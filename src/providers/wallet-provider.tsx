@@ -1,6 +1,7 @@
 import {
   createContext,
   type PropsWithChildren,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -12,6 +13,7 @@ import type {
   GoalReservation,
   Investment,
   RecordFilters,
+  Tag,
   WalletDataset,
   WalletRecord,
 } from "@shared/types";
@@ -29,6 +31,9 @@ interface WalletContextValue {
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
+  addTag: (tag: Omit<Tag, "id">) => string;
+  updateTag: (tagId: string, tag: Omit<Tag, "id">) => void;
+  deleteTag: (tagId: string) => void;
   addGoal: (goal: Omit<Goal, "id">) => string;
   updateGoal: (goalId: string, goal: Omit<Goal, "id">) => void;
   deleteGoal: (goalId: string) => void;
@@ -182,6 +187,62 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  function addTag(tag: Omit<Tag, "id">) {
+    const id = `tag-${crypto.randomUUID()}`;
+    setDataset((current) => ({
+      ...current,
+      tags: [
+        {
+          ...tag,
+          id,
+        },
+        ...current.tags,
+      ],
+    }));
+    return id;
+  }
+
+  function updateTag(tagId: string, tag: Omit<Tag, "id">) {
+    setDataset((current) => ({
+      ...current,
+      tags: current.tags.map((currentTag) =>
+        currentTag.id === tagId
+          ? {
+              ...tag,
+              id: tagId,
+            }
+          : currentTag,
+      ),
+    }));
+  }
+
+  const deleteTag = useCallback((tagId: string) => {
+    setDataset((current) => ({
+      ...current,
+      tags: current.tags.filter((tag) => tag.id !== tagId),
+      records: current.records.map((record) => ({
+        ...record,
+        tagIds: record.tagIds.filter((currentTagId) => currentTagId !== tagId),
+      })),
+      goals: current.goals.map((goal) => ({
+        ...goal,
+        tagIds: goal.tagIds.filter((currentTagId) => currentTagId !== tagId),
+      })),
+      budgets: current.budgets.map((budget) =>
+        budget.tagId === tagId
+          ? {
+              ...budget,
+              tagId: undefined,
+            }
+          : budget,
+      ),
+    }));
+    setRecordFiltersState((current) => ({
+      ...current,
+      tagId: undefined,
+    }));
+  }, []);
+
   function addGoal(goal: Omit<Goal, "id">) {
     const id = `goal-${crypto.randomUUID()}`;
     setDataset((current) => ({
@@ -321,6 +382,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       addRecord,
       updateRecord,
       deleteRecord,
+      addTag,
+      updateTag,
+      deleteTag,
       addGoal,
       updateGoal,
       deleteGoal,
@@ -331,7 +395,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       toggleAccountVisibility,
       setPrimaryAccount,
     }),
-    [dataset, recordFilters, selectedMonth],
+    [dataset, deleteTag, recordFilters, selectedMonth],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

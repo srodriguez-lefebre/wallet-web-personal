@@ -1,11 +1,16 @@
+import { FormEvent, useState } from "react";
 import {
   ArrowRight,
   Banknote,
+  Eye,
   Lock,
   Moon,
   Palette,
+  Plus,
+  Save,
   Tags,
   Target,
+  Trash2,
   Upload,
   WalletCards,
 } from "lucide-react";
@@ -17,16 +22,96 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
+import type { Tag } from "@shared/types";
+
+type TagDraft = Omit<Tag, "id">;
 
 export function SettingsView() {
   const navigate = useNavigate();
-  const { dataset, setRecordFilters } = useWallet();
+  const { dataset, setRecordFilters, addTag, updateTag, deleteTag } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
+  const [newTagName, setNewTagName] = useState("");
+  const [newTagColor, setNewTagColor] = useState("#2563EB");
+  const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
+  const fieldClassName =
+    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
     navigate("/records");
+  }
+
+  function getTagDraft(tag: Tag): TagDraft {
+    return (
+      tagDrafts[tag.id] ?? {
+        name: tag.name,
+        color: tag.color,
+        isActive: tag.isActive,
+      }
+    );
+  }
+
+  function updateTagDraft(tagId: string, patch: Partial<TagDraft>) {
+    const currentTag = dataset.tags.find((tag) => tag.id === tagId);
+    if (!currentTag) return;
+
+    setTagDrafts((current) => {
+      const currentDraft =
+        current[tagId] ??
+        ({
+          name: currentTag.name,
+          color: currentTag.color,
+          isActive: currentTag.isActive,
+        } satisfies TagDraft);
+
+      return {
+        ...current,
+        [tagId]: {
+          ...currentDraft,
+          ...patch,
+        },
+      };
+    });
+  }
+
+  function clearTagDraft(tagId: string) {
+    setTagDrafts((current) => {
+      const next = { ...current };
+      delete next[tagId];
+      return next;
+    });
+  }
+
+  function handleAddTag(event: FormEvent) {
+    event.preventDefault();
+    const name = newTagName.trim();
+    if (!name) return;
+
+    addTag({
+      name,
+      color: newTagColor,
+      isActive: true,
+    });
+    setNewTagName("");
+    setNewTagColor("#2563EB");
+  }
+
+  function handleSaveTag(tag: Tag) {
+    const draft = getTagDraft(tag);
+    const name = draft.name.trim();
+    if (!name) return;
+
+    updateTag(tag.id, {
+      ...draft,
+      name,
+    });
+    clearTagDraft(tag.id);
+  }
+
+  function handleDeleteTag(tagId: string) {
+    deleteTag(tagId);
+    clearTagDraft(tagId);
   }
 
   return (
@@ -129,18 +214,106 @@ export function SettingsView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {dataset.tags.map((tag) => (
-                <Badge
-                  key={tag.id}
-                  style={{ color: tag.color }}
-                  variant="muted"
-                  className="cursor-pointer transition hover:bg-secondary"
-                  onClick={() => openRecords({ tagId: tag.id, type: "all" })}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
+            <div className="space-y-4">
+              <form
+                className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"
+                onSubmit={handleAddTag}
+              >
+                <input
+                  value={newTagName}
+                  onChange={(event) => setNewTagName(event.target.value)}
+                  className={fieldClassName}
+                  placeholder="Nueva etiqueta"
+                />
+                <input
+                  value={newTagColor}
+                  onChange={(event) => setNewTagColor(event.target.value)}
+                  type="color"
+                  className="h-10 w-full rounded-md border bg-background px-2 sm:w-14"
+                  aria-label="Color de etiqueta nueva"
+                />
+                <Button type="submit">
+                  <Plus className="h-4 w-4" />
+                  Agregar
+                </Button>
+              </form>
+
+              <div className="space-y-2">
+                {dataset.tags.map((tag) => {
+                  const draft = getTagDraft(tag);
+                  const isDirty =
+                    draft.name !== tag.name ||
+                    draft.color !== tag.color ||
+                    draft.isActive !== tag.isActive;
+
+                  return (
+                    <div
+                      key={tag.id}
+                      className="grid gap-2 rounded-md border p-3 md:grid-cols-[auto_1fr_120px_auto_auto_auto]"
+                    >
+                      <input
+                        value={draft.color}
+                        onChange={(event) =>
+                          updateTagDraft(tag.id, { color: event.target.value })
+                        }
+                        type="color"
+                        className="h-10 w-full rounded-md border bg-background px-2 md:w-12"
+                        aria-label={`Color de ${tag.name}`}
+                      />
+                      <input
+                        value={draft.name}
+                        onChange={(event) =>
+                          updateTagDraft(tag.id, { name: event.target.value })
+                        }
+                        className={fieldClassName}
+                        placeholder="Nombre"
+                      />
+                      <select
+                        value={draft.isActive ? "active" : "inactive"}
+                        onChange={(event) =>
+                          updateTagDraft(tag.id, {
+                            isActive: event.target.value === "active",
+                          })
+                        }
+                        className={fieldClassName}
+                      >
+                        <option value="active">Activa</option>
+                        <option value="inactive">Inactiva</option>
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        aria-label={`Ver registros de ${tag.name}`}
+                        title="Ver registros"
+                        onClick={() => openRecords({ tagId: tag.id, type: "all" })}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        aria-label={`Guardar ${tag.name}`}
+                        title="Guardar"
+                        disabled={!isDirty}
+                        onClick={() => handleSaveTag(tag)}
+                      >
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        aria-label={`Eliminar ${tag.name}`}
+                        title="Eliminar"
+                        onClick={() => handleDeleteTag(tag.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
