@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +14,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney, groupRecordsByDay } from "@shared/calculations";
+import {
+  calculateAccountBalances,
+  formatMoney,
+  groupRecordsByDay,
+} from "@shared/calculations";
 import type {
   CurrencyCode,
   PaymentStatus,
@@ -105,6 +110,11 @@ export function RecordsView() {
   const categories = dataset.categories.filter((category) =>
     type === "income" ? category.type === "income" : category.type === "expense",
   );
+  const selectedAccountBalance = recordFilters.accountId
+    ? calculateAccountBalances(dataset).find(
+        (balance) => balance.account.id === recordFilters.accountId,
+      )
+    : undefined;
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
@@ -117,7 +127,10 @@ export function RecordsView() {
           : record.type === recordFilters.type,
       )
       .filter((record) =>
-        recordFilters.accountId ? record.accountId === recordFilters.accountId : true,
+        recordFilters.accountId
+          ? record.accountId === recordFilters.accountId ||
+            record.destinationAccountId === recordFilters.accountId
+          : true,
       )
       .filter((record) =>
         recordFilters.categoryId ? record.categoryId === recordFilters.categoryId : true,
@@ -256,6 +269,10 @@ export function RecordsView() {
           Nuevo
         </Button>
       </PageHeader>
+
+      {selectedAccountBalance ? (
+        <AccountStateSummary balance={selectedAccountBalance} />
+      ) : null}
 
       <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
         <DialogContent className="max-w-2xl">

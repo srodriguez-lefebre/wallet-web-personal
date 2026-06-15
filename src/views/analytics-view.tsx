@@ -14,8 +14,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { useWallet } from "@/providers/wallet-provider";
 import {
+  calculateAccountBalances,
   calculateBudgetProgress,
   calculateCategoryExpenses,
   calculateMonthlySeries,
@@ -38,6 +40,11 @@ export function AnalyticsView() {
   const { dataset, selectedMonth, recordFilters, setRecordFilters } = useWallet();
   const selectedAccount = recordFilters.accountId
     ? dataset.accounts.find((account) => account.id === recordFilters.accountId)
+    : undefined;
+  const selectedAccountBalance = selectedAccount
+    ? calculateAccountBalances(dataset).find(
+        (balance) => balance.account.id === selectedAccount.id,
+      )
     : undefined;
   const analyticsDataset = selectedAccount
     ? {
@@ -99,6 +106,10 @@ export function AnalyticsView() {
           </>
         ) : null}
       </PageHeader>
+
+      {selectedAccountBalance ? (
+        <AccountStateSummary balance={selectedAccountBalance} />
+      ) : null}
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
