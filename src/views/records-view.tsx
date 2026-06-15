@@ -5,6 +5,13 @@ import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney, groupRecordsByDay } from "@shared/calculations";
 import type {
@@ -35,13 +42,16 @@ export function RecordsView() {
     deleteRecord,
   } = useWallet();
 
+  const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [destinationAccountId, setDestinationAccountId] = useState(
     dataset.accounts[1]?.id ?? "",
   );
-  const [categoryId, setCategoryId] = useState(firstCategoryIdForType(dataset.categories, "expense"));
+  const [categoryId, setCategoryId] = useState(
+    firstCategoryIdForType(dataset.categories, "expense"),
+  );
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
@@ -51,6 +61,8 @@ export function RecordsView() {
   const categories = dataset.categories.filter((category) =>
     type === "income" ? category.type === "income" : category.type === "expense",
   );
+  const fieldClassName =
+    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   const filteredRecords = useMemo(() => {
     return dataset.records
@@ -104,8 +116,9 @@ export function RecordsView() {
       ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
       : null,
     recordFilters.counterpartyId
-      ? dataset.counterparties.find((counterparty) => counterparty.id === recordFilters.counterpartyId)
-          ?.name
+      ? dataset.counterparties.find(
+          (counterparty) => counterparty.id === recordFilters.counterpartyId,
+        )?.name
       : null,
     recordFilters.search,
   ].filter(Boolean);
@@ -124,6 +137,11 @@ export function RecordsView() {
     setPaymentStatus("cleared");
   }
 
+  function openNewRecordDialog() {
+    resetForm();
+    setIsRecordDialogOpen(true);
+  }
+
   function loadRecord(record: WalletRecord) {
     setEditingId(record.id);
     setType(record.type);
@@ -136,6 +154,12 @@ export function RecordsView() {
     setCounterpartyId(record.counterpartyId ?? "");
     setPaymentType(record.paymentType);
     setPaymentStatus(record.paymentStatus);
+    setIsRecordDialogOpen(true);
+  }
+
+  function closeRecordDialog() {
+    setIsRecordDialogOpen(false);
+    resetForm(type);
   }
 
   function buildRecord(): Omit<WalletRecord, "id"> | null {
@@ -175,7 +199,13 @@ export function RecordsView() {
       addRecord(nextRecord);
     }
 
-    resetForm(type);
+    closeRecordDialog();
+  }
+
+  function handleDeleteEditingRecord() {
+    if (!editingId) return;
+    deleteRecord(editingId);
+    closeRecordDialog();
   }
 
   function updateSearch(value: string) {
@@ -189,269 +219,280 @@ export function RecordsView() {
         title="Registros"
         description="Toca cualquier movimiento para editar monto, cuenta, contraparte, estado o notas."
       >
-        <Button variant="outline" onClick={() => resetForm()}>
+        <Button onClick={openNewRecordDialog}>
           <Plus className="h-4 w-4" />
           Nuevo
         </Button>
       </PageHeader>
 
-      <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
-        <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {editingId ? "Editar registro" : "Nuevo registro"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleSubmit}>
-                <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
-                  {(["expense", "income", "transfer"] as RecordType[]).map((item) => (
-                    <button
-                      key={item}
-                      type="button"
-                      onClick={() => {
-                        setType(item);
-                        setCategoryId(firstCategoryIdForType(dataset.categories, item));
-                        setPaymentType(item === "transfer" ? "transfer" : paymentType);
-                      }}
-                      className={
-                        type === item
-                          ? "rounded bg-card px-2 py-2 text-sm font-medium shadow-sm"
-                          : "rounded px-2 py-2 text-sm text-muted-foreground"
-                      }
-                    >
-                      {item}
-                    </button>
+      <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {editingId ? "Editar registro" : "Nuevo registro"}
+            </DialogTitle>
+            <DialogDescription>
+              Ajusta tipo, monto, cuenta, categoria, etiquetas y estado del movimiento.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
+              {(["expense", "income", "transfer"] as RecordType[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => {
+                    setType(item);
+                    setCategoryId(firstCategoryIdForType(dataset.categories, item));
+                    setPaymentType(item === "transfer" ? "transfer" : paymentType);
+                  }}
+                  className={
+                    type === item
+                      ? "rounded bg-card px-2 py-2 text-sm font-medium shadow-sm"
+                      : "rounded px-2 py-2 text-sm text-muted-foreground"
+                  }
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Monto</span>
+                <input
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  className={fieldClassName}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0"
+                />
+              </label>
+
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Cuenta</span>
+                <select
+                  value={accountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  {dataset.accounts
+                    .filter((account) => account.isActive)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            </div>
+
+            {type === "transfer" ? (
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Cuenta destino</span>
+                <select
+                  value={destinationAccountId}
+                  onChange={(event) => setDestinationAccountId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  {dataset.accounts
+                    .filter((account) => account.isActive && account.id !== accountId)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            ) : (
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Categoria</span>
+                <select
+                  value={categoryId}
+                  onChange={(event) => setCategoryId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  {categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
                   ))}
-                </div>
+                </select>
+              </label>
+            )}
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Monto</span>
-                  <input
-                    value={amount}
-                    onChange={(event) => setAmount(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="0"
-                  />
-                </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Etiqueta</span>
+                <select
+                  value={tagId}
+                  onChange={(event) => setTagId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  <option value="">Sin etiqueta</option>
+                  {dataset.tags.map((tag) => (
+                    <option key={tag.id} value={tag.id}>
+                      {tag.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Cuenta</span>
-                  <select
-                    value={accountId}
-                    onChange={(event) => setAccountId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    {dataset.accounts
-                      .filter((account) => account.isActive)
-                      .map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Contraparte</span>
+                <select
+                  value={counterpartyId}
+                  onChange={(event) => setCounterpartyId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  <option value="">Sin contraparte</option>
+                  {dataset.counterparties.map((counterparty) => (
+                    <option key={counterparty.id} value={counterparty.id}>
+                      {counterparty.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
 
-                {type === "transfer" ? (
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Cuenta destino</span>
-                    <select
-                      value={destinationAccountId}
-                      onChange={(event) => setDestinationAccountId(event.target.value)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {dataset.accounts
-                        .filter((account) => account.isActive && account.id !== accountId)
-                        .map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name}
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                ) : (
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Categoria</span>
-                    <select
-                      value={categoryId}
-                      onChange={(event) => setCategoryId(event.target.value)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Tipo de pago</span>
+                <select
+                  value={paymentType}
+                  onChange={(event) => setPaymentType(event.target.value as PaymentType)}
+                  className={fieldClassName}
+                >
+                  <option value="cash">cash</option>
+                  <option value="debit">debit</option>
+                  <option value="credit">credit</option>
+                  <option value="transfer">transfer</option>
+                  <option value="other">other</option>
+                </select>
+              </label>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Etiqueta</span>
-                    <select
-                      value={tagId}
-                      onChange={(event) => setTagId(event.target.value)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">Sin etiqueta</option>
-                      {dataset.tags.map((tag) => (
-                        <option key={tag.id} value={tag.id}>
-                          {tag.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Estado</span>
+                <select
+                  value={paymentStatus}
+                  onChange={(event) =>
+                    setPaymentStatus(event.target.value as PaymentStatus)
+                  }
+                  className={fieldClassName}
+                >
+                  <option value="cleared">cleared</option>
+                  <option value="pending">pending</option>
+                  <option value="cancelled">cancelled</option>
+                </select>
+              </label>
+            </div>
 
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Contraparte</span>
-                    <select
-                      value={counterpartyId}
-                      onChange={(event) => setCounterpartyId(event.target.value)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">Sin contraparte</option>
-                      {dataset.counterparties.map((counterparty) => (
-                        <option key={counterparty.id} value={counterparty.id}>
-                          {counterparty.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Tipo de pago</span>
-                    <select
-                      value={paymentType}
-                      onChange={(event) => setPaymentType(event.target.value as PaymentType)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="cash">cash</option>
-                      <option value="debit">debit</option>
-                      <option value="credit">credit</option>
-                      <option value="transfer">transfer</option>
-                      <option value="other">other</option>
-                    </select>
-                  </label>
-
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Estado</span>
-                    <select
-                      value={paymentStatus}
-                      onChange={(event) => setPaymentStatus(event.target.value as PaymentStatus)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="cleared">cleared</option>
-                      <option value="pending">pending</option>
-                      <option value="cancelled">cancelled</option>
-                    </select>
-                  </label>
-                </div>
-
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Nota</span>
-                  <input
-                    value={note}
-                    onChange={(event) => setNote(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="Descripcion opcional"
-                  />
-                </label>
-
-                <div className="flex gap-2">
-                  <Button className="flex-1" type="submit">
-                    {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                    {editingId ? "Guardar cambios" : "Agregar"}
-                  </Button>
-                  {editingId ? (
-                    <Button type="button" variant="outline" onClick={() => resetForm()}>
-                      <X className="h-4 w-4" />
-                    </Button>
-                  ) : null}
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Filtros</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <select
-                value={recordFilters.type ?? "all"}
-                onChange={(event) =>
-                  setRecordFilters({ type: event.target.value as "all" | RecordType })
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="all">Todos</option>
-                <option value="expense">Gastos</option>
-                <option value="income">Ingresos</option>
-                <option value="transfer">Transferencias</option>
-              </select>
-              <select
-                value={recordFilters.accountId ?? ""}
-                onChange={(event) =>
-                  setRecordFilters({ accountId: event.target.value || undefined })
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Todas las cuentas</option>
-                {dataset.accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={recordFilters.categoryId ?? ""}
-                onChange={(event) =>
-                  setRecordFilters({ categoryId: event.target.value || undefined })
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Todas las categorias</option>
-                {dataset.categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={recordFilters.counterpartyId ?? ""}
-                onChange={(event) =>
-                  setRecordFilters({ counterpartyId: event.target.value || undefined })
-                }
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Todas las contrapartes</option>
-                {dataset.counterparties.map((counterparty) => (
-                  <option key={counterparty.id} value={counterparty.id}>
-                    {counterparty.name}
-                  </option>
-                ))}
-              </select>
+            <label className="block space-y-2">
+              <span className="text-sm font-medium">Nota</span>
               <input
-                value={recordFilters.search ?? ""}
-                onChange={(event) => updateSearch(event.target.value)}
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Buscar por nota, categoria, contraparte..."
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                className={fieldClassName}
+                placeholder="Descripcion opcional"
               />
-              <Button className="w-full" variant="outline" onClick={clearRecordFilters}>
-                <FilterX className="h-4 w-4" />
-                Reset filter
+            </label>
+
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+              {editingId ? (
+                <Button type="button" variant="destructive" onClick={handleDeleteEditingRecord}>
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </Button>
+              ) : (
+                <Button type="button" variant="outline" onClick={closeRecordDialog}>
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </Button>
+              )}
+              <Button type="submit">
+                {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {editingId ? "Guardar cambios" : "Agregar"}
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
+        <Card className="h-fit">
+          <CardHeader className="pb-3">
+            <CardTitle>Filtros</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <input
+              value={recordFilters.search ?? ""}
+              onChange={(event) => updateSearch(event.target.value)}
+              className={fieldClassName}
+              placeholder="Buscar..."
+            />
+            <select
+              value={recordFilters.type ?? "all"}
+              onChange={(event) =>
+                setRecordFilters({ type: event.target.value as "all" | RecordType })
+              }
+              className={fieldClassName}
+            >
+              <option value="all">Todos</option>
+              <option value="expense">Gastos</option>
+              <option value="income">Ingresos</option>
+              <option value="transfer">Transferencias</option>
+            </select>
+            <select
+              value={recordFilters.accountId ?? ""}
+              onChange={(event) =>
+                setRecordFilters({ accountId: event.target.value || undefined })
+              }
+              className={fieldClassName}
+            >
+              <option value="">Cuentas</option>
+              {dataset.accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={recordFilters.categoryId ?? ""}
+              onChange={(event) =>
+                setRecordFilters({ categoryId: event.target.value || undefined })
+              }
+              className={fieldClassName}
+            >
+              <option value="">Categorias</option>
+              {dataset.categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={recordFilters.counterpartyId ?? ""}
+              onChange={(event) =>
+                setRecordFilters({ counterpartyId: event.target.value || undefined })
+              }
+              className={fieldClassName}
+            >
+              <option value="">Contrapartes</option>
+              {dataset.counterparties.map((counterparty) => (
+                <option key={counterparty.id} value={counterparty.id}>
+                  {counterparty.name}
+                </option>
+              ))}
+            </select>
+            <Button className="w-full" variant="outline" onClick={clearRecordFilters}>
+              <FilterX className="h-4 w-4" />
+              Reset
+            </Button>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -501,11 +542,7 @@ export function RecordsView() {
                             loadRecord(record);
                           }
                         }}
-                        className={
-                          editingId === record.id
-                            ? "flex cursor-pointer items-center justify-between rounded-md border border-primary bg-primary/5 p-3"
-                            : "flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
-                        }
+                        className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
                       >
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
