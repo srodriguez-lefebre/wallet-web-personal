@@ -7,6 +7,7 @@ import {
 } from "react";
 import { mockWalletData } from "@shared/mock-data";
 import type {
+  Account,
   Goal,
   GoalReservation,
   Investment,
@@ -22,6 +23,9 @@ interface WalletContextValue {
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
+  addAccount: (account: Omit<Account, "id">) => string;
+  updateAccount: (accountId: string, account: Omit<Account, "id">) => void;
+  deleteAccount: (accountId: string) => void;
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
@@ -30,6 +34,11 @@ interface WalletContextValue {
   deleteGoal: (goalId: string) => void;
   addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
   addInvestment: (investment: Omit<Investment, "id">) => string;
+  updateInvestment: (
+    investmentId: string,
+    investment: Omit<Investment, "id">,
+  ) => void;
+  deleteInvestment: (investmentId: string) => void;
   toggleAccountVisibility: (accountId: string) => void;
   setPrimaryAccount: (accountId: string) => void;
 }
@@ -52,6 +61,91 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   function clearRecordFilters() {
     setRecordFiltersState({ type: "all" });
+  }
+
+  function addAccount(account: Omit<Account, "id">) {
+    const id = `acc-${crypto.randomUUID()}`;
+    setDataset((current) => ({
+      ...current,
+      accounts: [
+        {
+          ...account,
+          id,
+        },
+        ...current.accounts,
+      ],
+    }));
+    return id;
+  }
+
+  function updateAccount(accountId: string, account: Omit<Account, "id">) {
+    setDataset((current) => ({
+      ...current,
+      accounts: current.accounts.map((currentAccount) =>
+        currentAccount.id === accountId
+          ? {
+              ...account,
+              id: accountId,
+            }
+          : currentAccount,
+      ),
+    }));
+  }
+
+  function deleteAccount(accountId: string) {
+    setDataset((current) => {
+      const nextAccounts = current.accounts.filter(
+        (account) => account.id !== accountId,
+      );
+      const nextPrimaryAccountId =
+        current.settings.primaryAccountId === accountId
+          ? nextAccounts.find((account) => account.isVisible)?.id ?? nextAccounts[0]?.id
+          : current.settings.primaryAccountId;
+
+      return {
+        ...current,
+        settings: {
+          ...current.settings,
+          primaryAccountId: nextPrimaryAccountId,
+        },
+        accounts: nextAccounts,
+        records: current.records.filter(
+          (record) =>
+            record.accountId !== accountId &&
+            record.destinationAccountId !== accountId,
+        ),
+        goals: current.goals.map((goal) =>
+          goal.accountId === accountId
+            ? {
+                ...goal,
+                accountId: undefined,
+              }
+            : goal,
+        ),
+        goalReservations: current.goalReservations.filter(
+          (reservation) => reservation.accountId !== accountId,
+        ),
+        budgets: current.budgets.map((budget) =>
+          budget.accountId === accountId
+            ? {
+                ...budget,
+                accountId: undefined,
+              }
+            : budget,
+        ),
+        debts: current.debts.map((debt) =>
+          debt.accountId === accountId
+            ? {
+                ...debt,
+                accountId: undefined,
+              }
+            : debt,
+        ),
+        installmentPlans: current.installmentPlans.filter(
+          (plan) => plan.accountId !== accountId,
+        ),
+      };
+    });
   }
 
   function addRecord(record: Omit<WalletRecord, "id">) {
@@ -163,6 +257,32 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return id;
   }
 
+  function updateInvestment(
+    investmentId: string,
+    investment: Omit<Investment, "id">,
+  ) {
+    setDataset((current) => ({
+      ...current,
+      investments: current.investments.map((currentInvestment) =>
+        currentInvestment.id === investmentId
+          ? {
+              ...investment,
+              id: investmentId,
+            }
+          : currentInvestment,
+      ),
+    }));
+  }
+
+  function deleteInvestment(investmentId: string) {
+    setDataset((current) => ({
+      ...current,
+      investments: current.investments.filter(
+        (investment) => investment.id !== investmentId,
+      ),
+    }));
+  }
+
   function toggleAccountVisibility(accountId: string) {
     setDataset((current) => ({
       ...current,
@@ -195,6 +315,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       recordFilters,
       setRecordFilters,
       clearRecordFilters,
+      addAccount,
+      updateAccount,
+      deleteAccount,
       addRecord,
       updateRecord,
       deleteRecord,
@@ -203,6 +326,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
       deleteGoal,
       addGoalReservation,
       addInvestment,
+      updateInvestment,
+      deleteInvestment,
       toggleAccountVisibility,
       setPrimaryAccount,
     }),

@@ -2,6 +2,8 @@ import { FormEvent, useState } from "react";
 import {
   CalendarDays,
   Edit3,
+  Eye,
+  EyeOff,
   Flag,
   PiggyBank,
   Plus,
@@ -33,6 +35,7 @@ interface GoalDraft {
   targetAmount: string;
   currency: CurrencyCode;
   color: string;
+  isVisible: boolean;
   tagId: string;
   deadline: string;
   status: GoalStatus;
@@ -55,6 +58,7 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
     targetAmount: String(goal.targetAmount),
     currency: goal.currency,
     color: goal.color,
+    isVisible: goal.isVisible,
     tagId: goal.tagIds[0] ?? "",
     deadline: goal.deadline ?? "",
     status: goal.status,
@@ -74,7 +78,11 @@ export function GoalsView() {
     addGoalReservation,
     setRecordFilters,
   } = useWallet();
+  const [showHidden, setShowHidden] = useState(false);
   const goals = calculateGoalProgress(dataset);
+  const visibleGoals = goals.filter((item) => item.goal.isVisible);
+  const hiddenGoals = goals.filter((item) => !item.goal.isVisible);
+  const renderedGoals = showHidden ? goals : visibleGoals;
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [reserveAmount, setReserveAmount] = useState("");
@@ -158,6 +166,7 @@ export function GoalsView() {
         targetAmount: Number(draft.targetAmount),
         currency: draft.currency,
         color: draft.color,
+        isVisible: draft.isVisible,
         icon: currentGoal.icon,
         deadline: draft.deadline || undefined,
         status: draft.status,
@@ -168,8 +177,8 @@ export function GoalsView() {
     });
 
     const selectedDraft = goalDrafts.find((draft) => draft.id === goalId);
-    if (!selectedDraft || selectedDraft.isDeleted) {
-      setGoalId(activeDrafts[0]?.id ?? "");
+    if (!selectedDraft || selectedDraft.isDeleted || !selectedDraft.isVisible) {
+      setGoalId(activeDrafts.find((draft) => draft.isVisible)?.id ?? "");
     }
 
     setEditError("");
@@ -187,6 +196,7 @@ export function GoalsView() {
       currency,
       color,
       icon: "flag",
+      isVisible: true,
       deadline: deadline || undefined,
       status: "active",
       tagIds: tagId ? [tagId] : [],
@@ -243,6 +253,10 @@ export function GoalsView() {
           </>
         ) : (
           <>
+            <Button variant="outline" onClick={() => setShowHidden((current) => !current)}>
+              {showHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              {showHidden ? "Ocultar ocultos" : `Mostrar ocultos (${hiddenGoals.length})`}
+            </Button>
             <Button
               size="icon"
               variant="outline"
@@ -428,6 +442,21 @@ export function GoalsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
+                        <span className="text-sm font-medium">Visibilidad</span>
+                        <select
+                          value={draft.isVisible ? "visible" : "hidden"}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, {
+                              isVisible: event.target.value === "visible",
+                            })
+                          }
+                          className={inputClassName}
+                        >
+                          <option value="visible">Visible</option>
+                          <option value="hidden">Oculto</option>
+                        </select>
+                      </label>
+                      <label className="block space-y-2">
                         <span className="text-sm font-medium">Moneda</span>
                         <select
                           value={draft.currency}
@@ -516,7 +545,7 @@ export function GoalsView() {
               ) : null}
             </>
           ) : (
-            goals.map((item) => (
+            renderedGoals.map((item) => (
               <Card
                 key={item.goal.id}
                 role="button"
@@ -593,6 +622,12 @@ export function GoalsView() {
                         {item.goal.deadline}
                       </Badge>
                     ) : null}
+                    {!item.goal.isVisible ? (
+                      <Badge variant="muted">
+                        <EyeOff className="mr-1 h-3 w-3" />
+                        Oculto
+                      </Badge>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -605,6 +640,14 @@ export function GoalsView() {
             <Card className="border-destructive/40 bg-destructive/5">
               <CardContent className="py-4 text-sm text-destructive">
                 {editError}
+              </CardContent>
+            </Card>
+          ) : null}
+          {!showHidden && hiddenGoals.length > 0 ? (
+            <Card className="border-dashed">
+              <CardContent className="py-4 text-sm text-muted-foreground">
+                Hay {hiddenGoals.length} objetivo(s) oculto(s). Usa "Mostrar ocultos"
+                para administrarlos.
               </CardContent>
             </Card>
           ) : null}
@@ -624,11 +667,13 @@ export function GoalsView() {
                     onChange={(event) => setGoalId(event.target.value)}
                     className={inputClassName}
                   >
-                    {dataset.goals.map((goal) => (
-                      <option key={goal.id} value={goal.id}>
-                        {goal.name}
-                      </option>
-                    ))}
+                    {dataset.goals
+                      .filter((goal) => goal.isVisible)
+                      .map((goal) => (
+                        <option key={goal.id} value={goal.id}>
+                          {goal.name}
+                        </option>
+                      ))}
                   </select>
                 </label>
                 <label className="block space-y-2">

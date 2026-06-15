@@ -89,6 +89,7 @@ export interface Goal {
   currency: CurrencyCode;
   color: string;
   icon: string;
+  isVisible: boolean;
   deadline?: string;
   status: GoalStatus;
   tagIds: string[];
@@ -135,6 +136,7 @@ export interface Investment {
   amountInvested: number;
   currentValue: number;
   currency: CurrencyCode;
+  isVisible: boolean;
   startedAt: string;
   note?: string;
 }

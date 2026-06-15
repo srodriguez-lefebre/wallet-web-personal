@@ -85,6 +85,7 @@ export const goalSchema = z.object({
   currency: currencySchema,
   color: z.string().min(1),
   icon: z.string().min(1),
+  isVisible: z.boolean().default(true),
   deadline: z.string().optional(),
   status: z.enum(["active", "completed", "paused", "cancelled"]).default("active"),
   tagIds: z.array(z.string()).default([]),
