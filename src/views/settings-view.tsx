@@ -36,6 +36,8 @@ export function SettingsView() {
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const colorInputClassName =
+    "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
 
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
@@ -229,7 +231,7 @@ export function SettingsView() {
                   value={newTagColor}
                   onChange={(event) => setNewTagColor(event.target.value)}
                   type="color"
-                  className="h-10 w-full rounded-md border bg-background px-2 sm:w-14"
+                  className={colorInputClassName}
                   aria-label="Color de etiqueta nueva"
                 />
                 <Button type="submit">
@@ -257,7 +259,7 @@ export function SettingsView() {
                           updateTagDraft(tag.id, { color: event.target.value })
                         }
                         type="color"
-                        className="h-10 w-full rounded-md border bg-background px-2 md:w-12"
+                        className={colorInputClassName}
                         aria-label={`Color de ${tag.name}`}
                       />
                       <input

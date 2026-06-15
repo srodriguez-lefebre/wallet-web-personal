@@ -103,6 +103,8 @@ export function GoalsView() {
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const textareaClassName =
     "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const colorInputClassName =
+    "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
 
   function startEditingGoals() {
     setGoalDrafts(buildGoalDrafts(dataset.goals));
@@ -344,7 +346,7 @@ export function GoalsView() {
                         value={color}
                         onChange={(event) => setColor(event.target.value)}
                         type="color"
-                        className="h-10 w-full rounded-md border bg-background px-2"
+                        className={colorInputClassName}
                       />
                     </label>
                   </div>
@@ -385,7 +387,7 @@ export function GoalsView() {
                               updateGoalDraft(draft.id, { color: event.target.value })
                             }
                             type="color"
-                            className="h-10 w-10 cursor-pointer rounded-md border bg-background p-1"
+                            className={colorInputClassName}
                             aria-label={`Color de ${draft.name || "objetivo"}`}
                           />
                         </label>
