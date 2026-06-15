@@ -88,6 +88,9 @@ export function InvestmentsView() {
   const visibleInvestmentDrafts = investmentDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
+  const shouldShowInvestmentsPanel = isEditing
+    ? visibleInvestmentDrafts.length > 0
+    : visibleInvestments.length > 0;
   const inputClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const textareaClassName =
@@ -360,7 +363,7 @@ export function InvestmentsView() {
       </PageHeader>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        {isEditing || visibleInvestments.length > 0 ? (
+        {shouldShowInvestmentsPanel ? (
           <Card className={isEditing ? "xl:col-span-2" : undefined}>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
