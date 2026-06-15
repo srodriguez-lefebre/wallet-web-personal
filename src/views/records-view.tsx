@@ -84,7 +84,6 @@ export function RecordsView() {
     addRecord,
     updateRecord,
     deleteRecord,
-    ensureCounterparty,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
@@ -126,20 +125,12 @@ export function RecordsView() {
       .filter((record) =>
         recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
       )
-      .filter((record) =>
-        recordFilters.counterpartyId
-          ? record.counterpartyId === recordFilters.counterpartyId
-          : true,
-      )
       .filter((record) => {
         const category = dataset.categories.find((item) => item.id === record.categoryId);
-        const counterparty = dataset.counterparties.find(
-          (item) => item.id === record.counterpartyId,
-        );
         const tags = record.tagIds
           .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
           .join(" ");
-        const haystack = `${category?.name ?? ""} ${counterparty?.name ?? ""} ${tags} ${record.note ?? ""}`;
+        const haystack = `${category?.name ?? ""} ${record.counterpartyName ?? ""} ${tags} ${record.note ?? ""}`;
         return haystack.toLowerCase().includes((recordFilters.search ?? "").toLowerCase());
       })
       .sort(
@@ -159,11 +150,6 @@ export function RecordsView() {
       : null,
     recordFilters.tagId
       ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
-      : null,
-    recordFilters.counterpartyId
-      ? dataset.counterparties.find(
-          (counterparty) => counterparty.id === recordFilters.counterpartyId,
-        )?.name
       : null,
     recordFilters.search,
   ].filter(Boolean);
@@ -197,10 +183,7 @@ export function RecordsView() {
     setAmount(String(record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
-    setCounterpartyName(
-      dataset.counterparties.find((counterparty) => counterparty.id === record.counterpartyId)
-        ?.name ?? "",
-    );
+    setCounterpartyName(record.counterpartyName ?? "");
     setPaymentType(record.paymentType);
     setPaymentStatus(record.paymentStatus);
     setIsRecordDialogOpen(true);
@@ -216,7 +199,6 @@ export function RecordsView() {
     if (!numericAmount || numericAmount <= 0) return null;
 
     const account = dataset.accounts.find((item) => item.id === accountId);
-    const nextCounterpartyId = ensureCounterparty(counterpartyName);
 
     return {
       type,
@@ -225,7 +207,7 @@ export function RecordsView() {
       accountId,
       destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
-      counterpartyId: nextCounterpartyId,
+      counterpartyName: counterpartyName.trim() || undefined,
       tagIds: tagId ? [tagId] : [],
       paymentType,
       paymentStatus,
@@ -398,7 +380,7 @@ export function RecordsView() {
                   value={counterpartyName}
                   onChange={(event) => setCounterpartyName(event.target.value)}
                   className={fieldClassName}
-                  placeholder="Nombre libre"
+                  placeholder="Nombre"
                 />
               </label>
             </div>
@@ -518,20 +500,6 @@ export function RecordsView() {
                 </option>
               ))}
             </select>
-            <select
-              value={recordFilters.counterpartyId ?? ""}
-              onChange={(event) =>
-                setRecordFilters({ counterpartyId: event.target.value || undefined })
-              }
-              className={fieldClassName}
-            >
-              <option value="">Contrapartes</option>
-              {dataset.counterparties.map((counterparty) => (
-                <option key={counterparty.id} value={counterparty.id}>
-                  {counterparty.name}
-                </option>
-              ))}
-            </select>
             <Button className="w-full" variant="outline" onClick={clearRecordFilters}>
               <FilterX className="h-4 w-4" />
               Reset
@@ -567,9 +535,6 @@ export function RecordsView() {
                     );
                     const account = dataset.accounts.find(
                       (item) => item.id === record.accountId,
-                    );
-                    const counterparty = dataset.counterparties.find(
-                      (item) => item.id === record.counterpartyId,
                     );
                     const tags = record.tagIds
                       .map((id) => dataset.tags.find((tag) => tag.id === id))
@@ -615,7 +580,7 @@ export function RecordsView() {
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {account?.name}
-                            {counterparty ? ` · ${counterparty.name}` : " · Sin contraparte"}
+                            {record.counterpartyName ? ` · ${record.counterpartyName}` : " · Sin contraparte"}
                             {record.note ? ` · ${record.note}` : " · Sin nota"}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1">

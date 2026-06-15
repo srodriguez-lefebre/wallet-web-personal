@@ -57,13 +57,6 @@ export interface Tag {
   isActive: boolean;
 }
 
-export interface Counterparty {
-  id: string;
-  name: string;
-  color?: string;
-  isActive: boolean;
-}
-
 export interface WalletRecord {
   id: string;
   type: RecordType;
@@ -72,7 +65,7 @@ export interface WalletRecord {
   accountId: string;
   destinationAccountId?: string;
   categoryId?: string;
-  counterpartyId?: string;
+  counterpartyName?: string;
   tagIds: string[];
   paymentType: PaymentType;
   paymentStatus: PaymentStatus;
@@ -147,7 +140,7 @@ export interface Debt {
   originalAmount: number;
   pendingAmount: number;
   currency: CurrencyCode;
-  counterpartyId?: string;
+  counterpartyName?: string;
   accountId?: string;
   status: DebtStatus;
   startedAt: string;
@@ -188,7 +181,6 @@ export interface WalletDataset {
   accounts: Account[];
   categories: Category[];
   tags: Tag[];
-  counterparties: Counterparty[];
   records: WalletRecord[];
   goals: Goal[];
   goalReservations: GoalReservation[];
@@ -204,7 +196,6 @@ export interface RecordFilters {
   accountId?: string;
   categoryId?: string;
   tagId?: string;
-  counterpartyId?: string;
   search?: string;
 }
 

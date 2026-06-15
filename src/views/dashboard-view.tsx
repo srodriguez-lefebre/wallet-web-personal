@@ -264,9 +264,6 @@ export function DashboardView() {
               const account = dataset.accounts.find(
                 (item) => item.id === record.accountId,
               );
-              const counterparty = dataset.counterparties.find(
-                (item) => item.id === record.counterpartyId,
-              );
 
               return (
                 <div
@@ -278,7 +275,6 @@ export function DashboardView() {
                       type: record.type,
                       accountId: record.accountId,
                       categoryId: record.categoryId,
-                      counterpartyId: record.counterpartyId,
                     })
                   }
                   onKeyDown={(event) => {
@@ -288,7 +284,6 @@ export function DashboardView() {
                         type: record.type,
                         accountId: record.accountId,
                         categoryId: record.categoryId,
-                        counterpartyId: record.counterpartyId,
                       });
                     }
                   }}
@@ -298,7 +293,7 @@ export function DashboardView() {
                     <p className="font-medium">{category?.name ?? "Transferencia"}</p>
                     <p className="text-xs text-muted-foreground">
                       {account?.name}
-                      {counterparty ? ` · ${counterparty.name}` : ""}
+                      {record.counterpartyName ? ` · ${record.counterpartyName}` : ""}
                     </p>
                   </div>
                   <p

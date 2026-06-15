@@ -1,4 +1,14 @@
-import { Lock, Moon, Palette, Tags, WalletCards } from "lucide-react";
+import {
+  ArrowRight,
+  Banknote,
+  Lock,
+  Moon,
+  Palette,
+  Tags,
+  Target,
+  Upload,
+  WalletCards,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +34,7 @@ export function SettingsView() {
       <PageHeader
         eyebrow="Settings"
         title="Configuracion"
-        description="Moneda principal, tema, cuentas, categorias, etiquetas, seguridad y datos."
+        description="Preferencias generales, seguridad, categorias, etiquetas y accesos de administracion."
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -115,43 +125,66 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Tags className="h-4 w-4" />
-              Etiquetas y contrapartes
+              Etiquetas
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="mb-2 text-sm font-medium">Etiquetas</p>
-              <div className="flex flex-wrap gap-2">
-                {dataset.tags.map((tag) => (
-                  <Badge
-                    key={tag.id}
-                    style={{ color: tag.color }}
-                    variant="muted"
-                    className="cursor-pointer transition hover:bg-secondary"
-                    onClick={() => openRecords({ tagId: tag.id, type: "all" })}
-                  >
-                    {tag.name}
-                  </Badge>
-                ))}
-              </div>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {dataset.tags.map((tag) => (
+                <Badge
+                  key={tag.id}
+                  style={{ color: tag.color }}
+                  variant="muted"
+                  className="cursor-pointer transition hover:bg-secondary"
+                  onClick={() => openRecords({ tagId: tag.id, type: "all" })}
+                >
+                  {tag.name}
+                </Badge>
+              ))}
             </div>
-            <div>
-              <p className="mb-2 text-sm font-medium">Contrapartes</p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {dataset.counterparties.map((counterparty) => (
-                  <button
-                    key={counterparty.id}
-                    type="button"
-                    onClick={() =>
-                      openRecords({ counterpartyId: counterparty.id, type: "all" })
-                    }
-                    className="rounded-md border p-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
-                  >
-                    {counterparty.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Banknote className="h-4 w-4" />
+              Administracion
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            <Button
+              variant="outline"
+              className="justify-between"
+              onClick={() => navigate("/accounts")}
+            >
+              Cuentas
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-between"
+              onClick={() => navigate("/goals")}
+            >
+              Objetivos
+              <Target className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-between"
+              onClick={() => navigate("/investments")}
+            >
+              Inversiones
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="justify-between"
+              onClick={() => navigate("/imports")}
+            >
+              Imports
+              <Upload className="h-4 w-4" />
+            </Button>
           </CardContent>
         </Card>
       </div>

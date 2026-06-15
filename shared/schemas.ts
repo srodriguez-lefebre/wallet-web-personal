@@ -42,7 +42,7 @@ export const recordSchema = z
     accountId: z.string().min(1),
     destinationAccountId: z.string().optional(),
     categoryId: z.string().optional(),
-    counterpartyId: z.string().optional(),
+    counterpartyName: z.string().optional(),
     tagIds: z.array(z.string()).default([]),
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,

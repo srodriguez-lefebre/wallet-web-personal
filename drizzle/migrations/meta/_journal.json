@@ -15,6 +15,13 @@
       "when": 1781532350699,
       "tag": "0001_marvelous_gravity",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781556742683,
+      "tag": "0002_freeform_counterparties",
+      "breakpoints": true
     }
   ]
 }

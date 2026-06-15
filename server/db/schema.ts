@@ -90,15 +90,6 @@ export const tags = pgTable("tags", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const counterparties = pgTable("counterparties", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  color: text("color"),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const records = pgTable(
   "records",
   {
@@ -111,7 +102,7 @@ export const records = pgTable(
       .references(() => accounts.id),
     destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
     categoryId: uuid("category_id").references(() => categories.id),
-    counterpartyId: uuid("counterparty_id").references(() => counterparties.id),
+    counterpartyName: text("counterparty_name"),
     paymentType: paymentTypeEnum("payment_type").notNull(),
     paymentStatus: paymentStatusEnum("payment_status").notNull(),
     exchangeRateToPrimary: numeric("exchange_rate_to_primary", {
@@ -254,7 +245,7 @@ export const debts = pgTable("debts", {
   originalAmount: numeric("original_amount", { precision: 14, scale: 2 }).notNull(),
   pendingAmount: numeric("pending_amount", { precision: 14, scale: 2 }).notNull(),
   currency: text("currency").notNull(),
-  counterpartyId: uuid("counterparty_id").references(() => counterparties.id),
+  counterpartyName: text("counterparty_name"),
   accountId: uuid("account_id").references(() => accounts.id),
   status: debtStatusEnum("status").notNull().default("active"),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
