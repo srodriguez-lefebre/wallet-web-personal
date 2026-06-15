@@ -121,7 +121,7 @@ export function AnalyticsView() {
                   <div className="flex items-center gap-3">
                     <span
                       className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: "#2563EB" }}
+                      style={{ backgroundColor: category.color }}
                     />
                     <p className="font-medium">{category.name}</p>
                   </div>

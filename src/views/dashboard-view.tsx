@@ -25,8 +25,6 @@ import {
   formatMoney,
 } from "@shared/calculations";
 
-const reportBlues = ["#2563EB", "#0EA5E9", "#0284C7", "#38BDF8", "#1D4ED8", "#60A5FA"];
-
 export function DashboardView() {
   const navigate = useNavigate();
   const { dataset, selectedMonth, setRecordFilters } = useWallet();
@@ -176,10 +174,10 @@ export function DashboardView() {
                   outerRadius={104}
                   paddingAngle={3}
                 >
-                  {categories.map((category, index) => (
+                  {categories.map((category) => (
                     <Cell
                       key={category.id}
-                      fill={reportBlues[index % reportBlues.length]}
+                      fill={category.color}
                       className="cursor-pointer outline-none"
                       onClick={() =>
                         goToRecords({ type: "expense", categoryId: category.id })
@@ -192,7 +190,7 @@ export function DashboardView() {
             </ResponsiveContainer>
           </CardContent>
           <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2">
-            {categories.map((category, index) => (
+            {categories.map((category) => (
               <button
                 key={category.id}
                 type="button"
@@ -202,7 +200,7 @@ export function DashboardView() {
                 <span className="flex items-center gap-2">
                   <span
                     className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: reportBlues[index % reportBlues.length] }}
+                    style={{ backgroundColor: category.color }}
                   />
                   {category.name}
                 </span>
