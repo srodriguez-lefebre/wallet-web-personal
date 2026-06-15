@@ -45,6 +45,7 @@ export interface Category {
   id: string;
   name: string;
   type: CategoryType;
+  parentId?: string;
   color: string;
   icon: string;
   isActive: boolean;

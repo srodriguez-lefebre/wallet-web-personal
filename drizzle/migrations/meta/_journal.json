@@ -22,6 +22,13 @@
       "when": 1781556742683,
       "tag": "0002_freeform_counterparties",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781559568368,
+      "tag": "0003_modern_miss_america",
+      "breakpoints": true
     }
   ]
 }

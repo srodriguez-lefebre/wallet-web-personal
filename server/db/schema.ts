@@ -1,5 +1,6 @@
 import {
   boolean,
+  type AnyPgColumn,
   index,
   numeric,
   pgEnum,
@@ -74,6 +75,7 @@ export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   type: categoryTypeEnum("type").notNull(),
+  parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
   color: text("color").notNull(),
   icon: text("icon").notNull(),
   isActive: boolean("is_active").notNull().default(true),

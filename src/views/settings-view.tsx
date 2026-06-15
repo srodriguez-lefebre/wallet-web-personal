@@ -22,9 +22,15 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Tag } from "@shared/types";
+import type { Category, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
+
+function childCategories(categories: Category[], parentId: string) {
+  return categories
+    .filter((category) => category.parentId === parentId)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function SettingsView() {
   const navigate = useNavigate();
@@ -182,29 +188,62 @@ export function SettingsView() {
               Categorias
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-2">
-            {dataset.categories.map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() =>
-                  openRecords({
-                    type: category.type === "income" ? "income" : "expense",
-                    categoryId: category.id,
-                  })
-                }
-                className="flex items-center gap-3 rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
-              >
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: category.color }}
-                />
-                <div>
-                  <p className="font-medium">{category.name}</p>
-                  <p className="text-xs text-muted-foreground">{category.type}</p>
-                </div>
-              </button>
-            ))}
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            {dataset.categories
+              .filter((category) => !category.parentId)
+              .map((category) => {
+                const children = childCategories(dataset.categories, category.id);
+
+                return (
+                  <div key={category.id} className="rounded-md border p-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openRecords({
+                          type: category.type === "income" ? "income" : "expense",
+                          categoryId: category.id,
+                        })
+                      }
+                      className="flex w-full items-center gap-3 rounded-md text-left transition hover:text-primary"
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full"
+                        style={{ backgroundColor: category.color }}
+                      />
+                      <div>
+                        <p className="font-medium">{category.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {category.type}
+                        </p>
+                      </div>
+                    </button>
+                    {children.length > 0 ? (
+                      <div className="mt-3 space-y-2 border-l pl-4">
+                        {children.map((child) => (
+                          <button
+                            key={child.id}
+                            type="button"
+                            onClick={() =>
+                              openRecords({
+                                type:
+                                  child.type === "income" ? "income" : "expense",
+                                categoryId: child.id,
+                              })
+                            }
+                            className="flex w-full items-center gap-2 rounded-md text-left text-sm transition hover:text-primary"
+                          >
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{ backgroundColor: child.color }}
+                            />
+                            <span>{child.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
           </CardContent>
         </Card>
 

@@ -11,6 +11,7 @@ import type {
   AnalyticsSummary,
   Budget,
   BudgetProgress,
+  Category,
   CurrencyCode,
   GoalProgress,
   WalletDataset,
@@ -167,10 +168,14 @@ export function calculateCategoryExpenses(
   );
 
   return dataset.categories
-    .filter((category) => category.type === "expense")
+    .filter((category) => category.type === "expense" && !category.parentId)
     .map((category) => {
       const value = records
-        .filter((record) => record.categoryId === category.id)
+        .filter(
+          (record) =>
+            record.categoryId &&
+            isCategoryOrDescendant(dataset.categories, record.categoryId, category.id),
+        )
         .reduce(
           (total, record) =>
             total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
@@ -186,6 +191,22 @@ export function calculateCategoryExpenses(
     })
     .filter((item) => item.value > 0)
     .sort((a, b) => b.value - a.value);
+}
+
+export function isCategoryOrDescendant(
+  categories: Category[],
+  categoryId: string,
+  selectedCategoryId: string,
+) {
+  if (categoryId === selectedCategoryId) return true;
+
+  let current = categories.find((category) => category.id === categoryId);
+  while (current?.parentId) {
+    if (current.parentId === selectedCategoryId) return true;
+    current = categories.find((category) => category.id === current?.parentId);
+  }
+
+  return false;
 }
 
 export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
@@ -229,7 +250,12 @@ export function calculateBudgetProgress(
   return dataset.budgets
     .filter((budget) => budget.isActive)
     .map((budget) => {
-      const spent = matchingBudgetRecords(dataset.records, budget, month).reduce(
+      const spent = matchingBudgetRecords(
+        dataset.records,
+        budget,
+        month,
+        dataset.categories,
+      ).reduce(
         (total, record) =>
           total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
         0,
@@ -253,13 +279,18 @@ function matchingBudgetRecords(
   records: WalletRecord[],
   budget: Budget,
   month: string,
+  categories: Category[],
 ) {
   return recordsForMonth(records, month).filter((record) => {
     if (record.type !== "expense" || record.paymentStatus === "cancelled") {
       return false;
     }
 
-    if (budget.categoryId && record.categoryId !== budget.categoryId) {
+    if (
+      budget.categoryId &&
+      (!record.categoryId ||
+        !isCategoryOrDescendant(categories, record.categoryId, budget.categoryId))
+    ) {
       return false;
     }
 

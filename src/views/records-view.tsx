@@ -18,8 +18,10 @@ import {
   calculateAccountBalances,
   formatMoney,
   groupRecordsByDay,
+  isCategoryOrDescendant,
 } from "@shared/calculations";
 import type {
+  Category,
   CurrencyCode,
   PaymentStatus,
   PaymentType,
@@ -34,6 +36,33 @@ function firstCategoryIdForType(
 ) {
   const categoryType = type === "income" ? "income" : "expense";
   return categories.find((category) => category.type === categoryType)?.id ?? "";
+}
+
+function formatCategoryName(categories: Category[], category: Category) {
+  const parent = category.parentId
+    ? categories.find((candidate) => candidate.id === category.parentId)
+    : undefined;
+
+  return parent ? `${parent.name} / ${category.name}` : category.name;
+}
+
+function sortCategoriesForSelect(categories: Category[]) {
+  return categories
+    .slice()
+    .sort((a, b) => {
+      const aParent = a.parentId
+        ? categories.find((category) => category.id === a.parentId)?.name ?? ""
+        : a.name;
+      const bParent = b.parentId
+        ? categories.find((category) => category.id === b.parentId)?.name ?? ""
+        : b.name;
+      const parentCompare = aParent.localeCompare(bParent);
+
+      if (parentCompare !== 0) return parentCompare;
+      if (!a.parentId && b.parentId) return -1;
+      if (a.parentId && !b.parentId) return 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 function defaultAccountId(dataset: WalletDataset) {
@@ -107,8 +136,10 @@ export function RecordsView() {
   const [counterpartyName, setCounterpartyName] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
-  const categories = dataset.categories.filter((category) =>
-    type === "income" ? category.type === "income" : category.type === "expense",
+  const categories = sortCategoriesForSelect(
+    dataset.categories.filter((category) =>
+      type === "income" ? category.type === "income" : category.type === "expense",
+    ),
   );
   const selectedAccountBalance = recordFilters.accountId
     ? calculateAccountBalances(dataset).find(
@@ -133,7 +164,14 @@ export function RecordsView() {
           : true,
       )
       .filter((record) =>
-        recordFilters.categoryId ? record.categoryId === recordFilters.categoryId : true,
+        recordFilters.categoryId
+          ? record.categoryId &&
+            isCategoryOrDescendant(
+              dataset.categories,
+              record.categoryId,
+              recordFilters.categoryId,
+            )
+          : true,
       )
       .filter((record) =>
         recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
@@ -143,7 +181,10 @@ export function RecordsView() {
         const tags = record.tagIds
           .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
           .join(" ");
-        const haystack = `${category?.name ?? ""} ${record.counterpartyName ?? ""} ${tags} ${record.note ?? ""}`;
+        const categoryName = category
+          ? formatCategoryName(dataset.categories, category)
+          : "";
+        const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${tags} ${record.note ?? ""}`;
         return haystack.toLowerCase().includes((recordFilters.search ?? "").toLowerCase());
       })
       .sort(
@@ -159,7 +200,12 @@ export function RecordsView() {
       ? dataset.accounts.find((account) => account.id === recordFilters.accountId)?.name
       : null,
     recordFilters.categoryId
-      ? dataset.categories.find((category) => category.id === recordFilters.categoryId)?.name
+      ? (() => {
+          const category = dataset.categories.find(
+            (candidate) => candidate.id === recordFilters.categoryId,
+          );
+          return category ? formatCategoryName(dataset.categories, category) : null;
+        })()
       : null,
     recordFilters.tagId
       ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
@@ -367,7 +413,7 @@ export function RecordsView() {
                 >
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {category.parentId ? `-- ${category.name}` : category.name}
                     </option>
                   ))}
                 </select>
@@ -511,9 +557,9 @@ export function RecordsView() {
               className={fieldClassName}
             >
               <option value="">Categorias</option>
-              {dataset.categories.map((category) => (
+              {sortCategoriesForSelect(dataset.categories).map((category) => (
                 <option key={category.id} value={category.id}>
-                  {category.name}
+                  {category.parentId ? `-- ${category.name}` : category.name}
                 </option>
               ))}
             </select>
@@ -580,7 +626,9 @@ export function RecordsView() {
                               }}
                             />
                             <p className="font-medium">
-                              {category?.name ?? "Transferencia"}
+                              {category
+                                ? formatCategoryName(dataset.categories, category)
+                                : "Transferencia"}
                             </p>
                             <Badge
                               variant={
