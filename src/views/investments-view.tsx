@@ -4,6 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney } from "@shared/calculations";
@@ -18,6 +26,7 @@ export function InvestmentsView() {
   const [currentValue, setCurrentValue] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("UYU");
   const [note, setNote] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   function handleCreateInvestment(event: FormEvent) {
     event.preventDefault();
@@ -39,6 +48,7 @@ export function InvestmentsView() {
     setAmountInvested("");
     setCurrentValue("");
     setNote("");
+    setIsCreateOpen(false);
     navigate(`/investments/${id}`);
   }
 
@@ -48,10 +58,99 @@ export function InvestmentsView() {
         eyebrow="Investments"
         title="Inversiones"
         description="Crea inversiones manuales y entra al detalle para ver rendimiento y contexto."
-      />
+      >
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button size="icon" aria-label="Nueva inversion">
+              <Plus className="h-5 w-5" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nueva inversion</DialogTitle>
+              <DialogDescription>
+                Carga una inversion manual para seguir valor actual y rendimiento.
+              </DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={handleCreateInvestment}>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Nombre</span>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Fondo, accion, deposito..."
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Tipo</span>
+                  <select
+                    value={type}
+                    onChange={(event) => setType(event.target.value as Investment["type"])}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="fund">fund</option>
+                    <option value="stock">stock</option>
+                    <option value="crypto">crypto</option>
+                    <option value="deposit">deposit</option>
+                    <option value="other">other</option>
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Moneda</span>
+                  <select
+                    value={currency}
+                    onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="UYU">UYU</option>
+                    <option value="USD">USD</option>
+                    <option value="BRL">BRL</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Invertido</span>
+                  <input
+                    value={amountInvested}
+                    onChange={(event) => setAmountInvested(event.target.value)}
+                    type="number"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="10000"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Valor actual</span>
+                  <input
+                    value={currentValue}
+                    onChange={(event) => setCurrentValue(event.target.value)}
+                    type="number"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Opcional"
+                  />
+                </label>
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Nota</span>
+                <input
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Contexto opcional"
+                />
+              </label>
+              <Button className="w-full" type="submit">
+                <Plus className="h-4 w-4" />
+                Crear y abrir detalle
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </PageHeader>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -149,92 +248,6 @@ export function InvestmentsView() {
               })}
             </CardContent>
           </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Plus className="h-4 w-4" />
-              Nueva inversion
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleCreateInvestment}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Nombre</span>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Fondo, accion, deposito..."
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Tipo</span>
-                  <select
-                    value={type}
-                    onChange={(event) => setType(event.target.value as Investment["type"])}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="fund">fund</option>
-                    <option value="stock">stock</option>
-                    <option value="crypto">crypto</option>
-                    <option value="deposit">deposit</option>
-                    <option value="other">other</option>
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Moneda</span>
-                  <select
-                    value={currency}
-                    onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="UYU">UYU</option>
-                    <option value="USD">USD</option>
-                    <option value="BRL">BRL</option>
-                  </select>
-                </label>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Invertido</span>
-                  <input
-                    value={amountInvested}
-                    onChange={(event) => setAmountInvested(event.target.value)}
-                    type="number"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="10000"
-                  />
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Valor actual</span>
-                  <input
-                    value={currentValue}
-                    onChange={(event) => setCurrentValue(event.target.value)}
-                    type="number"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="Opcional"
-                  />
-                </label>
-              </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Nota</span>
-                <input
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Contexto opcional"
-                />
-              </label>
-              <Button className="w-full" type="submit">
-                <Plus className="h-4 w-4" />
-                Crear y abrir detalle
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
       </div>
     </div>
   );

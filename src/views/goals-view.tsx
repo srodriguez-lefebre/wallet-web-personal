@@ -5,6 +5,14 @@ import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
@@ -23,6 +31,7 @@ export function GoalsView() {
   const [color, setColor] = useState("#2563EB");
   const [tagId, setTagId] = useState(dataset.tags[0]?.id ?? "");
   const [deadline, setDeadline] = useState("");
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
 
   function handleCreateGoal(event: FormEvent) {
     event.preventDefault();
@@ -45,6 +54,7 @@ export function GoalsView() {
     setName("");
     setTargetAmount("");
     setDeadline("");
+    setIsCreateOpen(false);
     navigate(`/goals/${id}`);
   }
 
@@ -76,9 +86,99 @@ export function GoalsView() {
         eyebrow="Goals"
         title="Objetivos"
         description="Crea objetivos, reserva dinero y entra al detalle para ver contexto asociado."
-      />
+      >
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button size="icon" aria-label="Nuevo objetivo">
+              <Plus className="h-5 w-5" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nuevo objetivo</DialogTitle>
+              <DialogDescription>
+                Defini la meta, elegi color y conectala con una etiqueta.
+              </DialogDescription>
+            </DialogHeader>
+            <form className="space-y-4" onSubmit={handleCreateGoal}>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Nombre</span>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  placeholder="Viaje, emergencia, notebook..."
+                />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Objetivo</span>
+                  <input
+                    value={targetAmount}
+                    onChange={(event) => setTargetAmount(event.target.value)}
+                    type="number"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="50000"
+                  />
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Moneda</span>
+                  <select
+                    value={currency}
+                    onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="UYU">UYU</option>
+                    <option value="USD">USD</option>
+                    <option value="BRL">BRL</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Etiqueta</span>
+                  <select
+                    value={tagId}
+                    onChange={(event) => setTagId(event.target.value)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Sin etiqueta</option>
+                    {dataset.tags.map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Color</span>
+                  <input
+                    value={color}
+                    onChange={(event) => setColor(event.target.value)}
+                    type="color"
+                    className="h-10 w-full rounded-md border bg-background px-2"
+                  />
+                </label>
+              </div>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Fecha limite</span>
+                <input
+                  value={deadline}
+                  onChange={(event) => setDeadline(event.target.value)}
+                  type="date"
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </label>
+              <Button className="w-full" type="submit">
+                <Plus className="h-4 w-4" />
+                Crear y abrir detalle
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </PageHeader>
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
+      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <div className="grid gap-4 lg:grid-cols-2">
           {goals.map((item) => (
             <Card
@@ -161,91 +261,6 @@ export function GoalsView() {
         </div>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Plus className="h-4 w-4" />
-                Nuevo goal
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <form className="space-y-4" onSubmit={handleCreateGoal}>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Nombre</span>
-                  <input
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="Viaje, emergencia, notebook..."
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Objetivo</span>
-                    <input
-                      value={targetAmount}
-                      onChange={(event) => setTargetAmount(event.target.value)}
-                      type="number"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                      placeholder="50000"
-                    />
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Moneda</span>
-                    <select
-                      value={currency}
-                      onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="UYU">UYU</option>
-                      <option value="USD">USD</option>
-                      <option value="BRL">BRL</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Etiqueta</span>
-                    <select
-                      value={tagId}
-                      onChange={(event) => setTagId(event.target.value)}
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="">Sin etiqueta</option>
-                      {dataset.tags.map((tag) => (
-                        <option key={tag.id} value={tag.id}>
-                          {tag.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Color</span>
-                    <input
-                      value={color}
-                      onChange={(event) => setColor(event.target.value)}
-                      type="color"
-                      className="h-10 w-full rounded-md border bg-background px-2"
-                    />
-                  </label>
-                </div>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Fecha limite</span>
-                  <input
-                    value={deadline}
-                    onChange={(event) => setDeadline(event.target.value)}
-                    type="date"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  />
-                </label>
-                <Button className="w-full" type="submit">
-                  <Plus className="h-4 w-4" />
-                  Crear y abrir detalle
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
