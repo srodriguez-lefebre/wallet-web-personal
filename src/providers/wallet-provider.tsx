@@ -6,7 +6,7 @@ import {
   useState,
 } from "react";
 import { mockWalletData } from "@shared/mock-data";
-import type { WalletDataset, WalletRecord } from "@shared/types";
+import type { GoalReservation, WalletDataset, WalletRecord } from "@shared/types";
 
 interface WalletContextValue {
   dataset: WalletDataset;
@@ -14,6 +14,7 @@ interface WalletContextValue {
   setSelectedMonth: (month: string) => void;
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
+  addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -42,8 +43,28 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
+    setDataset((current) => ({
+      ...current,
+      goalReservations: [
+        {
+          ...reservation,
+          id: `gres-${crypto.randomUUID()}`,
+        },
+        ...current.goalReservations,
+      ],
+    }));
+  }
+
   const value = useMemo(
-    () => ({ dataset, selectedMonth, setSelectedMonth, addRecord, deleteRecord }),
+    () => ({
+      dataset,
+      selectedMonth,
+      setSelectedMonth,
+      addRecord,
+      deleteRecord,
+      addGoalReservation,
+    }),
     [dataset, selectedMonth],
   );
 
