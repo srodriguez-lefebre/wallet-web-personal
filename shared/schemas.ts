@@ -1,0 +1,134 @@
+import { z } from "zod";
+
+export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
+
+export const recordTypeSchema = z.enum(["expense", "income", "transfer"]);
+
+export const paymentTypeSchema = z.enum([
+  "cash",
+  "debit",
+  "credit",
+  "transfer",
+  "other",
+]);
+
+export const paymentStatusSchema = z.enum(["cleared", "pending", "cancelled"]);
+
+export const accountSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum([
+    "cash",
+    "bank",
+    "credit_card",
+    "savings",
+    "recurring",
+    "investment",
+    "custom",
+  ]),
+  currency: currencySchema,
+  initialBalance: z.number(),
+  color: z.string().min(1),
+  icon: z.string().min(1),
+  isVisible: z.boolean(),
+  isActive: z.boolean(),
+  note: z.string().optional(),
+});
+
+export const recordSchema = z
+  .object({
+    type: recordTypeSchema,
+    amount: z.number().positive(),
+    currency: currencySchema,
+    accountId: z.string().min(1),
+    destinationAccountId: z.string().optional(),
+    categoryId: z.string().optional(),
+    counterpartyId: z.string().optional(),
+    tagIds: z.array(z.string()).default([]),
+    paymentType: paymentTypeSchema,
+    paymentStatus: paymentStatusSchema,
+    exchangeRateToPrimary: z.number().positive().default(1),
+    occurredAt: z.string().datetime(),
+    note: z.string().optional(),
+    isFixed: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.type !== "transfer" && !value.categoryId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["categoryId"],
+        message: "Category is required for income and expense records",
+      });
+    }
+
+    if (value.type === "transfer") {
+      if (!value.destinationAccountId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destinationAccountId"],
+          message: "Destination account is required for transfers",
+        });
+      }
+
+      if (value.destinationAccountId === value.accountId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["destinationAccountId"],
+          message: "Destination account must be different",
+        });
+      }
+    }
+  });
+
+export const goalSchema = z.object({
+  name: z.string().min(1),
+  targetAmount: z.number().positive(),
+  currency: currencySchema,
+  color: z.string().min(1),
+  icon: z.string().min(1),
+  deadline: z.string().optional(),
+  status: z.enum(["active", "completed", "paused", "cancelled"]).default("active"),
+  tagIds: z.array(z.string()).default([]),
+  accountId: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const goalReservationSchema = z.object({
+  goalId: z.string().min(1),
+  accountId: z.string().min(1),
+  amount: z.number().positive(),
+  currency: currencySchema,
+  createdAt: z.string().datetime(),
+  note: z.string().optional(),
+});
+
+export const budgetSchema = z.object({
+  name: z.string().min(1),
+  limitAmount: z.number().positive(),
+  currency: currencySchema,
+  period: z.literal("monthly"),
+  categoryId: z.string().optional(),
+  tagId: z.string().optional(),
+  accountId: z.string().optional(),
+  goalId: z.string().optional(),
+  color: z.string().min(1),
+  isActive: z.boolean().default(true),
+});
+
+export const settingsSchema = z.object({
+  primaryCurrency: currencySchema,
+  theme: z.enum(["light", "dark", "system"]),
+  defaultDashboardPreset: z.enum([
+    "general",
+    "spending",
+    "cash-flow",
+    "goals",
+    "accounts",
+    "monthly-review",
+  ]),
+  locale: z.literal("es-UY"),
+  includeHiddenAccountsInReports: z.boolean(),
+});
+
+export const unlockSchema = z.object({
+  token: z.string().min(1),
+});

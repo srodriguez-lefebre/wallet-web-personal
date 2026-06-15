@@ -1,0 +1,232 @@
+export type CurrencyCode = "UYU" | "USD" | "EUR" | "BRL" | "ARS";
+
+export type RecordType = "expense" | "income" | "transfer";
+
+export type AccountType =
+  | "cash"
+  | "bank"
+  | "credit_card"
+  | "savings"
+  | "recurring"
+  | "investment"
+  | "custom";
+
+export type PaymentType = "cash" | "debit" | "credit" | "transfer" | "other";
+
+export type PaymentStatus = "cleared" | "pending" | "cancelled";
+
+export type CategoryType = "expense" | "income";
+
+export type GoalStatus = "active" | "completed" | "paused" | "cancelled";
+
+export type BudgetStatus = "ok" | "warning" | "exceeded";
+
+export type DebtStatus = "active" | "paid" | "paused";
+
+export interface Money {
+  amount: number;
+  currency: CurrencyCode;
+}
+
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  currency: CurrencyCode;
+  initialBalance: number;
+  color: string;
+  icon: string;
+  isVisible: boolean;
+  isActive: boolean;
+  note?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  type: CategoryType;
+  color: string;
+  icon: string;
+  isActive: boolean;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  color: string;
+  isActive: boolean;
+}
+
+export interface Counterparty {
+  id: string;
+  name: string;
+  color?: string;
+  isActive: boolean;
+}
+
+export interface WalletRecord {
+  id: string;
+  type: RecordType;
+  amount: number;
+  currency: CurrencyCode;
+  accountId: string;
+  destinationAccountId?: string;
+  categoryId?: string;
+  counterpartyId?: string;
+  tagIds: string[];
+  paymentType: PaymentType;
+  paymentStatus: PaymentStatus;
+  exchangeRateToPrimary: number;
+  occurredAt: string;
+  note?: string;
+  isFixed?: boolean;
+}
+
+export interface Goal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currency: CurrencyCode;
+  color: string;
+  icon: string;
+  deadline?: string;
+  status: GoalStatus;
+  tagIds: string[];
+  accountId?: string;
+  note?: string;
+}
+
+export interface GoalReservation {
+  id: string;
+  goalId: string;
+  accountId: string;
+  amount: number;
+  currency: CurrencyCode;
+  createdAt: string;
+  note?: string;
+}
+
+export interface Budget {
+  id: string;
+  name: string;
+  limitAmount: number;
+  currency: CurrencyCode;
+  period: "monthly";
+  categoryId?: string;
+  tagId?: string;
+  accountId?: string;
+  goalId?: string;
+  color: string;
+  isActive: boolean;
+}
+
+export interface ExchangeRate {
+  id: string;
+  fromCurrency: CurrencyCode;
+  toCurrency: CurrencyCode;
+  rate: number;
+  date: string;
+}
+
+export interface Investment {
+  id: string;
+  name: string;
+  type: "stock" | "fund" | "crypto" | "deposit" | "other";
+  amountInvested: number;
+  currentValue: number;
+  currency: CurrencyCode;
+  startedAt: string;
+  note?: string;
+}
+
+export interface Debt {
+  id: string;
+  name: string;
+  originalAmount: number;
+  pendingAmount: number;
+  currency: CurrencyCode;
+  counterpartyId?: string;
+  accountId?: string;
+  status: DebtStatus;
+  startedAt: string;
+  dueAt?: string;
+  note?: string;
+}
+
+export interface InstallmentPlan {
+  id: string;
+  name: string;
+  totalAmount: number;
+  currency: CurrencyCode;
+  installmentsTotal: number;
+  installmentsPaid: number;
+  accountId: string;
+  categoryId: string;
+  nextPaymentAt?: string;
+  note?: string;
+}
+
+export interface WalletSettings {
+  primaryCurrency: CurrencyCode;
+  theme: "light" | "dark" | "system";
+  defaultDashboardPreset:
+    | "general"
+    | "spending"
+    | "cash-flow"
+    | "goals"
+    | "accounts"
+    | "monthly-review";
+  locale: "es-UY";
+  includeHiddenAccountsInReports: boolean;
+}
+
+export interface WalletDataset {
+  settings: WalletSettings;
+  accounts: Account[];
+  categories: Category[];
+  tags: Tag[];
+  counterparties: Counterparty[];
+  records: WalletRecord[];
+  goals: Goal[];
+  goalReservations: GoalReservation[];
+  budgets: Budget[];
+  exchangeRates: ExchangeRate[];
+  investments: Investment[];
+  debts: Debt[];
+  installmentPlans: InstallmentPlan[];
+}
+
+export interface AccountBalance {
+  account: Account;
+  balance: number;
+  balanceInPrimary: number;
+  reserved: number;
+  freeBalance: number;
+}
+
+export interface GoalProgress {
+  goal: Goal;
+  reserved: number;
+  spent: number;
+  committed: number;
+  remaining: number;
+  percentage: number;
+}
+
+export interface BudgetProgress {
+  budget: Budget;
+  spent: number;
+  remaining: number;
+  percentage: number;
+  status: BudgetStatus;
+}
+
+export interface AnalyticsSummary {
+  income: number;
+  expenses: number;
+  cashFlow: number;
+  balance: number;
+  spending: number;
+  dailyAverageExpense: number;
+  availableDaily: number;
+}
