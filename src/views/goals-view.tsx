@@ -8,19 +8,50 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import type { CurrencyCode } from "@shared/types";
 
 export function GoalsView() {
   const navigate = useNavigate();
-  const { dataset, addGoalReservation, setRecordFilters } = useWallet();
+  const { dataset, addGoal, addGoalReservation, setRecordFilters } = useWallet();
   const goals = calculateGoalProgress(dataset);
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
-  const [amount, setAmount] = useState("");
+  const [reserveAmount, setReserveAmount] = useState("");
+  const [name, setName] = useState("");
+  const [targetAmount, setTargetAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
+  const [color, setColor] = useState("#2563EB");
+  const [tagId, setTagId] = useState(dataset.tags[0]?.id ?? "");
+  const [deadline, setDeadline] = useState("");
+
+  function handleCreateGoal(event: FormEvent) {
+    event.preventDefault();
+    const numericTarget = Number(targetAmount);
+    if (!name.trim() || numericTarget <= 0) return;
+
+    const id = addGoal({
+      name: name.trim(),
+      targetAmount: numericTarget,
+      currency,
+      color,
+      icon: "flag",
+      deadline: deadline || undefined,
+      status: "active",
+      tagIds: tagId ? [tagId] : [],
+      accountId,
+      note: undefined,
+    });
+
+    setName("");
+    setTargetAmount("");
+    setDeadline("");
+    navigate(`/goals/${id}`);
+  }
 
   function handleReserve(event: FormEvent) {
     event.preventDefault();
     const account = dataset.accounts.find((item) => item.id === accountId);
-    const numericAmount = Number(amount);
+    const numericAmount = Number(reserveAmount);
     if (!account || !goalId || numericAmount <= 0) return;
 
     addGoalReservation({
@@ -31,11 +62,11 @@ export function GoalsView() {
       createdAt: new Date().toISOString(),
       note: "Reserva manual",
     });
-    setAmount("");
+    setReserveAmount("");
   }
 
-  function openGoalRecords(tagId?: string) {
-    setRecordFilters({ type: "expense", tagId });
+  function openGoalRecords(tag?: string) {
+    setRecordFilters({ type: "expense", tagId: tag });
     navigate("/records");
   }
 
@@ -44,41 +75,39 @@ export function GoalsView() {
       <PageHeader
         eyebrow="Goals"
         title="Objetivos"
-        description="Metas, reservas, gastos vinculados por etiquetas y progreso."
+        description="Crea objetivos, reserva dinero y entra al detalle para ver contexto asociado."
       />
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+      <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
         <div className="grid gap-4 lg:grid-cols-2">
           {goals.map((item) => (
             <Card
               key={item.goal.id}
               role="button"
               tabIndex={0}
-              onClick={() => openGoalRecords(item.goal.tagIds[0])}
+              onClick={() => navigate(`/goals/${item.goal.id}`)}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  openGoalRecords(item.goal.tagIds[0]);
+                  navigate(`/goals/${item.goal.id}`);
                 }
               }}
               className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
             >
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="grid h-9 w-9 place-items-center rounded-md text-white"
-                        style={{ backgroundColor: item.goal.color }}
-                      >
-                        <Flag className="h-4 w-4" />
-                      </span>
-                      <div>
-                        <CardTitle>{item.goal.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          Objetivo {formatMoney(item.goal.targetAmount, item.goal.currency)}
-                        </p>
-                      </div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="grid h-9 w-9 place-items-center rounded-md text-white"
+                      style={{ backgroundColor: item.goal.color }}
+                    >
+                      <Flag className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <CardTitle>{item.goal.name}</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Objetivo {formatMoney(item.goal.targetAmount, item.goal.currency)}
+                      </p>
                     </div>
                   </div>
                   <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
@@ -101,22 +130,10 @@ export function GoalsView() {
                       {formatMoney(item.spent, item.goal.currency)}
                     </p>
                   </div>
-                  <div className="rounded-md bg-secondary p-3">
-                    <p className="text-muted-foreground">Comprometido</p>
-                    <p className="font-semibold">
-                      {formatMoney(item.committed, item.goal.currency)}
-                    </p>
-                  </div>
-                  <div className="rounded-md bg-secondary p-3">
-                    <p className="text-muted-foreground">Restante</p>
-                    <p className="font-semibold">
-                      {formatMoney(item.remaining, item.goal.currency)}
-                    </p>
-                  </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {item.goal.tagIds.map((tagId) => {
-                    const tag = dataset.tags.find((candidate) => candidate.id === tagId);
+                  {item.goal.tagIds.map((currentTagId) => {
+                    const tag = dataset.tags.find((candidate) => candidate.id === currentTagId);
                     return tag ? (
                       <Badge
                         key={tag.id}
@@ -143,60 +160,147 @@ export function GoalsView() {
           ))}
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <PiggyBank className="h-4 w-4" />
-              Reservar dinero
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="space-y-4" onSubmit={handleReserve}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Goal</span>
-                <select
-                  value={goalId}
-                  onChange={(event) => setGoalId(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {dataset.goals.map((goal) => (
-                    <option key={goal.id} value={goal.id}>
-                      {goal.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Cuenta</span>
-                <select
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {dataset.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Monto</span>
-                <input
-                  value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                  type="number"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="0"
-                />
-              </label>
-              <Button className="w-full" type="submit">
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
-                Reservar
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+                Nuevo goal
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleCreateGoal}>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Nombre</span>
+                  <input
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="Viaje, emergencia, notebook..."
+                  />
+                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Objetivo</span>
+                    <input
+                      value={targetAmount}
+                      onChange={(event) => setTargetAmount(event.target.value)}
+                      type="number"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      placeholder="50000"
+                    />
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Moneda</span>
+                    <select
+                      value={currency}
+                      onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="UYU">UYU</option>
+                      <option value="USD">USD</option>
+                      <option value="BRL">BRL</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Etiqueta</span>
+                    <select
+                      value={tagId}
+                      onChange={(event) => setTagId(event.target.value)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Sin etiqueta</option>
+                      {dataset.tags.map((tag) => (
+                        <option key={tag.id} value={tag.id}>
+                          {tag.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Color</span>
+                    <input
+                      value={color}
+                      onChange={(event) => setColor(event.target.value)}
+                      type="color"
+                      className="h-10 w-full rounded-md border bg-background px-2"
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Fecha limite</span>
+                  <input
+                    value={deadline}
+                    onChange={(event) => setDeadline(event.target.value)}
+                    type="date"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                </label>
+                <Button className="w-full" type="submit">
+                  <Plus className="h-4 w-4" />
+                  Crear y abrir detalle
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PiggyBank className="h-4 w-4" />
+                Reservar dinero
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form className="space-y-4" onSubmit={handleReserve}>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Goal</span>
+                  <select
+                    value={goalId}
+                    onChange={(event) => setGoalId(event.target.value)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {dataset.goals.map((goal) => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Cuenta</span>
+                  <select
+                    value={accountId}
+                    onChange={(event) => setAccountId(event.target.value)}
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    {dataset.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Monto</span>
+                  <input
+                    value={reserveAmount}
+                    onChange={(event) => setReserveAmount(event.target.value)}
+                    type="number"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    placeholder="0"
+                  />
+                </label>
+                <Button className="w-full" type="submit">
+                  <Plus className="h-4 w-4" />
+                  Reservar
+                </Button>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

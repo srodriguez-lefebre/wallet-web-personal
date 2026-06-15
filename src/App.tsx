@@ -6,8 +6,10 @@ import { WalletProvider } from "@/providers/wallet-provider";
 import { AccountsView } from "@/views/accounts-view";
 import { AnalyticsView } from "@/views/analytics-view";
 import { DashboardView } from "@/views/dashboard-view";
+import { GoalDetailView } from "@/views/goal-detail-view";
 import { GoalsView } from "@/views/goals-view";
 import { ImportsView } from "@/views/imports-view";
+import { InvestmentDetailView } from "@/views/investment-detail-view";
 import { InvestmentsView } from "@/views/investments-view";
 import { RecordsView } from "@/views/records-view";
 import { SettingsView } from "@/views/settings-view";
@@ -29,7 +31,9 @@ function ProtectedApp() {
           <Route path="/records" element={<RecordsView />} />
           <Route path="/analytics" element={<AnalyticsView />} />
           <Route path="/goals" element={<GoalsView />} />
+          <Route path="/goals/:goalId" element={<GoalDetailView />} />
           <Route path="/investments" element={<InvestmentsView />} />
+          <Route path="/investments/:investmentId" element={<InvestmentDetailView />} />
           <Route path="/imports" element={<ImportsView />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="*" element={<Navigate to="/" replace />} />

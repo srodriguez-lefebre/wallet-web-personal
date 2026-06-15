@@ -7,7 +7,9 @@ import {
 } from "react";
 import { mockWalletData } from "@shared/mock-data";
 import type {
+  Goal,
   GoalReservation,
+  Investment,
   RecordFilters,
   WalletDataset,
   WalletRecord,
@@ -23,7 +25,9 @@ interface WalletContextValue {
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
+  addGoal: (goal: Omit<Goal, "id">) => string;
   addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
+  addInvestment: (investment: Omit<Investment, "id">) => string;
   toggleAccountVisibility: (accountId: string) => void;
   setPrimaryAccount: (accountId: string) => void;
 }
@@ -82,6 +86,21 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  function addGoal(goal: Omit<Goal, "id">) {
+    const id = `goal-${crypto.randomUUID()}`;
+    setDataset((current) => ({
+      ...current,
+      goals: [
+        {
+          ...goal,
+          id,
+        },
+        ...current.goals,
+      ],
+    }));
+    return id;
+  }
+
   function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
     setDataset((current) => ({
       ...current,
@@ -93,6 +112,21 @@ export function WalletProvider({ children }: PropsWithChildren) {
         ...current.goalReservations,
       ],
     }));
+  }
+
+  function addInvestment(investment: Omit<Investment, "id">) {
+    const id = `inv-${crypto.randomUUID()}`;
+    setDataset((current) => ({
+      ...current,
+      investments: [
+        {
+          ...investment,
+          id,
+        },
+        ...current.investments,
+      ],
+    }));
+    return id;
   }
 
   function toggleAccountVisibility(accountId: string) {
@@ -130,7 +164,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       addRecord,
       updateRecord,
       deleteRecord,
+      addGoal,
       addGoalReservation,
+      addInvestment,
       toggleAccountVisibility,
       setPrimaryAccount,
     }),
