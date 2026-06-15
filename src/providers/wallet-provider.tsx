@@ -26,6 +26,8 @@ interface WalletContextValue {
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
   addGoal: (goal: Omit<Goal, "id">) => string;
+  updateGoal: (goalId: string, goal: Omit<Goal, "id">) => void;
+  deleteGoal: (goalId: string) => void;
   addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
   addInvestment: (investment: Omit<Investment, "id">) => string;
   toggleAccountVisibility: (accountId: string) => void;
@@ -101,6 +103,38 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return id;
   }
 
+  function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
+    setDataset((current) => ({
+      ...current,
+      goals: current.goals.map((currentGoal) =>
+        currentGoal.id === goalId
+          ? {
+              ...goal,
+              id: goalId,
+            }
+          : currentGoal,
+      ),
+    }));
+  }
+
+  function deleteGoal(goalId: string) {
+    setDataset((current) => ({
+      ...current,
+      goals: current.goals.filter((goal) => goal.id !== goalId),
+      goalReservations: current.goalReservations.filter(
+        (reservation) => reservation.goalId !== goalId,
+      ),
+      budgets: current.budgets.map((budget) =>
+        budget.goalId === goalId
+          ? {
+              ...budget,
+              goalId: undefined,
+            }
+          : budget,
+      ),
+    }));
+  }
+
   function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
     setDataset((current) => ({
       ...current,
@@ -165,6 +199,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
       updateRecord,
       deleteRecord,
       addGoal,
+      updateGoal,
+      deleteGoal,
       addGoalReservation,
       addInvestment,
       toggleAccountVisibility,
