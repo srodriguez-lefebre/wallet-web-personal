@@ -116,6 +116,7 @@ export const budgetSchema = z.object({
 
 export const settingsSchema = z.object({
   primaryCurrency: currencySchema,
+  primaryAccountId: z.string().optional(),
   theme: z.enum(["light", "dark", "system"]),
   defaultDashboardPreset: z.enum([
     "general",

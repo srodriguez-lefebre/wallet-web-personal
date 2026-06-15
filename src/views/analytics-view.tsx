@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -25,7 +26,8 @@ import {
 } from "@shared/simulations";
 
 export function AnalyticsView() {
-  const { dataset, selectedMonth } = useWallet();
+  const navigate = useNavigate();
+  const { dataset, selectedMonth, setRecordFilters } = useWallet();
   const summary = calculateSummary(dataset, selectedMonth);
   const categories = calculateCategoryExpenses(dataset, selectedMonth);
   const budgets = calculateBudgetProgress(dataset, selectedMonth);
@@ -37,6 +39,11 @@ export function AnalyticsView() {
   const projection = calculateEndOfMonthProjection(dataset, summary.dailyAverageExpense);
   const allowedDaily = calculateAllowedDailySpend(dataset);
   const recommendations = buildSavingsRecommendations(dataset);
+
+  function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
+    setRecordFilters(filters);
+    navigate("/records");
+  }
 
   return (
     <div>
@@ -58,6 +65,7 @@ export function AnalyticsView() {
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={70} />
                 <Tooltip />
+                <Bar dataKey="cashFlow" fill="#2563EB" name="Cash flow" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="income" fill="#22C55E" name="Ingresos" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" fill="#EF4444" name="Gastos" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -71,42 +79,56 @@ export function AnalyticsView() {
           </CardHeader>
           <CardContent>
             <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
-              <div className="rounded-md bg-secondary p-3">
+              <button
+                type="button"
+                onClick={() => goToRecords({ type: "income" })}
+                className="rounded-md bg-secondary p-3 text-left transition hover:bg-sky-100 dark:hover:bg-sky-950"
+              >
                 <p className="text-muted-foreground">Ingreso</p>
                 <p className="font-semibold">
                   {formatMoney(summary.income, dataset.settings.primaryCurrency)}
                 </p>
-              </div>
-              <div className="rounded-md bg-secondary p-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => goToRecords({ type: "expense" })}
+                className="rounded-md bg-secondary p-3 text-left transition hover:bg-sky-100 dark:hover:bg-sky-950"
+              >
                 <p className="text-muted-foreground">Gasto</p>
                 <p className="font-semibold">
                   {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
                 </p>
-              </div>
-              <div className="rounded-md bg-secondary p-3">
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/")}
+                className="rounded-md bg-sky-50 p-3 text-left transition hover:bg-sky-100 dark:bg-sky-950/40 dark:hover:bg-sky-950"
+              >
                 <p className="text-muted-foreground">Flow</p>
-                <p className="font-semibold">
+                <p className="font-semibold text-sky-700 dark:text-sky-300">
                   {formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
                 </p>
-              </div>
+              </button>
             </div>
             <div className="space-y-2">
               {categories.map((category) => (
-                <div
+                <button
                   key={category.id}
-                  className="flex items-center justify-between rounded-md border p-3"
+                  type="button"
+                  onClick={() => goToRecords({ type: "expense", categoryId: category.id })}
+                  className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
                     <span
                       className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: category.color }}
+                      style={{ backgroundColor: "#2563EB" }}
                     />
                     <p className="font-medium">{category.name}</p>
                   </div>
                   <p className="font-semibold">
                     {formatMoney(category.value, dataset.settings.primaryCurrency)}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -120,7 +142,19 @@ export function AnalyticsView() {
           </CardHeader>
           <CardContent className="space-y-4">
             {budgets.map((budget) => (
-              <div key={budget.budget.id} className="rounded-md border p-3">
+              <button
+                key={budget.budget.id}
+                type="button"
+                onClick={() =>
+                  goToRecords({
+                    type: "expense",
+                    categoryId: budget.budget.categoryId,
+                    tagId: budget.budget.tagId,
+                    accountId: budget.budget.accountId,
+                  })
+                }
+                className="w-full rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="font-medium">{budget.budget.name}</p>
@@ -139,10 +173,10 @@ export function AnalyticsView() {
                       ? "bg-red-500"
                       : budget.status === "warning"
                         ? "bg-amber-500"
-                        : "bg-emerald-500"
+                        : "bg-sky-500"
                   }
                 />
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>

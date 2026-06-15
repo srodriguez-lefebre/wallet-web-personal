@@ -1,4 +1,5 @@
 import { Lock, Moon, Palette, Tags, WalletCards } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +9,15 @@ import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
 
 export function SettingsView() {
-  const { dataset } = useWallet();
+  const navigate = useNavigate();
+  const { dataset, setRecordFilters } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
+
+  function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
+    setRecordFilters(filters);
+    navigate("/records");
+  }
 
   return (
     <div>
@@ -80,7 +87,17 @@ export function SettingsView() {
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {dataset.categories.map((category) => (
-              <div key={category.id} className="flex items-center gap-3 rounded-md border p-3">
+              <button
+                key={category.id}
+                type="button"
+                onClick={() =>
+                  openRecords({
+                    type: category.type === "income" ? "income" : "expense",
+                    categoryId: category.id,
+                  })
+                }
+                className="flex items-center gap-3 rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
+              >
                 <span
                   className="h-3 w-3 rounded-full"
                   style={{ backgroundColor: category.color }}
@@ -89,7 +106,7 @@ export function SettingsView() {
                   <p className="font-medium">{category.name}</p>
                   <p className="text-xs text-muted-foreground">{category.type}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </CardContent>
         </Card>
@@ -106,7 +123,13 @@ export function SettingsView() {
               <p className="mb-2 text-sm font-medium">Etiquetas</p>
               <div className="flex flex-wrap gap-2">
                 {dataset.tags.map((tag) => (
-                  <Badge key={tag.id} style={{ color: tag.color }} variant="muted">
+                  <Badge
+                    key={tag.id}
+                    style={{ color: tag.color }}
+                    variant="muted"
+                    className="cursor-pointer transition hover:bg-secondary"
+                    onClick={() => openRecords({ tagId: tag.id, type: "all" })}
+                  >
                     {tag.name}
                   </Badge>
                 ))}
@@ -116,9 +139,16 @@ export function SettingsView() {
               <p className="mb-2 text-sm font-medium">Contrapartes</p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {dataset.counterparties.map((counterparty) => (
-                  <div key={counterparty.id} className="rounded-md border p-2 text-sm">
+                  <button
+                    key={counterparty.id}
+                    type="button"
+                    onClick={() =>
+                      openRecords({ counterpartyId: counterparty.id, type: "all" })
+                    }
+                    className="rounded-md border p-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
+                  >
                     {counterparty.name}
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { ArrowDownRight, ArrowUpRight, Landmark, WalletCards } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,12 +25,18 @@ import {
   formatMoney,
 } from "@shared/calculations";
 
+const reportBlues = ["#2563EB", "#0EA5E9", "#0284C7", "#38BDF8", "#1D4ED8", "#60A5FA"];
+
 export function DashboardView() {
-  const { dataset, selectedMonth } = useWallet();
+  const navigate = useNavigate();
+  const { dataset, selectedMonth, setRecordFilters } = useWallet();
   const summary = calculateSummary(dataset, selectedMonth);
-  const balances = calculateAccountBalances(dataset).filter(
-    (item) => item.account.isVisible,
-  );
+  const accountBalances = calculateAccountBalances(dataset);
+  const visibleBalances = accountBalances.filter((item) => item.account.isVisible);
+  const primaryBalance =
+    accountBalances.find(
+      (item) => item.account.id === dataset.settings.primaryAccountId,
+    ) ?? visibleBalances[0];
   const categories = calculateCategoryExpenses(dataset, selectedMonth);
   const monthlySeries = calculateMonthlySeries(dataset, [
     "2026-04",
@@ -44,12 +51,17 @@ export function DashboardView() {
     )
     .slice(0, 5);
 
+  function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
+    setRecordFilters(filters);
+    navigate("/records");
+  }
+
   return (
     <div>
       <PageHeader
         eyebrow="Dashboard"
         title="Estado financiero"
-        description="Resumen principal con cuentas visibles, cash flow, spending, ultimos registros y presets."
+        description="Resumen principal interactivo: cada numero abre su contexto en registros o reportes."
       >
         <Badge variant="info">Preset General</Badge>
       </PageHeader>
@@ -57,10 +69,19 @@ export function DashboardView() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
           label="Balance"
-          value={formatMoney(summary.balance, dataset.settings.primaryCurrency)}
-          detail="Cuentas visibles"
+          value={
+            primaryBalance
+              ? formatMoney(primaryBalance.balance, primaryBalance.account.currency)
+              : formatMoney(summary.balance, dataset.settings.primaryCurrency)
+          }
+          detail={primaryBalance ? `Cuenta principal: ${primaryBalance.account.name}` : "Cuenta principal"}
           icon={<WalletCards className="h-4 w-4" />}
-          tone={summary.balance >= 0 ? "success" : "danger"}
+          tone={(primaryBalance?.balance ?? summary.balance) >= 0 ? "success" : "danger"}
+          onClick={() =>
+            primaryBalance
+              ? goToRecords({ accountId: primaryBalance.account.id, type: "all" })
+              : goToRecords({ type: "all" })
+          }
         />
         <MetricCard
           label="Ingresos"
@@ -68,6 +89,7 @@ export function DashboardView() {
           detail="Mes seleccionado"
           icon={<ArrowUpRight className="h-4 w-4" />}
           tone="success"
+          onClick={() => goToRecords({ type: "income" })}
         />
         <MetricCard
           label="Gastos"
@@ -75,6 +97,7 @@ export function DashboardView() {
           detail="Mes seleccionado"
           icon={<ArrowDownRight className="h-4 w-4" />}
           tone="danger"
+          onClick={() => goToRecords({ type: "expense" })}
         />
         <MetricCard
           label="Cash flow"
@@ -82,6 +105,7 @@ export function DashboardView() {
           detail="Ingresos menos gastos"
           icon={<Landmark className="h-4 w-4" />}
           tone={summary.cashFlow >= 0 ? "success" : "danger"}
+          onClick={() => navigate("/analytics")}
         />
       </div>
 
@@ -95,12 +119,16 @@ export function DashboardView() {
               <AreaChart data={monthlySeries}>
                 <defs>
                   <linearGradient id="income" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="#22C55E" stopOpacity={0.3} />
+                    <stop offset="5%" stopColor="#22C55E" stopOpacity={0.24} />
                     <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="expenses" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.25} />
+                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="flow" x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.28} />
+                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -121,6 +149,13 @@ export function DashboardView() {
                   fill="url(#expenses)"
                   name="Gastos"
                 />
+                <Area
+                  type="monotone"
+                  dataKey="cashFlow"
+                  stroke="#2563EB"
+                  fill="url(#flow)"
+                  name="Cash flow"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -130,25 +165,53 @@ export function DashboardView() {
           <CardHeader>
             <CardTitle>Gastos por categoria</CardTitle>
           </CardHeader>
-          <CardContent className="h-80">
+          <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={categories}
                   dataKey="value"
                   nameKey="name"
-                  innerRadius={72}
-                  outerRadius={112}
+                  innerRadius={64}
+                  outerRadius={104}
                   paddingAngle={3}
                 >
-                  {categories.map((category) => (
-                    <Cell key={category.id} fill={category.color} />
+                  {categories.map((category, index) => (
+                    <Cell
+                      key={category.id}
+                      fill={reportBlues[index % reportBlues.length]}
+                      className="cursor-pointer outline-none"
+                      onClick={() =>
+                        goToRecords({ type: "expense", categoryId: category.id })
+                      }
+                    />
                   ))}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
+          <div className="grid gap-2 px-5 pb-5 sm:grid-cols-2">
+            {categories.map((category, index) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => goToRecords({ type: "expense", categoryId: category.id })}
+                className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
+              >
+                <span className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: reportBlues[index % reportBlues.length] }}
+                  />
+                  {category.name}
+                </span>
+                <span className="font-medium">
+                  {formatMoney(category.value, dataset.settings.primaryCurrency)}
+                </span>
+              </button>
+            ))}
+          </div>
         </Card>
       </div>
 
@@ -158,10 +221,19 @@ export function DashboardView() {
             <CardTitle>Cuentas visibles</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {balances.map(({ account, balance, freeBalance, reserved }) => (
+            {visibleBalances.map(({ account, balance, freeBalance, reserved }) => (
               <div
                 key={account.id}
-                className="flex items-center justify-between rounded-md border p-3"
+                role="button"
+                tabIndex={0}
+                onClick={() => goToRecords({ accountId: account.id, type: "all" })}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    goToRecords({ accountId: account.id, type: "all" });
+                  }
+                }}
+                className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
               >
                 <div className="flex items-center gap-3">
                   <span
@@ -194,14 +266,42 @@ export function DashboardView() {
               const account = dataset.accounts.find(
                 (item) => item.id === record.accountId,
               );
+              const counterparty = dataset.counterparties.find(
+                (item) => item.id === record.counterpartyId,
+              );
+
               return (
                 <div
                   key={record.id}
-                  className="flex items-center justify-between rounded-md border p-3"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    goToRecords({
+                      type: record.type,
+                      accountId: record.accountId,
+                      categoryId: record.categoryId,
+                      counterpartyId: record.counterpartyId,
+                    })
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      goToRecords({
+                        type: record.type,
+                        accountId: record.accountId,
+                        categoryId: record.categoryId,
+                        counterpartyId: record.counterpartyId,
+                      });
+                    }
+                  }}
+                  className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div>
                     <p className="font-medium">{category?.name ?? "Transferencia"}</p>
-                    <p className="text-xs text-muted-foreground">{account?.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {account?.name}
+                      {counterparty ? ` · ${counterparty.name}` : ""}
+                    </p>
                   </div>
                   <p
                     className={

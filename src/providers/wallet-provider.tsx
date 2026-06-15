@@ -6,15 +6,26 @@ import {
   useState,
 } from "react";
 import { mockWalletData } from "@shared/mock-data";
-import type { GoalReservation, WalletDataset, WalletRecord } from "@shared/types";
+import type {
+  GoalReservation,
+  RecordFilters,
+  WalletDataset,
+  WalletRecord,
+} from "@shared/types";
 
 interface WalletContextValue {
   dataset: WalletDataset;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  recordFilters: RecordFilters;
+  setRecordFilters: (filters: RecordFilters) => void;
+  clearRecordFilters: () => void;
   addRecord: (record: Omit<WalletRecord, "id">) => void;
+  updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
   addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
+  toggleAccountVisibility: (accountId: string) => void;
+  setPrimaryAccount: (accountId: string) => void;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -22,6 +33,20 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 export function WalletProvider({ children }: PropsWithChildren) {
   const [dataset, setDataset] = useState<WalletDataset>(mockWalletData);
   const [selectedMonth, setSelectedMonth] = useState("2026-06");
+  const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
+    type: "all",
+  });
+
+  function setRecordFilters(filters: RecordFilters) {
+    setRecordFiltersState((current) => ({
+      ...current,
+      ...filters,
+    }));
+  }
+
+  function clearRecordFilters() {
+    setRecordFiltersState({ type: "all" });
+  }
 
   function addRecord(record: Omit<WalletRecord, "id">) {
     setDataset((current) => ({
@@ -43,6 +68,20 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  function updateRecord(recordId: string, record: Omit<WalletRecord, "id">) {
+    setDataset((current) => ({
+      ...current,
+      records: current.records.map((currentRecord) =>
+        currentRecord.id === recordId
+          ? {
+              ...record,
+              id: recordId,
+            }
+          : currentRecord,
+      ),
+    }));
+  }
+
   function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
     setDataset((current) => ({
       ...current,
@@ -56,16 +95,46 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  function toggleAccountVisibility(accountId: string) {
+    setDataset((current) => ({
+      ...current,
+      accounts: current.accounts.map((account) =>
+        account.id === accountId
+          ? {
+              ...account,
+              isVisible: !account.isVisible,
+            }
+          : account,
+      ),
+    }));
+  }
+
+  function setPrimaryAccount(accountId: string) {
+    setDataset((current) => ({
+      ...current,
+      settings: {
+        ...current.settings,
+        primaryAccountId: accountId,
+      },
+    }));
+  }
+
   const value = useMemo(
     () => ({
       dataset,
       selectedMonth,
       setSelectedMonth,
+      recordFilters,
+      setRecordFilters,
+      clearRecordFilters,
       addRecord,
+      updateRecord,
       deleteRecord,
       addGoalReservation,
+      toggleAccountVisibility,
+      setPrimaryAccount,
     }),
-    [dataset, selectedMonth],
+    [dataset, recordFilters, selectedMonth],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;

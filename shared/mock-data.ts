@@ -3,6 +3,7 @@ import type { WalletDataset } from "./types";
 export const mockWalletData: WalletDataset = {
   settings: {
     primaryCurrency: "UYU",
+    primaryAccountId: "acc-bank",
     theme: "light",
     defaultDashboardPreset: "general",
     locale: "es-UY",

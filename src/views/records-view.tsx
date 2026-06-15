@@ -1,28 +1,53 @@
 import { FormEvent, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Plus, Trash2 } from "lucide-react";
+import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney, groupRecordsByDay } from "@shared/calculations";
-import type { CurrencyCode, PaymentStatus, PaymentType, RecordType } from "@shared/types";
+import type {
+  CurrencyCode,
+  PaymentStatus,
+  PaymentType,
+  RecordType,
+  WalletRecord,
+} from "@shared/types";
+
+function firstCategoryIdForType(
+  categories: ReturnType<typeof useWallet>["dataset"]["categories"],
+  type: RecordType,
+) {
+  const categoryType = type === "income" ? "income" : "expense";
+  return categories.find((category) => category.type === categoryType)?.id ?? "";
+}
 
 export function RecordsView() {
-  const { dataset, selectedMonth, addRecord, deleteRecord } = useWallet();
+  const {
+    dataset,
+    selectedMonth,
+    recordFilters,
+    setRecordFilters,
+    clearRecordFilters,
+    addRecord,
+    updateRecord,
+    deleteRecord,
+  } = useWallet();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [destinationAccountId, setDestinationAccountId] = useState(
     dataset.accounts[1]?.id ?? "",
   );
-  const [categoryId, setCategoryId] = useState(dataset.categories[0]?.id ?? "");
+  const [categoryId, setCategoryId] = useState(firstCategoryIdForType(dataset.categories, "expense"));
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
-  const [filterType, setFilterType] = useState<"all" | RecordType>("all");
-  const [search, setSearch] = useState("");
-
+  const [counterpartyId, setCounterpartyId] = useState("");
+  const [paymentType, setPaymentType] = useState<PaymentType>("cash");
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const categories = dataset.categories.filter((category) =>
     type === "income" ? category.type === "income" : category.type === "expense",
   );
@@ -30,48 +55,131 @@ export function RecordsView() {
   const filteredRecords = useMemo(() => {
     return dataset.records
       .filter((record) => record.occurredAt.startsWith(selectedMonth))
-      .filter((record) => (filterType === "all" ? true : record.type === filterType))
+      .filter((record) =>
+        !recordFilters.type || recordFilters.type === "all"
+          ? true
+          : record.type === recordFilters.type,
+      )
+      .filter((record) =>
+        recordFilters.accountId ? record.accountId === recordFilters.accountId : true,
+      )
+      .filter((record) =>
+        recordFilters.categoryId ? record.categoryId === recordFilters.categoryId : true,
+      )
+      .filter((record) =>
+        recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
+      )
+      .filter((record) =>
+        recordFilters.counterpartyId
+          ? record.counterpartyId === recordFilters.counterpartyId
+          : true,
+      )
       .filter((record) => {
         const category = dataset.categories.find((item) => item.id === record.categoryId);
         const counterparty = dataset.counterparties.find(
           (item) => item.id === record.counterpartyId,
         );
-        const haystack = `${category?.name ?? ""} ${counterparty?.name ?? ""} ${record.note ?? ""}`;
-        return haystack.toLowerCase().includes(search.toLowerCase());
+        const tags = record.tagIds
+          .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
+          .join(" ");
+        const haystack = `${category?.name ?? ""} ${counterparty?.name ?? ""} ${tags} ${record.note ?? ""}`;
+        return haystack.toLowerCase().includes((recordFilters.search ?? "").toLowerCase());
       })
       .sort(
         (a, b) =>
           new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
       );
-  }, [dataset, filterType, search, selectedMonth]);
+  }, [dataset, recordFilters, selectedMonth]);
 
   const grouped = groupRecordsByDay(filteredRecords);
+  const activeFilters = [
+    recordFilters.type && recordFilters.type !== "all" ? recordFilters.type : null,
+    recordFilters.accountId
+      ? dataset.accounts.find((account) => account.id === recordFilters.accountId)?.name
+      : null,
+    recordFilters.categoryId
+      ? dataset.categories.find((category) => category.id === recordFilters.categoryId)?.name
+      : null,
+    recordFilters.tagId
+      ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
+      : null,
+    recordFilters.counterpartyId
+      ? dataset.counterparties.find((counterparty) => counterparty.id === recordFilters.counterpartyId)
+          ?.name
+      : null,
+    recordFilters.search,
+  ].filter(Boolean);
 
-  function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  function resetForm(nextType: RecordType = "expense") {
+    setEditingId(null);
+    setType(nextType);
+    setAccountId(dataset.accounts[0]?.id ?? "");
+    setDestinationAccountId(dataset.accounts[1]?.id ?? "");
+    setCategoryId(firstCategoryIdForType(dataset.categories, nextType));
+    setAmount("");
+    setNote("");
+    setTagId("");
+    setCounterpartyId("");
+    setPaymentType(nextType === "transfer" ? "transfer" : "cash");
+    setPaymentStatus("cleared");
+  }
+
+  function loadRecord(record: WalletRecord) {
+    setEditingId(record.id);
+    setType(record.type);
+    setAccountId(record.accountId);
+    setDestinationAccountId(record.destinationAccountId ?? "");
+    setCategoryId(record.categoryId ?? firstCategoryIdForType(dataset.categories, record.type));
+    setAmount(String(record.amount));
+    setNote(record.note ?? "");
+    setTagId(record.tagIds[0] ?? "");
+    setCounterpartyId(record.counterpartyId ?? "");
+    setPaymentType(record.paymentType);
+    setPaymentStatus(record.paymentStatus);
+  }
+
+  function buildRecord(): Omit<WalletRecord, "id"> | null {
     const numericAmount = Number(amount);
-    if (!numericAmount || numericAmount <= 0) return;
+    if (!numericAmount || numericAmount <= 0) return null;
 
     const account = dataset.accounts.find((item) => item.id === accountId);
 
-    addRecord({
+    return {
       type,
       amount: numericAmount,
       currency: (account?.currency ?? "UYU") as CurrencyCode,
       accountId,
       destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
-      counterpartyId: undefined,
+      counterpartyId: counterpartyId || undefined,
       tagIds: tagId ? [tagId] : [],
-      paymentType: type === "transfer" ? "transfer" : ("cash" as PaymentType),
-      paymentStatus: "cleared" as PaymentStatus,
+      paymentType,
+      paymentStatus,
       exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
-      occurredAt: new Date().toISOString(),
+      occurredAt: editingId
+        ? (dataset.records.find((record) => record.id === editingId)?.occurredAt ??
+          new Date().toISOString())
+        : new Date().toISOString(),
       note: note || undefined,
-    });
-    setAmount("");
-    setNote("");
-    setTagId("");
+    };
+  }
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    const nextRecord = buildRecord();
+    if (!nextRecord) return;
+
+    if (editingId) {
+      updateRecord(editingId, nextRecord);
+    } else {
+      addRecord(nextRecord);
+    }
+
+    resetForm(type);
+  }
+
+  function updateSearch(value: string) {
+    setRecordFilters({ search: value });
   }
 
   return (
@@ -79,14 +187,22 @@ export function RecordsView() {
       <PageHeader
         eyebrow="Records"
         title="Registros"
-        description="Gastos, ingresos, transferencias, filtros y formulario de carga."
-      />
+        description="Toca cualquier movimiento para editar monto, cuenta, contraparte, estado o notas."
+      >
+        <Button variant="outline" onClick={() => resetForm()}>
+          <Plus className="h-4 w-4" />
+          Nuevo
+        </Button>
+      </PageHeader>
 
-      <div className="grid gap-4 xl:grid-cols-[360px_1fr]">
+      <div className="grid gap-4 xl:grid-cols-[380px_1fr]">
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Nuevo registro</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {editingId ? "Editar registro" : "Nuevo registro"}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <form className="space-y-4" onSubmit={handleSubmit}>
@@ -95,7 +211,11 @@ export function RecordsView() {
                     <button
                       key={item}
                       type="button"
-                      onClick={() => setType(item)}
+                      onClick={() => {
+                        setType(item);
+                        setCategoryId(firstCategoryIdForType(dataset.categories, item));
+                        setPaymentType(item === "transfer" ? "transfer" : paymentType);
+                      }}
                       className={
                         type === item
                           ? "rounded bg-card px-2 py-2 text-sm font-medium shadow-sm"
@@ -171,21 +291,69 @@ export function RecordsView() {
                   </label>
                 )}
 
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Etiqueta</span>
-                  <select
-                    value={tagId}
-                    onChange={(event) => setTagId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Sin etiqueta</option>
-                    {dataset.tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Etiqueta</span>
+                    <select
+                      value={tagId}
+                      onChange={(event) => setTagId(event.target.value)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Sin etiqueta</option>
+                      {dataset.tags.map((tag) => (
+                        <option key={tag.id} value={tag.id}>
+                          {tag.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Contraparte</span>
+                    <select
+                      value={counterpartyId}
+                      onChange={(event) => setCounterpartyId(event.target.value)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Sin contraparte</option>
+                      {dataset.counterparties.map((counterparty) => (
+                        <option key={counterparty.id} value={counterparty.id}>
+                          {counterparty.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Tipo de pago</span>
+                    <select
+                      value={paymentType}
+                      onChange={(event) => setPaymentType(event.target.value as PaymentType)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="cash">cash</option>
+                      <option value="debit">debit</option>
+                      <option value="credit">credit</option>
+                      <option value="transfer">transfer</option>
+                      <option value="other">other</option>
+                    </select>
+                  </label>
+
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Estado</span>
+                    <select
+                      value={paymentStatus}
+                      onChange={(event) => setPaymentStatus(event.target.value as PaymentStatus)}
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="cleared">cleared</option>
+                      <option value="pending">pending</option>
+                      <option value="cancelled">cancelled</option>
+                    </select>
+                  </label>
+                </div>
 
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Nota</span>
@@ -197,10 +365,17 @@ export function RecordsView() {
                   />
                 </label>
 
-                <Button className="w-full" type="submit">
-                  <Plus className="h-4 w-4" />
-                  Agregar
-                </Button>
+                <div className="flex gap-2">
+                  <Button className="flex-1" type="submit">
+                    {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                    {editingId ? "Guardar cambios" : "Agregar"}
+                  </Button>
+                  {editingId ? (
+                    <Button type="button" variant="outline" onClick={() => resetForm()}>
+                      <X className="h-4 w-4" />
+                    </Button>
+                  ) : null}
+                </div>
               </form>
             </CardContent>
           </Card>
@@ -211,8 +386,10 @@ export function RecordsView() {
             </CardHeader>
             <CardContent className="space-y-3">
               <select
-                value={filterType}
-                onChange={(event) => setFilterType(event.target.value as "all" | RecordType)}
+                value={recordFilters.type ?? "all"}
+                onChange={(event) =>
+                  setRecordFilters({ type: event.target.value as "all" | RecordType })
+                }
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               >
                 <option value="all">Todos</option>
@@ -220,21 +397,74 @@ export function RecordsView() {
                 <option value="income">Ingresos</option>
                 <option value="transfer">Transferencias</option>
               </select>
-              <input
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
+              <select
+                value={recordFilters.accountId ?? ""}
+                onChange={(event) =>
+                  setRecordFilters({ accountId: event.target.value || undefined })
+                }
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Buscar por nota, categoria..."
+              >
+                <option value="">Todas las cuentas</option>
+                {dataset.accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={recordFilters.categoryId ?? ""}
+                onChange={(event) =>
+                  setRecordFilters({ categoryId: event.target.value || undefined })
+                }
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Todas las categorias</option>
+                {dataset.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={recordFilters.counterpartyId ?? ""}
+                onChange={(event) =>
+                  setRecordFilters({ counterpartyId: event.target.value || undefined })
+                }
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">Todas las contrapartes</option>
+                {dataset.counterparties.map((counterparty) => (
+                  <option key={counterparty.id} value={counterparty.id}>
+                    {counterparty.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                value={recordFilters.search ?? ""}
+                onChange={(event) => updateSearch(event.target.value)}
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Buscar por nota, categoria, contraparte..."
               />
+              <Button className="w-full" variant="outline" onClick={clearRecordFilters}>
+                <FilterX className="h-4 w-4" />
+                Reset filter
+              </Button>
             </CardContent>
           </Card>
         </div>
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>{filteredRecords.length} registros</CardTitle>
-              <Badge variant="muted">{selectedMonth}</Badge>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="muted">{selectedMonth}</Badge>
+                {activeFilters.map((filter) => (
+                  <Badge key={String(filter)} variant="info">
+                    {filter}
+                  </Badge>
+                ))}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -252,14 +482,33 @@ export function RecordsView() {
                     const account = dataset.accounts.find(
                       (item) => item.id === record.accountId,
                     );
+                    const counterparty = dataset.counterparties.find(
+                      (item) => item.id === record.counterpartyId,
+                    );
+                    const tags = record.tagIds
+                      .map((id) => dataset.tags.find((tag) => tag.id === id))
+                      .filter(Boolean);
 
                     return (
                       <div
                         key={record.id}
-                        className="flex items-center justify-between rounded-md border p-3"
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => loadRecord(record)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            loadRecord(record);
+                          }
+                        }}
+                        className={
+                          editingId === record.id
+                            ? "flex cursor-pointer items-center justify-between rounded-md border border-primary bg-primary/5 p-3"
+                            : "flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
+                        }
                       >
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span
                               className="h-3 w-3 rounded-full"
                               style={{
@@ -280,10 +529,23 @@ export function RecordsView() {
                             >
                               {record.type}
                             </Badge>
+                            <Badge variant="muted">{record.paymentStatus}</Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {account?.name} · {record.note ?? "Sin nota"}
+                            {account?.name}
+                            {counterparty ? ` · ${counterparty.name}` : " · Sin contraparte"}
+                            {record.note ? ` · ${record.note}` : " · Sin nota"}
                           </p>
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {tags.map((tag) =>
+                              tag ? (
+                                <Badge key={tag.id} variant="info">
+                                  {tag.name}
+                                </Badge>
+                              ) : null,
+                            )}
+                            <Badge variant="muted">{record.paymentType}</Badge>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2">
                           <p
@@ -305,7 +567,10 @@ export function RecordsView() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => deleteRecord(record.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              deleteRecord(record.id);
+                            }}
                             aria-label="Eliminar registro"
                           >
                             <Trash2 className="h-4 w-4" />

@@ -215,6 +215,7 @@ export const budgets = pgTable("budgets", {
 export const settings = pgTable("settings", {
   id: uuid("id").primaryKey().defaultRandom(),
   primaryCurrency: text("primary_currency").notNull().default("UYU"),
+  primaryAccountId: uuid("primary_account_id").references(() => accounts.id),
   theme: text("theme").notNull().default("light"),
   defaultDashboardPreset: text("default_dashboard_preset")
     .notNull()

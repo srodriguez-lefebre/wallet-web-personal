@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { CalendarDays, Flag, PiggyBank, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,8 @@ import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
 
 export function GoalsView() {
-  const { dataset, addGoalReservation } = useWallet();
+  const navigate = useNavigate();
+  const { dataset, addGoalReservation, setRecordFilters } = useWallet();
   const goals = calculateGoalProgress(dataset);
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
@@ -32,6 +34,11 @@ export function GoalsView() {
     setAmount("");
   }
 
+  function openGoalRecords(tagId?: string) {
+    setRecordFilters({ type: "expense", tagId });
+    navigate("/records");
+  }
+
   return (
     <div>
       <PageHeader
@@ -43,7 +50,19 @@ export function GoalsView() {
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <div className="grid gap-4 lg:grid-cols-2">
           {goals.map((item) => (
-            <Card key={item.goal.id}>
+            <Card
+              key={item.goal.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => openGoalRecords(item.goal.tagIds[0])}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openGoalRecords(item.goal.tagIds[0]);
+                }
+              }}
+              className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+            >
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -99,7 +118,15 @@ export function GoalsView() {
                   {item.goal.tagIds.map((tagId) => {
                     const tag = dataset.tags.find((candidate) => candidate.id === tagId);
                     return tag ? (
-                      <Badge key={tag.id} variant="info">
+                      <Badge
+                        key={tag.id}
+                        variant="info"
+                        className="transition hover:bg-sky-500/20"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openGoalRecords(tag.id);
+                        }}
+                      >
                         {tag.name}
                       </Badge>
                     ) : null;

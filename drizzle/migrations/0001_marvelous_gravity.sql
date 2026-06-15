@@ -1,0 +1,2 @@
+ALTER TABLE "settings" ADD COLUMN "primary_account_id" uuid;--> statement-breakpoint
+ALTER TABLE "settings" ADD CONSTRAINT "settings_primary_account_id_accounts_id_fk" FOREIGN KEY ("primary_account_id") REFERENCES "public"."accounts"("id") ON DELETE no action ON UPDATE no action;

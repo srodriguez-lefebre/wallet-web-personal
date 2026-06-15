@@ -168,6 +168,7 @@ export interface InstallmentPlan {
 
 export interface WalletSettings {
   primaryCurrency: CurrencyCode;
+  primaryAccountId?: string;
   theme: "light" | "dark" | "system";
   defaultDashboardPreset:
     | "general"
@@ -194,6 +195,15 @@ export interface WalletDataset {
   investments: Investment[];
   debts: Debt[];
   installmentPlans: InstallmentPlan[];
+}
+
+export interface RecordFilters {
+  type?: RecordType | "all";
+  accountId?: string;
+  categoryId?: string;
+  tagId?: string;
+  counterpartyId?: string;
+  search?: string;
 }
 
 export interface AccountBalance {
