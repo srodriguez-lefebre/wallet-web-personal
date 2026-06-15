@@ -19,6 +19,7 @@ import type {
   PaymentStatus,
   PaymentType,
   RecordType,
+  WalletDataset,
   WalletRecord,
 } from "@shared/types";
 
@@ -28,6 +29,49 @@ function firstCategoryIdForType(
 ) {
   const categoryType = type === "income" ? "income" : "expense";
   return categories.find((category) => category.type === categoryType)?.id ?? "";
+}
+
+function defaultAccountId(dataset: WalletDataset) {
+  const activeVisibleAccounts = dataset.accounts.filter(
+    (account) => account.isActive && account.isVisible,
+  );
+  return (
+    activeVisibleAccounts.find(
+      (account) => account.id === dataset.settings.primaryAccountId,
+    )?.id ??
+    activeVisibleAccounts[0]?.id ??
+    dataset.accounts.find((account) => account.isActive)?.id ??
+    ""
+  );
+}
+
+function defaultDestinationAccountId(dataset: WalletDataset, sourceAccountId: string) {
+  return (
+    dataset.accounts.find(
+      (account) =>
+        account.isActive && account.isVisible && account.id !== sourceAccountId,
+    )?.id ?? ""
+  );
+}
+
+function typeButtonClassName(item: RecordType, currentType: RecordType) {
+  if (item === currentType) {
+    if (item === "expense") {
+      return "rounded bg-red-500 px-2 py-2 text-sm font-medium text-white shadow-sm";
+    }
+    if (item === "income") {
+      return "rounded bg-emerald-500 px-2 py-2 text-sm font-medium text-white shadow-sm";
+    }
+    return "rounded bg-sky-500 px-2 py-2 text-sm font-medium text-white shadow-sm";
+  }
+
+  if (item === "expense") {
+    return "rounded px-2 py-2 text-sm font-medium text-red-600 transition hover:bg-red-500/10";
+  }
+  if (item === "income") {
+    return "rounded px-2 py-2 text-sm font-medium text-emerald-600 transition hover:bg-emerald-500/10";
+  }
+  return "rounded px-2 py-2 text-sm font-medium text-sky-600 transition hover:bg-sky-500/10";
 }
 
 export function RecordsView() {
@@ -40,14 +84,15 @@ export function RecordsView() {
     addRecord,
     updateRecord,
     deleteRecord,
+    ensureCounterparty,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<RecordType>("expense");
-  const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
+  const [accountId, setAccountId] = useState(defaultAccountId(dataset));
   const [destinationAccountId, setDestinationAccountId] = useState(
-    dataset.accounts[1]?.id ?? "",
+    defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
   );
   const [categoryId, setCategoryId] = useState(
     firstCategoryIdForType(dataset.categories, "expense"),
@@ -55,8 +100,8 @@ export function RecordsView() {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
-  const [counterpartyId, setCounterpartyId] = useState("");
-  const [paymentType, setPaymentType] = useState<PaymentType>("cash");
+  const [counterpartyName, setCounterpartyName] = useState("");
+  const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const categories = dataset.categories.filter((category) =>
     type === "income" ? category.type === "income" : category.type === "expense",
@@ -124,16 +169,17 @@ export function RecordsView() {
   ].filter(Boolean);
 
   function resetForm(nextType: RecordType = "expense") {
+    const nextAccountId = defaultAccountId(dataset);
     setEditingId(null);
     setType(nextType);
-    setAccountId(dataset.accounts[0]?.id ?? "");
-    setDestinationAccountId(dataset.accounts[1]?.id ?? "");
+    setAccountId(nextAccountId);
+    setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
     setCategoryId(firstCategoryIdForType(dataset.categories, nextType));
     setAmount("");
     setNote("");
     setTagId("");
-    setCounterpartyId("");
-    setPaymentType(nextType === "transfer" ? "transfer" : "cash");
+    setCounterpartyName("");
+    setPaymentType(nextType === "transfer" ? "transfer" : "credit");
     setPaymentStatus("cleared");
   }
 
@@ -151,7 +197,10 @@ export function RecordsView() {
     setAmount(String(record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
-    setCounterpartyId(record.counterpartyId ?? "");
+    setCounterpartyName(
+      dataset.counterparties.find((counterparty) => counterparty.id === record.counterpartyId)
+        ?.name ?? "",
+    );
     setPaymentType(record.paymentType);
     setPaymentStatus(record.paymentStatus);
     setIsRecordDialogOpen(true);
@@ -167,6 +216,7 @@ export function RecordsView() {
     if (!numericAmount || numericAmount <= 0) return null;
 
     const account = dataset.accounts.find((item) => item.id === accountId);
+    const nextCounterpartyId = ensureCounterparty(counterpartyName);
 
     return {
       type,
@@ -175,7 +225,7 @@ export function RecordsView() {
       accountId,
       destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
-      counterpartyId: counterpartyId || undefined,
+      counterpartyId: nextCounterpartyId,
       tagIds: tagId ? [tagId] : [],
       paymentType,
       paymentStatus,
@@ -245,13 +295,9 @@ export function RecordsView() {
                   onClick={() => {
                     setType(item);
                     setCategoryId(firstCategoryIdForType(dataset.categories, item));
-                    setPaymentType(item === "transfer" ? "transfer" : paymentType);
+                    setPaymentType(item === "transfer" ? "transfer" : "credit");
                   }}
-                  className={
-                    type === item
-                      ? "rounded bg-card px-2 py-2 text-sm font-medium shadow-sm"
-                      : "rounded px-2 py-2 text-sm text-muted-foreground"
-                  }
+                  className={typeButtonClassName(item, type)}
                 >
                   {item}
                 </button>
@@ -280,7 +326,7 @@ export function RecordsView() {
                   className={fieldClassName}
                 >
                   {dataset.accounts
-                    .filter((account) => account.isActive)
+                    .filter((account) => account.isActive && account.isVisible)
                     .map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -299,7 +345,12 @@ export function RecordsView() {
                   className={fieldClassName}
                 >
                   {dataset.accounts
-                    .filter((account) => account.isActive && account.id !== accountId)
+                    .filter(
+                      (account) =>
+                        account.isActive &&
+                        account.isVisible &&
+                        account.id !== accountId,
+                    )
                     .map((account) => (
                       <option key={account.id} value={account.id}>
                         {account.name}
@@ -343,18 +394,12 @@ export function RecordsView() {
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Contraparte</span>
-                <select
-                  value={counterpartyId}
-                  onChange={(event) => setCounterpartyId(event.target.value)}
+                <input
+                  value={counterpartyName}
+                  onChange={(event) => setCounterpartyName(event.target.value)}
                   className={fieldClassName}
-                >
-                  <option value="">Sin contraparte</option>
-                  {dataset.counterparties.map((counterparty) => (
-                    <option key={counterparty.id} value={counterparty.id}>
-                      {counterparty.name}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Nombre libre"
+                />
               </label>
             </div>
 

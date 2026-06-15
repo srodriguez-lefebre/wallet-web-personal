@@ -1,6 +1,7 @@
 import {
   createContext,
   type PropsWithChildren,
+  useCallback,
   useContext,
   useMemo,
   useState,
@@ -8,6 +9,7 @@ import {
 import { mockWalletData } from "@shared/mock-data";
 import type {
   Account,
+  Counterparty,
   Goal,
   GoalReservation,
   Investment,
@@ -29,6 +31,7 @@ interface WalletContextValue {
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
+  ensureCounterparty: (name: string) => string | undefined;
   addGoal: (goal: Omit<Goal, "id">) => string;
   updateGoal: (goalId: string, goal: Omit<Goal, "id">) => void;
   deleteGoal: (goalId: string) => void;
@@ -182,6 +185,31 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  const ensureCounterparty = useCallback((name: string) => {
+    const normalizedName = name.trim();
+    if (!normalizedName) return undefined;
+
+    const existingCounterparty = dataset.counterparties.find(
+      (counterparty) =>
+        counterparty.name.toLowerCase() === normalizedName.toLowerCase(),
+    );
+    if (existingCounterparty) return existingCounterparty.id;
+
+    const nextCounterparty: Counterparty = {
+      id: `cp-${crypto.randomUUID()}`,
+      name: normalizedName,
+      color: "#2563EB",
+      isActive: true,
+    };
+
+    setDataset((current) => ({
+      ...current,
+      counterparties: [nextCounterparty, ...current.counterparties],
+    }));
+
+    return nextCounterparty.id;
+  }, [dataset.counterparties]);
+
   function addGoal(goal: Omit<Goal, "id">) {
     const id = `goal-${crypto.randomUUID()}`;
     setDataset((current) => ({
@@ -321,6 +349,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       addRecord,
       updateRecord,
       deleteRecord,
+      ensureCounterparty,
       addGoal,
       updateGoal,
       deleteGoal,
@@ -331,7 +360,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       toggleAccountVisibility,
       setPrimaryAccount,
     }),
-    [dataset, recordFilters, selectedMonth],
+    [dataset, ensureCounterparty, recordFilters, selectedMonth],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
