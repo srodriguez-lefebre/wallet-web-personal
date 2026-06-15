@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import {
+  BarChart3,
   Edit3,
   Eye,
   EyeOff,
@@ -107,6 +108,11 @@ export function AccountsView() {
   function openAccountRecords(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
     navigate("/records");
+  }
+
+  function openAccountAnalytics(accountId: string) {
+    setRecordFilters({ accountId, type: "all" });
+    navigate("/analytics");
   }
 
   function startEditingAccounts() {
@@ -634,6 +640,17 @@ export function AccountsView() {
                     {account.currency} · {account.isActive ? "Activa" : "Inactiva"}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openAccountAnalytics(account.id);
+                      }}
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Analytics
+                    </Button>
                     <Button
                       variant={isPrimary ? "secondary" : "outline"}
                       size="sm"

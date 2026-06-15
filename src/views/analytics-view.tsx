@@ -7,8 +7,11 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
@@ -24,24 +27,50 @@ import {
   calculateAllowedDailySpend,
   calculateEndOfMonthProjection,
 } from "@shared/simulations";
+import type { WalletRecord } from "@shared/types";
+
+function isAccountRecord(record: WalletRecord, accountId: string) {
+  return record.accountId === accountId || record.destinationAccountId === accountId;
+}
 
 export function AnalyticsView() {
   const navigate = useNavigate();
-  const { dataset, selectedMonth, setRecordFilters } = useWallet();
-  const summary = calculateSummary(dataset, selectedMonth);
-  const categories = calculateCategoryExpenses(dataset, selectedMonth);
-  const budgets = calculateBudgetProgress(dataset, selectedMonth);
-  const monthlySeries = calculateMonthlySeries(dataset, [
+  const { dataset, selectedMonth, recordFilters, setRecordFilters } = useWallet();
+  const selectedAccount = recordFilters.accountId
+    ? dataset.accounts.find((account) => account.id === recordFilters.accountId)
+    : undefined;
+  const analyticsDataset = selectedAccount
+    ? {
+        ...dataset,
+        accounts: [selectedAccount],
+        records: dataset.records.filter((record) =>
+          isAccountRecord(record, selectedAccount.id),
+        ),
+        budgets: dataset.budgets.filter(
+          (budget) => !budget.accountId || budget.accountId === selectedAccount.id,
+        ),
+      }
+    : dataset;
+  const summary = calculateSummary(analyticsDataset, selectedMonth);
+  const categories = calculateCategoryExpenses(analyticsDataset, selectedMonth);
+  const budgets = calculateBudgetProgress(analyticsDataset, selectedMonth);
+  const monthlySeries = calculateMonthlySeries(analyticsDataset, [
     "2026-04",
     "2026-05",
     "2026-06",
   ]);
-  const projection = calculateEndOfMonthProjection(dataset, summary.dailyAverageExpense);
-  const allowedDaily = calculateAllowedDailySpend(dataset);
-  const recommendations = buildSavingsRecommendations(dataset);
+  const projection = calculateEndOfMonthProjection(
+    analyticsDataset,
+    summary.dailyAverageExpense,
+  );
+  const allowedDaily = calculateAllowedDailySpend(analyticsDataset);
+  const recommendations = buildSavingsRecommendations(analyticsDataset);
 
   function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
-    setRecordFilters(filters);
+    setRecordFilters({
+      ...filters,
+      accountId: filters.accountId ?? selectedAccount?.id,
+    });
     navigate("/records");
   }
 
@@ -49,9 +78,27 @@ export function AnalyticsView() {
     <div>
       <PageHeader
         eyebrow="Analytics"
-        title="Analiticas"
-        description="Reportes por categoria, mes, cuenta, cash flow y balance trend."
-      />
+        title={selectedAccount ? `Analiticas de ${selectedAccount.name}` : "Analiticas"}
+        description={
+          selectedAccount
+            ? "Reportes filtrados por esta cuenta: movimientos, categorias, presupuestos y flujo mensual."
+            : "Reportes por categoria, mes, cuenta, cash flow y balance trend."
+        }
+      >
+        {selectedAccount ? (
+          <>
+            <Badge variant="info">Cuenta: {selectedAccount.name}</Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRecordFilters({ accountId: undefined })}
+            >
+              <X className="h-4 w-4" />
+              Ver todo
+            </Button>
+          </>
+        ) : null}
+      </PageHeader>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
