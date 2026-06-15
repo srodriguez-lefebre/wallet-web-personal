@@ -81,7 +81,6 @@ export function GoalsView() {
   const [showHidden, setShowHidden] = useState(false);
   const goals = calculateGoalProgress(dataset);
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
-  const hiddenGoals = goals.filter((item) => !item.goal.isVisible);
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [reserveAmount, setReserveAmount] = useState("");
@@ -402,15 +401,36 @@ export function GoalsView() {
                           />
                         </label>
                       </div>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => markGoalForDeletion(draft.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Eliminar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          aria-label={draft.isVisible ? "Ocultar objetivo" : "Mostrar objetivo"}
+                          title={draft.isVisible ? "Ocultar objetivo" : "Mostrar objetivo"}
+                          onClick={() =>
+                            updateGoalDraft(draft.id, {
+                              isVisible: !draft.isVisible,
+                            })
+                          }
+                        >
+                          {draft.isVisible ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          aria-label="Eliminar objetivo"
+                          title="Eliminar objetivo"
+                          onClick={() => markGoalForDeletion(draft.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -449,21 +469,6 @@ export function GoalsView() {
                       </label>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Visibilidad</span>
-                        <select
-                          value={draft.isVisible ? "visible" : "hidden"}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              isVisible: event.target.value === "visible",
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          <option value="visible">Visible</option>
-                          <option value="hidden">Oculto</option>
-                        </select>
-                      </label>
                       <label className="block space-y-2">
                         <span className="text-sm font-medium">Moneda</span>
                         <select
@@ -648,14 +653,6 @@ export function GoalsView() {
             <Card className="border-destructive/40 bg-destructive/5">
               <CardContent className="py-4 text-sm text-destructive">
                 {editError}
-              </CardContent>
-            </Card>
-          ) : null}
-          {!isEditing && hiddenGoals.length > 0 ? (
-            <Card className="border-dashed">
-              <CardContent className="py-4 text-sm text-muted-foreground">
-                Hay {hiddenGoals.length} objetivo(s) oculto(s). Entra al modo
-                edicion para verlos y administrarlos.
               </CardContent>
             </Card>
           ) : null}

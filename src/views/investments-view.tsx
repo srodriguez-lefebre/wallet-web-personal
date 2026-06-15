@@ -13,7 +13,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -85,9 +84,6 @@ export function InvestmentsView() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const visibleInvestments = dataset.investments.filter(
     (investment) => investment.isVisible,
-  );
-  const hiddenInvestments = dataset.investments.filter(
-    (investment) => !investment.isVisible,
   );
   const visibleInvestmentDrafts = investmentDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
@@ -364,115 +360,140 @@ export function InvestmentsView() {
       </PageHeader>
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <Card className={isEditing ? "xl:col-span-2" : undefined}>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Landmark className="h-4 w-4" />
-              Inversiones
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {editError ? (
-              <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
-                {editError}
-              </div>
-            ) : null}
-            {isEditing ? (
-              <div className="grid gap-3 md:grid-cols-2">
-                {visibleInvestmentDrafts.map((draft) => (
-                  <div key={draft.id} className="rounded-md border p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <label className="block flex-1 space-y-2">
-                        <span className="text-sm font-medium">Nombre</span>
-                        <input
-                          value={draft.name}
-                          onChange={(event) =>
-                            updateInvestmentDraft(draft.id, {
-                              name: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                          placeholder="Nombre"
-                        />
-                      </label>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => markInvestmentForDeletion(draft.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Eliminar
-                      </Button>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Tipo</span>
-                        <select
-                          value={draft.type}
-                          onChange={(event) =>
-                            updateInvestmentDraft(draft.id, {
-                              type: event.target.value as Investment["type"],
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          {investmentTypeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Moneda</span>
-                        <select
-                          value={draft.currency}
-                          onChange={(event) =>
-                            updateInvestmentDraft(draft.id, {
-                              currency: event.target.value as CurrencyCode,
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          <option value="UYU">UYU</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="BRL">BRL</option>
-                          <option value="ARS">ARS</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Invertido</span>
-                        <input
-                          value={draft.amountInvested}
-                          onChange={(event) =>
-                            updateInvestmentDraft(draft.id, {
-                              amountInvested: event.target.value,
-                            })
-                          }
-                          type="number"
-                          className={inputClassName}
-                        />
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Valor actual</span>
-                        <input
-                          value={draft.currentValue}
-                          onChange={(event) =>
-                            updateInvestmentDraft(draft.id, {
-                              currentValue: event.target.value,
-                            })
-                          }
-                          type="number"
-                          className={inputClassName}
-                        />
-                      </label>
-                    </div>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
+        {isEditing || visibleInvestments.length > 0 ? (
+          <Card className={isEditing ? "xl:col-span-2" : undefined}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Landmark className="h-4 w-4" />
+                Inversiones
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {editError ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
+                  {editError}
+                </div>
+              ) : null}
+              {isEditing ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {visibleInvestmentDrafts.map((draft) => (
+                    <div key={draft.id} className="rounded-md border p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <label className="block flex-1 space-y-2">
+                          <span className="text-sm font-medium">Nombre</span>
+                          <input
+                            value={draft.name}
+                            onChange={(event) =>
+                              updateInvestmentDraft(draft.id, {
+                                name: event.target.value,
+                              })
+                            }
+                            className={inputClassName}
+                            placeholder="Nombre"
+                          />
+                        </label>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={
+                              draft.isVisible ? "Ocultar inversion" : "Mostrar inversion"
+                            }
+                            title={
+                              draft.isVisible ? "Ocultar inversion" : "Mostrar inversion"
+                            }
+                            onClick={() =>
+                              updateInvestmentDraft(draft.id, {
+                                isVisible: !draft.isVisible,
+                              })
+                            }
+                          >
+                            {draft.isVisible ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            aria-label="Eliminar inversion"
+                            title="Eliminar inversion"
+                            onClick={() => markInvestmentForDeletion(draft.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Tipo</span>
+                          <select
+                            value={draft.type}
+                            onChange={(event) =>
+                              updateInvestmentDraft(draft.id, {
+                                type: event.target.value as Investment["type"],
+                              })
+                            }
+                            className={inputClassName}
+                          >
+                            {investmentTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Moneda</span>
+                          <select
+                            value={draft.currency}
+                            onChange={(event) =>
+                              updateInvestmentDraft(draft.id, {
+                                currency: event.target.value as CurrencyCode,
+                              })
+                            }
+                            className={inputClassName}
+                          >
+                            <option value="UYU">UYU</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="BRL">BRL</option>
+                            <option value="ARS">ARS</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Invertido</span>
+                          <input
+                            value={draft.amountInvested}
+                            onChange={(event) =>
+                              updateInvestmentDraft(draft.id, {
+                                amountInvested: event.target.value,
+                              })
+                            }
+                            type="number"
+                            className={inputClassName}
+                          />
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Valor actual</span>
+                          <input
+                            value={draft.currentValue}
+                            onChange={(event) =>
+                              updateInvestmentDraft(draft.id, {
+                                currentValue: event.target.value,
+                              })
+                            }
+                            type="number"
+                            className={inputClassName}
+                          />
+                        </label>
+                      </div>
+                      <label className="mt-3 block space-y-2">
                         <span className="text-sm font-medium">Inicio</span>
                         <input
                           value={draft.startedAt}
@@ -485,41 +506,24 @@ export function InvestmentsView() {
                           className={inputClassName}
                         />
                       </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Visibilidad</span>
-                        <select
-                          value={draft.isVisible ? "visible" : "hidden"}
+                      <label className="mt-3 block space-y-2">
+                        <span className="text-sm font-medium">Nota</span>
+                        <textarea
+                          value={draft.note}
                           onChange={(event) =>
                             updateInvestmentDraft(draft.id, {
-                              isVisible: event.target.value === "visible",
+                              note: event.target.value,
                             })
                           }
-                          className={inputClassName}
-                        >
-                          <option value="visible">Visible</option>
-                          <option value="hidden">Oculta</option>
-                        </select>
+                          className={textareaClassName}
+                          placeholder="Contexto opcional"
+                        />
                       </label>
                     </div>
-                    <label className="mt-3 block space-y-2">
-                      <span className="text-sm font-medium">Nota</span>
-                      <textarea
-                        value={draft.note}
-                        onChange={(event) =>
-                          updateInvestmentDraft(draft.id, {
-                            note: event.target.value,
-                          })
-                        }
-                        className={textareaClassName}
-                        placeholder="Contexto opcional"
-                      />
-                    </label>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <>
-                {visibleInvestments.map((investment) => {
+                  ))}
+                </div>
+              ) : (
+                visibleInvestments.map((investment) => {
                   const gain = investment.currentValue - investment.amountInvested;
                   const percentage =
                     (investment.currentValue / investment.amountInvested) * 100;
@@ -530,19 +534,11 @@ export function InvestmentsView() {
                       onClick={() => navigate(`/investments/${investment.id}`)}
                       className="w-full rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                     >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-medium">{investment.name}</p>
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {investment.type}
-                          </p>
-                        </div>
-                        {!investment.isVisible ? (
-                          <Badge variant="muted">
-                            <EyeOff className="mr-1 h-3 w-3" />
-                            Oculta
-                          </Badge>
-                        ) : null}
+                      <div>
+                        <p className="font-medium">{investment.name}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {investment.type}
+                        </p>
                       </div>
                       <Progress
                         value={Math.min(100, percentage)}
@@ -563,17 +559,11 @@ export function InvestmentsView() {
                       </div>
                     </button>
                   );
-                })}
-                {!isEditing && hiddenInvestments.length > 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Hay {hiddenInvestments.length} inversion(es) oculta(s). Entra
-                    al modo edicion para verlas y administrarlas.
-                  </p>
-                ) : null}
-              </>
-            )}
-          </CardContent>
-        </Card>
+                })
+              )}
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card>
           <CardHeader>

@@ -96,7 +96,6 @@ export function AccountsView() {
   const [note, setNote] = useState("");
   const balances = calculateAccountBalances(dataset);
   const visibleBalances = balances.filter((item) => item.account.isVisible);
-  const hiddenBalances = balances.filter((item) => !item.account.isVisible);
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
@@ -433,15 +432,36 @@ export function AccountsView() {
                       />
                     </label>
                   </div>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => markAccountForDeletion(draft.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Eliminar
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label={draft.isVisible ? "Ocultar cuenta" : "Mostrar cuenta"}
+                      title={draft.isVisible ? "Ocultar cuenta" : "Mostrar cuenta"}
+                      onClick={() =>
+                        updateAccountDraft(draft.id, {
+                          isVisible: !draft.isVisible,
+                        })
+                      }
+                    >
+                      {draft.isVisible ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      aria-label="Eliminar cuenta"
+                      title="Eliminar cuenta"
+                      onClick={() => markAccountForDeletion(draft.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -499,23 +519,6 @@ export function AccountsView() {
                     />
                   </label>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Visibilidad</span>
-                    <select
-                      value={draft.isVisible ? "visible" : "hidden"}
-                      onChange={(event) =>
-                        updateAccountDraft(draft.id, {
-                          isVisible: event.target.value === "visible",
-                        })
-                      }
-                      className={inputClassName}
-                    >
-                      <option value="visible">Visible</option>
-                      <option value="hidden">Oculta</option>
-                    </select>
-                  </label>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
                     <span className="text-sm font-medium">Estado</span>
                     <select
                       value={draft.isActive ? "active" : "inactive"}
@@ -530,6 +533,8 @@ export function AccountsView() {
                       <option value="inactive">Inactiva</option>
                     </select>
                   </label>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Principal</span>
                     <select
@@ -654,13 +659,6 @@ export function AccountsView() {
             {editError}
           </CardContent>
         </Card>
-      ) : null}
-
-      {!isEditing && hiddenBalances.length > 0 ? (
-        <p className="mt-4 text-sm text-muted-foreground">
-          Hay {hiddenBalances.length} cuenta(s) oculta(s). Entra al modo edicion
-          para verlas y administrarlas.
-        </p>
       ) : null}
     </div>
   );
