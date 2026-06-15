@@ -1,63 +1,50 @@
-import { Activity, Database, LockKeyhole, WalletCards } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { AppShell } from "@/components/layout/app-shell";
+import { AuthProvider, useAuth } from "@/providers/auth-provider";
+import { ThemeProvider } from "@/providers/theme-provider";
+import { WalletProvider } from "@/providers/wallet-provider";
+import { AccountsView } from "@/views/accounts-view";
+import { AnalyticsView } from "@/views/analytics-view";
+import { DashboardView } from "@/views/dashboard-view";
+import { GoalsView } from "@/views/goals-view";
+import { ImportsView } from "@/views/imports-view";
+import { InvestmentsView } from "@/views/investments-view";
+import { RecordsView } from "@/views/records-view";
+import { SettingsView } from "@/views/settings-view";
+import { UnlockView } from "@/views/unlock-view";
 
-const foundations = [
-  {
-    title: "React + Vite",
-    description: "SPA moderna preparada para vistas financieras y routing.",
-    icon: Activity,
-  },
-  {
-    title: "API protegida",
-    description: "Vercel Functions con token obligatorio para datos privados.",
-    icon: LockKeyhole,
-  },
-  {
-    title: "Neon + Drizzle",
-    description: "PostgreSQL serverless con migraciones tipadas.",
-    icon: Database,
-  },
-];
+function ProtectedApp() {
+  const { isUnlocked } = useAuth();
+
+  if (!isUnlocked) {
+    return <UnlockView />;
+  }
+
+  return (
+    <WalletProvider>
+      <AppShell>
+        <Routes>
+          <Route path="/" element={<DashboardView />} />
+          <Route path="/accounts" element={<AccountsView />} />
+          <Route path="/records" element={<RecordsView />} />
+          <Route path="/analytics" element={<AnalyticsView />} />
+          <Route path="/goals" element={<GoalsView />} />
+          <Route path="/investments" element={<InvestmentsView />} />
+          <Route path="/imports" element={<ImportsView />} />
+          <Route path="/settings" element={<SettingsView />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AppShell>
+    </WalletProvider>
+  );
+}
 
 export default function App() {
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <section className="mx-auto flex min-h-screen w-full max-w-6xl flex-col justify-center px-6 py-12">
-        <div className="max-w-3xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border bg-card px-3 py-1 text-sm text-muted-foreground shadow-soft">
-            <WalletCards className="h-4 w-4 text-primary" />
-            Wallet Web Personal
-          </div>
-          <h1 className="text-4xl font-semibold tracking-normal text-foreground sm:text-5xl">
-            Base lista para construir el control financiero personal.
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-            El proyecto ya esta orientado a una app React con API, base de datos,
-            dashboard, registros, goals, presupuestos y analiticas.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <Button>Comenzar implementacion</Button>
-            <Button variant="outline">Ver plan</Button>
-          </div>
-        </div>
-
-        <div className="mt-12 grid gap-4 md:grid-cols-3">
-          {foundations.map((item) => (
-            <Card key={item.title}>
-              <CardHeader>
-                <item.icon className="h-5 w-5 text-primary" />
-                <CardTitle>{item.title}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm leading-6 text-muted-foreground">
-                  {item.description}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </section>
-    </main>
+    <ThemeProvider>
+      <AuthProvider>
+        <ProtectedApp />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
