@@ -89,11 +89,8 @@ export function InvestmentsView() {
   const hiddenInvestments = dataset.investments.filter(
     (investment) => !investment.isVisible,
   );
-  const renderedInvestments = showHidden
-    ? dataset.investments
-    : visibleInvestments;
   const visibleInvestmentDrafts = investmentDrafts.filter(
-    (draft) => !draft.isDeleted,
+    (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
   const inputClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -102,12 +99,14 @@ export function InvestmentsView() {
 
   function startEditingInvestments() {
     setInvestmentDrafts(buildInvestmentDrafts(dataset.investments));
+    setShowHidden(false);
     setEditError("");
     setIsEditing(true);
   }
 
   function cancelEditingInvestments() {
     setInvestmentDrafts(buildInvestmentDrafts(dataset.investments));
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -172,6 +171,7 @@ export function InvestmentsView() {
       });
     });
 
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -212,6 +212,14 @@ export function InvestmentsView() {
       >
         {isEditing ? (
           <>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={showHidden ? "Ocultar inversiones ocultas" : "Ver inversiones ocultas"}
+              onClick={() => setShowHidden((current) => !current)}
+            >
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
             <Button variant="outline" onClick={cancelEditingInvestments}>
               <X className="h-4 w-4" />
               Cancelar
@@ -223,10 +231,6 @@ export function InvestmentsView() {
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={() => setShowHidden((current) => !current)}>
-              {showHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showHidden ? "Ocultar ocultas" : `Mostrar ocultas (${hiddenInvestments.length})`}
-            </Button>
             <Button
               size="icon"
               variant="outline"
@@ -515,7 +519,7 @@ export function InvestmentsView() {
               </div>
             ) : (
               <>
-                {renderedInvestments.map((investment) => {
+                {visibleInvestments.map((investment) => {
                   const gain = investment.currentValue - investment.amountInvested;
                   const percentage =
                     (investment.currentValue / investment.amountInvested) * 100;
@@ -560,10 +564,10 @@ export function InvestmentsView() {
                     </button>
                   );
                 })}
-                {!showHidden && hiddenInvestments.length > 0 ? (
+                {!isEditing && hiddenInvestments.length > 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    Hay {hiddenInvestments.length} inversion(es) oculta(s). Usa
-                    "Mostrar ocultas" para administrarlas.
+                    Hay {hiddenInvestments.length} inversion(es) oculta(s). Entra
+                    al modo edicion para verlas y administrarlas.
                   </p>
                 ) : null}
               </>

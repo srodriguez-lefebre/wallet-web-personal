@@ -77,7 +77,6 @@ export function AccountsView() {
     updateAccount,
     deleteAccount,
     setRecordFilters,
-    toggleAccountVisibility,
     setPrimaryAccount,
   } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
@@ -98,8 +97,9 @@ export function AccountsView() {
   const balances = calculateAccountBalances(dataset);
   const visibleBalances = balances.filter((item) => item.account.isVisible);
   const hiddenBalances = balances.filter((item) => !item.account.isVisible);
-  const renderedBalances = showHidden ? balances : visibleBalances;
-  const visibleAccountDrafts = accountDrafts.filter((draft) => !draft.isDeleted);
+  const visibleAccountDrafts = accountDrafts.filter(
+    (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
+  );
   const inputClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const textareaClassName =
@@ -114,6 +114,7 @@ export function AccountsView() {
     setAccountDrafts(
       buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
     );
+    setShowHidden(false);
     setEditError("");
     setIsEditing(true);
   }
@@ -122,6 +123,7 @@ export function AccountsView() {
     setAccountDrafts(
       buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
     );
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -205,6 +207,7 @@ export function AccountsView() {
       setPrimaryAccount(primaryDraft.id);
     }
 
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -247,6 +250,14 @@ export function AccountsView() {
       >
         {isEditing ? (
           <>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={showHidden ? "Ocultar cuentas ocultas" : "Ver cuentas ocultas"}
+              onClick={() => setShowHidden((current) => !current)}
+            >
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
             <Button variant="outline" onClick={cancelEditingAccounts}>
               <X className="h-4 w-4" />
               Cancelar
@@ -258,10 +269,6 @@ export function AccountsView() {
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={() => setShowHidden((current) => !current)}>
-              {showHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showHidden ? "Ocultar ocultas" : `Mostrar ocultas (${hiddenBalances.length})`}
-            </Button>
             <Button
               size="icon"
               variant="outline"
@@ -556,7 +563,7 @@ export function AccountsView() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {renderedBalances.map(({ account, balance, freeBalance, reserved }) => {
+          {visibleBalances.map(({ account, balance, freeBalance, reserved }) => {
             const isPrimary = dataset.settings.primaryAccountId === account.id;
 
             return (
@@ -623,21 +630,6 @@ export function AccountsView() {
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleAccountVisibility(account.id);
-                      }}
-                    >
-                      {account.isVisible ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                      {account.isVisible ? "Ocultar" : "Mostrar"}
-                    </Button>
-                    <Button
                       variant={isPrimary ? "secondary" : "outline"}
                       size="sm"
                       onClick={(event) => {
@@ -664,10 +656,10 @@ export function AccountsView() {
         </Card>
       ) : null}
 
-      {!isEditing && !showHidden && hiddenBalances.length > 0 ? (
+      {!isEditing && hiddenBalances.length > 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
-          Hay {hiddenBalances.length} cuenta(s) oculta(s). Usa "Mostrar ocultas"
-          para administrarlas.
+          Hay {hiddenBalances.length} cuenta(s) oculta(s). Entra al modo edicion
+          para verlas y administrarlas.
         </p>
       ) : null}
     </div>

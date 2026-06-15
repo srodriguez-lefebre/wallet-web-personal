@@ -82,7 +82,6 @@ export function GoalsView() {
   const goals = calculateGoalProgress(dataset);
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
   const hiddenGoals = goals.filter((item) => !item.goal.isVisible);
-  const renderedGoals = showHidden ? goals : visibleGoals;
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [reserveAmount, setReserveAmount] = useState("");
@@ -98,7 +97,9 @@ export function GoalsView() {
   const [goalDrafts, setGoalDrafts] = useState<GoalDraft[]>(() =>
     buildGoalDrafts(dataset.goals),
   );
-  const visibleGoalDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
+  const visibleGoalDrafts = goalDrafts.filter(
+    (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
+  );
   const inputClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const textareaClassName =
@@ -106,12 +107,14 @@ export function GoalsView() {
 
   function startEditingGoals() {
     setGoalDrafts(buildGoalDrafts(dataset.goals));
+    setShowHidden(false);
     setEditError("");
     setIsEditing(true);
   }
 
   function cancelEditingGoals() {
     setGoalDrafts(buildGoalDrafts(dataset.goals));
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -181,6 +184,7 @@ export function GoalsView() {
       setGoalId(activeDrafts.find((draft) => draft.isVisible)?.id ?? "");
     }
 
+    setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
@@ -242,6 +246,14 @@ export function GoalsView() {
       >
         {isEditing ? (
           <>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={showHidden ? "Ocultar objetivos ocultos" : "Ver objetivos ocultos"}
+              onClick={() => setShowHidden((current) => !current)}
+            >
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+            </Button>
             <Button variant="outline" onClick={cancelEditingGoals}>
               <X className="h-4 w-4" />
               Cancelar
@@ -253,10 +265,6 @@ export function GoalsView() {
           </>
         ) : (
           <>
-            <Button variant="outline" onClick={() => setShowHidden((current) => !current)}>
-              {showHidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              {showHidden ? "Ocultar ocultos" : `Mostrar ocultos (${hiddenGoals.length})`}
-            </Button>
             <Button
               size="icon"
               variant="outline"
@@ -545,7 +553,7 @@ export function GoalsView() {
               ) : null}
             </>
           ) : (
-            renderedGoals.map((item) => (
+            visibleGoals.map((item) => (
               <Card
                 key={item.goal.id}
                 role="button"
@@ -643,11 +651,11 @@ export function GoalsView() {
               </CardContent>
             </Card>
           ) : null}
-          {!showHidden && hiddenGoals.length > 0 ? (
+          {!isEditing && hiddenGoals.length > 0 ? (
             <Card className="border-dashed">
               <CardContent className="py-4 text-sm text-muted-foreground">
-                Hay {hiddenGoals.length} objetivo(s) oculto(s). Usa "Mostrar ocultos"
-                para administrarlos.
+                Hay {hiddenGoals.length} objetivo(s) oculto(s). Entra al modo
+                edicion para verlos y administrarlos.
               </CardContent>
             </Card>
           ) : null}
