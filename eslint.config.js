@@ -30,5 +30,11 @@ export default tseslint.config(
       globals: globals.node,
     },
   },
+  {
+    files: ["src/providers/**/*.tsx"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
   prettier,
 );
