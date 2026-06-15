@@ -1,5 +1,14 @@
 import { FormEvent, useState } from "react";
-import { CalendarDays, Edit3, Flag, PiggyBank, Plus, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  Edit3,
+  Flag,
+  PiggyBank,
+  Plus,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -16,7 +25,44 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
-import type { CurrencyCode, GoalStatus } from "@shared/types";
+import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
+
+interface GoalDraft {
+  id: string;
+  name: string;
+  targetAmount: string;
+  currency: CurrencyCode;
+  color: string;
+  tagId: string;
+  deadline: string;
+  status: GoalStatus;
+  accountId: string;
+  note: string;
+  isDeleted: boolean;
+}
+
+const goalStatusOptions: Array<{ value: GoalStatus; label: string }> = [
+  { value: "active", label: "Activo" },
+  { value: "paused", label: "Pausado" },
+  { value: "completed", label: "Completado" },
+  { value: "cancelled", label: "Cancelado" },
+];
+
+function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
+  return goals.map((goal) => ({
+    id: goal.id,
+    name: goal.name,
+    targetAmount: String(goal.targetAmount),
+    currency: goal.currency,
+    color: goal.color,
+    tagId: goal.tagIds[0] ?? "",
+    deadline: goal.deadline ?? "",
+    status: goal.status,
+    accountId: goal.accountId ?? "",
+    note: goal.note ?? "",
+    isDeleted: false,
+  }));
+}
 
 export function GoalsView() {
   const navigate = useNavigate();
@@ -29,7 +75,6 @@ export function GoalsView() {
     setRecordFilters,
   } = useWallet();
   const goals = calculateGoalProgress(dataset);
-  const firstGoal = dataset.goals[0];
   const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [reserveAmount, setReserveAmount] = useState("");
@@ -40,51 +85,95 @@ export function GoalsView() {
   const [tagId, setTagId] = useState(dataset.tags[0]?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [editGoalId, setEditGoalId] = useState(firstGoal?.id ?? "");
-  const [editName, setEditName] = useState(firstGoal?.name ?? "");
-  const [editTargetAmount, setEditTargetAmount] = useState(
-    firstGoal ? String(firstGoal.targetAmount) : "",
+  const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [goalDrafts, setGoalDrafts] = useState<GoalDraft[]>(() =>
+    buildGoalDrafts(dataset.goals),
   );
-  const [editCurrency, setEditCurrency] = useState<CurrencyCode>(
-    firstGoal?.currency ?? "UYU",
-  );
-  const [editColor, setEditColor] = useState(firstGoal?.color ?? "#2563EB");
-  const [editTagId, setEditTagId] = useState(firstGoal?.tagIds[0] ?? "");
-  const [editDeadline, setEditDeadline] = useState(firstGoal?.deadline ?? "");
-  const [editStatus, setEditStatus] = useState<GoalStatus>(
-    firstGoal?.status ?? "active",
-  );
-  const [editAccountId, setEditAccountId] = useState(firstGoal?.accountId ?? "");
-  const [editNote, setEditNote] = useState(firstGoal?.note ?? "");
+  const visibleGoalDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
+  const inputClassName =
+    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const textareaClassName =
+    "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
-  function loadEditableGoal(nextGoalId: string) {
-    const goal = dataset.goals.find((item) => item.id === nextGoalId);
-    if (!goal) return;
-
-    setEditGoalId(goal.id);
-    setEditName(goal.name);
-    setEditTargetAmount(String(goal.targetAmount));
-    setEditCurrency(goal.currency);
-    setEditColor(goal.color);
-    setEditTagId(goal.tagIds[0] ?? "");
-    setEditDeadline(goal.deadline ?? "");
-    setEditStatus(goal.status);
-    setEditAccountId(goal.accountId ?? "");
-    setEditNote(goal.note ?? "");
+  function startEditingGoals() {
+    setGoalDrafts(buildGoalDrafts(dataset.goals));
+    setEditError("");
+    setIsEditing(true);
   }
 
-  function openEditDialog() {
-    const nextGoalId =
-      dataset.goals.find((goal) => goal.id === editGoalId)?.id ??
-      dataset.goals[0]?.id ??
-      "";
+  function cancelEditingGoals() {
+    setGoalDrafts(buildGoalDrafts(dataset.goals));
+    setEditError("");
+    setIsEditing(false);
+  }
 
-    if (nextGoalId) {
-      loadEditableGoal(nextGoalId);
+  function updateGoalDraft(goalIdToUpdate: string, patch: Partial<GoalDraft>) {
+    setGoalDrafts((current) =>
+      current.map((draft) =>
+        draft.id === goalIdToUpdate
+          ? {
+              ...draft,
+              ...patch,
+            }
+          : draft,
+      ),
+    );
+  }
+
+  function markGoalForDeletion(goalIdToDelete: string) {
+    setGoalDrafts((current) =>
+      current.map((draft) =>
+        draft.id === goalIdToDelete
+          ? {
+              ...draft,
+              isDeleted: true,
+            }
+          : draft,
+      ),
+    );
+  }
+
+  function saveGoalEdits() {
+    const activeDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
+    const invalidDraft = activeDrafts.find(
+      (draft) => !draft.name.trim() || Number(draft.targetAmount) <= 0,
+    );
+
+    if (invalidDraft) {
+      setEditError("Revisa que cada objetivo tenga nombre y monto mayor a 0.");
+      return;
     }
 
-    setIsEditOpen(true);
+    goalDrafts
+      .filter((draft) => draft.isDeleted)
+      .forEach((draft) => deleteGoal(draft.id));
+
+    activeDrafts.forEach((draft) => {
+      const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
+      if (!currentGoal) return;
+
+      updateGoal(draft.id, {
+        name: draft.name.trim(),
+        targetAmount: Number(draft.targetAmount),
+        currency: draft.currency,
+        color: draft.color,
+        icon: currentGoal.icon,
+        deadline: draft.deadline || undefined,
+        status: draft.status,
+        tagIds: draft.tagId ? [draft.tagId] : [],
+        accountId: draft.accountId || undefined,
+        note: draft.note.trim() || undefined,
+      });
+    });
+
+    const selectedDraft = goalDrafts.find((draft) => draft.id === goalId);
+    if (!selectedDraft || selectedDraft.isDeleted) {
+      setGoalId(activeDrafts[0]?.id ?? "");
+    }
+
+    setEditError("");
+    setIsEditing(false);
   }
 
   function handleCreateGoal(event: FormEvent) {
@@ -110,55 +199,6 @@ export function GoalsView() {
     setDeadline("");
     setIsCreateOpen(false);
     navigate(`/goals/${id}`);
-  }
-
-  function handleUpdateGoal(event: FormEvent) {
-    event.preventDefault();
-    const currentGoal = dataset.goals.find((goal) => goal.id === editGoalId);
-    const numericTarget = Number(editTargetAmount);
-    if (!currentGoal || !editName.trim() || numericTarget <= 0) return;
-
-    updateGoal(editGoalId, {
-      name: editName.trim(),
-      targetAmount: numericTarget,
-      currency: editCurrency,
-      color: editColor,
-      icon: currentGoal.icon,
-      deadline: editDeadline || undefined,
-      status: editStatus,
-      tagIds: editTagId ? [editTagId] : [],
-      accountId: editAccountId || undefined,
-      note: editNote.trim() || undefined,
-    });
-
-    setIsEditOpen(false);
-  }
-
-  function handleDeleteGoal() {
-    const currentGoal = dataset.goals.find((goal) => goal.id === editGoalId);
-    if (!currentGoal) return;
-
-    const shouldDelete = window.confirm(`Eliminar el objetivo "${currentGoal.name}"?`);
-    if (!shouldDelete) return;
-
-    const nextGoal = dataset.goals.find((goal) => goal.id !== currentGoal.id);
-    deleteGoal(currentGoal.id);
-    setGoalId(nextGoal?.id ?? "");
-    if (nextGoal) {
-      loadEditableGoal(nextGoal.id);
-    } else {
-      setEditGoalId("");
-      setEditName("");
-      setEditTargetAmount("");
-      setEditCurrency("UYU");
-      setEditColor("#2563EB");
-      setEditTagId("");
-      setEditDeadline("");
-      setEditStatus("active");
-      setEditAccountId("");
-      setEditNote("");
-    }
-    setIsEditOpen(false);
   }
 
   function handleReserve(event: FormEvent) {
@@ -190,339 +230,384 @@ export function GoalsView() {
         title="Objetivos"
         description="Crea objetivos, reserva dinero y entra al detalle para ver contexto asociado."
       >
-        <Button
-          size="icon"
-          variant="outline"
-          aria-label="Editar objetivo"
-          disabled={dataset.goals.length === 0}
-          onClick={openEditDialog}
-        >
-          <Edit3 className="h-5 w-5" />
-        </Button>
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Editar objetivo</DialogTitle>
-              <DialogDescription>
-                Ajusta el nombre, monto, estado, color y relaciones del objetivo.
-              </DialogDescription>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={handleUpdateGoal}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Objetivo a editar</span>
-                <select
-                  value={editGoalId}
-                  onChange={(event) => loadEditableGoal(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                >
-                  {dataset.goals.map((goal) => (
-                    <option key={goal.id} value={goal.id}>
-                      {goal.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Nombre</span>
-                <input
-                  value={editName}
-                  onChange={(event) => setEditName(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Viaje, emergencia, notebook..."
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Objetivo</span>
-                  <input
-                    value={editTargetAmount}
-                    onChange={(event) => setEditTargetAmount(event.target.value)}
-                    type="number"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="50000"
-                  />
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Estado</span>
-                  <select
-                    value={editStatus}
-                    onChange={(event) => setEditStatus(event.target.value as GoalStatus)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="active">Activo</option>
-                    <option value="paused">Pausado</option>
-                    <option value="completed">Completado</option>
-                    <option value="cancelled">Cancelado</option>
-                  </select>
-                </label>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Moneda</span>
-                  <select
-                    value={editCurrency}
-                    onChange={(event) => setEditCurrency(event.target.value as CurrencyCode)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="UYU">UYU</option>
-                    <option value="USD">USD</option>
-                    <option value="EUR">EUR</option>
-                    <option value="BRL">BRL</option>
-                    <option value="ARS">ARS</option>
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Color</span>
-                  <input
-                    value={editColor}
-                    onChange={(event) => setEditColor(event.target.value)}
-                    type="color"
-                    className="h-10 w-full rounded-md border bg-background px-2"
-                  />
-                </label>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Etiqueta asociada</span>
-                  <select
-                    value={editTagId}
-                    onChange={(event) => setEditTagId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Sin etiqueta</option>
-                    {dataset.tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Cuenta asociada</span>
-                  <select
-                    value={editAccountId}
-                    onChange={(event) => setEditAccountId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Sin cuenta</option>
-                    {dataset.accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Fecha limite</span>
-                <input
-                  value={editDeadline}
-                  onChange={(event) => setEditDeadline(event.target.value)}
-                  type="date"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              </label>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Nota</span>
-                <textarea
-                  value={editNote}
-                  onChange={(event) => setEditNote(event.target.value)}
-                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Contexto o descripcion del objetivo"
-                />
-              </label>
-              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleDeleteGoal}
-                  disabled={!editGoalId}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Eliminar
-                </Button>
-                <Button type="submit" disabled={!editGoalId}>
-                  <Edit3 className="h-4 w-4" />
-                  Guardar cambios
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <DialogTrigger asChild>
-            <Button size="icon" aria-label="Nuevo objetivo">
-              <Plus className="h-5 w-5" />
+        {isEditing ? (
+          <>
+            <Button variant="outline" onClick={cancelEditingGoals}>
+              <X className="h-4 w-4" />
+              Cancelar
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nuevo objetivo</DialogTitle>
-              <DialogDescription>
-                Defini la meta, elegi color y conectala con una etiqueta.
-              </DialogDescription>
-            </DialogHeader>
-            <form className="space-y-4" onSubmit={handleCreateGoal}>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Nombre</span>
-                <input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  placeholder="Viaje, emergencia, notebook..."
-                />
-              </label>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Objetivo</span>
-                  <input
-                    value={targetAmount}
-                    onChange={(event) => setTargetAmount(event.target.value)}
-                    type="number"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    placeholder="50000"
-                  />
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Moneda</span>
-                  <select
-                    value={currency}
-                    onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="UYU">UYU</option>
-                    <option value="USD">USD</option>
-                    <option value="BRL">BRL</option>
-                  </select>
-                </label>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Etiqueta</span>
-                  <select
-                    value={tagId}
-                    onChange={(event) => setTagId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                  >
-                    <option value="">Sin etiqueta</option>
-                    {dataset.tags.map((tag) => (
-                      <option key={tag.id} value={tag.id}>
-                        {tag.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Color</span>
-                  <input
-                    value={color}
-                    onChange={(event) => setColor(event.target.value)}
-                    type="color"
-                    className="h-10 w-full rounded-md border bg-background px-2"
-                  />
-                </label>
-              </div>
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Fecha limite</span>
-                <input
-                  value={deadline}
-                  onChange={(event) => setDeadline(event.target.value)}
-                  type="date"
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-              </label>
-              <Button className="w-full" type="submit">
-                <Plus className="h-4 w-4" />
-                Crear y abrir detalle
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+            <Button onClick={saveGoalEdits}>
+              <Save className="h-4 w-4" />
+              Guardar
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label="Editar objetivos"
+              disabled={dataset.goals.length === 0}
+              onClick={startEditingGoals}
+            >
+              <Edit3 className="h-5 w-5" />
+            </Button>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button size="icon" aria-label="Nuevo objetivo">
+                  <Plus className="h-5 w-5" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nuevo objetivo</DialogTitle>
+                  <DialogDescription>
+                    Defini la meta, elegi color y conectala con una etiqueta.
+                  </DialogDescription>
+                </DialogHeader>
+                <form className="space-y-4" onSubmit={handleCreateGoal}>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Nombre</span>
+                    <input
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      className={inputClassName}
+                      placeholder="Viaje, emergencia, notebook..."
+                    />
+                  </label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Objetivo</span>
+                      <input
+                        value={targetAmount}
+                        onChange={(event) => setTargetAmount(event.target.value)}
+                        type="number"
+                        className={inputClassName}
+                        placeholder="50000"
+                      />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Moneda</span>
+                      <select
+                        value={currency}
+                        onChange={(event) =>
+                          setCurrency(event.target.value as CurrencyCode)
+                        }
+                        className={inputClassName}
+                      >
+                        <option value="UYU">UYU</option>
+                        <option value="USD">USD</option>
+                        <option value="BRL">BRL</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Etiqueta</span>
+                      <select
+                        value={tagId}
+                        onChange={(event) => setTagId(event.target.value)}
+                        className={inputClassName}
+                      >
+                        <option value="">Sin etiqueta</option>
+                        {dataset.tags.map((tag) => (
+                          <option key={tag.id} value={tag.id}>
+                            {tag.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Color</span>
+                      <input
+                        value={color}
+                        onChange={(event) => setColor(event.target.value)}
+                        type="color"
+                        className="h-10 w-full rounded-md border bg-background px-2"
+                      />
+                    </label>
+                  </div>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Fecha limite</span>
+                    <input
+                      value={deadline}
+                      onChange={(event) => setDeadline(event.target.value)}
+                      type="date"
+                      className={inputClassName}
+                    />
+                  </label>
+                  <Button className="w-full" type="submit">
+                    <Plus className="h-4 w-4" />
+                    Crear y abrir detalle
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </>
+        )}
       </PageHeader>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
         <div className="grid gap-4 lg:grid-cols-2">
-          {goals.map((item) => (
-            <Card
-              key={item.goal.id}
-              role="button"
-              tabIndex={0}
-              onClick={() => navigate(`/goals/${item.goal.id}`)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  navigate(`/goals/${item.goal.id}`);
-                }
-              }}
-              className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-            >
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="grid h-9 w-9 place-items-center rounded-md text-white"
-                      style={{ backgroundColor: item.goal.color }}
-                    >
-                      <Flag className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <CardTitle>{item.goal.name}</CardTitle>
-                      <p className="text-sm text-muted-foreground">
-                        Objetivo {formatMoney(item.goal.targetAmount, item.goal.currency)}
+          {isEditing ? (
+            <>
+              {visibleGoalDrafts.map((draft) => (
+                <Card key={draft.id} className="border-primary/30 shadow-sm">
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex flex-1 items-start gap-3">
+                        <label className="block space-y-2">
+                          <span className="sr-only">Color</span>
+                          <input
+                            value={draft.color}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, { color: event.target.value })
+                            }
+                            type="color"
+                            className="h-10 w-10 cursor-pointer rounded-md border bg-background p-1"
+                            aria-label={`Color de ${draft.name || "objetivo"}`}
+                          />
+                        </label>
+                        <label className="block flex-1 space-y-2">
+                          <span className="text-sm font-medium">Nombre</span>
+                          <input
+                            value={draft.name}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, { name: event.target.value })
+                            }
+                            className={inputClassName}
+                            placeholder="Nombre del objetivo"
+                          />
+                        </label>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => markGoalForDeletion(draft.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Eliminar
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Objetivo</span>
+                        <input
+                          value={draft.targetAmount}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, {
+                              targetAmount: event.target.value,
+                            })
+                          }
+                          type="number"
+                          className={inputClassName}
+                          placeholder="50000"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Estado</span>
+                        <select
+                          value={draft.status}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, {
+                              status: event.target.value as GoalStatus,
+                            })
+                          }
+                          className={inputClassName}
+                        >
+                          {goalStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Moneda</span>
+                        <select
+                          value={draft.currency}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, {
+                              currency: event.target.value as CurrencyCode,
+                            })
+                          }
+                          className={inputClassName}
+                        >
+                          <option value="UYU">UYU</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="BRL">BRL</option>
+                          <option value="ARS">ARS</option>
+                        </select>
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Fecha limite</span>
+                        <input
+                          value={draft.deadline}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, { deadline: event.target.value })
+                          }
+                          type="date"
+                          className={inputClassName}
+                        />
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Etiqueta asociada</span>
+                        <select
+                          value={draft.tagId}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, { tagId: event.target.value })
+                          }
+                          className={inputClassName}
+                        >
+                          <option value="">Sin etiqueta</option>
+                          {dataset.tags.map((tag) => (
+                            <option key={tag.id} value={tag.id}>
+                              {tag.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Cuenta asociada</span>
+                        <select
+                          value={draft.accountId}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, { accountId: event.target.value })
+                          }
+                          className={inputClassName}
+                        >
+                          <option value="">Sin cuenta</option>
+                          {dataset.accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Nota</span>
+                      <textarea
+                        value={draft.note}
+                        onChange={(event) =>
+                          updateGoalDraft(draft.id, { note: event.target.value })
+                        }
+                        className={textareaClassName}
+                        placeholder="Contexto o descripcion del objetivo"
+                      />
+                    </label>
+                  </CardContent>
+                </Card>
+              ))}
+              {visibleGoalDrafts.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="py-8 text-sm text-muted-foreground">
+                    No quedan objetivos en edicion.
+                  </CardContent>
+                </Card>
+              ) : null}
+            </>
+          ) : (
+            goals.map((item) => (
+              <Card
+                key={item.goal.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/goals/${item.goal.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate(`/goals/${item.goal.id}`);
+                  }
+                }}
+                className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="grid h-9 w-9 place-items-center rounded-md text-white"
+                        style={{ backgroundColor: item.goal.color }}
+                      >
+                        <Flag className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <CardTitle>{item.goal.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Objetivo{" "}
+                          {formatMoney(item.goal.targetAmount, item.goal.currency)}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
+                      {item.goal.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Progress value={item.percentage} indicatorClassName="bg-sky-500" />
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-muted-foreground">Reservado</p>
+                      <p className="font-semibold">
+                        {formatMoney(item.reserved, item.goal.currency)}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-muted-foreground">Gastado</p>
+                      <p className="font-semibold">
+                        {formatMoney(item.spent, item.goal.currency)}
                       </p>
                     </div>
                   </div>
-                  <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
-                    {item.goal.status}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Progress value={item.percentage} indicatorClassName="bg-sky-500" />
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-md bg-secondary p-3">
-                    <p className="text-muted-foreground">Reservado</p>
-                    <p className="font-semibold">
-                      {formatMoney(item.reserved, item.goal.currency)}
-                    </p>
-                  </div>
-                  <div className="rounded-md bg-secondary p-3">
-                    <p className="text-muted-foreground">Gastado</p>
-                    <p className="font-semibold">
-                      {formatMoney(item.spent, item.goal.currency)}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {item.goal.tagIds.map((currentTagId) => {
-                    const tag = dataset.tags.find((candidate) => candidate.id === currentTagId);
-                    return tag ? (
-                      <Badge
-                        key={tag.id}
-                        variant="info"
-                        className="transition hover:bg-sky-500/20"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openGoalRecords(tag.id);
-                        }}
-                      >
-                        {tag.name}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.goal.tagIds.map((currentTagId) => {
+                      const tag = dataset.tags.find(
+                        (candidate) => candidate.id === currentTagId,
+                      );
+                      return tag ? (
+                        <Badge
+                          key={tag.id}
+                          variant="info"
+                          className="transition hover:bg-sky-500/20"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openGoalRecords(tag.id);
+                          }}
+                        >
+                          {tag.name}
+                        </Badge>
+                      ) : null;
+                    })}
+                    {item.goal.deadline ? (
+                      <Badge variant="muted">
+                        <CalendarDays className="mr-1 h-3 w-3" />
+                        {item.goal.deadline}
                       </Badge>
-                    ) : null;
-                  })}
-                  {item.goal.deadline ? (
-                    <Badge variant="muted">
-                      <CalendarDays className="mr-1 h-3 w-3" />
-                      {item.goal.deadline}
-                    </Badge>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                    ) : null}
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
         </div>
 
         <div className="space-y-4">
+          {editError ? (
+            <Card className="border-destructive/40 bg-destructive/5">
+              <CardContent className="py-4 text-sm text-destructive">
+                {editError}
+              </CardContent>
+            </Card>
+          ) : null}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -537,7 +622,7 @@ export function GoalsView() {
                   <select
                     value={goalId}
                     onChange={(event) => setGoalId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    className={inputClassName}
                   >
                     {dataset.goals.map((goal) => (
                       <option key={goal.id} value={goal.id}>
@@ -551,7 +636,7 @@ export function GoalsView() {
                   <select
                     value={accountId}
                     onChange={(event) => setAccountId(event.target.value)}
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    className={inputClassName}
                   >
                     {dataset.accounts.map((account) => (
                       <option key={account.id} value={account.id}>
@@ -566,7 +651,7 @@ export function GoalsView() {
                     value={reserveAmount}
                     onChange={(event) => setReserveAmount(event.target.value)}
                     type="number"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    className={inputClassName}
                     placeholder="0"
                   />
                 </label>
