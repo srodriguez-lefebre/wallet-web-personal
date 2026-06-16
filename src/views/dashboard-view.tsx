@@ -24,18 +24,32 @@ import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useWallet } from "@/providers/wallet-provider";
 import {
+  calculateAccountBalanceAtDate,
   calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateCategoryExpenses,
+  calculateCategoryExpensesForDateRange,
   calculateSummary,
+  calculateSummaryForDateRange,
   formatMoney,
+  relativeDateRanges,
   relativeMonthKeys,
 } from "@shared/calculations";
+import type { DateRange } from "@shared/types";
 
 export function DashboardView() {
   const navigate = useNavigate();
-  const { dataset, selectedMonth, setRecordFilters } = useWallet();
-  const summary = calculateSummary(dataset, selectedMonth);
+  const {
+    dataset,
+    selectedMonth,
+    selectedPeriodMode,
+    selectedDateRange,
+    setRecordFilters,
+  } = useWallet();
+  const summary =
+    selectedPeriodMode === "custom"
+      ? calculateSummaryForDateRange(dataset, selectedDateRange)
+      : calculateSummary(dataset, selectedMonth);
   const accountBalances = calculateAccountBalances(dataset);
   const visibleBalances = accountBalances.filter(
     (item) => item.account.isVisible,
@@ -44,19 +58,34 @@ export function DashboardView() {
     accountBalances.find(
       (item) => item.account.id === dataset.settings.primaryAccountId,
     ) ?? visibleBalances[0];
-  const categories = calculateCategoryExpenses(dataset, selectedMonth);
+  const categories =
+    selectedPeriodMode === "custom"
+      ? calculateCategoryExpensesForDateRange(dataset, selectedDateRange)
+      : calculateCategoryExpenses(dataset, selectedMonth);
   const balanceCurrency =
     primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
-  const balanceTrend = relativeMonthKeys(selectedMonth, 3).map((month) => ({
-    month: formatMonthLabel(month),
-    balance: primaryBalance
-      ? calculateAccountBalanceAtMonthEnd(
-          dataset,
-          primaryBalance.account.id,
-          month,
-        )
-      : 0,
-  }));
+  const balanceTrend =
+    selectedPeriodMode === "custom"
+      ? relativeDateRanges(selectedDateRange, 3).map((range) => ({
+          period: formatDateRangeLabel(range),
+          balance: primaryBalance
+            ? calculateAccountBalanceAtDate(
+                dataset,
+                primaryBalance.account.id,
+                range.to,
+              )
+            : 0,
+        }))
+      : relativeMonthKeys(selectedMonth, 3).map((month) => ({
+          period: formatMonthLabel(month),
+          balance: primaryBalance
+            ? calculateAccountBalanceAtMonthEnd(
+                dataset,
+                primaryBalance.account.id,
+                month,
+              )
+            : 0,
+        }));
   const balanceTooltipFormatter = (value: unknown) =>
     formatMoney(Number(value ?? 0), balanceCurrency);
   const recentRecords = dataset.records
@@ -116,8 +145,8 @@ export function DashboardView() {
         <MetricCard
           label="Income"
           value={formatMoney(summary.income, dataset.settings.primaryCurrency)}
-          detail="Selected month"
-          icon={<ArrowUpRight className="h-4 w-4" />}
+          detail="Selected period"
+          icon={<ArrowDownRight className="h-4 w-4" />}
           tone="success"
           onClick={() => goToRecords({ type: "income" })}
         />
@@ -127,8 +156,8 @@ export function DashboardView() {
             summary.expenses,
             dataset.settings.primaryCurrency,
           )}
-          detail="Selected month"
-          icon={<ArrowDownRight className="h-4 w-4" />}
+          detail="Selected period"
+          icon={<ArrowUpRight className="h-4 w-4" />}
           tone="danger"
           onClick={() => goToRecords({ type: "expense" })}
         />
@@ -163,7 +192,7 @@ export function DashboardView() {
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"
                 />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                <XAxis dataKey="period" tickLine={false} axisLine={false} />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
@@ -380,4 +409,16 @@ function formatMonthLabel(month: string) {
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
+}
+
+function formatDateRangeLabel(range: DateRange) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const from = new Date(`${range.from}T12:00:00.000Z`);
+  const to = new Date(`${range.to}T12:00:00.000Z`);
+
+  return `${formatter.format(from)} - ${formatter.format(to)}`;
 }

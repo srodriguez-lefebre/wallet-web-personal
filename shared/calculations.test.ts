@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateAccountBalanceAtDate,
   calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateBudgetProgress,
   calculateCategoryExpenses,
+  calculateCategoryExpensesForDateRange,
   calculateGoalProgress,
   calculateSummary,
+  calculateSummaryForDateRange,
   formatMoney,
   groupRecordsByDay,
+  recordsForDateRange,
+  relativeDateRanges,
   relativeMonthKeys,
 } from "./calculations.js";
 import { mockWalletData } from "./mock-data.js";
@@ -51,12 +56,54 @@ describe("wallet calculations", () => {
     ).toBe(36000);
   });
 
+  it("calculates account balance at the end of a selected day", () => {
+    expect(
+      calculateAccountBalanceAtDate(mockWalletData, "acc-bank", "2026-06-06"),
+    ).toBe(116913);
+    expect(
+      calculateAccountBalanceAtDate(mockWalletData, "acc-bank", "2026-06-07"),
+    ).toBe(104913);
+  });
+
   it("builds a chronological window ending at the selected month", () => {
     expect(relativeMonthKeys("2026-06", 3)).toEqual([
       "2026-04",
       "2026-05",
       "2026-06",
     ]);
+  });
+
+  it("builds chronological windows for custom date ranges", () => {
+    expect(
+      relativeDateRanges({ from: "2026-06-08", to: "2026-06-14" }, 3),
+    ).toEqual([
+      { from: "2026-05-25", to: "2026-05-31" },
+      { from: "2026-06-01", to: "2026-06-07" },
+      { from: "2026-06-08", to: "2026-06-14" },
+    ]);
+  });
+
+  it("filters and summarizes records by custom date range", () => {
+    const range = { from: "2026-06-01", to: "2026-06-07" };
+    const records = recordsForDateRange(mockWalletData.records, range);
+    const summary = calculateSummaryForDateRange(mockWalletData, range);
+    const categories = calculateCategoryExpensesForDateRange(
+      mockWalletData,
+      range,
+    );
+
+    expect(records.map((record) => record.id)).toEqual([
+      "rec-income-1",
+      "rec-rent",
+      "rec-food-1",
+      "rec-transfer-usd",
+    ]);
+    expect(summary.income).toBe(43013);
+    expect(summary.expenses).toBe(22340);
+    expect(summary.cashFlow).toBe(20673);
+    expect(categories.find((item) => item.id === "cat-housing")?.value).toBe(
+      18500,
+    );
   });
 
   it("groups expenses by category", () => {

@@ -1,10 +1,14 @@
 import {
+  addDays,
   addMonths,
+  differenceInCalendarDays,
+  endOfDay,
   endOfMonth,
   format,
   isAfter,
   isBefore,
   parseISO,
+  startOfDay,
 } from "date-fns";
 import type {
   Account,
@@ -14,6 +18,7 @@ import type {
   BudgetProgress,
   Category,
   CurrencyCode,
+  DateRange,
   GoalProgress,
   WalletDataset,
   WalletRecord,
@@ -40,6 +45,19 @@ export function monthKey(date: string | Date) {
   return format(typeof date === "string" ? parseISO(date) : date, "yyyy-MM");
 }
 
+export function dateKey(date: string | Date) {
+  return format(typeof date === "string" ? parseISO(date) : date, "yyyy-MM-dd");
+}
+
+export function dateRangeForMonth(month: string): DateRange {
+  const date = parseISO(`${month}-15T12:00:00.000Z`);
+
+  return {
+    from: format(date, "yyyy-MM-01"),
+    to: format(endOfMonth(date), "yyyy-MM-dd"),
+  };
+}
+
 export function availableMonthKeys(records: WalletRecord[]) {
   return [
     ...new Set(records.map((record) => monthKey(record.occurredAt))),
@@ -63,8 +81,33 @@ export function relativeMonthKeys(month: string, count = 3) {
   );
 }
 
+export function relativeDateRanges(range: DateRange, count = 3): DateRange[] {
+  const from = parseISO(`${range.from}T12:00:00.000Z`);
+  const to = parseISO(`${range.to}T12:00:00.000Z`);
+  const days = Math.max(1, differenceInCalendarDays(to, from) + 1);
+
+  return Array.from({ length: count }, (_, index) => {
+    const offset = (index - count + 1) * days;
+
+    return {
+      from: format(addDays(from, offset), "yyyy-MM-dd"),
+      to: format(addDays(to, offset), "yyyy-MM-dd"),
+    };
+  });
+}
+
 export function recordsForMonth(records: WalletRecord[], month: string) {
   return records.filter((record) => monthKey(record.occurredAt) === month);
+}
+
+export function recordsForDateRange(records: WalletRecord[], range: DateRange) {
+  const from = startOfDay(parseISO(`${range.from}T12:00:00.000Z`));
+  const to = endOfDay(parseISO(`${range.to}T12:00:00.000Z`));
+
+  return records.filter((record) => {
+    const date = parseISO(record.occurredAt);
+    return !isBefore(date, from) && !isAfter(date, to);
+  });
 }
 
 export function isRecordInRange(
@@ -127,10 +170,32 @@ export function calculateAccountBalanceAtMonthEnd(
   accountId: string,
   month: string,
 ) {
+  return calculateAccountBalanceAtCutoff(
+    dataset,
+    accountId,
+    endOfMonth(parseISO(`${month}-15T12:00:00.000Z`)),
+  );
+}
+
+export function calculateAccountBalanceAtDate(
+  dataset: WalletDataset,
+  accountId: string,
+  date: string,
+) {
+  return calculateAccountBalanceAtCutoff(
+    dataset,
+    accountId,
+    endOfDay(parseISO(`${date}T12:00:00.000Z`)),
+  );
+}
+
+function calculateAccountBalanceAtCutoff(
+  dataset: WalletDataset,
+  accountId: string,
+  cutoff: Date,
+) {
   const account = dataset.accounts.find((item) => item.id === accountId);
   if (!account) return 0;
-
-  const cutoff = endOfMonth(parseISO(`${month}-15T12:00:00.000Z`));
 
   return dataset.records.reduce((total, record) => {
     if (record.paymentStatus === "cancelled") return total;
@@ -184,6 +249,44 @@ export function calculateSummary(
     (record) => record.paymentStatus !== "cancelled",
   );
 
+  const now = new Date();
+  const monthEnd = endOfMonth(now);
+  const dayOfMonth = Math.max(1, now.getDate());
+  const remainingDays = Math.max(1, monthEnd.getDate() - now.getDate() + 1);
+
+  return calculateSummaryFromRecords(
+    dataset,
+    records,
+    dayOfMonth,
+    remainingDays,
+  );
+}
+
+export function calculateSummaryForDateRange(
+  dataset: WalletDataset,
+  range: DateRange,
+): AnalyticsSummary {
+  const records = recordsForDateRange(dataset.records, range).filter(
+    (record) => record.paymentStatus !== "cancelled",
+  );
+  const from = parseISO(`${range.from}T12:00:00.000Z`);
+  const to = parseISO(`${range.to}T12:00:00.000Z`);
+  const now = new Date();
+  const dayCount = Math.max(1, differenceInCalendarDays(to, from) + 1);
+  const remainingDays =
+    isBefore(now, from) || isAfter(now, to)
+      ? 1
+      : Math.max(1, differenceInCalendarDays(to, now) + 1);
+
+  return calculateSummaryFromRecords(dataset, records, dayCount, remainingDays);
+}
+
+function calculateSummaryFromRecords(
+  dataset: WalletDataset,
+  records: WalletRecord[],
+  dayCount: number,
+  remainingDays: number,
+): AnalyticsSummary {
   const income = records
     .filter((record) => record.type === "income")
     .reduce(
@@ -200,12 +303,8 @@ export function calculateSummary(
       0,
     );
 
-  const now = new Date();
-  const monthEnd = endOfMonth(now);
-  const dayOfMonth = Math.max(1, now.getDate());
-  const remainingDays = Math.max(1, monthEnd.getDate() - now.getDate() + 1);
   const balance = calculateVisibleBalance(dataset);
-  const dailyAverageExpense = expenses / dayOfMonth;
+  const dailyAverageExpense = expenses / dayCount;
   const availableDaily = balance / remainingDays;
 
   return {
@@ -228,6 +327,25 @@ export function calculateCategoryExpenses(
       record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
+  return calculateCategoryExpensesFromRecords(dataset, records);
+}
+
+export function calculateCategoryExpensesForDateRange(
+  dataset: WalletDataset,
+  range: DateRange,
+) {
+  const records = recordsForDateRange(dataset.records, range).filter(
+    (record) =>
+      record.type === "expense" && record.paymentStatus !== "cancelled",
+  );
+
+  return calculateCategoryExpensesFromRecords(dataset, records);
+}
+
+function calculateCategoryExpensesFromRecords(
+  dataset: WalletDataset,
+  records: WalletRecord[],
+) {
   return dataset.categories
     .filter((category) => !category.parentId)
     .map((category) => {
@@ -315,13 +433,32 @@ export function calculateBudgetProgress(
   dataset: WalletDataset,
   month = monthKey(new Date()),
 ): BudgetProgress[] {
+  return calculateBudgetProgressFromRecords(
+    dataset,
+    recordsForMonth(dataset.records, month),
+  );
+}
+
+export function calculateBudgetProgressForDateRange(
+  dataset: WalletDataset,
+  range: DateRange,
+): BudgetProgress[] {
+  return calculateBudgetProgressFromRecords(
+    dataset,
+    recordsForDateRange(dataset.records, range),
+  );
+}
+
+function calculateBudgetProgressFromRecords(
+  dataset: WalletDataset,
+  records: WalletRecord[],
+): BudgetProgress[] {
   return dataset.budgets
     .filter((budget) => budget.isActive)
     .map((budget) => {
       const spent = matchingBudgetRecords(
-        dataset.records,
+        records,
         budget,
-        month,
         dataset.categories,
       ).reduce(
         (total, record) =>
@@ -347,10 +484,9 @@ export function calculateBudgetProgress(
 function matchingBudgetRecords(
   records: WalletRecord[],
   budget: Budget,
-  month: string,
   categories: Category[],
 ) {
-  return recordsForMonth(records, month).filter((record) => {
+  return records.filter((record) => {
     if (record.type !== "expense" || record.paymentStatus === "cancelled") {
       return false;
     }

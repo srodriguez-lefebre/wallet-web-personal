@@ -21,6 +21,7 @@ import {
   formatMoney,
   groupRecordsByDay,
   isCategoryOrDescendant,
+  recordsForDateRange,
 } from "@shared/calculations";
 import {
   paymentStatusLabels,
@@ -119,6 +120,8 @@ export function RecordsView() {
   const {
     dataset,
     selectedMonth,
+    selectedPeriodMode,
+    selectedDateRange,
     recordFilters,
     setRecordFilters,
     clearRecordFilters,
@@ -181,8 +184,14 @@ export function RecordsView() {
   }, [dataset, newRecordRequestId]);
 
   const filteredRecords = useMemo(() => {
-    return dataset.records
-      .filter((record) => record.occurredAt.startsWith(selectedMonth))
+    const periodRecords =
+      selectedPeriodMode === "custom"
+        ? recordsForDateRange(dataset.records, selectedDateRange)
+        : dataset.records.filter((record) =>
+            record.occurredAt.startsWith(selectedMonth),
+          );
+
+    return periodRecords
       .filter((record) =>
         !recordFilters.type || recordFilters.type === "all"
           ? true
@@ -228,7 +237,13 @@ export function RecordsView() {
         (a, b) =>
           new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
       );
-  }, [dataset, recordFilters, selectedMonth]);
+  }, [
+    dataset,
+    recordFilters,
+    selectedDateRange,
+    selectedMonth,
+    selectedPeriodMode,
+  ]);
 
   const grouped = groupRecordsByDay(filteredRecords);
   const activeFilters = [
@@ -660,7 +675,11 @@ export function RecordsView() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>{filteredRecords.length} records</CardTitle>
               <div className="flex flex-wrap gap-2">
-                <Badge variant="muted">{selectedMonth}</Badge>
+                <Badge variant="muted">
+                  {selectedPeriodMode === "custom"
+                    ? `${format(parseISO(selectedDateRange.from), "dd/MM/yyyy")} - ${format(parseISO(selectedDateRange.to), "dd/MM/yyyy")}`
+                    : selectedMonth}
+                </Badge>
                 {activeFilters.map((filter) => (
                   <Badge key={String(filter)} variant="info">
                     {filter}

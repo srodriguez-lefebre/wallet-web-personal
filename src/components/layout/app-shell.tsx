@@ -39,12 +39,22 @@ export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
   const { lock } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { dataset, selectedMonth, setSelectedMonth, requestNewRecord } = useWallet();
+  const {
+    dataset,
+    selectedMonth,
+    selectedPeriodMode,
+    customDateRange,
+    setSelectedMonth,
+    setCustomDateRange,
+    requestNewRecord,
+  } = useWallet();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const monthOptions = useMemo(
     () => recentMonthKeys(dataset.records, monthKey(new Date()), 12),
     [dataset.records],
   );
+  const periodSelectValue =
+    selectedPeriodMode === "custom" ? "custom" : selectedMonth;
 
   function formatMonthLabel(month: string) {
     return new Intl.DateTimeFormat("en-US", {
@@ -58,6 +68,15 @@ export function AppShell({ children }: PropsWithChildren) {
     requestNewRecord();
     navigate("/records");
     setIsMobileNavOpen(false);
+  }
+
+  function handlePeriodChange(value: string) {
+    if (value === "custom") {
+      setCustomDateRange(customDateRange);
+      return;
+    }
+
+    setSelectedMonth(value);
   }
 
   const navigation = (
@@ -113,7 +132,9 @@ export function AppShell({ children }: PropsWithChildren) {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Personal Wallet</p>
-                  <p className="text-xs text-muted-foreground">Finance control</p>
+                  <p className="text-xs text-muted-foreground">
+                    Finance control
+                  </p>
                 </div>
               </div>
               <Button
@@ -142,10 +163,10 @@ export function AppShell({ children }: PropsWithChildren) {
             <Menu className="h-5 w-5" />
           </Button>
 
-          <div className="flex flex-1 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
             <select
-              value={selectedMonth}
-              onChange={(event) => setSelectedMonth(event.target.value)}
+              value={periodSelectValue}
+              onChange={(event) => handlePeriodChange(event.target.value)}
               className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
               aria-label="Period"
             >
@@ -154,7 +175,37 @@ export function AppShell({ children }: PropsWithChildren) {
                   {formatMonthLabel(month)}
                 </option>
               ))}
+              <option value="custom">Custom range</option>
             </select>
+            {selectedPeriodMode === "custom" ? (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={customDateRange.from}
+                  onChange={(event) =>
+                    setCustomDateRange({
+                      ...customDateRange,
+                      from: event.target.value,
+                    })
+                  }
+                  className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="Start date"
+                />
+                <span className="text-xs text-muted-foreground">to</span>
+                <input
+                  type="date"
+                  value={customDateRange.to}
+                  onChange={(event) =>
+                    setCustomDateRange({
+                      ...customDateRange,
+                      to: event.target.value,
+                    })
+                  }
+                  className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  aria-label="End date"
+                />
+              </div>
+            ) : null}
             <span className="hidden items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm text-muted-foreground sm:inline-flex">
               <CircleDollarSign className="h-4 w-4" />
               {dataset.settings.primaryCurrency}
@@ -165,10 +216,24 @@ export function AppShell({ children }: PropsWithChildren) {
             <Plus className="h-4 w-4" />
             Record
           </Button>
-          <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
-            {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
           </Button>
-          <Button variant="outline" size="icon" onClick={lock} aria-label="Lock app">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={lock}
+            aria-label="Lock app"
+          >
             <Lock className="h-4 w-4" />
           </Button>
         </header>

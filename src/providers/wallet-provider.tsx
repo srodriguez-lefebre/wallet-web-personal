@@ -3,6 +3,7 @@ import {
   type PropsWithChildren,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,16 @@ import { readStorage, writeStorage } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import * as walletApi from "@/services/wallet-api";
 import { mockWalletData } from "@shared/mock-data";
-import { availableMonthKeys, monthKey } from "@shared/calculations";
+import {
+  availableMonthKeys,
+  dateKey,
+  dateRangeForMonth,
+  monthKey,
+} from "@shared/calculations";
 import type {
   Account,
   Category,
+  DateRange,
   Goal,
   GoalReservation,
   Investment,
@@ -23,17 +30,26 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
+type PeriodMode = "month" | "custom";
+
 interface WalletContextValue {
   dataset: WalletDataset;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  selectedPeriodMode: PeriodMode;
+  selectedDateRange: DateRange;
+  customDateRange: DateRange;
+  setCustomDateRange: (range: DateRange) => void;
   newRecordRequestId: number;
   requestNewRecord: () => void;
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
   addAccount: (account: Omit<Account, "id">) => Promise<string>;
-  updateAccount: (accountId: string, account: Omit<Account, "id">) => Promise<void>;
+  updateAccount: (
+    accountId: string,
+    account: Omit<Account, "id">,
+  ) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
   updateRecord: (
@@ -76,7 +92,11 @@ function collectCategoryTreeIds(categories: Category[], categoryId: string) {
   while (didAdd) {
     didAdd = false;
     categories.forEach((category) => {
-      if (category.parentId && ids.has(category.parentId) && !ids.has(category.id)) {
+      if (
+        category.parentId &&
+        ids.has(category.parentId) &&
+        !ids.has(category.id)
+      ) {
         ids.add(category.id);
         didAdd = true;
       }
@@ -105,18 +125,63 @@ function cacheDataset(dataset: WalletDataset) {
   writeStorage(datasetCacheKey, JSON.stringify(dataset));
 }
 
+function defaultCustomDateRange(): DateRange {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(to.getDate() - 6);
+
+  return {
+    from: dateKey(from),
+    to: dateKey(to),
+  };
+}
+
+function normalizeDateRange(range: DateRange): DateRange {
+  if (range.from <= range.to) return range;
+  return {
+    from: range.to,
+    to: range.from,
+  };
+}
+
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
   const [hasCachedDataset] = useState(() => Boolean(readCachedDataset()));
-  const [dataset, setDataset] = useState<WalletDataset>(() => readCachedDataset() ?? mockWalletData);
+  const [dataset, setDataset] = useState<WalletDataset>(
+    () => readCachedDataset() ?? mockWalletData,
+  );
   const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
+  const [selectedMonth, setSelectedMonthState] = useState(() =>
+    monthKey(new Date()),
+  );
+  const [selectedPeriodMode, setSelectedPeriodMode] =
+    useState<PeriodMode>("month");
+  const [customDateRange, setCustomDateRangeState] = useState(
+    defaultCustomDateRange,
+  );
+  const selectedDateRange = useMemo(
+    () =>
+      selectedPeriodMode === "custom"
+        ? customDateRange
+        : dateRangeForMonth(selectedMonth),
+    [customDateRange, selectedMonth, selectedPeriodMode],
+  );
   const [newRecordRequestId, setNewRecordRequestId] = useState(0);
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
     type: "all",
   });
+
+  function setSelectedMonth(month: string) {
+    setSelectedMonthState(month);
+    setSelectedPeriodMode("month");
+  }
+
+  function setCustomDateRange(range: DateRange) {
+    setCustomDateRangeState(normalizeDateRange(range));
+    setSelectedPeriodMode("custom");
+  }
 
   function requireToken() {
     if (!token) throw new Error("Missing API token");
@@ -133,7 +198,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       setDataset(nextDataset);
       cacheDataset(nextDataset);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not load wallet");
+      setLoadError(
+        error instanceof Error ? error.message : "Could not load wallet",
+      );
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
@@ -179,10 +246,14 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
-    if (months.length > 0 && !months.includes(selectedMonth)) {
-      queueMicrotask(() => setSelectedMonth(months[0]));
+    if (
+      selectedPeriodMode === "month" &&
+      months.length > 0 &&
+      !months.includes(selectedMonth)
+    ) {
+      queueMicrotask(() => setSelectedMonthState(months[0]));
     }
-  }, [dataset.records, selectedMonth]);
+  }, [dataset.records, selectedMonth, selectedPeriodMode]);
 
   function setRecordFilters(filters: RecordFilters) {
     setRecordFiltersState((current) => ({
@@ -208,8 +279,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return created.id;
   }
 
-  async function updateAccount(accountId: string, account: Omit<Account, "id">) {
-    const updated = await walletApi.updateAccount(requireToken(), accountId, account);
+  async function updateAccount(
+    accountId: string,
+    account: Omit<Account, "id">,
+  ) {
+    const updated = await walletApi.updateAccount(
+      requireToken(),
+      accountId,
+      account,
+    );
     setDataset((current) => ({
       ...current,
       accounts: current.accounts.map((currentAccount) =>
@@ -226,7 +304,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
       );
       const nextPrimaryAccountId =
         current.settings.primaryAccountId === accountId
-          ? nextAccounts.find((account) => account.isVisible)?.id ?? nextAccounts[0]?.id
+          ? (nextAccounts.find((account) => account.isVisible)?.id ??
+            nextAccounts[0]?.id)
           : current.settings.primaryAccountId;
 
       return {
@@ -291,8 +370,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
-  async function updateRecord(recordId: string, record: Omit<WalletRecord, "id">) {
-    const updated = await walletApi.updateRecord(requireToken(), recordId, record);
+  async function updateRecord(
+    recordId: string,
+    record: Omit<WalletRecord, "id">,
+  ) {
+    const updated = await walletApi.updateRecord(
+      requireToken(),
+      recordId,
+      record,
+    );
     setDataset((current) => ({
       ...current,
       records: current.records.map((currentRecord) =>
@@ -330,7 +416,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function deleteCategory(categoryId: string) {
     await walletApi.deleteCategory(requireToken(), categoryId);
     setDataset((current) => {
-      const categoryIds = collectCategoryTreeIds(current.categories, categoryId);
+      const categoryIds = collectCategoryTreeIds(
+        current.categories,
+        categoryId,
+      );
 
       return {
         ...current,
@@ -522,7 +611,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
       ...dataset.settings,
       primaryAccountId: accountId,
     };
-    const updated = await walletApi.updateSettings(requireToken(), nextSettings);
+    const updated = await walletApi.updateSettings(
+      requireToken(),
+      nextSettings,
+    );
     setDataset((current) => ({
       ...current,
       settings: updated,
@@ -562,6 +654,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
         dataset,
         selectedMonth,
         setSelectedMonth,
+        selectedPeriodMode,
+        selectedDateRange,
+        customDateRange,
+        setCustomDateRange,
         newRecordRequestId,
         requestNewRecord,
         recordFilters,

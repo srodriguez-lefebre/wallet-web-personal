@@ -20,10 +20,14 @@ import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
   calculateBudgetProgress,
+  calculateBudgetProgressForDateRange,
   calculateCategoryExpenses,
+  calculateCategoryExpensesForDateRange,
   calculateMonthlySeries,
   calculateSummary,
+  calculateSummaryForDateRange,
   formatMoney,
+  monthKey,
   recentMonthKeys,
 } from "@shared/calculations";
 import {
@@ -34,12 +38,21 @@ import {
 import type { WalletRecord } from "@shared/types";
 
 function isAccountRecord(record: WalletRecord, accountId: string) {
-  return record.accountId === accountId || record.destinationAccountId === accountId;
+  return (
+    record.accountId === accountId || record.destinationAccountId === accountId
+  );
 }
 
 export function AnalyticsView() {
   const navigate = useNavigate();
-  const { dataset, selectedMonth, recordFilters, setRecordFilters } = useWallet();
+  const {
+    dataset,
+    selectedMonth,
+    selectedPeriodMode,
+    selectedDateRange,
+    recordFilters,
+    setRecordFilters,
+  } = useWallet();
   const selectedAccount = recordFilters.accountId
     ? dataset.accounts.find((account) => account.id === recordFilters.accountId)
     : undefined;
@@ -56,16 +69,37 @@ export function AnalyticsView() {
           isAccountRecord(record, selectedAccount.id),
         ),
         budgets: dataset.budgets.filter(
-          (budget) => !budget.accountId || budget.accountId === selectedAccount.id,
+          (budget) =>
+            !budget.accountId || budget.accountId === selectedAccount.id,
         ),
       }
     : dataset;
-  const summary = calculateSummary(analyticsDataset, selectedMonth);
-  const categories = calculateCategoryExpenses(analyticsDataset, selectedMonth);
-  const budgets = calculateBudgetProgress(analyticsDataset, selectedMonth);
+  const summary =
+    selectedPeriodMode === "custom"
+      ? calculateSummaryForDateRange(analyticsDataset, selectedDateRange)
+      : calculateSummary(analyticsDataset, selectedMonth);
+  const categories =
+    selectedPeriodMode === "custom"
+      ? calculateCategoryExpensesForDateRange(
+          analyticsDataset,
+          selectedDateRange,
+        )
+      : calculateCategoryExpenses(analyticsDataset, selectedMonth);
+  const budgets =
+    selectedPeriodMode === "custom"
+      ? calculateBudgetProgressForDateRange(analyticsDataset, selectedDateRange)
+      : calculateBudgetProgress(analyticsDataset, selectedMonth);
   const monthlySeries = calculateMonthlySeries(
     analyticsDataset,
-    recentMonthKeys(analyticsDataset.records, selectedMonth, 6).slice().reverse(),
+    recentMonthKeys(
+      analyticsDataset.records,
+      selectedPeriodMode === "custom"
+        ? monthKey(selectedDateRange.to)
+        : selectedMonth,
+      6,
+    )
+      .slice()
+      .reverse(),
   );
   const projection = calculateEndOfMonthProjection(
     analyticsDataset,
@@ -86,7 +120,9 @@ export function AnalyticsView() {
     <div>
       <PageHeader
         eyebrow="Analytics"
-        title={selectedAccount ? `${selectedAccount.name} analytics` : "Analytics"}
+        title={
+          selectedAccount ? `${selectedAccount.name} analytics` : "Analytics"
+        }
         description={
           selectedAccount
             ? "Reports filtered by this account: records, categories, budgets, and monthly flow."
@@ -120,13 +156,31 @@ export function AnalyticsView() {
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlySeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={70} />
                 <Tooltip />
-                <Bar dataKey="cashFlow" fill="#2563EB" name="Cash flow" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="income" fill="#22C55E" name="Income" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" fill="#EF4444" name="Expenses" radius={[4, 4, 0, 0]} />
+                <Bar
+                  dataKey="cashFlow"
+                  fill="#2563EB"
+                  name="Cash flow"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="income"
+                  fill="#22C55E"
+                  name="Income"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar
+                  dataKey="expenses"
+                  fill="#EF4444"
+                  name="Expenses"
+                  radius={[4, 4, 0, 0]}
+                />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -145,7 +199,10 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Income</p>
                 <p className="font-semibold">
-                  {formatMoney(summary.income, dataset.settings.primaryCurrency)}
+                  {formatMoney(
+                    summary.income,
+                    dataset.settings.primaryCurrency,
+                  )}
                 </p>
               </button>
               <button
@@ -155,7 +212,10 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Expense</p>
                 <p className="font-semibold">
-                  {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
+                  {formatMoney(
+                    summary.expenses,
+                    dataset.settings.primaryCurrency,
+                  )}
                 </p>
               </button>
               <button
@@ -165,7 +225,10 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Flow</p>
                 <p className="font-semibold text-sky-700 dark:text-sky-300">
-                  {formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
+                  {formatMoney(
+                    summary.cashFlow,
+                    dataset.settings.primaryCurrency,
+                  )}
                 </p>
               </button>
             </div>
@@ -174,15 +237,24 @@ export function AnalyticsView() {
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => goToRecords({ type: "expense", categoryId: category.id })}
+                  onClick={() =>
+                    goToRecords({ type: "expense", categoryId: category.id })
+                  }
                   className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
-                    <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                    <CategoryIcon
+                      icon={category.icon}
+                      color={category.color}
+                      size="sm"
+                    />
                     <p className="font-medium">{category.name}</p>
                   </div>
                   <p className="font-semibold">
-                    {formatMoney(category.value, dataset.settings.primaryCurrency)}
+                    {formatMoney(
+                      category.value,
+                      dataset.settings.primaryCurrency,
+                    )}
                   </p>
                 </button>
               ))}
@@ -216,10 +288,15 @@ export function AnalyticsView() {
                     <p className="font-medium">{budget.budget.name}</p>
                     <p className="text-sm text-muted-foreground">
                       {formatMoney(budget.spent, budget.budget.currency)} of{" "}
-                      {formatMoney(budget.budget.limitAmount, budget.budget.currency)}
+                      {formatMoney(
+                        budget.budget.limitAmount,
+                        budget.budget.currency,
+                      )}
                     </p>
                   </div>
-                  <p className="font-semibold">{budget.percentage.toFixed(0)}%</p>
+                  <p className="font-semibold">
+                    {budget.percentage.toFixed(0)}%
+                  </p>
                 </div>
                 <Progress
                   value={budget.percentage}
@@ -250,7 +327,9 @@ export function AnalyticsView() {
                 </p>
               </div>
               <div className="rounded-md bg-secondary p-3">
-                <p className="text-sm text-muted-foreground">End-of-month projection</p>
+                <p className="text-sm text-muted-foreground">
+                  End-of-month projection
+                </p>
                 <p className="text-xl font-semibold">
                   {formatMoney(projection, dataset.settings.primaryCurrency)}
                 </p>
@@ -258,7 +337,10 @@ export function AnalyticsView() {
             </div>
             <div className="space-y-2">
               {recommendations.map((recommendation) => (
-                <div key={recommendation} className="rounded-md border p-3 text-sm">
+                <div
+                  key={recommendation}
+                  className="rounded-md border p-3 text-sm"
+                >
                   {recommendation}
                 </div>
               ))}

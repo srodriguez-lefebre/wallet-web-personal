@@ -26,6 +26,11 @@ export interface Money {
   currency: CurrencyCode;
 }
 
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
 export interface Account {
   id: string;
   name: string;
