@@ -1,9 +1,15 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { mockWalletData } from "@shared/mock-data";
 import { guardApi } from "../server/api/guard";
+import { routeError } from "../server/api/request";
 import { sendData } from "../server/api/response";
+import { getWalletDataset } from "../server/db/wallet-repository";
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guardApi(req, res, ["GET"])) return;
-  sendData(res, mockWalletData);
+
+  try {
+    sendData(res, await getWalletDataset());
+  } catch (error) {
+    routeError(res, error);
+  }
 }

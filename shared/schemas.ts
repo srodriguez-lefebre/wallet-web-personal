@@ -34,6 +34,19 @@ export const accountSchema = z.object({
   note: z.string().optional(),
 });
 
+export const categorySchema = z.object({
+  name: z.string().min(1),
+  parentId: z.string().optional(),
+  color: z.string().min(1),
+  icon: z.string().min(1),
+});
+
+export const tagSchema = z.object({
+  name: z.string().min(1),
+  color: z.string().min(1),
+  isActive: z.boolean().default(true),
+});
+
 export const recordSchema = z
   .object({
     type: recordTypeSchema,
@@ -99,6 +112,17 @@ export const goalReservationSchema = z.object({
   amount: z.number().positive(),
   currency: currencySchema,
   createdAt: z.string().datetime(),
+  note: z.string().optional(),
+});
+
+export const investmentSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum(["stock", "fund", "crypto", "deposit", "other"]),
+  amountInvested: z.number().positive(),
+  currentValue: z.number().positive(),
+  currency: currencySchema,
+  isVisible: z.boolean().default(true),
+  startedAt: z.string().datetime().or(z.string().date()),
   note: z.string().optional(),
 });
 

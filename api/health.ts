@@ -1,7 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { guardApi } from "../server/api/guard";
 import { sendData } from "../server/api/response";
 
-export default function handler(_req: VercelRequest, res: VercelResponse) {
+export default function handler(req: VercelRequest, res: VercelResponse) {
+  if (!guardApi(req, res, ["GET"])) return;
+
   sendData(res, {
     ok: true,
     service: "wallet-web-personal",
