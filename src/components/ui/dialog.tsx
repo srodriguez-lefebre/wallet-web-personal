@@ -44,7 +44,7 @@ export const DialogContent = forwardRef<
       {children}
       <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground">
         <X className="h-4 w-4" />
-        <span className="sr-only">Cerrar</span>
+        <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
     </DialogPrimitive.Content>
   </DialogPortal>

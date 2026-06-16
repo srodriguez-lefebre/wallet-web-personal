@@ -1,7 +1,6 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,7 +113,7 @@ function typeButtonClassName(item: RecordType, currentType: RecordType) {
 }
 
 export function RecordsView() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const openedNewRecordRef = useRef(0);
   const {
     dataset,
     selectedMonth,
@@ -124,6 +123,7 @@ export function RecordsView() {
     addRecord,
     updateRecord,
     deleteRecord,
+    newRecordRequestId,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
@@ -152,9 +152,10 @@ export function RecordsView() {
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   useEffect(() => {
-    if (searchParams.get("new") !== "1") return;
+    if (!newRecordRequestId || openedNewRecordRef.current === newRecordRequestId) return;
 
     queueMicrotask(() => {
+      openedNewRecordRef.current = newRecordRequestId;
       const nextAccountId = defaultAccountId(dataset);
       setEditingId(null);
       setType("expense");
@@ -168,9 +169,8 @@ export function RecordsView() {
       setPaymentType("credit");
       setPaymentStatus("cleared");
       setIsRecordDialogOpen(true);
-      setSearchParams({}, { replace: true });
     });
-  }, [dataset, searchParams, setSearchParams]);
+  }, [dataset, newRecordRequestId]);
 
   const filteredRecords = useMemo(() => {
     return dataset.records
@@ -273,6 +273,7 @@ export function RecordsView() {
 
   function closeRecordDialog() {
     setIsRecordDialogOpen(false);
+    openedNewRecordRef.current = 0;
     resetForm(type);
   }
 
@@ -544,7 +545,7 @@ export function RecordsView() {
               value={recordFilters.search ?? ""}
               onChange={(event) => updateSearch(event.target.value)}
               className={fieldClassName}
-              placeholder="Buscar..."
+              placeholder="Search..."
             />
             <select
               value={recordFilters.type ?? "all"}

@@ -1,4 +1,4 @@
-﻿import { FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   CalendarDays,
   Edit3,
@@ -393,7 +393,7 @@ export function GoalsView() {
                             }
                             type="color"
                             className={colorInputClassName}
-                            aria-label={`Color de ${draft.name || "goal"}`}
+                            aria-label={`${draft.name || "Goal"} color`}
                           />
                         </label>
                         <label className="block flex-1 space-y-2">

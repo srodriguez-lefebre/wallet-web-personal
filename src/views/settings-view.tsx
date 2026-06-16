@@ -1,4 +1,4 @@
-﻿import { FormEvent, useState } from "react";
+import { FormEvent, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -333,7 +333,7 @@ export function SettingsView() {
             }
             type="color"
             className={colorInputClassName}
-            aria-label={`Color de ${category.name}`}
+            aria-label={`${category.name} color`}
           />
           <input
             value={draft.name}
@@ -636,7 +636,7 @@ export function SettingsView() {
                         }
                         type="color"
                         className={colorInputClassName}
-                        aria-label={`Color de ${tag.name}`}
+                        aria-label={`${tag.name} color`}
                       />
                       <input
                         value={draft.name}

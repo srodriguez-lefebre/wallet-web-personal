@@ -27,6 +27,8 @@ interface WalletContextValue {
   dataset: WalletDataset;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  newRecordRequestId: number;
+  requestNewRecord: () => void;
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
@@ -111,6 +113,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
+  const [newRecordRequestId, setNewRecordRequestId] = useState(0);
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
     type: "all",
   });
@@ -190,6 +193,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   function clearRecordFilters() {
     setRecordFiltersState({ type: "all" });
+  }
+
+  function requestNewRecord() {
+    setNewRecordRequestId(Date.now());
   }
 
   async function addAccount(account: Omit<Account, "id">) {
@@ -555,6 +562,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
         dataset,
         selectedMonth,
         setSelectedMonth,
+        newRecordRequestId,
+        requestNewRecord,
         recordFilters,
         setRecordFilters,
         clearRecordFilters,

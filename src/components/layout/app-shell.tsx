@@ -39,7 +39,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
   const { lock } = useAuth();
   const { theme, toggleTheme } = useTheme();
-  const { dataset, selectedMonth, setSelectedMonth } = useWallet();
+  const { dataset, selectedMonth, setSelectedMonth, requestNewRecord } = useWallet();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const monthOptions = useMemo(
     () => recentMonthKeys(dataset.records, monthKey(new Date()), 12),
@@ -55,7 +55,8 @@ export function AppShell({ children }: PropsWithChildren) {
   }
 
   function openNewRecord() {
-    navigate("/records?new=1");
+    requestNewRecord();
+    navigate("/records");
     setIsMobileNavOpen(false);
   }
 
