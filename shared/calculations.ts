@@ -16,7 +16,7 @@ import type {
   GoalProgress,
   WalletDataset,
   WalletRecord,
-} from "./types";
+} from "./types.js";
 
 export function toPrimaryCurrency(amount: number, recordRate = 1) {
   return amount * recordRate;

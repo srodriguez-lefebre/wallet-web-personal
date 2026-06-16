@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { unlockSchema } from "@shared/schemas";
-import { isValidApiToken } from "../../server/api/auth";
-import { requireMethod } from "../../server/api/method";
-import { sendData, sendError } from "../../server/api/response";
+import { unlockSchema } from "../../shared/schemas.js";
+import { isValidApiToken } from "../../server/api/auth.js";
+import { requireMethod } from "../../server/api/method.js";
+import { sendData, sendError } from "../../server/api/response.js";
 
 export default function handler(req: VercelRequest, res: VercelResponse) {
   if (!requireMethod(req, res, ["POST"])) return;

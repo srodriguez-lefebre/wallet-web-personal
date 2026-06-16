@@ -1,4 +1,4 @@
-import type { WalletDataset } from "./types";
+import type { WalletDataset } from "./types.js";
 
 export const mockWalletData: WalletDataset = {
   settings: {

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { ZodError, type ZodSchema } from "zod";
-import { sendError } from "./response";
+import { sendError } from "./response.js";
 
 export function parseBody(req: VercelRequest) {
   if (typeof req.body === "string") {

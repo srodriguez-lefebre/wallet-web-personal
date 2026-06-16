@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { calculateSummary } from "@shared/calculations";
-import { guardApi } from "../../server/api/guard";
-import { routeError } from "../../server/api/request";
-import { sendData } from "../../server/api/response";
-import { getWalletDataset } from "../../server/db/wallet-repository";
+import { calculateSummary } from "../../shared/calculations.js";
+import { guardApi } from "../../server/api/guard.js";
+import { routeError } from "../../server/api/request.js";
+import { sendData } from "../../server/api/response.js";
+import { getWalletDataset } from "../../server/db/wallet-repository.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!guardApi(req, res, ["GET"])) return;

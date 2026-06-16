@@ -1,5 +1,5 @@
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
-import { createDb, type DbClient } from "./client";
+import { createDb, type DbClient } from "./client.js";
 import {
   accounts,
   budgets,
@@ -15,7 +15,7 @@ import {
   recordTags,
   settings,
   tags,
-} from "./schema";
+} from "./schema.js";
 import type {
   Account,
   Budget,
@@ -30,7 +30,7 @@ import type {
   WalletDataset,
   WalletRecord,
   WalletSettings,
-} from "@shared/types";
+} from "../../shared/types.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -39,7 +39,9 @@ type NewTag = Omit<Tag, "id">;
 type NewRecord = Omit<WalletRecord, "id">;
 type NewGoal = Omit<Goal, "id">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
-type NewInvestment = Omit<Investment, "id">;
+type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
+  startedAt?: string;
+};
 
 function asNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
@@ -667,7 +669,7 @@ export async function createInvestment(input: NewInvestment, db: Db = createDb()
       currentValue: decimal(input.currentValue),
       currency: input.currency,
       isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       note: input.note ?? null,
     })
     .returning();
@@ -688,7 +690,7 @@ export async function updateInvestment(
       currentValue: decimal(input.currentValue),
       currency: input.currency,
       isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       note: input.note ?? null,
       updatedAt: new Date(),
     })

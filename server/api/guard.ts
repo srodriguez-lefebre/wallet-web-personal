@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { requireApiToken } from "./auth";
-import { requireMethod } from "./method";
+import { requireApiToken } from "./auth.js";
+import { requireMethod } from "./method.js";
 
 export function guardApi(
   req: VercelRequest,

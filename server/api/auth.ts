@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { sendError } from "./response";
+import { sendError } from "./response.js";
 
 export function extractBearerToken(req: VercelRequest) {
   const header = req.headers.authorization;

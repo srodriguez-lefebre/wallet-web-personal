@@ -6,8 +6,8 @@ import {
   calculateGoalProgress,
   calculateSummary,
   groupRecordsByDay,
-} from "./calculations";
-import { mockWalletData } from "./mock-data";
+} from "./calculations.js";
+import { mockWalletData } from "./mock-data.js";
 
 describe("wallet calculations", () => {
   it("calculates monthly income, expenses and cash flow without counting transfers", () => {

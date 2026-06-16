@@ -1,4 +1,4 @@
-import type { CurrencyCode } from "./types";
+import type { CurrencyCode } from "./types.js";
 
 export const currencyLabels: Record<CurrencyCode, string> = {
   UYU: "Peso uruguayo",
