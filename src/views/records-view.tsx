@@ -274,23 +274,23 @@ export function RecordsView() {
     };
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     const nextRecord = buildRecord();
     if (!nextRecord) return;
 
     if (editingId) {
-      updateRecord(editingId, nextRecord);
+      await updateRecord(editingId, nextRecord);
     } else {
-      addRecord(nextRecord);
+      await addRecord(nextRecord);
     }
 
     closeRecordDialog();
   }
 
-  function handleDeleteEditingRecord() {
+  async function handleDeleteEditingRecord() {
     if (!editingId) return;
-    deleteRecord(editingId);
+    await deleteRecord(editingId);
     closeRecordDialog();
   }
 

@@ -144,12 +144,12 @@ export function SettingsView() {
     }));
   }
 
-  function handleAddCategory(event: FormEvent) {
+  async function handleAddCategory(event: FormEvent) {
     event.preventDefault();
     const name = newCategoryName.trim();
     if (!name) return;
 
-    addCategory({
+    await addCategory({
       name,
       parentId: newCategoryParentId || undefined,
       color: newCategoryColor,
@@ -162,20 +162,20 @@ export function SettingsView() {
     setIsCategoryDialogOpen(false);
   }
 
-  function handleSaveCategory(category: Category) {
+  async function handleSaveCategory(category: Category) {
     const draft = getCategoryDraft(category);
     const name = draft.name.trim();
     if (!name) return;
 
-    updateCategory(category.id, {
+    await updateCategory(category.id, {
       ...draft,
       name,
     });
     clearCategoryDraft(category.id);
   }
 
-  function handleDeleteCategory(categoryId: string) {
-    deleteCategory(categoryId);
+  async function handleDeleteCategory(categoryId: string) {
+    await deleteCategory(categoryId);
     clearCategoryDraft(categoryId);
   }
 
@@ -220,12 +220,12 @@ export function SettingsView() {
     });
   }
 
-  function handleAddTag(event: FormEvent) {
+  async function handleAddTag(event: FormEvent) {
     event.preventDefault();
     const name = newTagName.trim();
     if (!name) return;
 
-    addTag({
+    await addTag({
       name,
       color: newTagColor,
       isActive: true,
@@ -234,20 +234,20 @@ export function SettingsView() {
     setNewTagColor("#2563EB");
   }
 
-  function handleSaveTag(tag: Tag) {
+  async function handleSaveTag(tag: Tag) {
     const draft = getTagDraft(tag);
     const name = draft.name.trim();
     if (!name) return;
 
-    updateTag(tag.id, {
+    await updateTag(tag.id, {
       ...draft,
       name,
     });
     clearTagDraft(tag.id);
   }
 
-  function handleDeleteTag(tagId: string) {
-    deleteTag(tagId);
+  async function handleDeleteTag(tagId: string) {
+    await deleteTag(tagId);
     clearTagDraft(tagId);
   }
 

@@ -1,11 +1,13 @@
 import {
   createContext,
   type PropsWithChildren,
-  useCallback,
   useContext,
-  useMemo,
+  useEffect,
   useState,
 } from "react";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/providers/auth-provider";
+import * as walletApi from "@/services/wallet-api";
 import { mockWalletData } from "@shared/mock-data";
 import type {
   Account,
@@ -26,30 +28,38 @@ interface WalletContextValue {
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
-  addAccount: (account: Omit<Account, "id">) => string;
-  updateAccount: (accountId: string, account: Omit<Account, "id">) => void;
-  deleteAccount: (accountId: string) => void;
-  addRecord: (record: Omit<WalletRecord, "id">) => void;
-  updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
-  deleteRecord: (recordId: string) => void;
-  addCategory: (category: Omit<Category, "id">) => string;
-  updateCategory: (categoryId: string, category: Omit<Category, "id">) => void;
-  deleteCategory: (categoryId: string) => void;
-  addTag: (tag: Omit<Tag, "id">) => string;
-  updateTag: (tagId: string, tag: Omit<Tag, "id">) => void;
-  deleteTag: (tagId: string) => void;
-  addGoal: (goal: Omit<Goal, "id">) => string;
-  updateGoal: (goalId: string, goal: Omit<Goal, "id">) => void;
-  deleteGoal: (goalId: string) => void;
-  addGoalReservation: (reservation: Omit<GoalReservation, "id">) => void;
-  addInvestment: (investment: Omit<Investment, "id">) => string;
+  addAccount: (account: Omit<Account, "id">) => Promise<string>;
+  updateAccount: (accountId: string, account: Omit<Account, "id">) => Promise<void>;
+  deleteAccount: (accountId: string) => Promise<void>;
+  addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
+  updateRecord: (
+    recordId: string,
+    record: Omit<WalletRecord, "id">,
+  ) => Promise<void>;
+  deleteRecord: (recordId: string) => Promise<void>;
+  addCategory: (category: Omit<Category, "id">) => Promise<string>;
+  updateCategory: (
+    categoryId: string,
+    category: Omit<Category, "id">,
+  ) => Promise<void>;
+  deleteCategory: (categoryId: string) => Promise<void>;
+  addTag: (tag: Omit<Tag, "id">) => Promise<string>;
+  updateTag: (tagId: string, tag: Omit<Tag, "id">) => Promise<void>;
+  deleteTag: (tagId: string) => Promise<void>;
+  addGoal: (goal: Omit<Goal, "id">) => Promise<string>;
+  updateGoal: (goalId: string, goal: Omit<Goal, "id">) => Promise<void>;
+  deleteGoal: (goalId: string) => Promise<void>;
+  addGoalReservation: (
+    reservation: Omit<GoalReservation, "id">,
+  ) => Promise<void>;
+  addInvestment: (investment: Omit<Investment, "id">) => Promise<string>;
   updateInvestment: (
     investmentId: string,
     investment: Omit<Investment, "id">,
-  ) => void;
-  deleteInvestment: (investmentId: string) => void;
-  toggleAccountVisibility: (accountId: string) => void;
-  setPrimaryAccount: (accountId: string) => void;
+  ) => Promise<void>;
+  deleteInvestment: (investmentId: string) => Promise<void>;
+  toggleAccountVisibility: (accountId: string) => Promise<void>;
+  setPrimaryAccount: (accountId: string) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -72,11 +82,60 @@ function collectCategoryTreeIds(categories: Category[], categoryId: string) {
 }
 
 export function WalletProvider({ children }: PropsWithChildren) {
+  const { token, lock } = useAuth();
   const [dataset, setDataset] = useState<WalletDataset>(mockWalletData);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [selectedMonth, setSelectedMonth] = useState("2026-06");
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
     type: "all",
   });
+
+  function requireToken() {
+    if (!token) throw new Error("Missing API token");
+    return token;
+  }
+
+  async function reloadWallet() {
+    if (!token) return;
+
+    setIsLoading(true);
+    setLoadError("");
+    try {
+      setDataset(await walletApi.getWallet(token));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "No se pudo cargar la wallet");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadInitialWallet() {
+      if (!token) return;
+
+      try {
+        const nextDataset = await walletApi.getWallet(token);
+        if (isCancelled) return;
+        setDataset(nextDataset);
+        setLoadError("");
+      } catch (error) {
+        if (isCancelled) return;
+        setLoadError(
+          error instanceof Error ? error.message : "No se pudo cargar la wallet",
+        );
+      } finally {
+        if (!isCancelled) setIsLoading(false);
+      }
+    }
+
+    void loadInitialWallet();
+    return () => {
+      isCancelled = true;
+    };
+  }, [token]);
 
   function setRecordFilters(filters: RecordFilters) {
     setRecordFiltersState((current) => ({
@@ -89,36 +148,27 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setRecordFiltersState({ type: "all" });
   }
 
-  function addAccount(account: Omit<Account, "id">) {
-    const id = `acc-${crypto.randomUUID()}`;
+  async function addAccount(account: Omit<Account, "id">) {
+    const created = await walletApi.createAccount(requireToken(), account);
     setDataset((current) => ({
       ...current,
-      accounts: [
-        {
-          ...account,
-          id,
-        },
-        ...current.accounts,
-      ],
+      accounts: [created, ...current.accounts],
     }));
-    return id;
+    return created.id;
   }
 
-  function updateAccount(accountId: string, account: Omit<Account, "id">) {
+  async function updateAccount(accountId: string, account: Omit<Account, "id">) {
+    const updated = await walletApi.updateAccount(requireToken(), accountId, account);
     setDataset((current) => ({
       ...current,
       accounts: current.accounts.map((currentAccount) =>
-        currentAccount.id === accountId
-          ? {
-              ...account,
-              id: accountId,
-            }
-          : currentAccount,
+        currentAccount.id === accountId ? updated : currentAccount,
       ),
     }));
   }
 
-  function deleteAccount(accountId: string) {
+  async function deleteAccount(accountId: string) {
+    await walletApi.deleteAccount(requireToken(), accountId);
     setDataset((current) => {
       const nextAccounts = current.accounts.filter(
         (account) => account.id !== accountId,
@@ -174,70 +224,60 @@ export function WalletProvider({ children }: PropsWithChildren) {
     });
   }
 
-  function addRecord(record: Omit<WalletRecord, "id">) {
+  async function addRecord(record: Omit<WalletRecord, "id">) {
+    const created = await walletApi.createRecord(requireToken(), record);
     setDataset((current) => ({
       ...current,
-      records: [
-        {
-          ...record,
-          id: `rec-${crypto.randomUUID()}`,
-        },
-        ...current.records,
-      ],
+      records: [created, ...current.records],
     }));
   }
 
-  function deleteRecord(recordId: string) {
+  async function deleteRecord(recordId: string) {
+    await walletApi.deleteRecord(requireToken(), recordId);
     setDataset((current) => ({
       ...current,
       records: current.records.filter((record) => record.id !== recordId),
     }));
   }
 
-  function updateRecord(recordId: string, record: Omit<WalletRecord, "id">) {
+  async function updateRecord(recordId: string, record: Omit<WalletRecord, "id">) {
+    const updated = await walletApi.updateRecord(requireToken(), recordId, record);
     setDataset((current) => ({
       ...current,
       records: current.records.map((currentRecord) =>
-        currentRecord.id === recordId
-          ? {
-              ...record,
-              id: recordId,
-            }
-          : currentRecord,
+        currentRecord.id === recordId ? updated : currentRecord,
       ),
     }));
   }
 
-  function addCategory(category: Omit<Category, "id">) {
-    const id = `cat-${crypto.randomUUID()}`;
+  async function addCategory(category: Omit<Category, "id">) {
+    const created = await walletApi.createCategory(requireToken(), category);
     setDataset((current) => ({
       ...current,
-      categories: [
-        {
-          ...category,
-          id,
-        },
-        ...current.categories,
-      ],
+      categories: [created, ...current.categories],
     }));
-    return id;
+    return created.id;
   }
 
-  function updateCategory(categoryId: string, category: Omit<Category, "id">) {
+  async function updateCategory(
+    categoryId: string,
+    category: Omit<Category, "id">,
+  ) {
+    const updated = await walletApi.updateCategory(
+      requireToken(),
+      categoryId,
+      category,
+    );
     setDataset((current) => ({
       ...current,
       categories: current.categories.map((currentItem) =>
-        currentItem.id === categoryId
-          ? {
-              ...category,
-              id: categoryId,
-            }
-          : currentItem,
+        currentItem.id === categoryId ? updated : currentItem,
       ),
     }));
   }
 
-  const deleteCategory = useCallback((categoryId: string) => {
+  async function deleteCategory(categoryId: string) {
+    await walletApi.deleteCategory(requireToken(), categoryId);
     setDataset((current) => {
       const categoryIds = collectCategoryTreeIds(current.categories, categoryId);
 
@@ -271,38 +311,29 @@ export function WalletProvider({ children }: PropsWithChildren) {
       ...current,
       categoryId: undefined,
     }));
-  }, []);
-
-  function addTag(tag: Omit<Tag, "id">) {
-    const id = `tag-${crypto.randomUUID()}`;
-    setDataset((current) => ({
-      ...current,
-      tags: [
-        {
-          ...tag,
-          id,
-        },
-        ...current.tags,
-      ],
-    }));
-    return id;
   }
 
-  function updateTag(tagId: string, tag: Omit<Tag, "id">) {
+  async function addTag(tag: Omit<Tag, "id">) {
+    const created = await walletApi.createTag(requireToken(), tag);
+    setDataset((current) => ({
+      ...current,
+      tags: [created, ...current.tags],
+    }));
+    return created.id;
+  }
+
+  async function updateTag(tagId: string, tag: Omit<Tag, "id">) {
+    const updated = await walletApi.updateTag(requireToken(), tagId, tag);
     setDataset((current) => ({
       ...current,
       tags: current.tags.map((currentTag) =>
-        currentTag.id === tagId
-          ? {
-              ...tag,
-              id: tagId,
-            }
-          : currentTag,
+        currentTag.id === tagId ? updated : currentTag,
       ),
     }));
   }
 
-  const deleteTag = useCallback((tagId: string) => {
+  async function deleteTag(tagId: string) {
+    await walletApi.deleteTag(requireToken(), tagId);
     setDataset((current) => ({
       ...current,
       tags: current.tags.filter((tag) => tag.id !== tagId),
@@ -327,38 +358,29 @@ export function WalletProvider({ children }: PropsWithChildren) {
       ...current,
       tagId: undefined,
     }));
-  }, []);
-
-  function addGoal(goal: Omit<Goal, "id">) {
-    const id = `goal-${crypto.randomUUID()}`;
-    setDataset((current) => ({
-      ...current,
-      goals: [
-        {
-          ...goal,
-          id,
-        },
-        ...current.goals,
-      ],
-    }));
-    return id;
   }
 
-  function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
+  async function addGoal(goal: Omit<Goal, "id">) {
+    const created = await walletApi.createGoal(requireToken(), goal);
+    setDataset((current) => ({
+      ...current,
+      goals: [created, ...current.goals],
+    }));
+    return created.id;
+  }
+
+  async function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
+    const updated = await walletApi.updateGoal(requireToken(), goalId, goal);
     setDataset((current) => ({
       ...current,
       goals: current.goals.map((currentGoal) =>
-        currentGoal.id === goalId
-          ? {
-              ...goal,
-              id: goalId,
-            }
-          : currentGoal,
+        currentGoal.id === goalId ? updated : currentGoal,
       ),
     }));
   }
 
-  function deleteGoal(goalId: string) {
+  async function deleteGoal(goalId: string) {
+    await walletApi.deleteGoal(requireToken(), goalId);
     setDataset((current) => ({
       ...current,
       goals: current.goals.filter((goal) => goal.id !== goalId),
@@ -376,52 +398,45 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
-  function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
+  async function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
+    const created = await walletApi.createGoalReservation(
+      requireToken(),
+      reservation,
+    );
     setDataset((current) => ({
       ...current,
-      goalReservations: [
-        {
-          ...reservation,
-          id: `gres-${crypto.randomUUID()}`,
-        },
-        ...current.goalReservations,
-      ],
+      goalReservations: [created, ...current.goalReservations],
     }));
   }
 
-  function addInvestment(investment: Omit<Investment, "id">) {
-    const id = `inv-${crypto.randomUUID()}`;
+  async function addInvestment(investment: Omit<Investment, "id">) {
+    const created = await walletApi.createInvestment(requireToken(), investment);
     setDataset((current) => ({
       ...current,
-      investments: [
-        {
-          ...investment,
-          id,
-        },
-        ...current.investments,
-      ],
+      investments: [created, ...current.investments],
     }));
-    return id;
+    return created.id;
   }
 
-  function updateInvestment(
+  async function updateInvestment(
     investmentId: string,
     investment: Omit<Investment, "id">,
   ) {
+    const updated = await walletApi.updateInvestment(
+      requireToken(),
+      investmentId,
+      investment,
+    );
     setDataset((current) => ({
       ...current,
       investments: current.investments.map((currentInvestment) =>
-        currentInvestment.id === investmentId
-          ? {
-              ...investment,
-              id: investmentId,
-            }
-          : currentInvestment,
+        currentInvestment.id === investmentId ? updated : currentInvestment,
       ),
     }));
   }
 
-  function deleteInvestment(investmentId: string) {
+  async function deleteInvestment(investmentId: string) {
+    await walletApi.deleteInvestment(requireToken(), investmentId);
     setDataset((current) => ({
       ...current,
       investments: current.investments.filter(
@@ -430,64 +445,90 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
-  function toggleAccountVisibility(accountId: string) {
+  async function toggleAccountVisibility(accountId: string) {
+    const account = dataset.accounts.find((item) => item.id === accountId);
+    if (!account) return;
+
+    await updateAccount(accountId, {
+      ...account,
+      isVisible: !account.isVisible,
+    });
+  }
+
+  async function setPrimaryAccount(accountId: string) {
+    const nextSettings = {
+      ...dataset.settings,
+      primaryAccountId: accountId,
+    };
+    const updated = await walletApi.updateSettings(requireToken(), nextSettings);
     setDataset((current) => ({
       ...current,
-      accounts: current.accounts.map((account) =>
-        account.id === accountId
-          ? {
-              ...account,
-              isVisible: !account.isVisible,
-            }
-          : account,
-      ),
+      settings: updated,
     }));
   }
 
-  function setPrimaryAccount(accountId: string) {
-    setDataset((current) => ({
-      ...current,
-      settings: {
-        ...current.settings,
-        primaryAccountId: accountId,
-      },
-    }));
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
+        <p className="text-sm text-muted-foreground">Cargando wallet...</p>
+      </div>
+    );
   }
 
-  const value = useMemo(
-    () => ({
-      dataset,
-      selectedMonth,
-      setSelectedMonth,
-      recordFilters,
-      setRecordFilters,
-      clearRecordFilters,
-      addAccount,
-      updateAccount,
-      deleteAccount,
-      addRecord,
-      updateRecord,
-      deleteRecord,
-      addCategory,
-      updateCategory,
-      deleteCategory,
-      addTag,
-      updateTag,
-      deleteTag,
-      addGoal,
-      updateGoal,
-      deleteGoal,
-      addGoalReservation,
-      addInvestment,
-      updateInvestment,
-      deleteInvestment,
-      toggleAccountVisibility,
-      setPrimaryAccount,
-    }),
-    [dataset, deleteCategory, deleteTag, recordFilters, selectedMonth],
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+        <div className="max-w-md space-y-4 rounded-md border bg-card p-6 shadow-sm">
+          <div>
+            <p className="text-lg font-semibold">No se pudo cargar la wallet</p>
+            <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => void reloadWallet()}>Reintentar</Button>
+            <Button variant="outline" onClick={lock}>
+              Bloquear
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <WalletContext.Provider
+      value={{
+        dataset,
+        selectedMonth,
+        setSelectedMonth,
+        recordFilters,
+        setRecordFilters,
+        clearRecordFilters,
+        addAccount,
+        updateAccount,
+        deleteAccount,
+        addRecord,
+        updateRecord,
+        deleteRecord,
+        addCategory,
+        updateCategory,
+        deleteCategory,
+        addTag,
+        updateTag,
+        deleteTag,
+        addGoal,
+        updateGoal,
+        deleteGoal,
+        addGoalReservation,
+        addInvestment,
+        updateInvestment,
+        deleteInvestment,
+        toggleAccountVisibility,
+        setPrimaryAccount,
+      }}
+    >
+      {children}
+    </WalletContext.Provider>
   );
-
-  return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
 }
 
 export function useWallet() {

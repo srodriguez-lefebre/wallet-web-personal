@@ -172,7 +172,7 @@ export function AccountsView() {
     );
   }
 
-  function saveAccountEdits() {
+  async function saveAccountEdits() {
     const activeDrafts = accountDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
       (draft) => !draft.name.trim() || Number.isNaN(Number(draft.initialBalance)),
@@ -183,35 +183,39 @@ export function AccountsView() {
       return;
     }
 
-    accountDrafts
-      .filter((draft) => draft.isDeleted)
-      .forEach((draft) => deleteAccount(draft.id));
+    await Promise.all(
+      accountDrafts
+        .filter((draft) => draft.isDeleted)
+        .map((draft) => deleteAccount(draft.id)),
+    );
 
-    activeDrafts.forEach((draft) => {
-      const currentAccount = dataset.accounts.find(
-        (account) => account.id === draft.id,
-      );
-      if (!currentAccount) return;
+    await Promise.all(
+      activeDrafts.map((draft) => {
+        const currentAccount = dataset.accounts.find(
+          (account) => account.id === draft.id,
+        );
+        if (!currentAccount) return Promise.resolve();
 
-      updateAccount(draft.id, {
-        name: draft.name.trim(),
-        type: draft.type,
-        currency: draft.currency,
-        initialBalance: Number(draft.initialBalance),
-        color: draft.color,
-        icon: currentAccount.icon,
-        isVisible: draft.isVisible,
-        isActive: draft.isActive,
-        note: draft.note.trim() || undefined,
-      });
-    });
+        return updateAccount(draft.id, {
+          name: draft.name.trim(),
+          type: draft.type,
+          currency: draft.currency,
+          initialBalance: Number(draft.initialBalance),
+          color: draft.color,
+          icon: currentAccount.icon,
+          isVisible: draft.isVisible,
+          isActive: draft.isActive,
+          note: draft.note.trim() || undefined,
+        });
+      }),
+    );
 
     const primaryDraft =
       activeDrafts.find((draft) => draft.isPrimary) ??
       activeDrafts.find((draft) => draft.isVisible) ??
       activeDrafts[0];
     if (primaryDraft) {
-      setPrimaryAccount(primaryDraft.id);
+      await setPrimaryAccount(primaryDraft.id);
     }
 
     setShowHidden(false);
@@ -219,11 +223,11 @@ export function AccountsView() {
     setIsEditing(false);
   }
 
-  function handleCreateAccount(event: FormEvent) {
+  async function handleCreateAccount(event: FormEvent) {
     event.preventDefault();
     if (!name.trim() || Number.isNaN(Number(initialBalance))) return;
 
-    const id = addAccount({
+    const id = await addAccount({
       name: name.trim(),
       type,
       currency,
@@ -236,7 +240,7 @@ export function AccountsView() {
     });
 
     if (!dataset.settings.primaryAccountId) {
-      setPrimaryAccount(id);
+      await setPrimaryAccount(id);
     }
 
     setName("");

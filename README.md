@@ -42,6 +42,15 @@ npm run db:import-wallet-records
 
 En desarrollo local, el unlock acepta un token de al menos 4 caracteres si la API de Vercel no esta corriendo. En deploy, el endpoint `/api/auth/unlock` valida contra `API_TOKEN`.
 
+Para probar la app completa con endpoints reales en local, usar Vercel Dev:
+
+```powershell
+npx vercel dev --listen 3001
+```
+
+El CLI puede pedir login la primera vez. Una vez levantado, entrar a
+`http://localhost:3001` y desbloquear con `API_TOKEN`.
+
 ## Deploy
 
 Para Vercel:

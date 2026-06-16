@@ -146,7 +146,7 @@ export function GoalsView() {
     );
   }
 
-  function saveGoalEdits() {
+  async function saveGoalEdits() {
     const activeDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
       (draft) => !draft.name.trim() || Number(draft.targetAmount) <= 0,
@@ -157,28 +157,32 @@ export function GoalsView() {
       return;
     }
 
-    goalDrafts
-      .filter((draft) => draft.isDeleted)
-      .forEach((draft) => deleteGoal(draft.id));
+    await Promise.all(
+      goalDrafts
+        .filter((draft) => draft.isDeleted)
+        .map((draft) => deleteGoal(draft.id)),
+    );
 
-    activeDrafts.forEach((draft) => {
-      const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
-      if (!currentGoal) return;
+    await Promise.all(
+      activeDrafts.map((draft) => {
+        const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
+        if (!currentGoal) return Promise.resolve();
 
-      updateGoal(draft.id, {
-        name: draft.name.trim(),
-        targetAmount: Number(draft.targetAmount),
-        currency: draft.currency,
-        color: draft.color,
-        isVisible: draft.isVisible,
-        icon: currentGoal.icon,
-        deadline: draft.deadline || undefined,
-        status: draft.status,
-        tagIds: draft.tagId ? [draft.tagId] : [],
-        accountId: draft.accountId || undefined,
-        note: draft.note.trim() || undefined,
-      });
-    });
+        return updateGoal(draft.id, {
+          name: draft.name.trim(),
+          targetAmount: Number(draft.targetAmount),
+          currency: draft.currency,
+          color: draft.color,
+          isVisible: draft.isVisible,
+          icon: currentGoal.icon,
+          deadline: draft.deadline || undefined,
+          status: draft.status,
+          tagIds: draft.tagId ? [draft.tagId] : [],
+          accountId: draft.accountId || undefined,
+          note: draft.note.trim() || undefined,
+        });
+      }),
+    );
 
     const selectedDraft = goalDrafts.find((draft) => draft.id === goalId);
     if (!selectedDraft || selectedDraft.isDeleted || !selectedDraft.isVisible) {
@@ -190,12 +194,12 @@ export function GoalsView() {
     setIsEditing(false);
   }
 
-  function handleCreateGoal(event: FormEvent) {
+  async function handleCreateGoal(event: FormEvent) {
     event.preventDefault();
     const numericTarget = Number(targetAmount);
     if (!name.trim() || numericTarget <= 0) return;
 
-    const id = addGoal({
+    const id = await addGoal({
       name: name.trim(),
       targetAmount: numericTarget,
       currency,
@@ -216,13 +220,13 @@ export function GoalsView() {
     navigate(`/goals/${id}`);
   }
 
-  function handleReserve(event: FormEvent) {
+  async function handleReserve(event: FormEvent) {
     event.preventDefault();
     const account = dataset.accounts.find((item) => item.id === accountId);
     const numericAmount = Number(reserveAmount);
     if (!account || !goalId || numericAmount <= 0) return;
 
-    addGoalReservation({
+    await addGoalReservation({
       goalId,
       accountId,
       amount: numericAmount,

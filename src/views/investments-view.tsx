@@ -139,7 +139,7 @@ export function InvestmentsView() {
     );
   }
 
-  function saveInvestmentEdits() {
+  async function saveInvestmentEdits() {
     const activeDrafts = investmentDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
       (draft) =>
@@ -153,35 +153,39 @@ export function InvestmentsView() {
       return;
     }
 
-    investmentDrafts
-      .filter((draft) => draft.isDeleted)
-      .forEach((draft) => deleteInvestment(draft.id));
+    await Promise.all(
+      investmentDrafts
+        .filter((draft) => draft.isDeleted)
+        .map((draft) => deleteInvestment(draft.id)),
+    );
 
-    activeDrafts.forEach((draft) => {
-      updateInvestment(draft.id, {
-        name: draft.name.trim(),
-        type: draft.type,
-        amountInvested: Number(draft.amountInvested),
-        currentValue: Number(draft.currentValue),
-        currency: draft.currency,
-        startedAt: draft.startedAt,
-        isVisible: draft.isVisible,
-        note: draft.note.trim() || undefined,
-      });
-    });
+    await Promise.all(
+      activeDrafts.map((draft) =>
+        updateInvestment(draft.id, {
+          name: draft.name.trim(),
+          type: draft.type,
+          amountInvested: Number(draft.amountInvested),
+          currentValue: Number(draft.currentValue),
+          currency: draft.currency,
+          startedAt: draft.startedAt,
+          isVisible: draft.isVisible,
+          note: draft.note.trim() || undefined,
+        }),
+      ),
+    );
 
     setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
 
-  function handleCreateInvestment(event: FormEvent) {
+  async function handleCreateInvestment(event: FormEvent) {
     event.preventDefault();
     const invested = Number(amountInvested);
     const current = Number(currentValue || amountInvested);
     if (!name.trim() || invested <= 0 || current <= 0) return;
 
-    const id = addInvestment({
+    const id = await addInvestment({
       name: name.trim(),
       type,
       amountInvested: invested,
