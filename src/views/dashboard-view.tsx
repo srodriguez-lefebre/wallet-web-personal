@@ -10,7 +10,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowDownRight, ArrowUpRight, Landmark, WalletCards } from "lucide-react";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Landmark,
+  WalletCards,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -19,12 +24,12 @@ import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useWallet } from "@/providers/wallet-provider";
 import {
+  calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateCategoryExpenses,
-  calculateMonthlySeries,
   calculateSummary,
   formatMoney,
-  recentMonthKeys,
+  relativeMonthKeys,
 } from "@shared/calculations";
 
 export function DashboardView() {
@@ -32,16 +37,28 @@ export function DashboardView() {
   const { dataset, selectedMonth, setRecordFilters } = useWallet();
   const summary = calculateSummary(dataset, selectedMonth);
   const accountBalances = calculateAccountBalances(dataset);
-  const visibleBalances = accountBalances.filter((item) => item.account.isVisible);
+  const visibleBalances = accountBalances.filter(
+    (item) => item.account.isVisible,
+  );
   const primaryBalance =
     accountBalances.find(
       (item) => item.account.id === dataset.settings.primaryAccountId,
     ) ?? visibleBalances[0];
   const categories = calculateCategoryExpenses(dataset, selectedMonth);
-  const monthlySeries = calculateMonthlySeries(
-    dataset,
-    recentMonthKeys(dataset.records, selectedMonth, 6).slice().reverse(),
-  );
+  const balanceCurrency =
+    primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
+  const balanceTrend = relativeMonthKeys(selectedMonth, 3).map((month) => ({
+    month: formatMonthLabel(month),
+    balance: primaryBalance
+      ? calculateAccountBalanceAtMonthEnd(
+          dataset,
+          primaryBalance.account.id,
+          month,
+        )
+      : 0,
+  }));
+  const balanceTooltipFormatter = (value: unknown) =>
+    formatMoney(Number(value ?? 0), balanceCurrency);
   const recentRecords = dataset.records
     .slice()
     .sort(
@@ -70,15 +87,29 @@ export function DashboardView() {
           label="Balance"
           value={
             primaryBalance
-              ? formatMoney(primaryBalance.balance, primaryBalance.account.currency)
+              ? formatMoney(
+                  primaryBalance.balance,
+                  primaryBalance.account.currency,
+                )
               : formatMoney(summary.balance, dataset.settings.primaryCurrency)
           }
-          detail={primaryBalance ? `Primary account: ${primaryBalance.account.name}` : "Primary account"}
+          detail={
+            primaryBalance
+              ? `Primary account: ${primaryBalance.account.name}`
+              : "Primary account"
+          }
           icon={<WalletCards className="h-4 w-4" />}
-          tone={(primaryBalance?.balance ?? summary.balance) >= 0 ? "success" : "danger"}
+          tone={
+            (primaryBalance?.balance ?? summary.balance) >= 0
+              ? "success"
+              : "danger"
+          }
           onClick={() =>
             primaryBalance
-              ? goToRecords({ accountId: primaryBalance.account.id, type: "all" })
+              ? goToRecords({
+                  accountId: primaryBalance.account.id,
+                  type: "all",
+                })
               : goToRecords({ type: "all" })
           }
         />
@@ -92,7 +123,10 @@ export function DashboardView() {
         />
         <MetricCard
           label="Expenses"
-          value={formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
+          value={formatMoney(
+            summary.expenses,
+            dataset.settings.primaryCurrency,
+          )}
           detail="Selected month"
           icon={<ArrowDownRight className="h-4 w-4" />}
           tone="danger"
@@ -100,7 +134,10 @@ export function DashboardView() {
         />
         <MetricCard
           label="Cash flow"
-          value={formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
+          value={formatMoney(
+            summary.cashFlow,
+            dataset.settings.primaryCurrency,
+          )}
           detail="Income minus expenses"
           icon={<Landmark className="h-4 w-4" />}
           tone={summary.cashFlow >= 0 ? "success" : "danger"}
@@ -111,49 +148,35 @@ export function DashboardView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Monthly cash flow</CardTitle>
+            <CardTitle>Primary account balance</CardTitle>
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlySeries}>
+              <AreaChart data={balanceTrend}>
                 <defs>
-                  <linearGradient id="income" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="#22C55E" stopOpacity={0.24} />
-                    <stop offset="95%" stopColor="#22C55E" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="expenses" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="#EF4444" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#EF4444" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="flow" x1="0" x2="0" y1="0" y2="1">
+                  <linearGradient id="balance" x1="0" x2="0" y1="0" y2="1">
                     <stop offset="5%" stopColor="#2563EB" stopOpacity={0.28} />
                     <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
-                <YAxis tickLine={false} axisLine={false} width={70} />
-                <Tooltip />
-                <Area
-                  type="monotone"
-                  dataKey="income"
-                  stroke="#22C55E"
-                  fill="url(#income)"
-                  name="Income"
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={88}
+                  tickFormatter={(value) => balanceTooltipFormatter(value)}
                 />
+                <Tooltip formatter={balanceTooltipFormatter} />
                 <Area
                   type="monotone"
-                  dataKey="expenses"
-                  stroke="#EF4444"
-                  fill="url(#expenses)"
-                  name="Expenses"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="cashFlow"
+                  dataKey="balance"
                   stroke="#2563EB"
-                  fill="url(#flow)"
-                  name="Cash flow"
+                  fill="url(#balance)"
+                  name="Balance"
                 />
               </AreaChart>
             </ResponsiveContainer>
@@ -181,7 +204,10 @@ export function DashboardView() {
                       fill={category.color}
                       className="cursor-pointer outline-none"
                       onClick={() =>
-                        goToRecords({ type: "expense", categoryId: category.id })
+                        goToRecords({
+                          type: "expense",
+                          categoryId: category.id,
+                        })
                       }
                     />
                   ))}
@@ -195,15 +221,24 @@ export function DashboardView() {
               <button
                 key={category.id}
                 type="button"
-                onClick={() => goToRecords({ type: "expense", categoryId: category.id })}
+                onClick={() =>
+                  goToRecords({ type: "expense", categoryId: category.id })
+                }
                 className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
               >
                 <span className="flex items-center gap-2">
-                  <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                  <CategoryIcon
+                    icon={category.icon}
+                    color={category.color}
+                    size="sm"
+                  />
                   {category.name}
                 </span>
                 <span className="font-medium">
-                  {formatMoney(category.value, dataset.settings.primaryCurrency)}
+                  {formatMoney(
+                    category.value,
+                    dataset.settings.primaryCurrency,
+                  )}
                 </span>
               </button>
             ))}
@@ -217,36 +252,44 @@ export function DashboardView() {
             <CardTitle>Visible accounts</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {visibleBalances.map(({ account, balance, freeBalance, reserved }) => (
-              <div
-                key={account.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => goToRecords({ accountId: account.id, type: "all" })}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    goToRecords({ accountId: account.id, type: "all" });
+            {visibleBalances.map(
+              ({ account, balance, freeBalance, reserved }) => (
+                <div
+                  key={account.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() =>
+                    goToRecords({ accountId: account.id, type: "all" })
                   }
-                }}
-                className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: account.color }}
-                  />
-                  <div>
-                    <p className="font-medium">{account.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Free {formatMoney(freeBalance, account.currency)}
-                      {reserved > 0 ? ` · Reserved ${formatMoney(reserved, account.currency)}` : ""}
-                    </p>
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      goToRecords({ accountId: account.id, type: "all" });
+                    }
+                  }}
+                  className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: account.color }}
+                    />
+                    <div>
+                      <p className="font-medium">{account.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Free {formatMoney(freeBalance, account.currency)}
+                        {reserved > 0
+                          ? ` · Reserved ${formatMoney(reserved, account.currency)}`
+                          : ""}
+                      </p>
+                    </div>
                   </div>
+                  <p className="font-semibold">
+                    {formatMoney(balance, account.currency)}
+                  </p>
                 </div>
-                <p className="font-semibold">{formatMoney(balance, account.currency)}</p>
-              </div>
-            ))}
+              ),
+            )}
           </CardContent>
         </Card>
 
@@ -293,11 +336,15 @@ export function DashboardView() {
                       color={category?.color ?? "#2563EB"}
                     />
                     <div>
-                    <p className="font-medium">{category?.name ?? "Transfer"}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {account?.name}
-                      {record.counterpartyName ? ` · ${record.counterpartyName}` : ""}
-                    </p>
+                      <p className="font-medium">
+                        {category?.name ?? "Transfer"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {account?.name}
+                        {record.counterpartyName
+                          ? ` · ${record.counterpartyName}`
+                          : ""}
+                      </p>
                     </div>
                   </div>
                   <p
@@ -309,7 +356,11 @@ export function DashboardView() {
                           : "font-semibold text-sky-600"
                     }
                   >
-                    {record.type === "expense" ? "-" : record.type === "income" ? "+" : ""}
+                    {record.type === "expense"
+                      ? "-"
+                      : record.type === "income"
+                        ? "+"
+                        : ""}
                     {formatMoney(record.amount, record.currency)}
                   </p>
                 </div>
@@ -320,4 +371,13 @@ export function DashboardView() {
       </div>
     </div>
   );
+}
+
+function formatMonthLabel(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
 }

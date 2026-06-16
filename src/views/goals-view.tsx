@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
@@ -154,7 +155,9 @@ export function GoalsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Make sure every goal has a name and an amount greater than zero.");
+      setEditError(
+        "Make sure every goal has a name and an amount greater than zero.",
+      );
       return;
     }
 
@@ -255,10 +258,16 @@ export function GoalsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={showHidden ? "Hide hidden goals" : "Show hidden goals"}
+              aria-label={
+                showHidden ? "Hide hidden goals" : "Show hidden goals"
+              }
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              {showHidden ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
             </Button>
             <Button variant="outline" onClick={cancelEditingGoals}>
               <X className="h-4 w-4" />
@@ -308,10 +317,15 @@ export function GoalsView() {
                       <span className="text-sm font-medium">Target</span>
                       <input
                         value={targetAmount}
-                        onChange={(event) => setTargetAmount(event.target.value)}
+                        onChange={(event) =>
+                          setTargetAmount(
+                            limitDecimalPlaces(event.target.value),
+                          )
+                        }
                         type="number"
                         className={inputClassName}
                         placeholder="50000"
+                        step="0.01"
                       />
                     </label>
                     <label className="block space-y-2">
@@ -389,7 +403,9 @@ export function GoalsView() {
                           <input
                             value={draft.color}
                             onChange={(event) =>
-                              updateGoalDraft(draft.id, { color: event.target.value })
+                              updateGoalDraft(draft.id, {
+                                color: event.target.value,
+                              })
                             }
                             type="color"
                             className={colorInputClassName}
@@ -401,7 +417,9 @@ export function GoalsView() {
                           <input
                             value={draft.name}
                             onChange={(event) =>
-                              updateGoalDraft(draft.id, { name: event.target.value })
+                              updateGoalDraft(draft.id, {
+                                name: event.target.value,
+                              })
                             }
                             className={inputClassName}
                             placeholder="Goal name"
@@ -413,7 +431,9 @@ export function GoalsView() {
                           type="button"
                           variant="outline"
                           size="icon"
-                          aria-label={draft.isVisible ? "Hide goal" : "Show goal"}
+                          aria-label={
+                            draft.isVisible ? "Hide goal" : "Show goal"
+                          }
                           title={draft.isVisible ? "Hide goal" : "Show goal"}
                           onClick={() =>
                             updateGoalDraft(draft.id, {
@@ -448,12 +468,15 @@ export function GoalsView() {
                           value={draft.targetAmount}
                           onChange={(event) =>
                             updateGoalDraft(draft.id, {
-                              targetAmount: event.target.value,
+                              targetAmount: limitDecimalPlaces(
+                                event.target.value,
+                              ),
                             })
                           }
                           type="number"
                           className={inputClassName}
                           placeholder="50000"
+                          step="0.01"
                         />
                       </label>
                       <label className="block space-y-2">
@@ -499,7 +522,9 @@ export function GoalsView() {
                         <input
                           value={draft.deadline}
                           onChange={(event) =>
-                            updateGoalDraft(draft.id, { deadline: event.target.value })
+                            updateGoalDraft(draft.id, {
+                              deadline: event.target.value,
+                            })
                           }
                           type="date"
                           className={inputClassName}
@@ -512,7 +537,9 @@ export function GoalsView() {
                         <select
                           value={draft.tagId}
                           onChange={(event) =>
-                            updateGoalDraft(draft.id, { tagId: event.target.value })
+                            updateGoalDraft(draft.id, {
+                              tagId: event.target.value,
+                            })
                           }
                           className={inputClassName}
                         >
@@ -525,11 +552,15 @@ export function GoalsView() {
                         </select>
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Linked account</span>
+                        <span className="text-sm font-medium">
+                          Linked account
+                        </span>
                         <select
                           value={draft.accountId}
                           onChange={(event) =>
-                            updateGoalDraft(draft.id, { accountId: event.target.value })
+                            updateGoalDraft(draft.id, {
+                              accountId: event.target.value,
+                            })
                           }
                           className={inputClassName}
                         >
@@ -547,7 +578,9 @@ export function GoalsView() {
                       <textarea
                         value={draft.note}
                         onChange={(event) =>
-                          updateGoalDraft(draft.id, { note: event.target.value })
+                          updateGoalDraft(draft.id, {
+                            note: event.target.value,
+                          })
                         }
                         className={textareaClassName}
                         placeholder="Goal context or description"
@@ -592,17 +625,27 @@ export function GoalsView() {
                         <CardTitle>{item.goal.name}</CardTitle>
                         <p className="text-sm text-muted-foreground">
                           Target{" "}
-                          {formatMoney(item.goal.targetAmount, item.goal.currency)}
+                          {formatMoney(
+                            item.goal.targetAmount,
+                            item.goal.currency,
+                          )}
                         </p>
                       </div>
                     </div>
-                    <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
+                    <Badge
+                      variant={
+                        item.goal.status === "active" ? "success" : "muted"
+                      }
+                    >
                       {goalStatusLabels[item.goal.status]}
                     </Badge>
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Progress value={item.percentage} indicatorClassName="bg-sky-500" />
+                  <Progress
+                    value={item.percentage}
+                    indicatorClassName="bg-sky-500"
+                  />
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-secondary p-3">
                       <p className="text-muted-foreground">Reserved</p>
@@ -706,10 +749,13 @@ export function GoalsView() {
                   <span className="text-sm font-medium">Amount</span>
                   <input
                     value={reserveAmount}
-                    onChange={(event) => setReserveAmount(event.target.value)}
+                    onChange={(event) =>
+                      setReserveAmount(limitDecimalPlaces(event.target.value))
+                    }
                     type="number"
                     className={inputClassName}
                     placeholder="0"
+                    step="0.01"
                   />
                 </label>
                 <Button className="w-full" type="submit">
@@ -724,4 +770,3 @@ export function GoalsView() {
     </div>
   );
 }
-

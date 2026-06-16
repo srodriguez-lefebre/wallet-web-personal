@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
@@ -51,22 +52,20 @@ function formatCategoryName(categories: Category[], category: Category) {
 }
 
 function sortCategoriesForSelect(categories: Category[]) {
-  return categories
-    .slice()
-    .sort((a, b) => {
-      const aParent = a.parentId
-        ? categories.find((category) => category.id === a.parentId)?.name ?? ""
-        : a.name;
-      const bParent = b.parentId
-        ? categories.find((category) => category.id === b.parentId)?.name ?? ""
-        : b.name;
-      const parentCompare = aParent.localeCompare(bParent);
+  return categories.slice().sort((a, b) => {
+    const aParent = a.parentId
+      ? (categories.find((category) => category.id === a.parentId)?.name ?? "")
+      : a.name;
+    const bParent = b.parentId
+      ? (categories.find((category) => category.id === b.parentId)?.name ?? "")
+      : b.name;
+    const parentCompare = aParent.localeCompare(bParent);
 
-      if (parentCompare !== 0) return parentCompare;
-      if (!a.parentId && b.parentId) return -1;
-      if (a.parentId && !b.parentId) return 1;
-      return a.name.localeCompare(b.name);
-    });
+    if (parentCompare !== 0) return parentCompare;
+    if (!a.parentId && b.parentId) return -1;
+    if (a.parentId && !b.parentId) return 1;
+    return a.name.localeCompare(b.name);
+  });
 }
 
 function defaultAccountId(dataset: WalletDataset) {
@@ -83,7 +82,10 @@ function defaultAccountId(dataset: WalletDataset) {
   );
 }
 
-function defaultDestinationAccountId(dataset: WalletDataset, sourceAccountId: string) {
+function defaultDestinationAccountId(
+  dataset: WalletDataset,
+  sourceAccountId: string,
+) {
   return (
     dataset.accounts.find(
       (account) =>
@@ -152,7 +154,11 @@ export function RecordsView() {
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   useEffect(() => {
-    if (!newRecordRequestId || openedNewRecordRef.current === newRecordRequestId) return;
+    if (
+      !newRecordRequestId ||
+      openedNewRecordRef.current === newRecordRequestId
+    )
+      return;
 
     queueMicrotask(() => {
       openedNewRecordRef.current = newRecordRequestId;
@@ -160,7 +166,9 @@ export function RecordsView() {
       setEditingId(null);
       setType("expense");
       setAccountId(nextAccountId);
-      setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
+      setDestinationAccountId(
+        defaultDestinationAccountId(dataset, nextAccountId),
+      );
       setCategoryId(firstCategoryId(dataset.categories));
       setAmount("");
       setNote("");
@@ -197,10 +205,14 @@ export function RecordsView() {
           : true,
       )
       .filter((record) =>
-        recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
+        recordFilters.tagId
+          ? record.tagIds.includes(recordFilters.tagId)
+          : true,
       )
       .filter((record) => {
-        const category = dataset.categories.find((item) => item.id === record.categoryId);
+        const category = dataset.categories.find(
+          (item) => item.id === record.categoryId,
+        );
         const tags = record.tagIds
           .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
           .join(" ");
@@ -208,7 +220,9 @@ export function RecordsView() {
           ? formatCategoryName(dataset.categories, category)
           : "";
         const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${tags} ${record.note ?? ""}`;
-        return haystack.toLowerCase().includes((recordFilters.search ?? "").toLowerCase());
+        return haystack
+          .toLowerCase()
+          .includes((recordFilters.search ?? "").toLowerCase());
       })
       .sort(
         (a, b) =>
@@ -218,16 +232,22 @@ export function RecordsView() {
 
   const grouped = groupRecordsByDay(filteredRecords);
   const activeFilters = [
-    recordFilters.type && recordFilters.type !== "all" ? recordFilters.type : null,
+    recordFilters.type && recordFilters.type !== "all"
+      ? recordFilters.type
+      : null,
     recordFilters.accountId
-      ? dataset.accounts.find((account) => account.id === recordFilters.accountId)?.name
+      ? dataset.accounts.find(
+          (account) => account.id === recordFilters.accountId,
+        )?.name
       : null,
     recordFilters.categoryId
       ? (() => {
           const category = dataset.categories.find(
             (candidate) => candidate.id === recordFilters.categoryId,
           );
-          return category ? formatCategoryName(dataset.categories, category) : null;
+          return category
+            ? formatCategoryName(dataset.categories, category)
+            : null;
         })()
       : null,
     recordFilters.tagId
@@ -241,7 +261,9 @@ export function RecordsView() {
     setEditingId(null);
     setType(nextType);
     setAccountId(nextAccountId);
-    setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
+    setDestinationAccountId(
+      defaultDestinationAccountId(dataset, nextAccountId),
+    );
     setCategoryId(firstCategoryId(dataset.categories));
     setAmount("");
     setNote("");
@@ -288,7 +310,8 @@ export function RecordsView() {
       amount: numericAmount,
       currency: (account?.currency ?? "UYU") as CurrencyCode,
       accountId,
-      destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
+      destinationAccountId:
+        type === "transfer" ? destinationAccountId : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
       counterpartyName: counterpartyName.trim() || undefined,
       tagIds: tagId ? [tagId] : [],
@@ -296,8 +319,8 @@ export function RecordsView() {
       paymentStatus,
       exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
       occurredAt: editingId
-        ? (dataset.records.find((record) => record.id === editingId)?.occurredAt ??
-          new Date().toISOString())
+        ? (dataset.records.find((record) => record.id === editingId)
+            ?.occurredAt ?? new Date().toISOString())
         : new Date().toISOString(),
       note: note || undefined,
     };
@@ -348,7 +371,11 @@ export function RecordsView() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+              {editingId ? (
+                <Edit3 className="h-4 w-4" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
               {editingId ? "Edit record" : "New record"}
             </DialogTitle>
             <DialogDescription>
@@ -357,20 +384,24 @@ export function RecordsView() {
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
-              {(["expense", "income", "transfer"] as RecordType[]).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => {
-                    setType(item);
-                    setCategoryId(firstCategoryId(dataset.categories));
-                    setPaymentType(item === "transfer" ? "transfer" : "credit");
-                  }}
-                  className={typeButtonClassName(item, type)}
-                >
-                  {recordTypeLabels[item]}
-                </button>
-              ))}
+              {(["expense", "income", "transfer"] as RecordType[]).map(
+                (item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setType(item);
+                      setCategoryId(firstCategoryId(dataset.categories));
+                      setPaymentType(
+                        item === "transfer" ? "transfer" : "credit",
+                      );
+                    }}
+                    className={typeButtonClassName(item, type)}
+                  >
+                    {recordTypeLabels[item]}
+                  </button>
+                ),
+              )}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -378,7 +409,9 @@ export function RecordsView() {
                 <span className="text-sm font-medium">Amount</span>
                 <input
                   value={amount}
-                  onChange={(event) => setAmount(event.target.value)}
+                  onChange={(event) =>
+                    setAmount(limitDecimalPlaces(event.target.value))
+                  }
                   className={fieldClassName}
                   type="number"
                   min="0"
@@ -410,7 +443,9 @@ export function RecordsView() {
                 <span className="text-sm font-medium">Destination account</span>
                 <select
                   value={destinationAccountId}
-                  onChange={(event) => setDestinationAccountId(event.target.value)}
+                  onChange={(event) =>
+                    setDestinationAccountId(event.target.value)
+                  }
                   className={fieldClassName}
                 >
                   {dataset.accounts
@@ -437,7 +472,9 @@ export function RecordsView() {
                 >
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.parentId ? `-- ${category.name}` : category.name}
+                      {category.parentId
+                        ? `-- ${category.name}`
+                        : category.name}
                     </option>
                   ))}
                 </select>
@@ -477,7 +514,9 @@ export function RecordsView() {
                 <span className="text-sm font-medium">Payment type</span>
                 <select
                   value={paymentType}
-                  onChange={(event) => setPaymentType(event.target.value as PaymentType)}
+                  onChange={(event) =>
+                    setPaymentType(event.target.value as PaymentType)
+                  }
                   className={fieldClassName}
                 >
                   <option value="cash">{paymentTypeLabels.cash}</option>
@@ -499,7 +538,9 @@ export function RecordsView() {
                 >
                   <option value="cleared">{paymentStatusLabels.cleared}</option>
                   <option value="pending">{paymentStatusLabels.pending}</option>
-                  <option value="cancelled">{paymentStatusLabels.cancelled}</option>
+                  <option value="cancelled">
+                    {paymentStatusLabels.cancelled}
+                  </option>
                 </select>
               </label>
             </div>
@@ -516,18 +557,30 @@ export function RecordsView() {
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
               {editingId ? (
-                <Button type="button" variant="destructive" onClick={handleDeleteEditingRecord}>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDeleteEditingRecord}
+                >
                   <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
               ) : (
-                <Button type="button" variant="outline" onClick={closeRecordDialog}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={closeRecordDialog}
+                >
                   <X className="h-4 w-4" />
                   Cancel
                 </Button>
               )}
               <Button type="submit">
-                {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+                {editingId ? (
+                  <Save className="h-4 w-4" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
                 {editingId ? "Save changes" : "Add"}
               </Button>
             </div>
@@ -538,7 +591,7 @@ export function RecordsView() {
       <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
         <Card className="h-fit">
           <CardHeader className="pb-3">
-          <CardTitle>Filters</CardTitle>
+            <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <input
@@ -550,7 +603,9 @@ export function RecordsView() {
             <select
               value={recordFilters.type ?? "all"}
               onChange={(event) =>
-                setRecordFilters({ type: event.target.value as "all" | RecordType })
+                setRecordFilters({
+                  type: event.target.value as "all" | RecordType,
+                })
               }
               className={fieldClassName}
             >
@@ -576,7 +631,9 @@ export function RecordsView() {
             <select
               value={recordFilters.categoryId ?? ""}
               onChange={(event) =>
-                setRecordFilters({ categoryId: event.target.value || undefined })
+                setRecordFilters({
+                  categoryId: event.target.value || undefined,
+                })
               }
               className={fieldClassName}
             >
@@ -587,7 +644,11 @@ export function RecordsView() {
                 </option>
               ))}
             </select>
-            <Button className="w-full" variant="outline" onClick={clearRecordFilters}>
+            <Button
+              className="w-full"
+              variant="outline"
+              onClick={clearRecordFilters}
+            >
               <FilterX className="h-4 w-4" />
               Reset
             </Button>
@@ -612,8 +673,12 @@ export function RecordsView() {
             {Object.entries(grouped).map(([day, records]) => (
               <div key={day}>
                 <div className="mb-2 flex items-center justify-between text-sm">
-                  <p className="font-semibold">{format(parseISO(day), "dd/MM/yyyy")}</p>
-                  <p className="text-muted-foreground">{records.length} records</p>
+                  <p className="font-semibold">
+                    {format(parseISO(day), "dd/MM/yyyy")}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {records.length} records
+                  </p>
                 </div>
                 <div className="space-y-2">
                   {records.map((record) => {
@@ -650,7 +715,10 @@ export function RecordsView() {
                             />
                             <p className="font-medium">
                               {category
-                                ? formatCategoryName(dataset.categories, category)
+                                ? formatCategoryName(
+                                    dataset.categories,
+                                    category,
+                                  )
                                 : "Transfer"}
                             </p>
                             <Badge

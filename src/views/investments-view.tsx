@@ -24,6 +24,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney } from "@shared/calculations";
 import { investmentTypeLabels } from "@shared/constants";
@@ -42,7 +43,10 @@ interface InvestmentDraft {
   isDeleted: boolean;
 }
 
-const investmentTypeOptions: Array<{ value: Investment["type"]; label: string }> = [
+const investmentTypeOptions: Array<{
+  value: Investment["type"];
+  label: string;
+}> = [
   { value: "fund", label: investmentTypeLabels.fund },
   { value: "stock", label: investmentTypeLabels.stock },
   { value: "crypto", label: investmentTypeLabels.crypto },
@@ -67,19 +71,22 @@ function buildInvestmentDrafts(investments: Investment[]): InvestmentDraft[] {
 
 export function InvestmentsView() {
   const navigate = useNavigate();
-  const { dataset, addInvestment, updateInvestment, deleteInvestment } = useWallet();
+  const { dataset, addInvestment, updateInvestment, deleteInvestment } =
+    useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
-  const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(() =>
-    buildInvestmentDrafts(dataset.investments),
+  const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(
+    () => buildInvestmentDrafts(dataset.investments),
   );
   const [name, setName] = useState("");
   const [type, setType] = useState<Investment["type"]>("fund");
   const [amountInvested, setAmountInvested] = useState("");
   const [currentValue, setCurrentValue] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [startedAt, setStartedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [startedAt, setStartedAt] = useState(
+    new Date().toISOString().slice(0, 10),
+  );
   const [isVisible, setIsVisible] = useState(true);
   const [note, setNote] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -150,7 +157,9 @@ export function InvestmentsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Review name, invested amount, and current value for each investment.");
+      setEditError(
+        "Review name, invested amount, and current value for each investment.",
+      );
       return;
     }
 
@@ -219,10 +228,18 @@ export function InvestmentsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={showHidden ? "Hide hidden investments" : "Show hidden investments"}
+              aria-label={
+                showHidden
+                  ? "Hide hidden investments"
+                  : "Show hidden investments"
+              }
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+              {showHidden ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
             </Button>
             <Button variant="outline" onClick={cancelEditingInvestments}>
               <X className="h-4 w-4" />
@@ -254,7 +271,8 @@ export function InvestmentsView() {
                 <DialogHeader>
                   <DialogTitle>New investment</DialogTitle>
                   <DialogDescription>
-                    Add a manual investment to track current value and performance.
+                    Add a manual investment to track current value and
+                    performance.
                   </DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={handleCreateInvestment}>
@@ -306,20 +324,30 @@ export function InvestmentsView() {
                       <span className="text-sm font-medium">Invested</span>
                       <input
                         value={amountInvested}
-                        onChange={(event) => setAmountInvested(event.target.value)}
+                        onChange={(event) =>
+                          setAmountInvested(
+                            limitDecimalPlaces(event.target.value),
+                          )
+                        }
                         type="number"
                         className={inputClassName}
                         placeholder="10000"
+                        step="0.01"
                       />
                     </label>
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Current value</span>
                       <input
                         value={currentValue}
-                        onChange={(event) => setCurrentValue(event.target.value)}
+                        onChange={(event) =>
+                          setCurrentValue(
+                            limitDecimalPlaces(event.target.value),
+                          )
+                        }
                         type="number"
                         className={inputClassName}
                         placeholder="Opcional"
+                        step="0.01"
                       />
                     </label>
                   </div>
@@ -406,10 +434,14 @@ export function InvestmentsView() {
                             variant="outline"
                             size="icon"
                             aria-label={
-                              draft.isVisible ? "Hide investment" : "Show investment"
+                              draft.isVisible
+                                ? "Hide investment"
+                                : "Show investment"
                             }
                             title={
-                              draft.isVisible ? "Hide investment" : "Show investment"
+                              draft.isVisible
+                                ? "Hide investment"
+                                : "Show investment"
                             }
                             onClick={() =>
                               updateInvestmentDraft(draft.id, {
@@ -480,24 +512,32 @@ export function InvestmentsView() {
                             value={draft.amountInvested}
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
-                                amountInvested: event.target.value,
+                                amountInvested: limitDecimalPlaces(
+                                  event.target.value,
+                                ),
                               })
                             }
                             type="number"
                             className={inputClassName}
+                            step="0.01"
                           />
                         </label>
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">Current value</span>
+                          <span className="text-sm font-medium">
+                            Current value
+                          </span>
                           <input
                             value={draft.currentValue}
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
-                                currentValue: event.target.value,
+                                currentValue: limitDecimalPlaces(
+                                  event.target.value,
+                                ),
                               })
                             }
                             type="number"
                             className={inputClassName}
+                            step="0.01"
                           />
                         </label>
                       </div>
@@ -532,7 +572,8 @@ export function InvestmentsView() {
                 </div>
               ) : (
                 visibleInvestments.map((investment) => {
-                  const gain = investment.currentValue - investment.amountInvested;
+                  const gain =
+                    investment.currentValue - investment.amountInvested;
                   const percentage =
                     (investment.currentValue / investment.amountInvested) * 100;
                   return (
@@ -551,17 +592,26 @@ export function InvestmentsView() {
                       <Progress
                         value={Math.min(100, percentage)}
                         className="mt-3"
-                        indicatorClassName={gain >= 0 ? "bg-emerald-500" : "bg-red-500"}
+                        indicatorClassName={
+                          gain >= 0 ? "bg-emerald-500" : "bg-red-500"
+                        }
                       />
                       <div className="mt-3 flex justify-between text-sm">
                         <span>Current</span>
                         <span className="font-semibold">
-                          {formatMoney(investment.currentValue, investment.currency)}
+                          {formatMoney(
+                            investment.currentValue,
+                            investment.currency,
+                          )}
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-sm">
                         <span>Result</span>
-                        <span className={gain >= 0 ? "text-emerald-600" : "text-red-600"}>
+                        <span
+                          className={
+                            gain >= 0 ? "text-emerald-600" : "text-red-600"
+                          }
+                        >
                           {formatMoney(gain, investment.currency)}
                         </span>
                       </div>
@@ -611,7 +661,8 @@ export function InvestmentsView() {
           </CardHeader>
           <CardContent className="space-y-3">
             {dataset.installmentPlans.map((plan) => {
-              const percentage = (plan.installmentsPaid / plan.installmentsTotal) * 100;
+              const percentage =
+                (plan.installmentsPaid / plan.installmentsTotal) * 100;
               return (
                 <div key={plan.id} className="rounded-md border p-3">
                   <div className="flex justify-between gap-3">
@@ -633,4 +684,3 @@ export function InvestmentsView() {
     </div>
   );
 }
-

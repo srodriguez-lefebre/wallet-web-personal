@@ -1,4 +1,5 @@
 import {
+  addMonths,
   endOfMonth,
   format,
   isAfter,
@@ -30,7 +31,8 @@ export function formatMoney(
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
-    maximumFractionDigits: currency === "UYU" ? 0 : 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
   }).format(amount);
 }
 
@@ -39,14 +41,26 @@ export function monthKey(date: string | Date) {
 }
 
 export function availableMonthKeys(records: WalletRecord[]) {
-  return [...new Set(records.map((record) => monthKey(record.occurredAt)))].sort(
-    (a, b) => b.localeCompare(a),
-  );
+  return [
+    ...new Set(records.map((record) => monthKey(record.occurredAt))),
+  ].sort((a, b) => b.localeCompare(a));
 }
 
-export function recentMonthKeys(records: WalletRecord[], fallbackMonth: string, limit = 6) {
+export function recentMonthKeys(
+  records: WalletRecord[],
+  fallbackMonth: string,
+  limit = 6,
+) {
   const months = availableMonthKeys(records);
   return (months.length > 0 ? months : [fallbackMonth]).slice(0, limit);
+}
+
+export function relativeMonthKeys(month: string, count = 3) {
+  const start = parseISO(`${month}-15T12:00:00.000Z`);
+
+  return Array.from({ length: count }, (_, index) =>
+    format(addMonths(start, index - count + 1), "yyyy-MM"),
+  );
 }
 
 export function recordsForMonth(records: WalletRecord[], month: string) {
@@ -64,7 +78,9 @@ export function isRecordInRange(
   return afterFrom && beforeTo;
 }
 
-export function calculateAccountBalances(dataset: WalletDataset): AccountBalance[] {
+export function calculateAccountBalances(
+  dataset: WalletDataset,
+): AccountBalance[] {
   return dataset.accounts.map((account) => {
     const balance = dataset.records.reduce((total, record) => {
       if (record.paymentStatus === "cancelled") return total;
@@ -79,7 +95,8 @@ export function calculateAccountBalances(dataset: WalletDataset): AccountBalance
 
       if (record.type === "transfer") {
         if (record.accountId === account.id) return total - record.amount;
-        if (record.destinationAccountId === account.id) return total + record.amount;
+        if (record.destinationAccountId === account.id)
+          return total + record.amount;
       }
 
       return total;
@@ -103,6 +120,38 @@ export function calculateAccountBalances(dataset: WalletDataset): AccountBalance
       freeBalance: balance - reserved,
     };
   });
+}
+
+export function calculateAccountBalanceAtMonthEnd(
+  dataset: WalletDataset,
+  accountId: string,
+  month: string,
+) {
+  const account = dataset.accounts.find((item) => item.id === accountId);
+  if (!account) return 0;
+
+  const cutoff = endOfMonth(parseISO(`${month}-15T12:00:00.000Z`));
+
+  return dataset.records.reduce((total, record) => {
+    if (record.paymentStatus === "cancelled") return total;
+    if (isAfter(parseISO(record.occurredAt), cutoff)) return total;
+
+    if (record.type === "income" && record.accountId === account.id) {
+      return total + record.amount;
+    }
+
+    if (record.type === "expense" && record.accountId === account.id) {
+      return total - record.amount;
+    }
+
+    if (record.type === "transfer") {
+      if (record.accountId === account.id) return total - record.amount;
+      if (record.destinationAccountId === account.id)
+        return total + record.amount;
+    }
+
+    return total;
+  }, account.initialBalance);
 }
 
 function convertAccountBalanceToPrimary(
@@ -175,7 +224,8 @@ export function calculateCategoryExpenses(
   month = monthKey(new Date()),
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
-    (record) => record.type === "expense" && record.paymentStatus !== "cancelled",
+    (record) =>
+      record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
   return dataset.categories
@@ -185,11 +235,16 @@ export function calculateCategoryExpenses(
         .filter(
           (record) =>
             record.categoryId &&
-            isCategoryOrDescendant(dataset.categories, record.categoryId, category.id),
+            isCategoryOrDescendant(
+              dataset.categories,
+              record.categoryId,
+              category.id,
+            ),
         )
         .reduce(
           (total, record) =>
-            total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+            total +
+            toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
           0,
         );
 
@@ -236,7 +291,8 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
       )
       .reduce(
         (total, record) =>
-          total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+          total +
+          toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
         0,
       );
 
@@ -269,7 +325,8 @@ export function calculateBudgetProgress(
         dataset.categories,
       ).reduce(
         (total, record) =>
-          total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+          total +
+          toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
         0,
       );
       const percentage = Math.min(999, (spent / budget.limitAmount) * 100);
@@ -301,7 +358,11 @@ function matchingBudgetRecords(
     if (
       budget.categoryId &&
       (!record.categoryId ||
-        !isCategoryOrDescendant(categories, record.categoryId, budget.categoryId))
+        !isCategoryOrDescendant(
+          categories,
+          record.categoryId,
+          budget.categoryId,
+        ))
     ) {
       return false;
     }
@@ -327,7 +388,10 @@ export function groupRecordsByDay(records: WalletRecord[]) {
   }, {});
 }
 
-export function calculateMonthlySeries(dataset: WalletDataset, months: string[]) {
+export function calculateMonthlySeries(
+  dataset: WalletDataset,
+  months: string[],
+) {
   return months.map((month) => {
     const summary = calculateSummary(dataset, month);
     return {

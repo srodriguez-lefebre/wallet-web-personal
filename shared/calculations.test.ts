@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateBudgetProgress,
   calculateCategoryExpenses,
   calculateGoalProgress,
   calculateSummary,
+  formatMoney,
   groupRecordsByDay,
+  relativeMonthKeys,
 } from "./calculations.js";
 import { mockWalletData } from "./mock-data.js";
 
@@ -18,6 +21,11 @@ describe("wallet calculations", () => {
     expect(summary.cashFlow).toBe(20527);
   });
 
+  it("formats money with up to two decimal places", () => {
+    expect(formatMoney(1234.567, "UYU")).toBe("$\u00a01.234,57");
+    expect(formatMoney(1234, "UYU")).toBe("$\u00a01.234");
+  });
+
   it("calculates account balances from initial balances and records", () => {
     const balances = calculateAccountBalances(mockWalletData);
     const bank = balances.find((item) => item.account.id === "acc-bank");
@@ -25,6 +33,30 @@ describe("wallet calculations", () => {
 
     expect(bank?.balance).toBe(104913);
     expect(hidden?.balance).toBe(36000);
+  });
+
+  it("calculates account balance at the end of a selected month", () => {
+    expect(
+      calculateAccountBalanceAtMonthEnd(mockWalletData, "acc-bank", "2026-05"),
+    ).toBe(92400);
+    expect(
+      calculateAccountBalanceAtMonthEnd(mockWalletData, "acc-bank", "2026-06"),
+    ).toBe(104913);
+    expect(
+      calculateAccountBalanceAtMonthEnd(
+        mockWalletData,
+        "acc-hidden",
+        "2026-06",
+      ),
+    ).toBe(36000);
+  });
+
+  it("builds a chronological window ending at the selected month", () => {
+    expect(relativeMonthKeys("2026-06", 3)).toEqual([
+      "2026-04",
+      "2026-05",
+      "2026-06",
+    ]);
   });
 
   it("groups expenses by category", () => {
