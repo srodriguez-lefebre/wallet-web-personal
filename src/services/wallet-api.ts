@@ -1,10 +1,6 @@
 import type {
   Account,
   Category,
-  Goal,
-  GoalReservation,
-  Investment,
-  Tag,
   WalletDataset,
   WalletRecord,
   WalletSettings,
@@ -118,83 +114,6 @@ export function updateCategory(
 
 export function deleteCategory(token: string, categoryId: string) {
   return requestApi<{ deleted: true }>(token, `/api/categories/${categoryId}`, {
-    method: "DELETE",
-  });
-}
-
-export function createTag(token: string, tag: Omit<Tag, "id">) {
-  return requestApi<Tag>(token, "/api/tags", {
-    method: "POST",
-    ...body(tag),
-  });
-}
-
-export function updateTag(token: string, tagId: string, tag: Omit<Tag, "id">) {
-  return requestApi<Tag>(token, `/api/tags/${tagId}`, {
-    method: "PATCH",
-    ...body(tag),
-  });
-}
-
-export function deleteTag(token: string, tagId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/tags/${tagId}`, {
-    method: "DELETE",
-  });
-}
-
-export function createGoal(token: string, goal: Omit<Goal, "id">) {
-  return requestApi<Goal>(token, "/api/goals", {
-    method: "POST",
-    ...body(goal),
-  });
-}
-
-export function updateGoal(token: string, goalId: string, goal: Omit<Goal, "id">) {
-  return requestApi<Goal>(token, `/api/goals/${goalId}`, {
-    method: "PATCH",
-    ...body(goal),
-  });
-}
-
-export function deleteGoal(token: string, goalId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/goals/${goalId}`, {
-    method: "DELETE",
-  });
-}
-
-export function createGoalReservation(
-  token: string,
-  reservation: Omit<GoalReservation, "id">,
-) {
-  return requestApi<GoalReservation>(token, "/api/goal-reservations", {
-    method: "POST",
-    ...body(reservation),
-  });
-}
-
-export function createInvestment(
-  token: string,
-  investment: Omit<Investment, "id">,
-) {
-  return requestApi<Investment>(token, "/api/investments", {
-    method: "POST",
-    ...body(investment),
-  });
-}
-
-export function updateInvestment(
-  token: string,
-  investmentId: string,
-  investment: Omit<Investment, "id">,
-) {
-  return requestApi<Investment>(token, `/api/investments/${investmentId}`, {
-    method: "PATCH",
-    ...body(investment),
-  });
-}
-
-export function deleteInvestment(token: string, investmentId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/investments/${investmentId}`, {
     method: "DELETE",
   });
 }

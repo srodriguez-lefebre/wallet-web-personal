@@ -81,6 +81,10 @@ function collectCategoryTreeIds(categories: Category[], categoryId: string) {
   return ids;
 }
 
+function localId(prefix: string) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
   const [dataset, setDataset] = useState<WalletDataset>(mockWalletData);
@@ -314,7 +318,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addTag(tag: Omit<Tag, "id">) {
-    const created = await walletApi.createTag(requireToken(), tag);
+    const created = {
+      id: localId("tag"),
+      ...tag,
+    };
     setDataset((current) => ({
       ...current,
       tags: [created, ...current.tags],
@@ -323,7 +330,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function updateTag(tagId: string, tag: Omit<Tag, "id">) {
-    const updated = await walletApi.updateTag(requireToken(), tagId, tag);
+    const updated = {
+      id: tagId,
+      ...tag,
+    };
     setDataset((current) => ({
       ...current,
       tags: current.tags.map((currentTag) =>
@@ -333,7 +343,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteTag(tagId: string) {
-    await walletApi.deleteTag(requireToken(), tagId);
     setDataset((current) => ({
       ...current,
       tags: current.tags.filter((tag) => tag.id !== tagId),
@@ -361,7 +370,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addGoal(goal: Omit<Goal, "id">) {
-    const created = await walletApi.createGoal(requireToken(), goal);
+    const created = {
+      id: localId("goal"),
+      ...goal,
+    };
     setDataset((current) => ({
       ...current,
       goals: [created, ...current.goals],
@@ -370,7 +382,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
-    const updated = await walletApi.updateGoal(requireToken(), goalId, goal);
+    const updated = {
+      id: goalId,
+      ...goal,
+    };
     setDataset((current) => ({
       ...current,
       goals: current.goals.map((currentGoal) =>
@@ -380,7 +395,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteGoal(goalId: string) {
-    await walletApi.deleteGoal(requireToken(), goalId);
     setDataset((current) => ({
       ...current,
       goals: current.goals.filter((goal) => goal.id !== goalId),
@@ -399,10 +413,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
-    const created = await walletApi.createGoalReservation(
-      requireToken(),
-      reservation,
-    );
+    const created = {
+      id: localId("goal-reservation"),
+      ...reservation,
+    };
     setDataset((current) => ({
       ...current,
       goalReservations: [created, ...current.goalReservations],
@@ -410,7 +424,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addInvestment(investment: Omit<Investment, "id">) {
-    const created = await walletApi.createInvestment(requireToken(), investment);
+    const created = {
+      id: localId("investment"),
+      ...investment,
+    };
     setDataset((current) => ({
       ...current,
       investments: [created, ...current.investments],
@@ -422,11 +439,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
     investmentId: string,
     investment: Omit<Investment, "id">,
   ) {
-    const updated = await walletApi.updateInvestment(
-      requireToken(),
-      investmentId,
-      investment,
-    );
+    const updated = {
+      id: investmentId,
+      ...investment,
+    };
     setDataset((current) => ({
       ...current,
       investments: current.investments.map((currentInvestment) =>
@@ -436,7 +452,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteInvestment(investmentId: string) {
-    await walletApi.deleteInvestment(requireToken(), investmentId);
     setDataset((current) => ({
       ...current,
       investments: current.investments.filter(
