@@ -380,22 +380,27 @@ export function DashboardView() {
                       </p>
                     </div>
                   </div>
-                  <p
-                    className={
-                      record.type === "expense"
-                        ? "font-semibold text-red-600"
+                  <div className="text-right">
+                    <p
+                      className={
+                        record.type === "expense"
+                          ? "font-semibold text-red-600"
+                          : record.type === "income"
+                            ? "font-semibold text-emerald-600"
+                            : "font-semibold text-sky-600"
+                      }
+                    >
+                      {record.type === "expense"
+                        ? "-"
                         : record.type === "income"
-                          ? "font-semibold text-emerald-600"
-                          : "font-semibold text-sky-600"
-                    }
-                  >
-                    {record.type === "expense"
-                      ? "-"
-                      : record.type === "income"
-                        ? "+"
-                        : ""}
-                    {formatMoney(record.amount, record.currency)}
-                  </p>
+                          ? "+"
+                          : ""}
+                      {formatMoney(record.amount, record.currency)}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                      {formatRecordDateTime(record.occurredAt)}
+                    </p>
+                  </div>
                 </div>
               );
             })}
@@ -430,4 +435,15 @@ function buildBalanceComparisonSeries(
     previous: previous?.[index] ?? null,
     current: current?.[index] ?? null,
   }));
+}
+
+function formatRecordDateTime(value: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
 }

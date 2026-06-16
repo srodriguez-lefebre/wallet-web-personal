@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Personal Wallet">
+  <rect width="64" height="64" rx="14" fill="#0f172a"/>
+  <path d="M17 22.5h27.5a7.5 7.5 0 0 1 7.5 7.5v13.5a7 7 0 0 1-7 7H17a7 7 0 0 1-7-7v-14a7 7 0 0 1 7-7Z" fill="#f8fafc"/>
+  <path d="M18 17h23a5 5 0 0 1 5 5v2H18a5 5 0 0 0 0 10h34v-4a8 8 0 0 0-8-8H18a7 7 0 1 1 0-14h19a4 4 0 0 1 4 4v3H18Z" fill="#38bdf8"/>
+  <path d="M42 32h11v12H42a6 6 0 0 1 0-12Z" fill="#14b8a6"/>
+  <circle cx="43" cy="38" r="2.4" fill="#f8fafc"/>
+</svg>
