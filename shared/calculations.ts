@@ -110,6 +110,16 @@ export function recordsForDateRange(records: WalletRecord[], range: DateRange) {
   });
 }
 
+export function dateKeysForRange(range: DateRange) {
+  const from = parseISO(`${range.from}T12:00:00.000Z`);
+  const to = parseISO(`${range.to}T12:00:00.000Z`);
+  const days = Math.max(1, differenceInCalendarDays(to, from) + 1);
+
+  return Array.from({ length: days }, (_, index) =>
+    format(addDays(from, index), "yyyy-MM-dd"),
+  );
+}
+
 export function isRecordInRange(
   record: WalletRecord,
   from?: string,

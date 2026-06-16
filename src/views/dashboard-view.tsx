@@ -1,8 +1,9 @@
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Cell,
+  Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -25,12 +26,13 @@ import { MetricCard } from "@/components/wallet/metric-card";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalanceAtDate,
-  calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
   calculateSummary,
   calculateSummaryForDateRange,
+  dateKeysForRange,
+  dateRangeForMonth,
   formatMoney,
   relativeDateRanges,
   relativeMonthKeys,
@@ -64,28 +66,15 @@ export function DashboardView() {
       : calculateCategoryExpenses(dataset, selectedMonth);
   const balanceCurrency =
     primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
-  const balanceTrend =
+  const balancePeriods =
     selectedPeriodMode === "custom"
-      ? relativeDateRanges(selectedDateRange, 3).map((range) => ({
-          period: formatDateRangeLabel(range),
-          balance: primaryBalance
-            ? calculateAccountBalanceAtDate(
-                dataset,
-                primaryBalance.account.id,
-                range.to,
-              )
-            : 0,
-        }))
-      : relativeMonthKeys(selectedMonth, 3).map((month) => ({
-          period: formatMonthLabel(month),
-          balance: primaryBalance
-            ? calculateAccountBalanceAtMonthEnd(
-                dataset,
-                primaryBalance.account.id,
-                month,
-              )
-            : 0,
-        }));
+      ? relativeDateRanges(selectedDateRange, 3)
+      : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
+  const balanceTrend = buildBalanceComparisonSeries(
+    dataset,
+    primaryBalance?.account.id,
+    balancePeriods,
+  );
   const balanceTooltipFormatter = (value: unknown) =>
     formatMoney(Number(value ?? 0), balanceCurrency);
   const recentRecords = dataset.records
@@ -181,18 +170,12 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={balanceTrend}>
-                <defs>
-                  <linearGradient id="balance" x1="0" x2="0" y1="0" y2="1">
-                    <stop offset="5%" stopColor="#2563EB" stopOpacity={0.28} />
-                    <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
+              <LineChart data={balanceTrend}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"
                 />
-                <XAxis dataKey="period" tickLine={false} axisLine={false} />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} />
                 <YAxis
                   tickLine={false}
                   axisLine={false}
@@ -200,14 +183,35 @@ export function DashboardView() {
                   tickFormatter={(value) => balanceTooltipFormatter(value)}
                 />
                 <Tooltip formatter={balanceTooltipFormatter} />
-                <Area
+                <Legend />
+                <Line
                   type="monotone"
-                  dataKey="balance"
+                  dataKey="current"
                   stroke="#2563EB"
-                  fill="url(#balance)"
-                  name="Balance"
+                  strokeWidth={3}
+                  dot={false}
+                  name="Current period"
+                  connectNulls
                 />
-              </AreaChart>
+                <Line
+                  type="monotone"
+                  dataKey="previous"
+                  stroke="#14B8A6"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Previous period"
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="previousPrevious"
+                  stroke="#64748B"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Two periods ago"
+                  connectNulls
+                />
+              </LineChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
@@ -402,23 +406,28 @@ export function DashboardView() {
   );
 }
 
-function formatMonthLabel(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(Date.UTC(year, monthNumber - 1, 1)));
-}
+function buildBalanceComparisonSeries(
+  dataset: Parameters<typeof calculateAccountBalanceAtDate>[0],
+  accountId: string | undefined,
+  ranges: DateRange[],
+) {
+  const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
+    dateKeysForRange(range).map((date) =>
+      accountId
+        ? calculateAccountBalanceAtDate(dataset, accountId, date)
+        : null,
+    ),
+  );
+  const maxDays = Math.max(
+    twoPeriodsAgo?.length ?? 0,
+    previous?.length ?? 0,
+    current?.length ?? 0,
+  );
 
-function formatDateRangeLabel(range: DateRange) {
-  const formatter = new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    timeZone: "UTC",
-  });
-  const from = new Date(`${range.from}T12:00:00.000Z`);
-  const to = new Date(`${range.to}T12:00:00.000Z`);
-
-  return `${formatter.format(from)} - ${formatter.format(to)}`;
+  return Array.from({ length: maxDays }, (_, index) => ({
+    day: `Day ${index + 1}`,
+    previousPrevious: twoPeriodsAgo?.[index] ?? null,
+    previous: previous?.[index] ?? null,
+    current: current?.[index] ?? null,
+  }));
 }

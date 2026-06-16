@@ -9,6 +9,7 @@ import {
   calculateGoalProgress,
   calculateSummary,
   calculateSummaryForDateRange,
+  dateKeysForRange,
   formatMoney,
   groupRecordsByDay,
   recordsForDateRange,
@@ -80,6 +81,14 @@ describe("wallet calculations", () => {
       { from: "2026-05-25", to: "2026-05-31" },
       { from: "2026-06-01", to: "2026-06-07" },
       { from: "2026-06-08", to: "2026-06-14" },
+    ]);
+  });
+
+  it("builds date keys for a custom range", () => {
+    expect(dateKeysForRange({ from: "2026-06-05", to: "2026-06-07" })).toEqual([
+      "2026-06-05",
+      "2026-06-06",
+      "2026-06-07",
     ]);
   });
 
