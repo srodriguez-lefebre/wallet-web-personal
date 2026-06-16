@@ -15,6 +15,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useWallet } from "@/providers/wallet-provider";
 import {
@@ -198,10 +199,7 @@ export function DashboardView() {
                 className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
               >
                 <span className="flex items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: category.color }}
-                  />
+                  <CategoryIcon icon={category.icon} color={category.color} size="sm" />
                   {category.name}
                 </span>
                 <span className="font-medium">
@@ -289,12 +287,18 @@ export function DashboardView() {
                   }}
                   className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
                 >
-                  <div>
+                  <div className="flex items-center gap-3">
+                    <CategoryIcon
+                      icon={category?.icon}
+                      color={category?.color ?? "#2563EB"}
+                    />
+                    <div>
                     <p className="font-medium">{category?.name ?? "Transferencia"}</p>
                     <p className="text-xs text-muted-foreground">
                       {account?.name}
                       {record.counterpartyName ? ` · ${record.counterpartyName}` : ""}
                     </p>
+                    </div>
                   </div>
                   <p
                     className={

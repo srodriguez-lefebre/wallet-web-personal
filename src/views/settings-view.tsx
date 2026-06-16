@@ -21,6 +21,8 @@ import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { CategoryIcon } from "@/components/wallet/category-icon";
+import { categoryIconOptions } from "@/components/wallet/category-icons";
 import {
   Dialog,
   DialogContent,
@@ -73,6 +75,8 @@ export function SettingsView() {
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const inlineFieldClassName =
+    "h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const colorInputClassName =
     "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
 
@@ -256,7 +260,7 @@ export function SettingsView() {
 
     return (
       <div key={category.id} className={level > 0 ? "ml-4 border-l pl-4" : ""}>
-        <div className="grid gap-2 rounded-md border p-2 md:grid-cols-[auto_auto_1fr_auto_auto_auto]">
+        <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
           {hasChildren && level === 0 ? (
             <Button
               type="button"
@@ -279,6 +283,7 @@ export function SettingsView() {
           ) : (
             <span className="hidden h-10 w-10 md:block" aria-hidden="true" />
           )}
+          <CategoryIcon icon={draft.icon} color={draft.color} />
           <input
             value={draft.color}
             onChange={(event) =>
@@ -293,9 +298,23 @@ export function SettingsView() {
             onChange={(event) =>
               updateCategoryDraft(category.id, { name: event.target.value })
             }
-            className={fieldClassName}
+            className={`${inlineFieldClassName} min-w-40 flex-1`}
             placeholder="Name"
           />
+          <select
+            value={draft.icon}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, { icon: event.target.value })
+            }
+            className={`${inlineFieldClassName} min-w-36`}
+            aria-label={`Icono de ${category.name}`}
+          >
+            {categoryIconOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <Button
             type="button"
             variant="outline"
@@ -456,25 +475,47 @@ export function SettingsView() {
                     <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
                       <label className="block space-y-2">
                         <span className="text-sm font-medium">Color</span>
-                        <input
-                          value={newCategoryColor}
-                          onChange={(event) =>
-                            setNewCategoryColor(event.target.value)
-                          }
-                          type="color"
-                          className={colorInputClassName}
-                          aria-label="Color de categoria nueva"
-                        />
+                        <div className="flex items-center gap-2">
+                          <CategoryIcon
+                            icon={newCategoryIcon}
+                            color={newCategoryColor}
+                          />
+                          <input
+                            value={newCategoryColor}
+                            onChange={(event) =>
+                              setNewCategoryColor(event.target.value)
+                            }
+                            type="color"
+                            className={colorInputClassName}
+                            aria-label="Color de categoria nueva"
+                          />
+                        </div>
                       </label>
-                      <label className="block space-y-2">
+                      <div className="space-y-2">
                         <span className="text-sm font-medium">Icono</span>
-                        <input
-                          value={newCategoryIcon}
-                          onChange={(event) => setNewCategoryIcon(event.target.value)}
-                          className={fieldClassName}
-                          placeholder="tag"
-                        />
-                      </label>
+                        <div className="grid max-h-44 grid-cols-7 gap-2 overflow-y-auto rounded-md border p-2">
+                          {categoryIconOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              className={`flex h-10 w-10 items-center justify-center rounded-full border transition hover:border-primary ${
+                                newCategoryIcon === option.value
+                                  ? "border-primary bg-secondary"
+                                  : "border-transparent"
+                              }`}
+                              title={option.label}
+                              aria-label={`Usar icono ${option.label}`}
+                              onClick={() => setNewCategoryIcon(option.value)}
+                            >
+                              <CategoryIcon
+                                icon={option.value}
+                                color={newCategoryColor}
+                                size="sm"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                     <Button className="w-full" type="submit">
                       <Plus className="h-4 w-4" />

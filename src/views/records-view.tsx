@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
+import { CategoryIcon } from "@/components/wallet/category-icon";
 import {
   Dialog,
   DialogContent,
@@ -613,11 +614,10 @@ export function RecordsView() {
                       >
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <span
-                              className="h-3 w-3 rounded-full"
-                              style={{
-                                backgroundColor: category?.color ?? "#0EA5E9",
-                              }}
+                            <CategoryIcon
+                              icon={category?.icon}
+                              color={category?.color ?? "#0EA5E9"}
+                              size="sm"
                             />
                             <p className="font-medium">
                               {category

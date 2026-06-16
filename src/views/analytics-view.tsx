@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
+import { CategoryIcon } from "@/components/wallet/category-icon";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
@@ -177,10 +178,7 @@ export function AnalyticsView() {
                   className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: category.color }}
-                    />
+                    <CategoryIcon icon={category.icon} color={category.color} size="sm" />
                     <p className="font-medium">{category.name}</p>
                   </div>
                   <p className="font-semibold">

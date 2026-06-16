@@ -186,6 +186,7 @@ export function calculateCategoryExpenses(
         id: category.id,
         name: category.name,
         color: category.color,
+        icon: category.icon,
         value,
       };
     })
