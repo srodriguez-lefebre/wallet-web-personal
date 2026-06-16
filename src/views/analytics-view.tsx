@@ -2,6 +2,9 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -26,16 +29,22 @@ import {
   calculateMonthlySeries,
   calculateSummary,
   calculateSummaryForDateRange,
+  dateKeysForRange,
+  dateRangeForMonth,
   formatMoney,
   monthKey,
   recentMonthKeys,
+  recordsForDateRange,
+  relativeDateRanges,
+  relativeMonthKeys,
+  toPrimaryCurrency,
 } from "@shared/calculations";
 import {
   buildSavingsRecommendations,
   calculateAllowedDailySpend,
   calculateEndOfMonthProjection,
 } from "@shared/simulations";
-import type { WalletRecord } from "@shared/types";
+import type { DateRange, WalletDataset, WalletRecord } from "@shared/types";
 
 function isAccountRecord(record: WalletRecord, accountId: string) {
   return (
@@ -101,6 +110,14 @@ export function AnalyticsView() {
       .slice()
       .reverse(),
   );
+  const comparisonPeriods =
+    selectedPeriodMode === "custom"
+      ? relativeDateRanges(selectedDateRange, 3)
+      : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
+  const expenseTrend = buildExpenseComparisonSeries(
+    analyticsDataset,
+    comparisonPeriods,
+  );
   const projection = calculateEndOfMonthProjection(
     analyticsDataset,
     summary.dailyAverageExpense,
@@ -148,7 +165,121 @@ export function AnalyticsView() {
         <AccountStateSummary balance={selectedAccountBalance} />
       ) : null}
 
-      <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <button
+          type="button"
+          onClick={() => goToRecords({ type: "income" })}
+          className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
+        >
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Income
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-emerald-600">
+            {formatMoney(summary.income, dataset.settings.primaryCurrency)}
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => goToRecords({ type: "expense" })}
+          className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
+        >
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Expenses
+          </p>
+          <p className="mt-2 text-2xl font-semibold text-red-600">
+            {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
+          </p>
+        </button>
+        <button
+          type="button"
+          onClick={() => goToRecords({ type: "all" })}
+          className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
+        >
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Cash flow
+          </p>
+          <p
+            className={
+              summary.cashFlow >= 0
+                ? "mt-2 text-2xl font-semibold text-sky-700 dark:text-sky-300"
+                : "mt-2 text-2xl font-semibold text-red-600"
+            }
+          >
+            {formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
+          </p>
+        </button>
+        <div className="rounded-md border bg-card p-4">
+          <p className="text-xs font-semibold uppercase text-muted-foreground">
+            Daily average
+          </p>
+          <p className="mt-2 text-2xl font-semibold">
+            {formatMoney(
+              summary.dailyAverageExpense,
+              dataset.settings.primaryCurrency,
+            )}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Expense trend by period</CardTitle>
+          </CardHeader>
+          <CardContent className="h-80 min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={expenseTrend}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="hsl(var(--border))"
+                />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  width={88}
+                  tickFormatter={(value) =>
+                    formatMoney(Number(value), dataset.settings.primaryCurrency)
+                  }
+                />
+                <Tooltip
+                  formatter={(value) =>
+                    formatMoney(Number(value), dataset.settings.primaryCurrency)
+                  }
+                />
+                <Legend />
+                <Line
+                  type="monotone"
+                  dataKey="current"
+                  stroke="#EF4444"
+                  strokeWidth={3}
+                  dot={false}
+                  name="Current period"
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="previous"
+                  stroke="#F59E0B"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Previous period"
+                  connectNulls
+                />
+                <Line
+                  type="monotone"
+                  dataKey="previousPrevious"
+                  stroke="#64748B"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Two periods ago"
+                  connectNulls
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Monthly comparison</CardTitle>
@@ -185,7 +316,9 @@ export function AnalyticsView() {
             </ResponsiveContainer>
           </CardContent>
         </Card>
+      </div>
 
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
             <CardTitle>Category report</CardTitle>
@@ -261,9 +394,7 @@ export function AnalyticsView() {
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Budgets</CardTitle>
@@ -313,7 +444,9 @@ export function AnalyticsView() {
             ))}
           </CardContent>
         </Card>
+      </div>
 
+      <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
             <CardTitle>Simulator and recommendations</CardTitle>
@@ -350,4 +483,42 @@ export function AnalyticsView() {
       </div>
     </div>
   );
+}
+
+function buildExpenseComparisonSeries(
+  dataset: WalletDataset,
+  ranges: DateRange[],
+) {
+  const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
+    dateKeysForRange(range).map((date) => {
+      const records = recordsForDateRange(dataset.records, {
+        from: range.from,
+        to: date,
+      });
+
+      return records
+        .filter(
+          (record) =>
+            record.type === "expense" && record.paymentStatus !== "cancelled",
+        )
+        .reduce(
+          (total, record) =>
+            total +
+            toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+          0,
+        );
+    }),
+  );
+  const maxDays = Math.max(
+    twoPeriodsAgo?.length ?? 0,
+    previous?.length ?? 0,
+    current?.length ?? 0,
+  );
+
+  return Array.from({ length: maxDays }, (_, index) => ({
+    day: `Day ${index + 1}`,
+    previousPrevious: twoPeriodsAgo?.[index] ?? null,
+    previous: previous?.[index] ?? null,
+    current: current?.[index] ?? null,
+  }));
 }
