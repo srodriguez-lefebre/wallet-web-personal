@@ -37,6 +37,7 @@ npm run lint
 npm run test
 npm run db:generate
 npm run db:migrate
+npm run db:import-wallet-records
 ```
 
 En desarrollo local, el unlock acepta un token de al menos 4 caracteres si la API de Vercel no esta corriendo. En deploy, el endpoint `/api/auth/unlock` valida contra `API_TOKEN`.
@@ -50,3 +51,17 @@ Para Vercel:
 - Deployar el repo.
 
 Neon Auth no es necesario para esta version. Neon se usa como PostgreSQL.
+
+## Carga de datos reales
+
+El importador usa `.env.local`, resetea las tablas principales de la wallet y carga
+`wallet_records.csv` con una unica cuenta llamada `Banco`.
+
+```powershell
+npm run db:migrate
+npm run db:import-wallet-records
+```
+
+El script crea categorias padre/hija con icono y color inferidos desde
+`categories-from-wallet-records.md`, normaliza categorias con espacios sobrantes y
+carga los records en Neon.

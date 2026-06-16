@@ -25,7 +25,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["api/**/*.ts", "server/**/*.ts", "drizzle.config.ts"],
+    files: ["api/**/*.ts", "server/**/*.ts", "scripts/**/*.mjs", "drizzle.config.ts"],
     languageOptions: {
       globals: globals.node,
     },
