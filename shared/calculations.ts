@@ -38,6 +38,17 @@ export function monthKey(date: string | Date) {
   return format(typeof date === "string" ? parseISO(date) : date, "yyyy-MM");
 }
 
+export function availableMonthKeys(records: WalletRecord[]) {
+  return [...new Set(records.map((record) => monthKey(record.occurredAt)))].sort(
+    (a, b) => b.localeCompare(a),
+  );
+}
+
+export function recentMonthKeys(records: WalletRecord[], fallbackMonth: string, limit = 6) {
+  const months = availableMonthKeys(records);
+  return (months.length > 0 ? months : [fallbackMonth]).slice(0, limit);
+}
+
 export function recordsForMonth(records: WalletRecord[], month: string) {
   return records.filter((record) => monthKey(record.occurredAt) === month);
 }

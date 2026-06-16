@@ -24,6 +24,7 @@ import {
   calculateMonthlySeries,
   calculateSummary,
   formatMoney,
+  recentMonthKeys,
 } from "@shared/calculations";
 import {
   buildSavingsRecommendations,
@@ -62,11 +63,10 @@ export function AnalyticsView() {
   const summary = calculateSummary(analyticsDataset, selectedMonth);
   const categories = calculateCategoryExpenses(analyticsDataset, selectedMonth);
   const budgets = calculateBudgetProgress(analyticsDataset, selectedMonth);
-  const monthlySeries = calculateMonthlySeries(analyticsDataset, [
-    "2026-04",
-    "2026-05",
-    "2026-06",
-  ]);
+  const monthlySeries = calculateMonthlySeries(
+    analyticsDataset,
+    recentMonthKeys(analyticsDataset.records, selectedMonth, 6).slice().reverse(),
+  );
   const projection = calculateEndOfMonthProjection(
     analyticsDataset,
     summary.dailyAverageExpense,
@@ -117,7 +117,7 @@ export function AnalyticsView() {
           <CardHeader>
             <CardTitle>Comparacion mensual</CardTitle>
           </CardHeader>
-          <CardContent className="h-80">
+          <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlySeries}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />

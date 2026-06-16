@@ -6,9 +6,11 @@ import {
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { readStorage, writeStorage } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import * as walletApi from "@/services/wallet-api";
 import { mockWalletData } from "@shared/mock-data";
+import { availableMonthKeys, monthKey } from "@shared/calculations";
 import type {
   Account,
   Category,
@@ -63,6 +65,7 @@ interface WalletContextValue {
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
+const datasetCacheKey = "wallet-dataset-cache";
 
 function collectCategoryTreeIds(categories: Category[], categoryId: string) {
   const ids = new Set([categoryId]);
@@ -85,12 +88,29 @@ function localId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+function readCachedDataset() {
+  const cached = readStorage(datasetCacheKey);
+  if (!cached) return null;
+
+  try {
+    return JSON.parse(cached) as WalletDataset;
+  } catch {
+    return null;
+  }
+}
+
+function cacheDataset(dataset: WalletDataset) {
+  writeStorage(datasetCacheKey, JSON.stringify(dataset));
+}
+
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
-  const [dataset, setDataset] = useState<WalletDataset>(mockWalletData);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasCachedDataset] = useState(() => Boolean(readCachedDataset()));
+  const [dataset, setDataset] = useState<WalletDataset>(() => readCachedDataset() ?? mockWalletData);
+  const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
-  const [selectedMonth, setSelectedMonth] = useState("2026-06");
+  const [selectedMonth, setSelectedMonth] = useState(() => monthKey(new Date()));
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
     type: "all",
   });
@@ -103,14 +123,17 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function reloadWallet() {
     if (!token) return;
 
-    setIsLoading(true);
+    setIsRefreshing(true);
     setLoadError("");
     try {
-      setDataset(await walletApi.getWallet(token));
+      const nextDataset = await walletApi.getWallet(token);
+      setDataset(nextDataset);
+      cacheDataset(nextDataset);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "No se pudo cargar la wallet");
+      setLoadError(error instanceof Error ? error.message : "Could not load wallet");
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }
 
@@ -120,18 +143,28 @@ export function WalletProvider({ children }: PropsWithChildren) {
     async function loadInitialWallet() {
       if (!token) return;
 
+      if (hasCachedDataset) {
+        setIsRefreshing(true);
+      }
+
       try {
         const nextDataset = await walletApi.getWallet(token);
         if (isCancelled) return;
         setDataset(nextDataset);
+        cacheDataset(nextDataset);
         setLoadError("");
       } catch (error) {
         if (isCancelled) return;
-        setLoadError(
-          error instanceof Error ? error.message : "No se pudo cargar la wallet",
-        );
+        if (!hasCachedDataset) {
+          setLoadError(
+            error instanceof Error ? error.message : "Could not load wallet",
+          );
+        }
       } finally {
-        if (!isCancelled) setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+          setIsRefreshing(false);
+        }
       }
     }
 
@@ -139,7 +172,14 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return () => {
       isCancelled = true;
     };
-  }, [token]);
+  }, [hasCachedDataset, token]);
+
+  useEffect(() => {
+    const months = availableMonthKeys(dataset.records);
+    if (months.length > 0 && !months.includes(selectedMonth)) {
+      queueMicrotask(() => setSelectedMonth(months[0]));
+    }
+  }, [dataset.records, selectedMonth]);
 
   function setRecordFilters(filters: RecordFilters) {
     setRecordFiltersState((current) => ({
@@ -485,7 +525,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <p className="text-sm text-muted-foreground">Cargando wallet...</p>
+        <p className="text-sm text-muted-foreground">Loading wallet...</p>
       </div>
     );
   }
@@ -495,13 +535,13 @@ export function WalletProvider({ children }: PropsWithChildren) {
       <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
         <div className="max-w-md space-y-4 rounded-md border bg-card p-6 shadow-sm">
           <div>
-            <p className="text-lg font-semibold">No se pudo cargar la wallet</p>
+            <p className="text-lg font-semibold">Could not load wallet</p>
             <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => void reloadWallet()}>Reintentar</Button>
+            <Button onClick={() => void reloadWallet()}>Retry</Button>
             <Button variant="outline" onClick={lock}>
-              Bloquear
+              Lock
             </Button>
           </div>
         </div>
@@ -541,6 +581,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
         setPrimaryAccount,
       }}
     >
+      {isRefreshing ? (
+        <div className="fixed bottom-4 right-4 z-50 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
+          Refreshing wallet...
+        </div>
+      ) : null}
       {children}
     </WalletContext.Provider>
   );

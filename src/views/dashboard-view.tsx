@@ -24,6 +24,7 @@ import {
   calculateMonthlySeries,
   calculateSummary,
   formatMoney,
+  recentMonthKeys,
 } from "@shared/calculations";
 
 export function DashboardView() {
@@ -37,11 +38,10 @@ export function DashboardView() {
       (item) => item.account.id === dataset.settings.primaryAccountId,
     ) ?? visibleBalances[0];
   const categories = calculateCategoryExpenses(dataset, selectedMonth);
-  const monthlySeries = calculateMonthlySeries(dataset, [
-    "2026-04",
-    "2026-05",
-    "2026-06",
-  ]);
+  const monthlySeries = calculateMonthlySeries(
+    dataset,
+    recentMonthKeys(dataset.records, selectedMonth, 6).slice().reverse(),
+  );
   const recentRecords = dataset.records
     .slice()
     .sort(
@@ -113,7 +113,7 @@ export function DashboardView() {
           <CardHeader>
             <CardTitle>Cash flow mensual</CardTitle>
           </CardHeader>
-          <CardContent className="h-80">
+          <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={monthlySeries}>
                 <defs>
@@ -164,7 +164,7 @@ export function DashboardView() {
           <CardHeader>
             <CardTitle>Gastos por categoria</CardTitle>
           </CardHeader>
-          <CardContent className="h-72">
+          <CardContent className="h-72 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
