@@ -29,6 +29,13 @@
       "when": 1781559568368,
       "tag": "0003_modern_miss_america",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781572592648,
+      "tag": "0004_steep_talisman",
+      "breakpoints": true
     }
   ]
 }

@@ -22,33 +22,19 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Category, CategoryType, Tag } from "@shared/types";
+import type { Category, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
+type NewChildCategoryDraft = {
+  name: string;
+  color: string;
+};
 
 function childCategories(categories: Category[], parentId: string) {
   return categories
     .filter((category) => category.parentId === parentId)
     .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function parentCategoryOptions(
-  categories: Category[],
-  categoryId: string | undefined,
-  type: CategoryType,
-) {
-  return categories
-    .filter(
-      (category) =>
-        !category.parentId && category.id !== categoryId && category.type === type,
-    )
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-function defaultCategoryIcon(type: CategoryType, parentId?: string) {
-  if (parentId) return "folder";
-  return type === "income" ? "coins" : "tag";
 }
 
 export function SettingsView() {
@@ -66,9 +52,10 @@ export function SettingsView() {
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryType, setNewCategoryType] = useState<CategoryType>("expense");
-  const [newCategoryParentId, setNewCategoryParentId] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
+  const [newChildCategoryDrafts, setNewChildCategoryDrafts] = useState<
+    Record<string, NewChildCategoryDraft>
+  >({});
   const [categoryDrafts, setCategoryDrafts] = useState<
     Record<string, CategoryDraft>
   >({});
@@ -89,11 +76,9 @@ export function SettingsView() {
     return (
       categoryDrafts[category.id] ?? {
         name: category.name,
-        type: category.type,
         parentId: category.parentId,
         color: category.color,
         icon: category.icon,
-        isActive: category.isActive,
       }
     );
   }
@@ -112,20 +97,14 @@ export function SettingsView() {
         current[categoryId] ??
         ({
           name: currentCategory.name,
-          type: currentCategory.type,
           parentId: currentCategory.parentId,
           color: currentCategory.color,
           icon: currentCategory.icon,
-          isActive: currentCategory.isActive,
         } satisfies CategoryDraft);
       const nextDraft = {
         ...currentDraft,
         ...patch,
       };
-
-      if (patch.type && patch.type !== currentDraft.type) {
-        nextDraft.parentId = undefined;
-      }
 
       return {
         ...current,
@@ -149,15 +128,59 @@ export function SettingsView() {
 
     addCategory({
       name,
-      type: newCategoryType,
-      parentId: newCategoryParentId || undefined,
       color: newCategoryColor,
-      icon: defaultCategoryIcon(newCategoryType, newCategoryParentId),
-      isActive: true,
+      icon: "tag",
     });
     setNewCategoryName("");
-    setNewCategoryParentId("");
     setNewCategoryColor("#2563EB");
+  }
+
+  function getNewChildCategoryDraft(parentId: string) {
+    return (
+      newChildCategoryDrafts[parentId] ?? {
+        name: "",
+        color: "#2563EB",
+      }
+    );
+  }
+
+  function updateNewChildCategoryDraft(
+    parentId: string,
+    patch: Partial<NewChildCategoryDraft>,
+  ) {
+    setNewChildCategoryDrafts((current) => ({
+      ...current,
+      [parentId]: {
+        ...(current[parentId] ?? {
+          name: "",
+          color: "#2563EB",
+        }),
+        ...patch,
+      },
+    }));
+  }
+
+  function clearNewChildCategoryDraft(parentId: string) {
+    setNewChildCategoryDrafts((current) => {
+      const next = { ...current };
+      delete next[parentId];
+      return next;
+    });
+  }
+
+  function handleAddChildCategory(event: FormEvent, parent: Category) {
+    event.preventDefault();
+    const draft = getNewChildCategoryDraft(parent.id);
+    const name = draft.name.trim();
+    if (!name) return;
+
+    addCategory({
+      name,
+      parentId: parent.id,
+      color: draft.color,
+      icon: "folder",
+    });
+    clearNewChildCategoryDraft(parent.id);
   }
 
   function handleSaveCategory(category: Category) {
@@ -168,7 +191,6 @@ export function SettingsView() {
     updateCategory(category.id, {
       ...draft,
       name,
-      parentId: draft.parentId || undefined,
     });
     clearCategoryDraft(category.id);
   }
@@ -254,22 +276,15 @@ export function SettingsView() {
     const draft = getCategoryDraft(category);
     const children = childCategories(dataset.categories, category.id);
     const hasChildren = children.length > 0;
-    const parentOptions = parentCategoryOptions(
-      dataset.categories,
-      category.id,
-      draft.type,
-    );
     const isDirty =
       draft.name !== category.name ||
-      draft.type !== category.type ||
-      (draft.parentId ?? "") !== (category.parentId ?? "") ||
       draft.color !== category.color ||
-      draft.icon !== category.icon ||
-      draft.isActive !== category.isActive;
+      draft.icon !== category.icon;
+    const childDraft = getNewChildCategoryDraft(category.id);
 
     return (
       <div key={category.id} className={level > 0 ? "ml-4 border-l pl-4" : ""}>
-        <div className="grid gap-2 rounded-md border p-3 lg:grid-cols-[auto_1fr_110px_170px_110px_110px_auto_auto_auto]">
+        <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[auto_1fr_auto_auto_auto]">
           <input
             value={draft.color}
             onChange={(event) =>
@@ -287,60 +302,6 @@ export function SettingsView() {
             className={fieldClassName}
             placeholder="Name"
           />
-          <select
-            value={draft.type}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, {
-                type: event.target.value as CategoryType,
-              })
-            }
-            className={fieldClassName}
-          >
-            <option value="expense">Expense</option>
-            <option value="income">Income</option>
-          </select>
-          <select
-            value={draft.parentId ?? ""}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, {
-                parentId: event.target.value || undefined,
-              })
-            }
-            className={fieldClassName}
-            disabled={hasChildren}
-            title={
-              hasChildren
-                ? "Una categoria con hijas debe quedar como padre"
-                : "Categoria padre"
-            }
-          >
-            <option value="">No parent</option>
-            {parentOptions.map((parent) => (
-              <option key={parent.id} value={parent.id}>
-                {parent.name}
-              </option>
-            ))}
-          </select>
-          <input
-            value={draft.icon}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, { icon: event.target.value })
-            }
-            className={fieldClassName}
-            placeholder="Icon"
-          />
-          <select
-            value={draft.isActive ? "active" : "inactive"}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, {
-                isActive: event.target.value === "active",
-              })
-            }
-            className={fieldClassName}
-          >
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
           <Button
             type="button"
             variant="outline"
@@ -349,7 +310,7 @@ export function SettingsView() {
             title="Ver registros"
             onClick={() =>
               openRecords({
-                type: category.type === "income" ? "income" : "expense",
+                type: "all",
                 categoryId: category.id,
               })
             }
@@ -377,7 +338,39 @@ export function SettingsView() {
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-        {children.length > 0 ? (
+        {level === 0 ? (
+          <form
+            className="mt-2 grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_auto_auto]"
+            onSubmit={(event) => handleAddChildCategory(event, category)}
+          >
+            <input
+              value={childDraft.name}
+              onChange={(event) =>
+                updateNewChildCategoryDraft(category.id, {
+                  name: event.target.value,
+                })
+              }
+              className={fieldClassName}
+              placeholder={`New child in ${category.name}`}
+            />
+            <input
+              value={childDraft.color}
+              onChange={(event) =>
+                updateNewChildCategoryDraft(category.id, {
+                  color: event.target.value,
+                })
+              }
+              type="color"
+              className={colorInputClassName}
+              aria-label={`Color de nueva hija de ${category.name}`}
+            />
+            <Button type="submit" variant="outline">
+              <Plus className="h-4 w-4" />
+              Agregar hija
+            </Button>
+          </form>
+        ) : null}
+        {hasChildren ? (
           <div className="mt-2 space-y-2">
             {children.map((child) => renderCategoryEditor(child, level + 1))}
           </div>
@@ -455,42 +448,15 @@ export function SettingsView() {
           <CardContent>
             <div className="space-y-4">
               <form
-                className="grid gap-2 lg:grid-cols-[1fr_120px_170px_auto_auto]"
+                className="grid gap-2 md:grid-cols-[1fr_auto_auto]"
                 onSubmit={handleAddCategory}
               >
                 <input
                   value={newCategoryName}
                   onChange={(event) => setNewCategoryName(event.target.value)}
                   className={fieldClassName}
-                  placeholder="New category"
+                  placeholder="New parent category"
                 />
-                <select
-                  value={newCategoryType}
-                  onChange={(event) => {
-                    setNewCategoryType(event.target.value as CategoryType);
-                    setNewCategoryParentId("");
-                  }}
-                  className={fieldClassName}
-                >
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                </select>
-                <select
-                  value={newCategoryParentId}
-                  onChange={(event) => setNewCategoryParentId(event.target.value)}
-                  className={fieldClassName}
-                >
-                  <option value="">No parent</option>
-                  {parentCategoryOptions(
-                    dataset.categories,
-                    undefined,
-                    newCategoryType,
-                  ).map((parent) => (
-                    <option key={parent.id} value={parent.id}>
-                      {parent.name}
-                    </option>
-                  ))}
-                </select>
                 <input
                   value={newCategoryColor}
                   onChange={(event) => setNewCategoryColor(event.target.value)}

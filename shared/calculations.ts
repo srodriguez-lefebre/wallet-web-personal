@@ -168,7 +168,7 @@ export function calculateCategoryExpenses(
   );
 
   return dataset.categories
-    .filter((category) => category.type === "expense" && !category.parentId)
+    .filter((category) => !category.parentId)
     .map((category) => {
       const value = records
         .filter(

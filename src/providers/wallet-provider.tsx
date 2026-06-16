@@ -224,34 +224,17 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   function updateCategory(categoryId: string, category: Omit<Category, "id">) {
-    setDataset((current) => {
-      const currentCategory = current.categories.find(
-        (candidate) => candidate.id === categoryId,
-      );
-      const shouldCascadeType =
-        currentCategory && currentCategory.type !== category.type;
-
-      return {
-        ...current,
-        categories: current.categories.map((currentItem) => {
-          if (currentItem.id === categoryId) {
-            return {
+    setDataset((current) => ({
+      ...current,
+      categories: current.categories.map((currentItem) =>
+        currentItem.id === categoryId
+          ? {
               ...category,
               id: categoryId,
-            };
-          }
-
-          if (shouldCascadeType && currentItem.parentId === categoryId) {
-            return {
-              ...currentItem,
-              type: category.type,
-            };
-          }
-
-          return currentItem;
-        }),
-      };
-    });
+            }
+          : currentItem,
+      ),
+    }));
   }
 
   const deleteCategory = useCallback((categoryId: string) => {

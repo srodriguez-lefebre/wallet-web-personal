@@ -30,12 +30,10 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
-function firstCategoryIdForType(
+function firstCategoryId(
   categories: ReturnType<typeof useWallet>["dataset"]["categories"],
-  type: RecordType,
 ) {
-  const categoryType = type === "income" ? "income" : "expense";
-  return categories.find((category) => category.type === categoryType)?.id ?? "";
+  return categories[0]?.id ?? "";
 }
 
 function formatCategoryName(categories: Category[], category: Category) {
@@ -128,7 +126,7 @@ export function RecordsView() {
     defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
   );
   const [categoryId, setCategoryId] = useState(
-    firstCategoryIdForType(dataset.categories, "expense"),
+    firstCategoryId(dataset.categories),
   );
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
@@ -136,11 +134,7 @@ export function RecordsView() {
   const [counterpartyName, setCounterpartyName] = useState("");
   const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
-  const categories = sortCategoriesForSelect(
-    dataset.categories.filter((category) =>
-      type === "income" ? category.type === "income" : category.type === "expense",
-    ),
-  );
+  const categories = sortCategoriesForSelect(dataset.categories);
   const selectedAccountBalance = recordFilters.accountId
     ? calculateAccountBalances(dataset).find(
         (balance) => balance.account.id === recordFilters.accountId,
@@ -219,7 +213,7 @@ export function RecordsView() {
     setType(nextType);
     setAccountId(nextAccountId);
     setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
-    setCategoryId(firstCategoryIdForType(dataset.categories, nextType));
+    setCategoryId(firstCategoryId(dataset.categories));
     setAmount("");
     setNote("");
     setTagId("");
@@ -238,7 +232,7 @@ export function RecordsView() {
     setType(record.type);
     setAccountId(record.accountId);
     setDestinationAccountId(record.destinationAccountId ?? "");
-    setCategoryId(record.categoryId ?? firstCategoryIdForType(dataset.categories, record.type));
+    setCategoryId(record.categoryId ?? firstCategoryId(dataset.categories));
     setAmount(String(record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
@@ -339,7 +333,7 @@ export function RecordsView() {
                   type="button"
                   onClick={() => {
                     setType(item);
-                    setCategoryId(firstCategoryIdForType(dataset.categories, item));
+                    setCategoryId(firstCategoryId(dataset.categories));
                     setPaymentType(item === "transfer" ? "transfer" : "credit");
                   }}
                   className={typeButtonClassName(item, type)}

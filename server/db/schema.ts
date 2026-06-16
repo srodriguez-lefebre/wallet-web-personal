@@ -40,8 +40,6 @@ export const paymentStatusEnum = pgEnum("payment_status", [
   "cancelled",
 ]);
 
-export const categoryTypeEnum = pgEnum("category_type", ["expense", "income"]);
-
 export const goalStatusEnum = pgEnum("goal_status", [
   "active",
   "completed",
@@ -74,11 +72,9 @@ export const accounts = pgTable("accounts", {
 export const categories = pgTable("categories", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  type: categoryTypeEnum("type").notNull(),
   parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
   color: text("color").notNull(),
   icon: text("icon").notNull(),
-  isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -15,8 +15,6 @@ export type PaymentType = "cash" | "debit" | "credit" | "transfer" | "other";
 
 export type PaymentStatus = "cleared" | "pending" | "cancelled";
 
-export type CategoryType = "expense" | "income";
-
 export type GoalStatus = "active" | "completed" | "paused" | "cancelled";
 
 export type BudgetStatus = "ok" | "warning" | "exceeded";
@@ -44,11 +42,9 @@ export interface Account {
 export interface Category {
   id: string;
   name: string;
-  type: CategoryType;
   parentId?: string;
   color: string;
   icon: string;
-  isActive: boolean;
 }
 
 export interface Tag {
