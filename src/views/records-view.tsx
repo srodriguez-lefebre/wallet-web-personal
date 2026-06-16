@@ -129,6 +129,7 @@ export function RecordsView() {
     updateRecord,
     deleteRecord,
     newRecordRequestId,
+    consumeNewRecordRequest,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
@@ -180,8 +181,9 @@ export function RecordsView() {
       setPaymentType("credit");
       setPaymentStatus("cleared");
       setIsRecordDialogOpen(true);
+      consumeNewRecordRequest();
     });
-  }, [dataset, newRecordRequestId]);
+  }, [consumeNewRecordRequest, dataset, newRecordRequestId]);
 
   const filteredRecords = useMemo(() => {
     const periodRecords =

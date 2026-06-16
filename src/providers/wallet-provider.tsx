@@ -42,6 +42,7 @@ interface WalletContextValue {
   setCustomDateRange: (range: DateRange) => void;
   newRecordRequestId: number;
   requestNewRecord: () => void;
+  consumeNewRecordRequest: () => void;
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
@@ -144,6 +145,20 @@ function normalizeDateRange(range: DateRange): DateRange {
   };
 }
 
+function defaultRecordAccountId(dataset: WalletDataset) {
+  const activeVisibleAccounts = dataset.accounts.filter(
+    (account) => account.isActive && account.isVisible,
+  );
+
+  return (
+    activeVisibleAccounts.find(
+      (account) => account.id === dataset.settings.primaryAccountId,
+    )?.id ??
+    activeVisibleAccounts[0]?.id ??
+    dataset.accounts.find((account) => account.isActive)?.id
+  );
+}
+
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
   const [hasCachedDataset] = useState(() => Boolean(readCachedDataset()));
@@ -169,9 +184,12 @@ export function WalletProvider({ children }: PropsWithChildren) {
     [customDateRange, selectedMonth, selectedPeriodMode],
   );
   const [newRecordRequestId, setNewRecordRequestId] = useState(0);
-  const [recordFilters, setRecordFiltersState] = useState<RecordFilters>({
-    type: "all",
-  });
+  const [recordFilters, setRecordFiltersState] = useState<RecordFilters>(
+    () => ({
+      type: "all",
+      accountId: defaultRecordAccountId(dataset),
+    }),
+  );
 
   function setSelectedMonth(month: string) {
     setSelectedMonthState(month);
@@ -267,7 +285,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   function requestNewRecord() {
+    setRecordFiltersState({
+      type: "all",
+      accountId: defaultRecordAccountId(dataset),
+    });
     setNewRecordRequestId(Date.now());
+  }
+
+  function consumeNewRecordRequest() {
+    setNewRecordRequestId(0);
   }
 
   async function addAccount(account: Omit<Account, "id">) {
@@ -660,6 +686,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         setCustomDateRange,
         newRecordRequestId,
         requestNewRecord,
+        consumeNewRecordRequest,
         recordFilters,
         setRecordFilters,
         clearRecordFilters,
