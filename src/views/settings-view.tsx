@@ -345,21 +345,6 @@ export function SettingsView() {
           />
           <Button
             type="button"
-            variant="outline"
-            size="icon"
-            aria-label={`Ver registros de ${category.name}`}
-            title="Ver registros"
-            onClick={() =>
-              openRecords({
-                type: "all",
-                categoryId: category.id,
-              })
-            }
-          >
-            <Eye className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
             size="icon"
             aria-label={`Guardar ${category.name}`}
             title="Guardar"
