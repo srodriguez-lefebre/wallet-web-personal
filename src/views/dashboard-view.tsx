@@ -14,6 +14,7 @@ import {
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Flag,
   Landmark,
   WalletCards,
 } from "lucide-react";
@@ -21,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useWallet } from "@/providers/wallet-provider";
@@ -29,6 +31,7 @@ import {
   calculateAccountBalances,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
+  calculateGoalProgress,
   calculateSummary,
   calculateSummaryForDateRange,
   dateKeysForRange,
@@ -37,6 +40,7 @@ import {
   relativeDateRanges,
   relativeMonthKeys,
 } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
 import type { DateRange } from "@shared/types";
 
 export function DashboardView() {
@@ -64,6 +68,9 @@ export function DashboardView() {
     selectedPeriodMode === "custom"
       ? calculateCategoryExpensesForDateRange(dataset, selectedDateRange)
       : calculateCategoryExpenses(dataset, selectedMonth);
+  const visibleGoals = calculateGoalProgress(dataset).filter(
+    (item) => item.goal.isVisible,
+  );
   const balanceCurrency =
     primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
   const balancePeriods =
@@ -282,7 +289,7 @@ export function DashboardView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Visible accounts</CardTitle>
+            <CardTitle>Visible accounts & goals</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleBalances.map(
@@ -323,6 +330,67 @@ export function DashboardView() {
                 </div>
               ),
             )}
+            <div className="border-t pt-3">
+              <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">
+                Goals
+              </p>
+              {visibleGoals.length > 0 ? (
+                <div className="space-y-3">
+                  {visibleGoals.map((item) => (
+                    <div
+                      key={item.goal.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate(`/goals/${item.goal.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/goals/${item.goal.id}`);
+                        }
+                      }}
+                      className="cursor-pointer rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-white"
+                            style={{ backgroundColor: item.goal.color }}
+                          >
+                            <Flag className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">
+                              {item.goal.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {goalStatusLabels[item.goal.status]} - Reserved{" "}
+                              {formatMoney(item.reserved, item.goal.currency)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p className="font-semibold">
+                            {formatMoney(item.remaining, item.goal.currency)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            remaining
+                          </p>
+                        </div>
+                      </div>
+                      <Progress
+                        value={item.percentage}
+                        className="mt-3"
+                        indicatorClassName="bg-sky-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  No visible goals
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 
