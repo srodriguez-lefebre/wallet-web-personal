@@ -22,9 +22,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Category, Tag } from "@shared/types";
+import type { Category, CategoryType, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
+type CategoryDraft = Omit<Category, "id">;
 
 function childCategories(categories: Category[], parentId: string) {
   return categories
@@ -32,11 +33,45 @@ function childCategories(categories: Category[], parentId: string) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+function parentCategoryOptions(
+  categories: Category[],
+  categoryId: string | undefined,
+  type: CategoryType,
+) {
+  return categories
+    .filter(
+      (category) =>
+        !category.parentId && category.id !== categoryId && category.type === type,
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function defaultCategoryIcon(type: CategoryType, parentId?: string) {
+  if (parentId) return "folder";
+  return type === "income" ? "coins" : "tag";
+}
+
 export function SettingsView() {
   const navigate = useNavigate();
-  const { dataset, setRecordFilters, addTag, updateTag, deleteTag } = useWallet();
+  const {
+    dataset,
+    setRecordFilters,
+    addCategory,
+    updateCategory,
+    deleteCategory,
+    addTag,
+    updateTag,
+    deleteTag,
+  } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryType, setNewCategoryType] = useState<CategoryType>("expense");
+  const [newCategoryParentId, setNewCategoryParentId] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
+  const [categoryDrafts, setCategoryDrafts] = useState<
+    Record<string, CategoryDraft>
+  >({});
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#2563EB");
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
@@ -48,6 +83,99 @@ export function SettingsView() {
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
     navigate("/records");
+  }
+
+  function getCategoryDraft(category: Category): CategoryDraft {
+    return (
+      categoryDrafts[category.id] ?? {
+        name: category.name,
+        type: category.type,
+        parentId: category.parentId,
+        color: category.color,
+        icon: category.icon,
+        isActive: category.isActive,
+      }
+    );
+  }
+
+  function updateCategoryDraft(
+    categoryId: string,
+    patch: Partial<CategoryDraft>,
+  ) {
+    const currentCategory = dataset.categories.find(
+      (category) => category.id === categoryId,
+    );
+    if (!currentCategory) return;
+
+    setCategoryDrafts((current) => {
+      const currentDraft =
+        current[categoryId] ??
+        ({
+          name: currentCategory.name,
+          type: currentCategory.type,
+          parentId: currentCategory.parentId,
+          color: currentCategory.color,
+          icon: currentCategory.icon,
+          isActive: currentCategory.isActive,
+        } satisfies CategoryDraft);
+      const nextDraft = {
+        ...currentDraft,
+        ...patch,
+      };
+
+      if (patch.type && patch.type !== currentDraft.type) {
+        nextDraft.parentId = undefined;
+      }
+
+      return {
+        ...current,
+        [categoryId]: nextDraft,
+      };
+    });
+  }
+
+  function clearCategoryDraft(categoryId: string) {
+    setCategoryDrafts((current) => {
+      const next = { ...current };
+      delete next[categoryId];
+      return next;
+    });
+  }
+
+  function handleAddCategory(event: FormEvent) {
+    event.preventDefault();
+    const name = newCategoryName.trim();
+    if (!name) return;
+
+    addCategory({
+      name,
+      type: newCategoryType,
+      parentId: newCategoryParentId || undefined,
+      color: newCategoryColor,
+      icon: defaultCategoryIcon(newCategoryType, newCategoryParentId),
+      isActive: true,
+    });
+    setNewCategoryName("");
+    setNewCategoryParentId("");
+    setNewCategoryColor("#2563EB");
+  }
+
+  function handleSaveCategory(category: Category) {
+    const draft = getCategoryDraft(category);
+    const name = draft.name.trim();
+    if (!name) return;
+
+    updateCategory(category.id, {
+      ...draft,
+      name,
+      parentId: draft.parentId || undefined,
+    });
+    clearCategoryDraft(category.id);
+  }
+
+  function handleDeleteCategory(categoryId: string) {
+    deleteCategory(categoryId);
+    clearCategoryDraft(categoryId);
   }
 
   function getTagDraft(tag: Tag): TagDraft {
@@ -122,6 +250,142 @@ export function SettingsView() {
     clearTagDraft(tagId);
   }
 
+  function renderCategoryEditor(category: Category, level = 0) {
+    const draft = getCategoryDraft(category);
+    const children = childCategories(dataset.categories, category.id);
+    const hasChildren = children.length > 0;
+    const parentOptions = parentCategoryOptions(
+      dataset.categories,
+      category.id,
+      draft.type,
+    );
+    const isDirty =
+      draft.name !== category.name ||
+      draft.type !== category.type ||
+      (draft.parentId ?? "") !== (category.parentId ?? "") ||
+      draft.color !== category.color ||
+      draft.icon !== category.icon ||
+      draft.isActive !== category.isActive;
+
+    return (
+      <div key={category.id} className={level > 0 ? "ml-4 border-l pl-4" : ""}>
+        <div className="grid gap-2 rounded-md border p-3 lg:grid-cols-[auto_1fr_110px_170px_110px_110px_auto_auto_auto]">
+          <input
+            value={draft.color}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, { color: event.target.value })
+            }
+            type="color"
+            className={colorInputClassName}
+            aria-label={`Color de ${category.name}`}
+          />
+          <input
+            value={draft.name}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, { name: event.target.value })
+            }
+            className={fieldClassName}
+            placeholder="Name"
+          />
+          <select
+            value={draft.type}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, {
+                type: event.target.value as CategoryType,
+              })
+            }
+            className={fieldClassName}
+          >
+            <option value="expense">Expense</option>
+            <option value="income">Income</option>
+          </select>
+          <select
+            value={draft.parentId ?? ""}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, {
+                parentId: event.target.value || undefined,
+              })
+            }
+            className={fieldClassName}
+            disabled={hasChildren}
+            title={
+              hasChildren
+                ? "Una categoria con hijas debe quedar como padre"
+                : "Categoria padre"
+            }
+          >
+            <option value="">No parent</option>
+            {parentOptions.map((parent) => (
+              <option key={parent.id} value={parent.id}>
+                {parent.name}
+              </option>
+            ))}
+          </select>
+          <input
+            value={draft.icon}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, { icon: event.target.value })
+            }
+            className={fieldClassName}
+            placeholder="Icon"
+          />
+          <select
+            value={draft.isActive ? "active" : "inactive"}
+            onChange={(event) =>
+              updateCategoryDraft(category.id, {
+                isActive: event.target.value === "active",
+              })
+            }
+            className={fieldClassName}
+          >
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            aria-label={`Ver registros de ${category.name}`}
+            title="Ver registros"
+            onClick={() =>
+              openRecords({
+                type: category.type === "income" ? "income" : "expense",
+                categoryId: category.id,
+              })
+            }
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            aria-label={`Guardar ${category.name}`}
+            title="Guardar"
+            disabled={!isDirty}
+            onClick={() => handleSaveCategory(category)}
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="icon"
+            aria-label={`Eliminar ${category.name}`}
+            title={hasChildren ? "Eliminar categoria e hijas" : "Eliminar"}
+            onClick={() => handleDeleteCategory(category.id)}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+        {children.length > 0 ? (
+          <div className="mt-2 space-y-2">
+            {children.map((child) => renderCategoryEditor(child, level + 1))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader
@@ -181,69 +445,72 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <WalletCards className="h-4 w-4" />
               Categorias
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            {dataset.categories
-              .filter((category) => !category.parentId)
-              .map((category) => {
-                const children = childCategories(dataset.categories, category.id);
+          <CardContent>
+            <div className="space-y-4">
+              <form
+                className="grid gap-2 lg:grid-cols-[1fr_120px_170px_auto_auto]"
+                onSubmit={handleAddCategory}
+              >
+                <input
+                  value={newCategoryName}
+                  onChange={(event) => setNewCategoryName(event.target.value)}
+                  className={fieldClassName}
+                  placeholder="New category"
+                />
+                <select
+                  value={newCategoryType}
+                  onChange={(event) => {
+                    setNewCategoryType(event.target.value as CategoryType);
+                    setNewCategoryParentId("");
+                  }}
+                  className={fieldClassName}
+                >
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </select>
+                <select
+                  value={newCategoryParentId}
+                  onChange={(event) => setNewCategoryParentId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  <option value="">No parent</option>
+                  {parentCategoryOptions(
+                    dataset.categories,
+                    undefined,
+                    newCategoryType,
+                  ).map((parent) => (
+                    <option key={parent.id} value={parent.id}>
+                      {parent.name}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  value={newCategoryColor}
+                  onChange={(event) => setNewCategoryColor(event.target.value)}
+                  type="color"
+                  className={colorInputClassName}
+                  aria-label="Color de categoria nueva"
+                />
+                <Button type="submit">
+                  <Plus className="h-4 w-4" />
+                  Agregar
+                </Button>
+              </form>
 
-                return (
-                  <div key={category.id} className="rounded-md border p-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openRecords({
-                          type: category.type === "income" ? "income" : "expense",
-                          categoryId: category.id,
-                        })
-                      }
-                      className="flex w-full items-center gap-3 rounded-md text-left transition hover:text-primary"
-                    >
-                      <span
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: category.color }}
-                      />
-                      <div>
-                        <p className="font-medium">{category.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {category.type}
-                        </p>
-                      </div>
-                    </button>
-                    {children.length > 0 ? (
-                      <div className="mt-3 space-y-2 border-l pl-4">
-                        {children.map((child) => (
-                          <button
-                            key={child.id}
-                            type="button"
-                            onClick={() =>
-                              openRecords({
-                                type:
-                                  child.type === "income" ? "income" : "expense",
-                                categoryId: child.id,
-                              })
-                            }
-                            className="flex w-full items-center gap-2 rounded-md text-left text-sm transition hover:text-primary"
-                          >
-                            <span
-                              className="h-2.5 w-2.5 rounded-full"
-                              style={{ backgroundColor: child.color }}
-                            />
-                            <span>{child.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+              <div className="space-y-3">
+                {dataset.categories
+                  .filter((category) => !category.parentId)
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map((category) => renderCategoryEditor(category))}
+              </div>
+            </div>
           </CardContent>
         </Card>
 

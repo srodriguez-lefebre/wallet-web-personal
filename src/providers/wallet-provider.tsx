@@ -9,6 +9,7 @@ import {
 import { mockWalletData } from "@shared/mock-data";
 import type {
   Account,
+  Category,
   Goal,
   GoalReservation,
   Investment,
@@ -31,6 +32,9 @@ interface WalletContextValue {
   addRecord: (record: Omit<WalletRecord, "id">) => void;
   updateRecord: (recordId: string, record: Omit<WalletRecord, "id">) => void;
   deleteRecord: (recordId: string) => void;
+  addCategory: (category: Omit<Category, "id">) => string;
+  updateCategory: (categoryId: string, category: Omit<Category, "id">) => void;
+  deleteCategory: (categoryId: string) => void;
   addTag: (tag: Omit<Tag, "id">) => string;
   updateTag: (tagId: string, tag: Omit<Tag, "id">) => void;
   deleteTag: (tagId: string) => void;
@@ -49,6 +53,23 @@ interface WalletContextValue {
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
+
+function collectCategoryTreeIds(categories: Category[], categoryId: string) {
+  const ids = new Set([categoryId]);
+  let didAdd = true;
+
+  while (didAdd) {
+    didAdd = false;
+    categories.forEach((category) => {
+      if (category.parentId && ids.has(category.parentId) && !ids.has(category.id)) {
+        ids.add(category.id);
+        didAdd = true;
+      }
+    });
+  }
+
+  return ids;
+}
 
 export function WalletProvider({ children }: PropsWithChildren) {
   const [dataset, setDataset] = useState<WalletDataset>(mockWalletData);
@@ -186,6 +207,88 @@ export function WalletProvider({ children }: PropsWithChildren) {
       ),
     }));
   }
+
+  function addCategory(category: Omit<Category, "id">) {
+    const id = `cat-${crypto.randomUUID()}`;
+    setDataset((current) => ({
+      ...current,
+      categories: [
+        {
+          ...category,
+          id,
+        },
+        ...current.categories,
+      ],
+    }));
+    return id;
+  }
+
+  function updateCategory(categoryId: string, category: Omit<Category, "id">) {
+    setDataset((current) => {
+      const currentCategory = current.categories.find(
+        (candidate) => candidate.id === categoryId,
+      );
+      const shouldCascadeType =
+        currentCategory && currentCategory.type !== category.type;
+
+      return {
+        ...current,
+        categories: current.categories.map((currentItem) => {
+          if (currentItem.id === categoryId) {
+            return {
+              ...category,
+              id: categoryId,
+            };
+          }
+
+          if (shouldCascadeType && currentItem.parentId === categoryId) {
+            return {
+              ...currentItem,
+              type: category.type,
+            };
+          }
+
+          return currentItem;
+        }),
+      };
+    });
+  }
+
+  const deleteCategory = useCallback((categoryId: string) => {
+    setDataset((current) => {
+      const categoryIds = collectCategoryTreeIds(current.categories, categoryId);
+
+      return {
+        ...current,
+        categories: current.categories.filter(
+          (category) => !categoryIds.has(category.id),
+        ),
+        records: current.records.map((record) =>
+          record.categoryId && categoryIds.has(record.categoryId)
+            ? {
+                ...record,
+                categoryId: undefined,
+              }
+            : record,
+        ),
+        budgets: current.budgets.map((budget) =>
+          budget.categoryId && categoryIds.has(budget.categoryId)
+            ? {
+                ...budget,
+                categoryId: undefined,
+              }
+            : budget,
+        ),
+        installmentPlans: current.installmentPlans.filter(
+          (plan) => !categoryIds.has(plan.categoryId),
+        ),
+      };
+    });
+    setRecordFiltersState((current) => ({
+      ...current,
+      categoryId: undefined,
+    }));
+  }, []);
 
   function addTag(tag: Omit<Tag, "id">) {
     const id = `tag-${crypto.randomUUID()}`;
@@ -382,6 +485,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       addRecord,
       updateRecord,
       deleteRecord,
+      addCategory,
+      updateCategory,
+      deleteCategory,
       addTag,
       updateTag,
       deleteTag,
@@ -395,7 +501,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       toggleAccountVisibility,
       setPrimaryAccount,
     }),
-    [dataset, deleteTag, recordFilters, selectedMonth],
+    [dataset, deleteCategory, deleteTag, recordFilters, selectedMonth],
   );
 
   return <WalletContext.Provider value={value}>{children}</WalletContext.Provider>;
