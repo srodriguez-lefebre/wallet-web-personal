@@ -2,6 +2,8 @@ import { FormEvent, useState } from "react";
 import {
   ArrowRight,
   Banknote,
+  ChevronDown,
+  ChevronRight,
   Eye,
   Lock,
   Moon,
@@ -19,6 +21,14 @@ import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
@@ -26,10 +36,6 @@ import type { Category, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
-type NewChildCategoryDraft = {
-  name: string;
-  color: string;
-};
 
 function childCategories(categories: Category[], parentId: string) {
   return categories
@@ -51,10 +57,13 @@ export function SettingsView() {
   } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryParentId, setNewCategoryParentId] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
-  const [newChildCategoryDrafts, setNewChildCategoryDrafts] = useState<
-    Record<string, NewChildCategoryDraft>
+  const [newCategoryIcon, setNewCategoryIcon] = useState("tag");
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<
+    Record<string, boolean>
   >({});
   const [categoryDrafts, setCategoryDrafts] = useState<
     Record<string, CategoryDraft>
@@ -121,6 +130,13 @@ export function SettingsView() {
     });
   }
 
+  function toggleCategoryExpansion(categoryId: string) {
+    setExpandedCategoryIds((current) => ({
+      ...current,
+      [categoryId]: !current[categoryId],
+    }));
+  }
+
   function handleAddCategory(event: FormEvent) {
     event.preventDefault();
     const name = newCategoryName.trim();
@@ -128,59 +144,15 @@ export function SettingsView() {
 
     addCategory({
       name,
+      parentId: newCategoryParentId || undefined,
       color: newCategoryColor,
-      icon: "tag",
+      icon: newCategoryIcon.trim() || "tag",
     });
     setNewCategoryName("");
+    setNewCategoryParentId("");
     setNewCategoryColor("#2563EB");
-  }
-
-  function getNewChildCategoryDraft(parentId: string) {
-    return (
-      newChildCategoryDrafts[parentId] ?? {
-        name: "",
-        color: "#2563EB",
-      }
-    );
-  }
-
-  function updateNewChildCategoryDraft(
-    parentId: string,
-    patch: Partial<NewChildCategoryDraft>,
-  ) {
-    setNewChildCategoryDrafts((current) => ({
-      ...current,
-      [parentId]: {
-        ...(current[parentId] ?? {
-          name: "",
-          color: "#2563EB",
-        }),
-        ...patch,
-      },
-    }));
-  }
-
-  function clearNewChildCategoryDraft(parentId: string) {
-    setNewChildCategoryDrafts((current) => {
-      const next = { ...current };
-      delete next[parentId];
-      return next;
-    });
-  }
-
-  function handleAddChildCategory(event: FormEvent, parent: Category) {
-    event.preventDefault();
-    const draft = getNewChildCategoryDraft(parent.id);
-    const name = draft.name.trim();
-    if (!name) return;
-
-    addCategory({
-      name,
-      parentId: parent.id,
-      color: draft.color,
-      icon: "folder",
-    });
-    clearNewChildCategoryDraft(parent.id);
+    setNewCategoryIcon("tag");
+    setIsCategoryDialogOpen(false);
   }
 
   function handleSaveCategory(category: Category) {
@@ -276,15 +248,37 @@ export function SettingsView() {
     const draft = getCategoryDraft(category);
     const children = childCategories(dataset.categories, category.id);
     const hasChildren = children.length > 0;
+    const isExpanded = Boolean(expandedCategoryIds[category.id]);
     const isDirty =
       draft.name !== category.name ||
       draft.color !== category.color ||
       draft.icon !== category.icon;
-    const childDraft = getNewChildCategoryDraft(category.id);
 
     return (
       <div key={category.id} className={level > 0 ? "ml-4 border-l pl-4" : ""}>
-        <div className="grid gap-2 rounded-md border p-3 md:grid-cols-[auto_1fr_auto_auto_auto]">
+        <div className="grid gap-2 rounded-md border p-2 md:grid-cols-[auto_auto_1fr_auto_auto_auto]">
+          {hasChildren && level === 0 ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={
+                isExpanded
+                  ? `Ocultar hijas de ${category.name}`
+                  : `Mostrar hijas de ${category.name}`
+              }
+              title={isExpanded ? "Ocultar hijas" : "Mostrar hijas"}
+              onClick={() => toggleCategoryExpansion(category.id)}
+            >
+              {isExpanded ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
+          ) : (
+            <span className="hidden h-10 w-10 md:block" aria-hidden="true" />
+          )}
           <input
             value={draft.color}
             onChange={(event) =>
@@ -338,39 +332,7 @@ export function SettingsView() {
             <Trash2 className="h-4 w-4" />
           </Button>
         </div>
-        {level === 0 ? (
-          <form
-            className="mt-2 grid gap-2 rounded-md border border-dashed p-3 md:grid-cols-[1fr_auto_auto]"
-            onSubmit={(event) => handleAddChildCategory(event, category)}
-          >
-            <input
-              value={childDraft.name}
-              onChange={(event) =>
-                updateNewChildCategoryDraft(category.id, {
-                  name: event.target.value,
-                })
-              }
-              className={fieldClassName}
-              placeholder={`New child in ${category.name}`}
-            />
-            <input
-              value={childDraft.color}
-              onChange={(event) =>
-                updateNewChildCategoryDraft(category.id, {
-                  color: event.target.value,
-                })
-              }
-              type="color"
-              className={colorInputClassName}
-              aria-label={`Color de nueva hija de ${category.name}`}
-            />
-            <Button type="submit" variant="outline">
-              <Plus className="h-4 w-4" />
-              Agregar hija
-            </Button>
-          </form>
-        ) : null}
-        {hasChildren ? (
+        {hasChildren && level === 0 && isExpanded ? (
           <div className="mt-2 space-y-2">
             {children.map((child) => renderCategoryEditor(child, level + 1))}
           </div>
@@ -438,38 +400,93 @@ export function SettingsView() {
           </CardContent>
         </Card>
 
-        <Card className="xl:col-span-2">
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <WalletCards className="h-4 w-4" />
-              Categorias
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <WalletCards className="h-4 w-4" />
+                Categorias
+              </CardTitle>
+              <Dialog
+                open={isCategoryDialogOpen}
+                onOpenChange={setIsCategoryDialogOpen}
+              >
+                <DialogTrigger asChild>
+                  <Button size="icon" aria-label="Nueva categoria">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Nueva categoria</DialogTitle>
+                    <DialogDescription>
+                      Crea una categoria padre o elegi un padre para crear una hija.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <form className="space-y-4" onSubmit={handleAddCategory}>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Nombre</span>
+                      <input
+                        value={newCategoryName}
+                        onChange={(event) => setNewCategoryName(event.target.value)}
+                        className={fieldClassName}
+                        placeholder="Groceries, Butcher, Rent..."
+                      />
+                    </label>
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Padre</span>
+                      <select
+                        value={newCategoryParentId}
+                        onChange={(event) =>
+                          setNewCategoryParentId(event.target.value)
+                        }
+                        className={fieldClassName}
+                      >
+                        <option value="">Sin padre</option>
+                        {dataset.categories
+                          .filter((category) => !category.parentId)
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                    <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Color</span>
+                        <input
+                          value={newCategoryColor}
+                          onChange={(event) =>
+                            setNewCategoryColor(event.target.value)
+                          }
+                          type="color"
+                          className={colorInputClassName}
+                          aria-label="Color de categoria nueva"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Icono</span>
+                        <input
+                          value={newCategoryIcon}
+                          onChange={(event) => setNewCategoryIcon(event.target.value)}
+                          className={fieldClassName}
+                          placeholder="tag"
+                        />
+                      </label>
+                    </div>
+                    <Button className="w-full" type="submit">
+                      <Plus className="h-4 w-4" />
+                      Agregar categoria
+                    </Button>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <form
-                className="grid gap-2 md:grid-cols-[1fr_auto_auto]"
-                onSubmit={handleAddCategory}
-              >
-                <input
-                  value={newCategoryName}
-                  onChange={(event) => setNewCategoryName(event.target.value)}
-                  className={fieldClassName}
-                  placeholder="New parent category"
-                />
-                <input
-                  value={newCategoryColor}
-                  onChange={(event) => setNewCategoryColor(event.target.value)}
-                  type="color"
-                  className={colorInputClassName}
-                  aria-label="Color de categoria nueva"
-                />
-                <Button type="submit">
-                  <Plus className="h-4 w-4" />
-                  Agregar
-                </Button>
-              </form>
-
+            <div className="space-y-3">
               <div className="space-y-3">
                 {dataset.categories
                   .filter((category) => !category.parentId)
