@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateAccountBalances, formatMoney } from "@shared/calculations";
+import { accountTypeLabels } from "@shared/constants";
 import type { Account, AccountType, CurrencyCode } from "@shared/types";
 
 interface AccountDraft {
@@ -42,13 +43,13 @@ interface AccountDraft {
 }
 
 const accountTypeOptions: Array<{ value: AccountType; label: string }> = [
-  { value: "cash", label: "Efectivo" },
-  { value: "bank", label: "Banco" },
-  { value: "credit_card", label: "Tarjeta" },
-  { value: "savings", label: "Ahorro" },
-  { value: "recurring", label: "Recurrente" },
-  { value: "investment", label: "Inversion" },
-  { value: "custom", label: "Personalizada" },
+  { value: "cash", label: accountTypeLabels.cash },
+  { value: "bank", label: accountTypeLabels.bank },
+  { value: "credit_card", label: accountTypeLabels.credit_card },
+  { value: "savings", label: accountTypeLabels.savings },
+  { value: "recurring", label: accountTypeLabels.recurring },
+  { value: "investment", label: accountTypeLabels.investment },
+  { value: "custom", label: accountTypeLabels.custom },
 ];
 
 function buildAccountDrafts(
@@ -179,7 +180,7 @@ export function AccountsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Revisa que cada cuenta tenga nombre y balance valido.");
+      setEditError("Make sure every account has a name and a valid balance.");
       return;
     }
 
@@ -256,26 +257,26 @@ export function AccountsView() {
     <div>
       <PageHeader
         eyebrow="Accounts"
-        title="Cuentas"
-        description="Toca una cuenta para ver sus registros. Edita, crea y controla visibilidad desde aca."
+        title="Accounts"
+        description="Open an account to inspect its records. Edit, create, and control visibility here."
       >
         {isEditing ? (
           <>
             <Button
               size="icon"
               variant="outline"
-              aria-label={showHidden ? "Ocultar cuentas ocultas" : "Ver cuentas ocultas"}
+              aria-label={showHidden ? "Hide hidden accounts" : "Show hidden accounts"}
               onClick={() => setShowHidden((current) => !current)}
             >
               {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Button variant="outline" onClick={cancelEditingAccounts}>
               <X className="h-4 w-4" />
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={saveAccountEdits}>
               <Save className="h-4 w-4" />
-              Guardar
+              Save
             </Button>
           </>
         ) : (
@@ -283,7 +284,7 @@ export function AccountsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label="Editar cuentas"
+              aria-label="Edit accounts"
               disabled={dataset.accounts.length === 0}
               onClick={startEditingAccounts}
             >
@@ -291,20 +292,20 @@ export function AccountsView() {
             </Button>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button size="icon" aria-label="Nueva cuenta">
+                <Button size="icon" aria-label="New account">
                   <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Nueva cuenta</DialogTitle>
+                  <DialogTitle>New account</DialogTitle>
                   <DialogDescription>
-                    Crea una cuenta para efectivo, banco, tarjeta, ahorro o uso custom.
+                    Create an account for cash, bank, card, savings, or custom use.
                   </DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={handleCreateAccount}>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Nombre</span>
+                    <span className="text-sm font-medium">Name</span>
                     <input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
@@ -314,7 +315,7 @@ export function AccountsView() {
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Tipo</span>
+                      <span className="text-sm font-medium">Type</span>
                       <select
                         value={type}
                         onChange={(event) => setType(event.target.value as AccountType)}
@@ -328,7 +329,7 @@ export function AccountsView() {
                       </select>
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Moneda</span>
+                      <span className="text-sm font-medium">Currency</span>
                       <select
                         value={currency}
                         onChange={(event) =>
@@ -346,7 +347,7 @@ export function AccountsView() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Balance inicial</span>
+                      <span className="text-sm font-medium">Initial balance</span>
                       <input
                         value={initialBalance}
                         onChange={(event) => setInitialBalance(event.target.value)}
@@ -367,7 +368,7 @@ export function AccountsView() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Visibilidad</span>
+                      <span className="text-sm font-medium">Visibility</span>
                       <select
                         value={isVisible ? "visible" : "hidden"}
                         onChange={(event) =>
@@ -376,11 +377,11 @@ export function AccountsView() {
                         className={inputClassName}
                       >
                         <option value="visible">Visible</option>
-                        <option value="hidden">Oculta</option>
+                        <option value="hidden">Hidden</option>
                       </select>
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Estado</span>
+                      <span className="text-sm font-medium">Status</span>
                       <select
                         value={isActive ? "active" : "inactive"}
                         onChange={(event) =>
@@ -388,23 +389,23 @@ export function AccountsView() {
                         }
                         className={inputClassName}
                       >
-                        <option value="active">Activa</option>
-                        <option value="inactive">Inactiva</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
                       </select>
                     </label>
                   </div>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Nota</span>
+                    <span className="text-sm font-medium">Note</span>
                     <textarea
                       value={note}
                       onChange={(event) => setNote(event.target.value)}
                       className={textareaClassName}
-                      placeholder="Contexto opcional"
+                      placeholder="Optional context"
                     />
                   </label>
                   <Button className="w-full" type="submit">
                     <Plus className="h-4 w-4" />
-                    Crear cuenta
+                    Create account
                   </Button>
                 </form>
               </DialogContent>
@@ -429,18 +430,18 @@ export function AccountsView() {
                         }
                         type="color"
                         className={colorInputClassName}
-                        aria-label={`Color de ${draft.name || "cuenta"}`}
+                        aria-label={`${draft.name || "Account"} color`}
                       />
                     </label>
                     <label className="block flex-1 space-y-2">
-                      <span className="text-sm font-medium">Nombre</span>
+                      <span className="text-sm font-medium">Name</span>
                       <input
                         value={draft.name}
                         onChange={(event) =>
                           updateAccountDraft(draft.id, { name: event.target.value })
                         }
                         className={inputClassName}
-                        placeholder="Nombre de la cuenta"
+                        placeholder="Account name"
                       />
                     </label>
                   </div>
@@ -449,8 +450,8 @@ export function AccountsView() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      aria-label={draft.isVisible ? "Ocultar cuenta" : "Mostrar cuenta"}
-                      title={draft.isVisible ? "Ocultar cuenta" : "Mostrar cuenta"}
+                      aria-label={draft.isVisible ? "Hide account" : "Show account"}
+                      title={draft.isVisible ? "Hide account" : "Show account"}
                       onClick={() =>
                         updateAccountDraft(draft.id, {
                           isVisible: !draft.isVisible,
@@ -467,8 +468,8 @@ export function AccountsView() {
                       type="button"
                       variant="destructive"
                       size="icon"
-                      aria-label="Eliminar cuenta"
-                      title="Eliminar cuenta"
+                      aria-label="Delete account"
+                      title="Delete account"
                       onClick={() => markAccountForDeletion(draft.id)}
                     >
                       <Trash2 className="h-4 w-4" />
@@ -479,7 +480,7 @@ export function AccountsView() {
               <CardContent className="space-y-4">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Tipo</span>
+                    <span className="text-sm font-medium">Type</span>
                     <select
                       value={draft.type}
                       onChange={(event) =>
@@ -497,7 +498,7 @@ export function AccountsView() {
                     </select>
                   </label>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Moneda</span>
+                    <span className="text-sm font-medium">Currency</span>
                     <select
                       value={draft.currency}
                       onChange={(event) =>
@@ -517,7 +518,7 @@ export function AccountsView() {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Balance inicial</span>
+                    <span className="text-sm font-medium">Initial balance</span>
                     <input
                       value={draft.initialBalance}
                       onChange={(event) =>
@@ -531,7 +532,7 @@ export function AccountsView() {
                     />
                   </label>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Estado</span>
+                    <span className="text-sm font-medium">Status</span>
                     <select
                       value={draft.isActive ? "active" : "inactive"}
                       onChange={(event) =>
@@ -541,14 +542,14 @@ export function AccountsView() {
                       }
                       className={inputClassName}
                     >
-                      <option value="active">Activa</option>
-                      <option value="inactive">Inactiva</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
                     </select>
                   </label>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Principal</span>
+                  <span className="text-sm font-medium">Primary</span>
                     <select
                       value={draft.isPrimary ? "primary" : "normal"}
                       onChange={(event) =>
@@ -558,20 +559,20 @@ export function AccountsView() {
                       }
                       className={inputClassName}
                     >
-                      <option value="normal">Normal</option>
-                      <option value="primary">Principal</option>
+                    <option value="normal">Regular</option>
+                    <option value="primary">Primary</option>
                     </select>
                   </label>
                 </div>
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium">Nota</span>
+                  <span className="text-sm font-medium">Note</span>
                   <textarea
                     value={draft.note}
                     onChange={(event) =>
                       updateAccountDraft(draft.id, { note: event.target.value })
                     }
                     className={textareaClassName}
-                    placeholder="Contexto opcional"
+                    placeholder="Optional context"
                   />
                 </label>
               </CardContent>
@@ -607,7 +608,7 @@ export function AccountsView() {
                         ) : null}
                       </CardTitle>
                       <p className="mt-1 text-sm text-muted-foreground">
-                        {account.type}
+                        {accountTypeLabels[account.type]}
                       </p>
                     </div>
                     <Badge variant={account.isVisible ? "success" : "muted"}>
@@ -616,7 +617,7 @@ export function AccountsView() {
                       ) : (
                         <EyeOff className="mr-1 h-3 w-3" />
                       )}
-                      {account.isVisible ? "Visible" : "Oculta"}
+                      {account.isVisible ? "Visible" : "Hidden"}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -626,13 +627,13 @@ export function AccountsView() {
                   </p>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Libre</p>
+                      <p className="text-muted-foreground">Free</p>
                       <p className="font-medium">
                         {formatMoney(freeBalance, account.currency)}
                       </p>
                     </div>
                     <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Reservado</p>
+                      <p className="text-muted-foreground">Reserved</p>
                       <p className="font-medium">
                         {formatMoney(reserved, account.currency)}
                       </p>
@@ -643,7 +644,7 @@ export function AccountsView() {
                       className="h-3 w-3 rounded-full"
                       style={{ backgroundColor: account.color }}
                     />
-                    {account.currency} · {account.isActive ? "Activa" : "Inactiva"}
+                    {account.currency} · {account.isActive ? "Active" : "Inactive"}
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
                     <Button
@@ -666,7 +667,7 @@ export function AccountsView() {
                       }}
                     >
                       <Star className="h-4 w-4" />
-                      {isPrimary ? "Principal" : "Set principal"}
+                      {isPrimary ? "Primary" : "Set primary"}
                     </Button>
                   </div>
                 </CardContent>

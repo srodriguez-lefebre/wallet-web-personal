@@ -1,4 +1,4 @@
-import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
+﻿import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney } from "@shared/calculations";
+import { investmentTypeLabels } from "@shared/constants";
 
 export function InvestmentDetailView() {
   const { investmentId } = useParams();
@@ -17,10 +18,10 @@ export function InvestmentDetailView() {
   if (!investment) {
     return (
       <div>
-        <PageHeader title="Inversion no encontrada" description="La inversion no existe." />
+        <PageHeader title="Investment not found" description="This investment does not exist." />
         <Button variant="outline" onClick={() => navigate("/investments")}>
           <ArrowLeft className="h-4 w-4" />
-          Volver
+          Back
         </Button>
       </div>
     );
@@ -35,7 +36,7 @@ export function InvestmentDetailView() {
       <PageHeader
         eyebrow="Investment detail"
         title={investment.name}
-        description="Detalle manual de la inversion, rendimiento actual y datos asociados."
+        description="Manual investment detail, current performance, and related data."
       >
         <Button variant="outline" onClick={() => navigate("/investments")}>
           <ArrowLeft className="h-4 w-4" />
@@ -55,12 +56,12 @@ export function InvestmentDetailView() {
                   <div>
                     <CardTitle>{investment.name}</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {investment.type} · iniciado {investment.startedAt}
+                      {investmentTypeLabels[investment.type]} · started {investment.startedAt}
                     </p>
                   </div>
                 </div>
                 <Badge variant={gain >= 0 ? "success" : "danger"}>
-                  {gain >= 0 ? "ganancia" : "perdida"}
+                  {gain >= 0 ? "gain" : "loss"}
                 </Badge>
               </div>
             </CardHeader>
@@ -71,19 +72,19 @@ export function InvestmentDetailView() {
               />
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Invertido</p>
+                  <p className="text-sm text-muted-foreground">Invested</p>
                   <p className="font-semibold">
                     {formatMoney(investment.amountInvested, investment.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Valor actual</p>
+                  <p className="text-sm text-muted-foreground">Current value</p>
                   <p className="font-semibold">
                     {formatMoney(investment.currentValue, investment.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Resultado</p>
+                  <p className="text-sm text-muted-foreground">Result</p>
                   <p className={gain >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-600"}>
                     {formatMoney(gain, investment.currency)}
                   </p>
@@ -94,7 +95,7 @@ export function InvestmentDetailView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Lectura rapida</CardTitle>
+              <CardTitle>Quick read</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between rounded-md border p-3">
@@ -104,15 +105,15 @@ export function InvestmentDetailView() {
                   ) : (
                     <TrendingDown className="h-4 w-4 text-red-600" />
                   )}
-                  <span className="font-medium">Rendimiento</span>
+                  <span className="font-medium">Performance</span>
                 </div>
                 <span className={gain >= 0 ? "text-emerald-600" : "text-red-600"}>
                   {gainPercentage.toFixed(2)}%
                 </span>
               </div>
               <div className="rounded-md border p-3">
-                <p className="text-sm text-muted-foreground">Nota</p>
-                <p className="mt-1 font-medium">{investment.note ?? "Sin nota asociada."}</p>
+                <p className="text-sm text-muted-foreground">Note</p>
+                <p className="mt-1 font-medium">{investment.note ?? "No note attached."}</p>
               </div>
             </CardContent>
           </Card>
@@ -120,19 +121,19 @@ export function InvestmentDetailView() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Info asociada</CardTitle>
+            <CardTitle>Related info</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-md border p-3">
-              <p className="text-sm text-muted-foreground">Moneda</p>
+              <p className="text-sm text-muted-foreground">Currency</p>
               <p className="font-semibold">{investment.currency}</p>
             </div>
             <div className="rounded-md border p-3">
-              <p className="text-sm text-muted-foreground">Tipo</p>
-              <p className="font-semibold">{investment.type}</p>
+              <p className="text-sm text-muted-foreground">Type</p>
+              <p className="font-semibold">{investmentTypeLabels[investment.type]}</p>
             </div>
             <div className="rounded-md border p-3">
-              <p className="text-sm text-muted-foreground">Seguimiento</p>
+              <p className="text-sm text-muted-foreground">Tracking</p>
               <p className="font-semibold">Manual</p>
             </div>
           </CardContent>
@@ -141,3 +142,4 @@ export function InvestmentDetailView() {
     </div>
   );
 }
+

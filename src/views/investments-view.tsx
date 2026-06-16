@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+﻿import { FormEvent, useState } from "react";
 import {
   Banknote,
   Edit3,
@@ -26,6 +26,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney } from "@shared/calculations";
+import { investmentTypeLabels } from "@shared/constants";
 import type { CurrencyCode, Investment } from "@shared/types";
 
 interface InvestmentDraft {
@@ -42,11 +43,11 @@ interface InvestmentDraft {
 }
 
 const investmentTypeOptions: Array<{ value: Investment["type"]; label: string }> = [
-  { value: "fund", label: "Fondo" },
-  { value: "stock", label: "Accion" },
-  { value: "crypto", label: "Crypto" },
-  { value: "deposit", label: "Deposito" },
-  { value: "other", label: "Otro" },
+  { value: "fund", label: investmentTypeLabels.fund },
+  { value: "stock", label: investmentTypeLabels.stock },
+  { value: "crypto", label: investmentTypeLabels.crypto },
+  { value: "deposit", label: investmentTypeLabels.deposit },
+  { value: "other", label: investmentTypeLabels.other },
 ];
 
 function buildInvestmentDrafts(investments: Investment[]): InvestmentDraft[] {
@@ -149,7 +150,7 @@ export function InvestmentsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Revisa nombre, invertido y valor actual en cada inversion.");
+      setEditError("Review name, invested amount, and current value for each investment.");
       return;
     }
 
@@ -210,26 +211,26 @@ export function InvestmentsView() {
     <div>
       <PageHeader
         eyebrow="Investments"
-        title="Inversiones"
-        description="Crea inversiones manuales y entra al detalle para ver rendimiento y contexto."
+        title="Investments"
+        description="Create manual investments and open details to review performance and context."
       >
         {isEditing ? (
           <>
             <Button
               size="icon"
               variant="outline"
-              aria-label={showHidden ? "Ocultar inversiones ocultas" : "Ver inversiones ocultas"}
+              aria-label={showHidden ? "Hide hidden investments" : "Show hidden investments"}
               onClick={() => setShowHidden((current) => !current)}
             >
               {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Button variant="outline" onClick={cancelEditingInvestments}>
               <X className="h-4 w-4" />
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={saveInvestmentEdits}>
               <Save className="h-4 w-4" />
-              Guardar
+              Save
             </Button>
           </>
         ) : (
@@ -237,7 +238,7 @@ export function InvestmentsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label="Editar inversiones"
+              aria-label="Edit investments"
               disabled={dataset.investments.length === 0}
               onClick={startEditingInvestments}
             >
@@ -245,20 +246,20 @@ export function InvestmentsView() {
             </Button>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button size="icon" aria-label="Nueva inversion">
+                <Button size="icon" aria-label="New investment">
                   <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Nueva inversion</DialogTitle>
+                  <DialogTitle>New investment</DialogTitle>
                   <DialogDescription>
-                    Carga una inversion manual para seguir valor actual y rendimiento.
+                    Add a manual investment to track current value and performance.
                   </DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={handleCreateInvestment}>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Nombre</span>
+                    <span className="text-sm font-medium">Name</span>
                     <input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
@@ -268,7 +269,7 @@ export function InvestmentsView() {
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Tipo</span>
+                      <span className="text-sm font-medium">Type</span>
                       <select
                         value={type}
                         onChange={(event) =>
@@ -284,7 +285,7 @@ export function InvestmentsView() {
                       </select>
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Moneda</span>
+                      <span className="text-sm font-medium">Currency</span>
                       <select
                         value={currency}
                         onChange={(event) =>
@@ -302,7 +303,7 @@ export function InvestmentsView() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Invertido</span>
+                      <span className="text-sm font-medium">Invested</span>
                       <input
                         value={amountInvested}
                         onChange={(event) => setAmountInvested(event.target.value)}
@@ -312,7 +313,7 @@ export function InvestmentsView() {
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Valor actual</span>
+                      <span className="text-sm font-medium">Current value</span>
                       <input
                         value={currentValue}
                         onChange={(event) => setCurrentValue(event.target.value)}
@@ -324,7 +325,7 @@ export function InvestmentsView() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Inicio</span>
+                      <span className="text-sm font-medium">Start date</span>
                       <input
                         value={startedAt}
                         onChange={(event) => setStartedAt(event.target.value)}
@@ -333,7 +334,7 @@ export function InvestmentsView() {
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Visibilidad</span>
+                      <span className="text-sm font-medium">Visibility</span>
                       <select
                         value={isVisible ? "visible" : "hidden"}
                         onChange={(event) =>
@@ -342,17 +343,17 @@ export function InvestmentsView() {
                         className={inputClassName}
                       >
                         <option value="visible">Visible</option>
-                        <option value="hidden">Oculta</option>
+                        <option value="hidden">Hidden</option>
                       </select>
                     </label>
                   </div>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Nota</span>
+                    <span className="text-sm font-medium">Note</span>
                     <textarea
                       value={note}
                       onChange={(event) => setNote(event.target.value)}
                       className={textareaClassName}
-                      placeholder="Contexto opcional"
+                      placeholder="Optional context"
                     />
                   </label>
                   <Button className="w-full" type="submit">
@@ -372,7 +373,7 @@ export function InvestmentsView() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Landmark className="h-4 w-4" />
-                Inversiones
+                Investments
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -387,7 +388,7 @@ export function InvestmentsView() {
                     <div key={draft.id} className="rounded-md border p-3">
                       <div className="flex items-start justify-between gap-3">
                         <label className="block flex-1 space-y-2">
-                          <span className="text-sm font-medium">Nombre</span>
+                          <span className="text-sm font-medium">Name</span>
                           <input
                             value={draft.name}
                             onChange={(event) =>
@@ -396,7 +397,7 @@ export function InvestmentsView() {
                               })
                             }
                             className={inputClassName}
-                            placeholder="Nombre"
+                            placeholder="Name"
                           />
                         </label>
                         <div className="flex gap-2">
@@ -405,10 +406,10 @@ export function InvestmentsView() {
                             variant="outline"
                             size="icon"
                             aria-label={
-                              draft.isVisible ? "Ocultar inversion" : "Mostrar inversion"
+                              draft.isVisible ? "Hide investment" : "Show investment"
                             }
                             title={
-                              draft.isVisible ? "Ocultar inversion" : "Mostrar inversion"
+                              draft.isVisible ? "Hide investment" : "Show investment"
                             }
                             onClick={() =>
                               updateInvestmentDraft(draft.id, {
@@ -426,8 +427,8 @@ export function InvestmentsView() {
                             type="button"
                             variant="destructive"
                             size="icon"
-                            aria-label="Eliminar inversion"
-                            title="Eliminar inversion"
+                            aria-label="Delete investment"
+                            title="Delete investment"
                             onClick={() => markInvestmentForDeletion(draft.id)}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -436,7 +437,7 @@ export function InvestmentsView() {
                       </div>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">Tipo</span>
+                          <span className="text-sm font-medium">Type</span>
                           <select
                             value={draft.type}
                             onChange={(event) =>
@@ -454,7 +455,7 @@ export function InvestmentsView() {
                           </select>
                         </label>
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">Moneda</span>
+                          <span className="text-sm font-medium">Currency</span>
                           <select
                             value={draft.currency}
                             onChange={(event) =>
@@ -474,7 +475,7 @@ export function InvestmentsView() {
                       </div>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">Invertido</span>
+                          <span className="text-sm font-medium">Invested</span>
                           <input
                             value={draft.amountInvested}
                             onChange={(event) =>
@@ -487,7 +488,7 @@ export function InvestmentsView() {
                           />
                         </label>
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">Valor actual</span>
+                          <span className="text-sm font-medium">Current value</span>
                           <input
                             value={draft.currentValue}
                             onChange={(event) =>
@@ -501,7 +502,7 @@ export function InvestmentsView() {
                         </label>
                       </div>
                       <label className="mt-3 block space-y-2">
-                        <span className="text-sm font-medium">Inicio</span>
+                        <span className="text-sm font-medium">Start date</span>
                         <input
                           value={draft.startedAt}
                           onChange={(event) =>
@@ -514,7 +515,7 @@ export function InvestmentsView() {
                         />
                       </label>
                       <label className="mt-3 block space-y-2">
-                        <span className="text-sm font-medium">Nota</span>
+                        <span className="text-sm font-medium">Note</span>
                         <textarea
                           value={draft.note}
                           onChange={(event) =>
@@ -523,7 +524,7 @@ export function InvestmentsView() {
                             })
                           }
                           className={textareaClassName}
-                          placeholder="Contexto opcional"
+                          placeholder="Optional context"
                         />
                       </label>
                     </div>
@@ -544,7 +545,7 @@ export function InvestmentsView() {
                       <div>
                         <p className="font-medium">{investment.name}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {investment.type}
+                          {investmentTypeLabels[investment.type]}
                         </p>
                       </div>
                       <Progress
@@ -553,13 +554,13 @@ export function InvestmentsView() {
                         indicatorClassName={gain >= 0 ? "bg-emerald-500" : "bg-red-500"}
                       />
                       <div className="mt-3 flex justify-between text-sm">
-                        <span>Actual</span>
+                        <span>Current</span>
                         <span className="font-semibold">
                           {formatMoney(investment.currentValue, investment.currency)}
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-sm">
-                        <span>Resultado</span>
+                        <span>Result</span>
                         <span className={gain >= 0 ? "text-emerald-600" : "text-red-600"}>
                           {formatMoney(gain, investment.currency)}
                         </span>
@@ -576,7 +577,7 @@ export function InvestmentsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Banknote className="h-4 w-4" />
-              Deudas y prestamos
+              Debts and loans
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -593,7 +594,7 @@ export function InvestmentsView() {
                   </div>
                   <Progress value={percentage} className="mt-3" />
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Pagado {percentage.toFixed(0)}%
+                    Paid {percentage.toFixed(0)}%
                   </p>
                 </div>
               );
@@ -605,7 +606,7 @@ export function InvestmentsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ReceiptText className="h-4 w-4" />
-              Cuotas
+              Installments
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -632,3 +633,4 @@ export function InvestmentsView() {
     </div>
   );
 }
+

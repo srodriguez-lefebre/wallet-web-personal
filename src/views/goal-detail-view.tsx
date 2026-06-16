@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
+﻿import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
 
 export function GoalDetailView() {
   const { goalId } = useParams();
@@ -19,10 +20,10 @@ export function GoalDetailView() {
   if (!progress) {
     return (
       <div>
-        <PageHeader title="Goal no encontrado" description="El objetivo no existe." />
+        <PageHeader title="Goal not found" description="This goal does not exist." />
         <Button variant="outline" onClick={() => navigate("/goals")}>
           <ArrowLeft className="h-4 w-4" />
-          Volver
+          Back
         </Button>
       </div>
     );
@@ -54,7 +55,7 @@ export function GoalDetailView() {
       <PageHeader
         eyebrow="Goal detail"
         title={goalProgress.goal.name}
-        description="Detalle del objetivo, dinero reservado y movimientos vinculados por etiquetas."
+        description="Goal detail, reserved money, and records linked by tags."
       >
         <Button variant="outline" onClick={() => navigate("/goals")}>
           <ArrowLeft className="h-4 w-4" />
@@ -81,12 +82,12 @@ export function GoalDetailView() {
                   <div>
                     <CardTitle>{goalProgress.goal.name}</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Objetivo {formatMoney(goalProgress.goal.targetAmount, goalProgress.goal.currency)}
+                      Target {formatMoney(goalProgress.goal.targetAmount, goalProgress.goal.currency)}
                     </p>
                   </div>
                 </div>
                 <Badge variant={goalProgress.goal.status === "active" ? "success" : "muted"}>
-                  {goalProgress.goal.status}
+                  {goalStatusLabels[goalProgress.goal.status]}
                 </Badge>
               </div>
             </CardHeader>
@@ -94,25 +95,25 @@ export function GoalDetailView() {
               <Progress value={goalProgress.percentage} indicatorClassName="bg-sky-500" />
               <div className="mt-4 grid gap-3 sm:grid-cols-4">
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Reservado</p>
+                  <p className="text-sm text-muted-foreground">Reserved</p>
                   <p className="font-semibold">
                     {formatMoney(goalProgress.reserved, goalProgress.goal.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Gastado</p>
+                  <p className="text-sm text-muted-foreground">Spent</p>
                   <p className="font-semibold">
                     {formatMoney(goalProgress.spent, goalProgress.goal.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Comprometido</p>
+                  <p className="text-sm text-muted-foreground">Committed</p>
                   <p className="font-semibold">
                     {formatMoney(goalProgress.committed, goalProgress.goal.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Restante</p>
+                  <p className="text-sm text-muted-foreground">Remaining</p>
                   <p className="font-semibold">
                     {formatMoney(goalProgress.remaining, goalProgress.goal.currency)}
                   </p>
@@ -139,12 +140,12 @@ export function GoalDetailView() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Movimientos asociados</CardTitle>
+              <CardTitle>Linked records</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {linkedRecords.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  Todavia no hay movimientos asociados a este objetivo.
+                  There are no records linked to this goal yet.
                 </p>
               ) : (
                 linkedRecords.map((record) => {
@@ -162,9 +163,9 @@ export function GoalDetailView() {
                       className="flex w-full items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                     >
                       <div>
-                        <p className="font-medium">{category?.name ?? "Transferencia"}</p>
+                        <p className="font-medium">{category?.name ?? "Transfer"}</p>
                         <p className="text-xs text-muted-foreground">
-                          {account?.name} · {record.note ?? "Sin nota"}
+                          {account?.name} · {record.note ?? "No note"}
                         </p>
                       </div>
                       <p
@@ -189,13 +190,13 @@ export function GoalDetailView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <PiggyBank className="h-4 w-4" />
-              Reservas
+              Reservations
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {reservations.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Todavia no reservaste dinero para este objetivo.
+                You have not reserved money for this goal yet.
               </p>
             ) : (
               reservations.map((reservation) => {
@@ -206,9 +207,9 @@ export function GoalDetailView() {
                   <div key={reservation.id} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-medium">{account?.name ?? "Cuenta"}</p>
+                        <p className="font-medium">{account?.name ?? "Account"}</p>
                         <p className="text-xs text-muted-foreground">
-                          {reservation.note ?? "Reserva"}
+                          {reservation.note ?? "Reservation"}
                         </p>
                       </div>
                       <p className="font-semibold">
@@ -225,3 +226,5 @@ export function GoalDetailView() {
     </div>
   );
 }
+
+

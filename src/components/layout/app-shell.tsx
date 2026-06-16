@@ -89,8 +89,8 @@ export function AppShell({ children }: PropsWithChildren) {
             <WalletCards className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-sm font-semibold">Wallet Personal</p>
-            <p className="text-xs text-muted-foreground">Control financiero</p>
+            <p className="text-sm font-semibold">Personal Wallet</p>
+            <p className="text-xs text-muted-foreground">Finance control</p>
           </div>
         </div>
 
@@ -146,7 +146,7 @@ export function AppShell({ children }: PropsWithChildren) {
               value={selectedMonth}
               onChange={(event) => setSelectedMonth(event.target.value)}
               className="h-10 rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              aria-label="Periodo"
+              aria-label="Period"
             >
               {monthOptions.map((month) => (
                 <option key={month} value={month}>
@@ -164,10 +164,10 @@ export function AppShell({ children }: PropsWithChildren) {
             <Plus className="h-4 w-4" />
             Record
           </Button>
-          <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Cambiar tema">
+          <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Toggle theme">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
-          <Button variant="outline" size="icon" onClick={lock} aria-label="Bloquear app">
+          <Button variant="outline" size="icon" onClick={lock} aria-label="Lock app">
             <Lock className="h-4 w-4" />
           </Button>
         </header>

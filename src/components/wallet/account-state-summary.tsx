@@ -23,7 +23,7 @@ export function AccountStateSummary({ balance }: AccountStateSummaryProps) {
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold">{account.name}</p>
               <Badge variant={account.isActive ? "success" : "muted"}>
-                {account.isActive ? "Activa" : "Inactiva"}
+                {account.isActive ? "Active" : "Inactive"}
               </Badge>
               <Badge variant={account.isVisible ? "info" : "muted"}>
                 {account.isVisible ? (
@@ -31,11 +31,11 @@ export function AccountStateSummary({ balance }: AccountStateSummaryProps) {
                 ) : (
                   <EyeOff className="mr-1 h-3 w-3" />
                 )}
-                {account.isVisible ? "Visible" : "Oculta"}
+                {account.isVisible ? "Visible" : "Hidden"}
               </Badge>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Estado actual de la cuenta seleccionada
+              Current state of the selected account
             </p>
           </div>
         </div>
@@ -48,13 +48,13 @@ export function AccountStateSummary({ balance }: AccountStateSummaryProps) {
             </p>
           </div>
           <div className="rounded-md border bg-card px-3 py-2">
-            <p className="text-muted-foreground">Libre</p>
+            <p className="text-muted-foreground">Free</p>
             <p className="text-lg font-semibold">
               {formatMoney(balance.freeBalance, account.currency)}
             </p>
           </div>
           <div className="rounded-md border bg-card px-3 py-2">
-            <p className="text-muted-foreground">Reservado</p>
+            <p className="text-muted-foreground">Reserved</p>
             <p className="text-lg font-semibold">
               {formatMoney(balance.reserved, account.currency)}
             </p>

@@ -86,23 +86,23 @@ export function AnalyticsView() {
     <div>
       <PageHeader
         eyebrow="Analytics"
-        title={selectedAccount ? `Analiticas de ${selectedAccount.name}` : "Analiticas"}
+        title={selectedAccount ? `${selectedAccount.name} analytics` : "Analytics"}
         description={
           selectedAccount
-            ? "Reportes filtrados por esta cuenta: movimientos, categorias, presupuestos y flujo mensual."
-            : "Reportes por categoria, mes, cuenta, cash flow y balance trend."
+            ? "Reports filtered by this account: records, categories, budgets, and monthly flow."
+            : "Reports by category, month, account, cash flow, and balance trend."
         }
       >
         {selectedAccount ? (
           <>
-            <Badge variant="info">Cuenta: {selectedAccount.name}</Badge>
+            <Badge variant="info">Account: {selectedAccount.name}</Badge>
             <Button
               variant="outline"
               size="sm"
               onClick={() => setRecordFilters({ accountId: undefined })}
             >
               <X className="h-4 w-4" />
-              Ver todo
+              View all
             </Button>
           </>
         ) : null}
@@ -115,7 +115,7 @@ export function AnalyticsView() {
       <div className="grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Comparacion mensual</CardTitle>
+            <CardTitle>Monthly comparison</CardTitle>
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -125,8 +125,8 @@ export function AnalyticsView() {
                 <YAxis tickLine={false} axisLine={false} width={70} />
                 <Tooltip />
                 <Bar dataKey="cashFlow" fill="#2563EB" name="Cash flow" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="income" fill="#22C55E" name="Ingresos" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" fill="#EF4444" name="Gastos" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="income" fill="#22C55E" name="Income" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="expenses" fill="#EF4444" name="Expenses" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -134,7 +134,7 @@ export function AnalyticsView() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Reporte por categoria</CardTitle>
+            <CardTitle>Category report</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
@@ -143,7 +143,7 @@ export function AnalyticsView() {
                 onClick={() => goToRecords({ type: "income" })}
                 className="rounded-md bg-secondary p-3 text-left transition hover:bg-sky-100 dark:hover:bg-sky-950"
               >
-                <p className="text-muted-foreground">Ingreso</p>
+                <p className="text-muted-foreground">Income</p>
                 <p className="font-semibold">
                   {formatMoney(summary.income, dataset.settings.primaryCurrency)}
                 </p>
@@ -153,7 +153,7 @@ export function AnalyticsView() {
                 onClick={() => goToRecords({ type: "expense" })}
                 className="rounded-md bg-secondary p-3 text-left transition hover:bg-sky-100 dark:hover:bg-sky-950"
               >
-                <p className="text-muted-foreground">Gasto</p>
+                <p className="text-muted-foreground">Expense</p>
                 <p className="font-semibold">
                   {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
                 </p>
@@ -194,7 +194,7 @@ export function AnalyticsView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Presupuestos</CardTitle>
+            <CardTitle>Budgets</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {budgets.map((budget) => (
@@ -215,7 +215,7 @@ export function AnalyticsView() {
                   <div>
                     <p className="font-medium">{budget.budget.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatMoney(budget.spent, budget.budget.currency)} de{" "}
+                      {formatMoney(budget.spent, budget.budget.currency)} of{" "}
                       {formatMoney(budget.budget.limitAmount, budget.budget.currency)}
                     </p>
                   </div>
@@ -239,18 +239,18 @@ export function AnalyticsView() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Simulador y recomendaciones</CardTitle>
+            <CardTitle>Simulator and recommendations</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md bg-secondary p-3">
-                <p className="text-sm text-muted-foreground">Permitido diario</p>
+                <p className="text-sm text-muted-foreground">Daily allowance</p>
                 <p className="text-xl font-semibold">
                   {formatMoney(allowedDaily, dataset.settings.primaryCurrency)}
                 </p>
               </div>
               <div className="rounded-md bg-secondary p-3">
-                <p className="text-sm text-muted-foreground">Proyeccion fin de mes</p>
+                <p className="text-sm text-muted-foreground">End-of-month projection</p>
                 <p className="text-xl font-semibold">
                   {formatMoney(projection, dataset.settings.primaryCurrency)}
                 </p>

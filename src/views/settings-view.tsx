@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+﻿import { FormEvent, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -272,7 +272,7 @@ export function SettingsView() {
                 : "border-transparent"
             }`}
             title={option.label}
-            aria-label={`Usar icono ${option.label}`}
+            aria-label={`Use ${option.label} icon`}
             onClick={() => onSelect(option.value)}
           >
             <CategoryIcon icon={option.value} color={color} size="sm" />
@@ -302,10 +302,10 @@ export function SettingsView() {
               size="icon"
               aria-label={
                 isExpanded
-                  ? `Ocultar hijas de ${category.name}`
-                  : `Mostrar hijas de ${category.name}`
+                  ? `Hide children for ${category.name}`
+                  : `Show children for ${category.name}`
               }
-              title={isExpanded ? "Ocultar hijas" : "Mostrar hijas"}
+              title={isExpanded ? "Hide children" : "Show children"}
               onClick={() => toggleCategoryExpansion(category.id)}
             >
               {isExpanded ? (
@@ -320,8 +320,8 @@ export function SettingsView() {
           <button
             type="button"
             className="rounded-full outline-none ring-offset-background transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label={`Cambiar icono de ${category.name}`}
-            title="Cambiar icono"
+            aria-label={`Change icon for ${category.name}`}
+            title="Change icon"
             onClick={() => setEditingCategoryIconId(category.id)}
           >
             <CategoryIcon icon={draft.icon} color={draft.color} />
@@ -346,8 +346,8 @@ export function SettingsView() {
           <Button
             type="button"
             size="icon"
-            aria-label={`Guardar ${category.name}`}
-            title="Guardar"
+            aria-label={`Save ${category.name}`}
+            title="Save"
             disabled={!isDirty}
             onClick={() => handleSaveCategory(category)}
           >
@@ -357,8 +357,8 @@ export function SettingsView() {
             type="button"
             variant="destructive"
             size="icon"
-            aria-label={`Eliminar ${category.name}`}
-            title={hasChildren ? "Eliminar categoria e hijas" : "Eliminar"}
+            aria-label={`Delete ${category.name}`}
+            title={hasChildren ? "Delete category and children" : "Delete"}
             onClick={() => handleDeleteCategory(category.id)}
           >
             <Trash2 className="h-4 w-4" />
@@ -384,8 +384,8 @@ export function SettingsView() {
     <div>
       <PageHeader
         eyebrow="Settings"
-        title="Configuracion"
-        description="Preferencias generales, seguridad, categorias, etiquetas y accesos de administracion."
+        title="Settings"
+        description="General preferences, security, categories, tags, and administration shortcuts."
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -393,21 +393,21 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Palette className="h-4 w-4" />
-              Preferencias
+              Preferences
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
-                <p className="font-medium">Moneda principal</p>
-                <p className="text-sm text-muted-foreground">Para dashboard y reportes</p>
+                <p className="font-medium">Primary currency</p>
+                <p className="text-sm text-muted-foreground">For dashboard and reports</p>
               </div>
               <Badge>{dataset.settings.primaryCurrency}</Badge>
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
-                <p className="font-medium">Tema</p>
-                <p className="text-sm text-muted-foreground">Claro principal, oscuro alternativo</p>
+                <p className="font-medium">Theme</p>
+                <p className="text-sm text-muted-foreground">Light by default, dark as an alternative</p>
               </div>
               <Button variant="outline" onClick={toggleTheme}>
                 <Moon className="h-4 w-4" />
@@ -421,19 +421,19 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lock className="h-4 w-4" />
-              Seguridad
+              Security
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
-                <p className="font-medium">Token local</p>
+                <p className="font-medium">Local token</p>
                 <p className="text-sm text-muted-foreground">
-                  Bloquear borra el token guardado en este navegador.
+                  Locking removes the token saved in this browser.
                 </p>
               </div>
               <Button variant="outline" onClick={lock}>
-                Bloquear
+                Lock
               </Button>
             </div>
           </CardContent>
@@ -444,27 +444,27 @@ export function SettingsView() {
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="flex items-center gap-2">
                 <WalletCards className="h-4 w-4" />
-                Categorias
+                Categories
               </CardTitle>
               <Dialog
                 open={isCategoryDialogOpen}
                 onOpenChange={setIsCategoryDialogOpen}
               >
                 <DialogTrigger asChild>
-                  <Button size="icon" aria-label="Nueva categoria">
+                  <Button size="icon" aria-label="New category">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Nueva categoria</DialogTitle>
+                    <DialogTitle>New category</DialogTitle>
                     <DialogDescription>
-                      Crea una categoria padre o elegi un padre para crear una hija.
+                      Create a parent category or select a parent to create a child.
                     </DialogDescription>
                   </DialogHeader>
                   <form className="space-y-4" onSubmit={handleAddCategory}>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Nombre</span>
+                      <span className="text-sm font-medium">Name</span>
                       <input
                         value={newCategoryName}
                         onChange={(event) => setNewCategoryName(event.target.value)}
@@ -473,7 +473,7 @@ export function SettingsView() {
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Padre</span>
+                      <span className="text-sm font-medium">Parent</span>
                       <select
                         value={newCategoryParentId}
                         onChange={(event) =>
@@ -481,7 +481,7 @@ export function SettingsView() {
                         }
                         className={fieldClassName}
                       >
-                        <option value="">Sin padre</option>
+                        <option value="">No parent</option>
                         {dataset.categories
                           .filter((category) => !category.parentId)
                           .sort((a, b) => a.name.localeCompare(b.name))
@@ -507,12 +507,12 @@ export function SettingsView() {
                             }
                             type="color"
                             className={colorInputClassName}
-                            aria-label="Color de categoria nueva"
+                            aria-label="New category color"
                           />
                         </div>
                       </label>
                       <div className="space-y-2">
-                        <span className="text-sm font-medium">Icono</span>
+                        <span className="text-sm font-medium">Icon</span>
                         {renderCategoryIconGrid({
                           selectedIcon: newCategoryIcon,
                           color: newCategoryColor,
@@ -522,7 +522,7 @@ export function SettingsView() {
                     </div>
                     <Button className="w-full" type="submit">
                       <Plus className="h-4 w-4" />
-                      Agregar categoria
+                      Add category
                     </Button>
                   </form>
                 </DialogContent>
@@ -550,10 +550,10 @@ export function SettingsView() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>
-                Icono de {editingCategoryIcon?.name ?? "categoria"}
+                Icon for {editingCategoryIcon?.name ?? "category"}
               </DialogTitle>
               <DialogDescription>
-                Elegi un icono para combinarlo con el color actual de la categoria.
+                Choose an icon to combine with the current category color.
               </DialogDescription>
             </DialogHeader>
             {editingCategoryIcon && editingCategoryIconDraft ? (
@@ -567,7 +567,7 @@ export function SettingsView() {
                   <div>
                     <p className="font-medium">{editingCategoryIcon.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      Despues de elegir, usa Guardar en la fila para confirmar.
+                      After choosing, use Save in the row to confirm.
                     </p>
                   </div>
                 </div>
@@ -588,7 +588,7 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Tags className="h-4 w-4" />
-              Etiquetas
+              Tags
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -601,18 +601,18 @@ export function SettingsView() {
                   value={newTagName}
                   onChange={(event) => setNewTagName(event.target.value)}
                   className={fieldClassName}
-                  placeholder="Nueva etiqueta"
+                  placeholder="New tag"
                 />
                 <input
                   value={newTagColor}
                   onChange={(event) => setNewTagColor(event.target.value)}
                   type="color"
                   className={colorInputClassName}
-                  aria-label="Color de etiqueta nueva"
+                  aria-label="New tag color"
                 />
                 <Button type="submit">
                   <Plus className="h-4 w-4" />
-                  Agregar
+                  Add
                 </Button>
               </form>
 
@@ -644,7 +644,7 @@ export function SettingsView() {
                           updateTagDraft(tag.id, { name: event.target.value })
                         }
                         className={fieldClassName}
-                        placeholder="Nombre"
+                        placeholder="Name"
                       />
                       <select
                         value={draft.isActive ? "active" : "inactive"}
@@ -655,15 +655,15 @@ export function SettingsView() {
                         }
                         className={fieldClassName}
                       >
-                        <option value="active">Activa</option>
-                        <option value="inactive">Inactiva</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
                       </select>
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        aria-label={`Ver registros de ${tag.name}`}
-                        title="Ver registros"
+                        aria-label={`View records for ${tag.name}`}
+                        title="View records"
                         onClick={() => openRecords({ tagId: tag.id, type: "all" })}
                       >
                         <Eye className="h-4 w-4" />
@@ -671,8 +671,8 @@ export function SettingsView() {
                       <Button
                         type="button"
                         size="icon"
-                        aria-label={`Guardar ${tag.name}`}
-                        title="Guardar"
+                        aria-label={`Save ${tag.name}`}
+                        title="Save"
                         disabled={!isDirty}
                         onClick={() => handleSaveTag(tag)}
                       >
@@ -682,8 +682,8 @@ export function SettingsView() {
                         type="button"
                         variant="destructive"
                         size="icon"
-                        aria-label={`Eliminar ${tag.name}`}
-                        title="Eliminar"
+                        aria-label={`Delete ${tag.name}`}
+                        title="Delete"
                         onClick={() => handleDeleteTag(tag.id)}
                       >
                         <Trash2 className="h-4 w-4" />
@@ -700,7 +700,7 @@ export function SettingsView() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Banknote className="h-4 w-4" />
-              Administracion
+              Administration
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
@@ -709,7 +709,7 @@ export function SettingsView() {
               className="justify-between"
               onClick={() => navigate("/accounts")}
             >
-              Cuentas
+              Accounts
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button
@@ -717,7 +717,7 @@ export function SettingsView() {
               className="justify-between"
               onClick={() => navigate("/goals")}
             >
-              Objetivos
+              Goals
               <Target className="h-4 w-4" />
             </Button>
             <Button
@@ -725,7 +725,7 @@ export function SettingsView() {
               className="justify-between"
               onClick={() => navigate("/investments")}
             >
-              Inversiones
+              Investments
               <ArrowRight className="h-4 w-4" />
             </Button>
             <Button
@@ -742,3 +742,4 @@ export function SettingsView() {
     </div>
   );
 }
+

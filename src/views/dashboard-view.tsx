@@ -59,10 +59,10 @@ export function DashboardView() {
     <div>
       <PageHeader
         eyebrow="Dashboard"
-        title="Estado financiero"
-        description="Resumen principal interactivo: cada numero abre su contexto en registros o reportes."
+        title="Financial overview"
+        description="Interactive summary: each metric opens the related records or reports."
       >
-        <Badge variant="info">Preset General</Badge>
+        <Badge variant="info">General preset</Badge>
       </PageHeader>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -73,7 +73,7 @@ export function DashboardView() {
               ? formatMoney(primaryBalance.balance, primaryBalance.account.currency)
               : formatMoney(summary.balance, dataset.settings.primaryCurrency)
           }
-          detail={primaryBalance ? `Cuenta principal: ${primaryBalance.account.name}` : "Cuenta principal"}
+          detail={primaryBalance ? `Primary account: ${primaryBalance.account.name}` : "Primary account"}
           icon={<WalletCards className="h-4 w-4" />}
           tone={(primaryBalance?.balance ?? summary.balance) >= 0 ? "success" : "danger"}
           onClick={() =>
@@ -83,17 +83,17 @@ export function DashboardView() {
           }
         />
         <MetricCard
-          label="Ingresos"
+          label="Income"
           value={formatMoney(summary.income, dataset.settings.primaryCurrency)}
-          detail="Mes seleccionado"
+          detail="Selected month"
           icon={<ArrowUpRight className="h-4 w-4" />}
           tone="success"
           onClick={() => goToRecords({ type: "income" })}
         />
         <MetricCard
-          label="Gastos"
+          label="Expenses"
           value={formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
-          detail="Mes seleccionado"
+          detail="Selected month"
           icon={<ArrowDownRight className="h-4 w-4" />}
           tone="danger"
           onClick={() => goToRecords({ type: "expense" })}
@@ -101,7 +101,7 @@ export function DashboardView() {
         <MetricCard
           label="Cash flow"
           value={formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
-          detail="Ingresos menos gastos"
+          detail="Income minus expenses"
           icon={<Landmark className="h-4 w-4" />}
           tone={summary.cashFlow >= 0 ? "success" : "danger"}
           onClick={() => navigate("/analytics")}
@@ -111,7 +111,7 @@ export function DashboardView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.35fr_0.9fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Cash flow mensual</CardTitle>
+            <CardTitle>Monthly cash flow</CardTitle>
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -139,14 +139,14 @@ export function DashboardView() {
                   dataKey="income"
                   stroke="#22C55E"
                   fill="url(#income)"
-                  name="Ingresos"
+                  name="Income"
                 />
                 <Area
                   type="monotone"
                   dataKey="expenses"
                   stroke="#EF4444"
                   fill="url(#expenses)"
-                  name="Gastos"
+                  name="Expenses"
                 />
                 <Area
                   type="monotone"
@@ -162,7 +162,7 @@ export function DashboardView() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Gastos por categoria</CardTitle>
+            <CardTitle>Expenses by category</CardTitle>
           </CardHeader>
           <CardContent className="h-72 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
@@ -214,7 +214,7 @@ export function DashboardView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Cuentas visibles</CardTitle>
+            <CardTitle>Visible accounts</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleBalances.map(({ account, balance, freeBalance, reserved }) => (
@@ -239,8 +239,8 @@ export function DashboardView() {
                   <div>
                     <p className="font-medium">{account.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      Libre {formatMoney(freeBalance, account.currency)}
-                      {reserved > 0 ? ` · Reservado ${formatMoney(reserved, account.currency)}` : ""}
+                      Free {formatMoney(freeBalance, account.currency)}
+                      {reserved > 0 ? ` · Reserved ${formatMoney(reserved, account.currency)}` : ""}
                     </p>
                   </div>
                 </div>
@@ -252,7 +252,7 @@ export function DashboardView() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Ultimos registros</CardTitle>
+            <CardTitle>Latest records</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {recentRecords.map((record) => {
@@ -293,7 +293,7 @@ export function DashboardView() {
                       color={category?.color ?? "#2563EB"}
                     />
                     <div>
-                    <p className="font-medium">{category?.name ?? "Transferencia"}</p>
+                    <p className="font-medium">{category?.name ?? "Transfer"}</p>
                     <p className="text-xs text-muted-foreground">
                       {account?.name}
                       {record.counterpartyName ? ` · ${record.counterpartyName}` : ""}

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -22,6 +22,11 @@ import {
   groupRecordsByDay,
   isCategoryOrDescendant,
 } from "@shared/calculations";
+import {
+  paymentStatusLabels,
+  paymentTypeLabels,
+  recordTypeLabels,
+} from "@shared/constants";
 import type {
   Category,
   CurrencyCode,
@@ -325,12 +330,12 @@ export function RecordsView() {
     <div>
       <PageHeader
         eyebrow="Records"
-        title="Registros"
-        description="Toca cualquier movimiento para editar monto, cuenta, contraparte, estado o notas."
+        title="Records"
+        description="Open any record to edit amount, account, counterparty, status, or notes."
       >
         <Button onClick={openNewRecordDialog}>
           <Plus className="h-4 w-4" />
-          Nuevo
+          New
         </Button>
       </PageHeader>
 
@@ -343,10 +348,10 @@ export function RecordsView() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-              {editingId ? "Editar registro" : "Nuevo registro"}
+              {editingId ? "Edit record" : "New record"}
             </DialogTitle>
             <DialogDescription>
-              Ajusta tipo, monto, cuenta, categoria, etiquetas y estado del movimiento.
+              Adjust type, amount, account, category, tags, and payment status.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -362,14 +367,14 @@ export function RecordsView() {
                   }}
                   className={typeButtonClassName(item, type)}
                 >
-                  {item}
+                  {recordTypeLabels[item]}
                 </button>
               ))}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Monto</span>
+                <span className="text-sm font-medium">Amount</span>
                 <input
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
@@ -382,7 +387,7 @@ export function RecordsView() {
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Cuenta</span>
+                <span className="text-sm font-medium">Account</span>
                 <select
                   value={accountId}
                   onChange={(event) => setAccountId(event.target.value)}
@@ -401,7 +406,7 @@ export function RecordsView() {
 
             {type === "transfer" ? (
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Cuenta destino</span>
+                <span className="text-sm font-medium">Destination account</span>
                 <select
                   value={destinationAccountId}
                   onChange={(event) => setDestinationAccountId(event.target.value)}
@@ -423,7 +428,7 @@ export function RecordsView() {
               </label>
             ) : (
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Categoria</span>
+                <span className="text-sm font-medium">Category</span>
                 <select
                   value={categoryId}
                   onChange={(event) => setCategoryId(event.target.value)}
@@ -440,13 +445,13 @@ export function RecordsView() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Etiqueta</span>
+                <span className="text-sm font-medium">Tag</span>
                 <select
                   value={tagId}
                   onChange={(event) => setTagId(event.target.value)}
                   className={fieldClassName}
                 >
-                  <option value="">Sin etiqueta</option>
+                  <option value="">No tag</option>
                   {dataset.tags.map((tag) => (
                     <option key={tag.id} value={tag.id}>
                       {tag.name}
@@ -456,34 +461,34 @@ export function RecordsView() {
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Contraparte</span>
+                <span className="text-sm font-medium">Counterparty</span>
                 <input
                   value={counterpartyName}
                   onChange={(event) => setCounterpartyName(event.target.value)}
                   className={fieldClassName}
-                  placeholder="Nombre"
+                  placeholder="Name"
                 />
               </label>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Tipo de pago</span>
+                <span className="text-sm font-medium">Payment type</span>
                 <select
                   value={paymentType}
                   onChange={(event) => setPaymentType(event.target.value as PaymentType)}
                   className={fieldClassName}
                 >
-                  <option value="cash">cash</option>
-                  <option value="debit">debit</option>
-                  <option value="credit">credit</option>
-                  <option value="transfer">transfer</option>
-                  <option value="other">other</option>
+                  <option value="cash">{paymentTypeLabels.cash}</option>
+                  <option value="debit">{paymentTypeLabels.debit}</option>
+                  <option value="credit">{paymentTypeLabels.credit}</option>
+                  <option value="transfer">{paymentTypeLabels.transfer}</option>
+                  <option value="other">{paymentTypeLabels.other}</option>
                 </select>
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Estado</span>
+                <span className="text-sm font-medium">Status</span>
                 <select
                   value={paymentStatus}
                   onChange={(event) =>
@@ -491,20 +496,20 @@ export function RecordsView() {
                   }
                   className={fieldClassName}
                 >
-                  <option value="cleared">cleared</option>
-                  <option value="pending">pending</option>
-                  <option value="cancelled">cancelled</option>
+                  <option value="cleared">{paymentStatusLabels.cleared}</option>
+                  <option value="pending">{paymentStatusLabels.pending}</option>
+                  <option value="cancelled">{paymentStatusLabels.cancelled}</option>
                 </select>
               </label>
             </div>
 
             <label className="block space-y-2">
-              <span className="text-sm font-medium">Nota</span>
+              <span className="text-sm font-medium">Note</span>
               <input
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
                 className={fieldClassName}
-                placeholder="Descripcion opcional"
+                placeholder="Optional description"
               />
             </label>
 
@@ -512,17 +517,17 @@ export function RecordsView() {
               {editingId ? (
                 <Button type="button" variant="destructive" onClick={handleDeleteEditingRecord}>
                   <Trash2 className="h-4 w-4" />
-                  Eliminar
+                  Delete
                 </Button>
               ) : (
                 <Button type="button" variant="outline" onClick={closeRecordDialog}>
                   <X className="h-4 w-4" />
-                  Cancelar
+                  Cancel
                 </Button>
               )}
               <Button type="submit">
                 {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                {editingId ? "Guardar cambios" : "Agregar"}
+                {editingId ? "Save changes" : "Add"}
               </Button>
             </div>
           </form>
@@ -532,7 +537,7 @@ export function RecordsView() {
       <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
         <Card className="h-fit">
           <CardHeader className="pb-3">
-            <CardTitle>Filtros</CardTitle>
+          <CardTitle>Filters</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
             <input
@@ -548,10 +553,10 @@ export function RecordsView() {
               }
               className={fieldClassName}
             >
-              <option value="all">Todos</option>
-              <option value="expense">Gastos</option>
-              <option value="income">Ingresos</option>
-              <option value="transfer">Transferencias</option>
+              <option value="all">All</option>
+              <option value="expense">Expenses</option>
+              <option value="income">Income</option>
+              <option value="transfer">Transfers</option>
             </select>
             <select
               value={recordFilters.accountId ?? ""}
@@ -560,7 +565,7 @@ export function RecordsView() {
               }
               className={fieldClassName}
             >
-              <option value="">Cuentas</option>
+              <option value="">Accounts</option>
               {dataset.accounts.map((account) => (
                 <option key={account.id} value={account.id}>
                   {account.name}
@@ -574,7 +579,7 @@ export function RecordsView() {
               }
               className={fieldClassName}
             >
-              <option value="">Categorias</option>
+              <option value="">Categories</option>
               {sortCategoriesForSelect(dataset.categories).map((category) => (
                 <option key={category.id} value={category.id}>
                   {category.parentId ? `-- ${category.name}` : category.name}
@@ -591,7 +596,7 @@ export function RecordsView() {
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>{filteredRecords.length} registros</CardTitle>
+              <CardTitle>{filteredRecords.length} records</CardTitle>
               <div className="flex flex-wrap gap-2">
                 <Badge variant="muted">{selectedMonth}</Badge>
                 {activeFilters.map((filter) => (
@@ -607,7 +612,7 @@ export function RecordsView() {
               <div key={day}>
                 <div className="mb-2 flex items-center justify-between text-sm">
                   <p className="font-semibold">{format(parseISO(day), "dd/MM/yyyy")}</p>
-                  <p className="text-muted-foreground">{records.length} movimientos</p>
+                  <p className="text-muted-foreground">{records.length} records</p>
                 </div>
                 <div className="space-y-2">
                   {records.map((record) => {
@@ -645,7 +650,7 @@ export function RecordsView() {
                             <p className="font-medium">
                               {category
                                 ? formatCategoryName(dataset.categories, category)
-                                : "Transferencia"}
+                                : "Transfer"}
                             </p>
                             <Badge
                               variant={
@@ -656,14 +661,18 @@ export function RecordsView() {
                                     : "info"
                               }
                             >
-                              {record.type}
+                              {recordTypeLabels[record.type]}
                             </Badge>
-                            <Badge variant="muted">{record.paymentStatus}</Badge>
+                            <Badge variant="muted">
+                              {paymentStatusLabels[record.paymentStatus]}
+                            </Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {account?.name}
-                            {record.counterpartyName ? ` · ${record.counterpartyName}` : " · Sin contraparte"}
-                            {record.note ? ` · ${record.note}` : " · Sin nota"}
+                            {record.counterpartyName
+                              ? ` · ${record.counterpartyName}`
+                              : " · No counterparty"}
+                            {record.note ? ` · ${record.note}` : " · No note"}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1">
                             {tags.map((tag) =>
@@ -673,7 +682,9 @@ export function RecordsView() {
                                 </Badge>
                               ) : null,
                             )}
-                            <Badge variant="muted">{record.paymentType}</Badge>
+                            <Badge variant="muted">
+                              {paymentTypeLabels[record.paymentType]}
+                            </Badge>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
@@ -700,7 +711,7 @@ export function RecordsView() {
                               event.stopPropagation();
                               deleteRecord(record.id);
                             }}
-                            aria-label="Eliminar registro"
+                            aria-label="Delete record"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

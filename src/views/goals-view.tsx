@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+﻿import { FormEvent, useState } from "react";
 import {
   CalendarDays,
   Edit3,
@@ -27,6 +27,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
 import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
 interface GoalDraft {
@@ -45,10 +46,10 @@ interface GoalDraft {
 }
 
 const goalStatusOptions: Array<{ value: GoalStatus; label: string }> = [
-  { value: "active", label: "Activo" },
-  { value: "paused", label: "Pausado" },
-  { value: "completed", label: "Completado" },
-  { value: "cancelled", label: "Cancelado" },
+  { value: "active", label: goalStatusLabels.active },
+  { value: "paused", label: goalStatusLabels.paused },
+  { value: "completed", label: goalStatusLabels.completed },
+  { value: "cancelled", label: goalStatusLabels.cancelled },
 ];
 
 function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
@@ -153,7 +154,7 @@ export function GoalsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Revisa que cada objetivo tenga nombre y monto mayor a 0.");
+      setEditError("Make sure every goal has a name and an amount greater than zero.");
       return;
     }
 
@@ -246,26 +247,26 @@ export function GoalsView() {
     <div>
       <PageHeader
         eyebrow="Goals"
-        title="Objetivos"
-        description="Crea objetivos, reserva dinero y entra al detalle para ver contexto asociado."
+        title="Goals"
+        description="Create goals, reserve money, and open details for related context."
       >
         {isEditing ? (
           <>
             <Button
               size="icon"
               variant="outline"
-              aria-label={showHidden ? "Ocultar objetivos ocultos" : "Ver objetivos ocultos"}
+              aria-label={showHidden ? "Hide hidden goals" : "Show hidden goals"}
               onClick={() => setShowHidden((current) => !current)}
             >
               {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Button variant="outline" onClick={cancelEditingGoals}>
               <X className="h-4 w-4" />
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={saveGoalEdits}>
               <Save className="h-4 w-4" />
-              Guardar
+              Save
             </Button>
           </>
         ) : (
@@ -273,7 +274,7 @@ export function GoalsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label="Editar objetivos"
+              aria-label="Edit goals"
               disabled={dataset.goals.length === 0}
               onClick={startEditingGoals}
             >
@@ -281,20 +282,20 @@ export function GoalsView() {
             </Button>
             <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
               <DialogTrigger asChild>
-                <Button size="icon" aria-label="Nuevo objetivo">
+                <Button size="icon" aria-label="New goal">
                   <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>Nuevo objetivo</DialogTitle>
+                  <DialogTitle>New goal</DialogTitle>
                   <DialogDescription>
-                    Defini la meta, elegi color y conectala con una etiqueta.
+                    Set the target, choose a color, and connect it to a tag.
                   </DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={handleCreateGoal}>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Nombre</span>
+                    <span className="text-sm font-medium">Name</span>
                     <input
                       value={name}
                       onChange={(event) => setName(event.target.value)}
@@ -304,7 +305,7 @@ export function GoalsView() {
                   </label>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Objetivo</span>
+                      <span className="text-sm font-medium">Target</span>
                       <input
                         value={targetAmount}
                         onChange={(event) => setTargetAmount(event.target.value)}
@@ -314,7 +315,7 @@ export function GoalsView() {
                       />
                     </label>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Moneda</span>
+                      <span className="text-sm font-medium">Currency</span>
                       <select
                         value={currency}
                         onChange={(event) =>
@@ -330,13 +331,13 @@ export function GoalsView() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Etiqueta</span>
+                      <span className="text-sm font-medium">Tag</span>
                       <select
                         value={tagId}
                         onChange={(event) => setTagId(event.target.value)}
                         className={inputClassName}
                       >
-                        <option value="">Sin etiqueta</option>
+                        <option value="">No tag</option>
                         {dataset.tags.map((tag) => (
                           <option key={tag.id} value={tag.id}>
                             {tag.name}
@@ -355,7 +356,7 @@ export function GoalsView() {
                     </label>
                   </div>
                   <label className="block space-y-2">
-                    <span className="text-sm font-medium">Fecha limite</span>
+                    <span className="text-sm font-medium">Deadline</span>
                     <input
                       value={deadline}
                       onChange={(event) => setDeadline(event.target.value)}
@@ -392,18 +393,18 @@ export function GoalsView() {
                             }
                             type="color"
                             className={colorInputClassName}
-                            aria-label={`Color de ${draft.name || "objetivo"}`}
+                            aria-label={`Color de ${draft.name || "goal"}`}
                           />
                         </label>
                         <label className="block flex-1 space-y-2">
-                          <span className="text-sm font-medium">Nombre</span>
+                          <span className="text-sm font-medium">Name</span>
                           <input
                             value={draft.name}
                             onChange={(event) =>
                               updateGoalDraft(draft.id, { name: event.target.value })
                             }
                             className={inputClassName}
-                            placeholder="Nombre del objetivo"
+                            placeholder="Goal name"
                           />
                         </label>
                       </div>
@@ -412,8 +413,8 @@ export function GoalsView() {
                           type="button"
                           variant="outline"
                           size="icon"
-                          aria-label={draft.isVisible ? "Ocultar objetivo" : "Mostrar objetivo"}
-                          title={draft.isVisible ? "Ocultar objetivo" : "Mostrar objetivo"}
+                          aria-label={draft.isVisible ? "Hide goal" : "Show goal"}
+                          title={draft.isVisible ? "Hide goal" : "Show goal"}
                           onClick={() =>
                             updateGoalDraft(draft.id, {
                               isVisible: !draft.isVisible,
@@ -430,8 +431,8 @@ export function GoalsView() {
                           type="button"
                           variant="destructive"
                           size="icon"
-                          aria-label="Eliminar objetivo"
-                          title="Eliminar objetivo"
+                          aria-label="Delete goal"
+                          title="Delete goal"
                           onClick={() => markGoalForDeletion(draft.id)}
                         >
                           <Trash2 className="h-4 w-4" />
@@ -442,7 +443,7 @@ export function GoalsView() {
                   <CardContent className="space-y-4">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Objetivo</span>
+                        <span className="text-sm font-medium">Target</span>
                         <input
                           value={draft.targetAmount}
                           onChange={(event) =>
@@ -456,7 +457,7 @@ export function GoalsView() {
                         />
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Estado</span>
+                        <span className="text-sm font-medium">Status</span>
                         <select
                           value={draft.status}
                           onChange={(event) =>
@@ -476,7 +477,7 @@ export function GoalsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Moneda</span>
+                        <span className="text-sm font-medium">Currency</span>
                         <select
                           value={draft.currency}
                           onChange={(event) =>
@@ -494,7 +495,7 @@ export function GoalsView() {
                         </select>
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Fecha limite</span>
+                        <span className="text-sm font-medium">Deadline</span>
                         <input
                           value={draft.deadline}
                           onChange={(event) =>
@@ -507,7 +508,7 @@ export function GoalsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Etiqueta asociada</span>
+                        <span className="text-sm font-medium">Linked tag</span>
                         <select
                           value={draft.tagId}
                           onChange={(event) =>
@@ -515,7 +516,7 @@ export function GoalsView() {
                           }
                           className={inputClassName}
                         >
-                          <option value="">Sin etiqueta</option>
+                          <option value="">No tag</option>
                           {dataset.tags.map((tag) => (
                             <option key={tag.id} value={tag.id}>
                               {tag.name}
@@ -524,7 +525,7 @@ export function GoalsView() {
                         </select>
                       </label>
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Cuenta asociada</span>
+                        <span className="text-sm font-medium">Linked account</span>
                         <select
                           value={draft.accountId}
                           onChange={(event) =>
@@ -532,7 +533,7 @@ export function GoalsView() {
                           }
                           className={inputClassName}
                         >
-                          <option value="">Sin cuenta</option>
+                          <option value="">No account</option>
                           {dataset.accounts.map((account) => (
                             <option key={account.id} value={account.id}>
                               {account.name}
@@ -542,14 +543,14 @@ export function GoalsView() {
                       </label>
                     </div>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Nota</span>
+                      <span className="text-sm font-medium">Note</span>
                       <textarea
                         value={draft.note}
                         onChange={(event) =>
                           updateGoalDraft(draft.id, { note: event.target.value })
                         }
                         className={textareaClassName}
-                        placeholder="Contexto o descripcion del objetivo"
+                        placeholder="Goal context or description"
                       />
                     </label>
                   </CardContent>
@@ -558,7 +559,7 @@ export function GoalsView() {
               {visibleGoalDrafts.length === 0 ? (
                 <Card className="border-dashed">
                   <CardContent className="py-8 text-sm text-muted-foreground">
-                    No quedan objetivos en edicion.
+                    No goals left in edit mode.
                   </CardContent>
                 </Card>
               ) : null}
@@ -590,13 +591,13 @@ export function GoalsView() {
                       <div>
                         <CardTitle>{item.goal.name}</CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          Objetivo{" "}
+                          Target{" "}
                           {formatMoney(item.goal.targetAmount, item.goal.currency)}
                         </p>
                       </div>
                     </div>
                     <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
-                      {item.goal.status}
+                      {goalStatusLabels[item.goal.status]}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -604,13 +605,13 @@ export function GoalsView() {
                   <Progress value={item.percentage} indicatorClassName="bg-sky-500" />
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Reservado</p>
+                      <p className="text-muted-foreground">Reserved</p>
                       <p className="font-semibold">
                         {formatMoney(item.reserved, item.goal.currency)}
                       </p>
                     </div>
                     <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Gastado</p>
+                      <p className="text-muted-foreground">Spent</p>
                       <p className="font-semibold">
                         {formatMoney(item.spent, item.goal.currency)}
                       </p>
@@ -644,7 +645,7 @@ export function GoalsView() {
                     {!item.goal.isVisible ? (
                       <Badge variant="muted">
                         <EyeOff className="mr-1 h-3 w-3" />
-                        Oculto
+                        Hidden
                       </Badge>
                     ) : null}
                   </div>
@@ -666,7 +667,7 @@ export function GoalsView() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <PiggyBank className="h-4 w-4" />
-                Reservar dinero
+                Reserve money
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -688,7 +689,7 @@ export function GoalsView() {
                   </select>
                 </label>
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium">Cuenta</span>
+                  <span className="text-sm font-medium">Account</span>
                   <select
                     value={accountId}
                     onChange={(event) => setAccountId(event.target.value)}
@@ -702,7 +703,7 @@ export function GoalsView() {
                   </select>
                 </label>
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium">Monto</span>
+                  <span className="text-sm font-medium">Amount</span>
                   <input
                     value={reserveAmount}
                     onChange={(event) => setReserveAmount(event.target.value)}
@@ -713,7 +714,7 @@ export function GoalsView() {
                 </label>
                 <Button className="w-full" type="submit">
                   <Plus className="h-4 w-4" />
-                  Reservar
+                  Reserve
                 </Button>
               </form>
             </CardContent>
@@ -723,3 +724,4 @@ export function GoalsView() {
     </div>
   );
 }
+

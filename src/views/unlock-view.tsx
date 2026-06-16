@@ -14,7 +14,7 @@ export function UnlockView() {
     const ok = await unlock(token);
 
     if (!ok) {
-      setError("Ingresá un token válido para desbloquear la wallet.");
+      setError("Enter a valid token to unlock the wallet.");
     }
   }
 
@@ -25,9 +25,9 @@ export function UnlockView() {
           <div className="mb-4 grid h-12 w-12 place-items-center rounded-lg bg-primary text-primary-foreground">
             <WalletCards className="h-6 w-6" />
           </div>
-          <CardTitle className="text-2xl">Desbloquear wallet</CardTitle>
+          <CardTitle className="text-2xl">Unlock wallet</CardTitle>
           <p className="text-sm leading-6 text-muted-foreground">
-            Esta app usa un token personal. No hay usuarios ni registro público.
+            This app uses a personal token. There are no public users or signups.
           </p>
         </CardHeader>
         <CardContent>
@@ -42,13 +42,13 @@ export function UnlockView() {
                 }}
                 type="password"
                 className="h-11 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                placeholder="Ingresá tu token"
+                placeholder="Enter your token"
               />
             </label>
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <Button className="w-full" type="submit">
               <LockKeyhole className="h-4 w-4" />
-              Entrar
+              Enter
             </Button>
           </form>
         </CardContent>

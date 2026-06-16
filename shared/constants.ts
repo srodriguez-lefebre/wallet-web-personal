@@ -1,11 +1,64 @@
-import type { CurrencyCode } from "./types.js";
+import type {
+  AccountType,
+  CurrencyCode,
+  GoalStatus,
+  Investment,
+  PaymentStatus,
+  PaymentType,
+  RecordType,
+} from "./types.js";
 
 export const currencyLabels: Record<CurrencyCode, string> = {
-  UYU: "Peso uruguayo",
-  USD: "Dolar estadounidense",
+  UYU: "Uruguayan peso",
+  USD: "US dollar",
   EUR: "Euro",
-  BRL: "Real brasileno",
-  ARS: "Peso argentino",
+  BRL: "Brazilian real",
+  ARS: "Argentine peso",
+};
+
+export const accountTypeLabels: Record<AccountType, string> = {
+  cash: "Cash",
+  bank: "Bank",
+  credit_card: "Credit card",
+  savings: "Savings",
+  recurring: "Recurring",
+  investment: "Investment",
+  custom: "Custom",
+};
+
+export const recordTypeLabels: Record<RecordType, string> = {
+  expense: "Expense",
+  income: "Income",
+  transfer: "Transfer",
+};
+
+export const paymentTypeLabels: Record<PaymentType, string> = {
+  cash: "Cash",
+  debit: "Debit",
+  credit: "Credit",
+  transfer: "Transfer",
+  other: "Other",
+};
+
+export const paymentStatusLabels: Record<PaymentStatus, string> = {
+  cleared: "Cleared",
+  pending: "Pending",
+  cancelled: "Cancelled",
+};
+
+export const goalStatusLabels: Record<GoalStatus, string> = {
+  active: "Active",
+  completed: "Completed",
+  paused: "Paused",
+  cancelled: "Cancelled",
+};
+
+export const investmentTypeLabels: Record<Investment["type"], string> = {
+  stock: "Stock",
+  fund: "Fund",
+  crypto: "Crypto",
+  deposit: "Deposit",
+  other: "Other",
 };
 
 export const primaryCurrency: CurrencyCode = "UYU";

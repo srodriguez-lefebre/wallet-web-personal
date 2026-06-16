@@ -25,22 +25,22 @@ export function buildSavingsRecommendations(dataset: WalletDataset) {
   const summary = calculateSummary(dataset, monthKey(new Date()));
   const allowedDaily = calculateAllowedDailySpend(dataset);
   const recommendations = [
-    `Gasto promedio diario: ${formatMoney(
+    `Average daily spending: ${formatMoney(
       summary.dailyAverageExpense,
       dataset.settings.primaryCurrency,
     )}.`,
-    `Disponible diario estimado: ${formatMoney(
+    `Estimated daily allowance: ${formatMoney(
       allowedDaily,
       dataset.settings.primaryCurrency,
     )}.`,
   ];
 
   if (summary.dailyAverageExpense > allowedDaily) {
-    recommendations.push("El gasto diario promedio supera el disponible diario estimado.");
+    recommendations.push("Average daily spending is above the estimated daily allowance.");
   }
 
   if (summary.cashFlow < 0) {
-    recommendations.push("El cash flow del mes esta negativo; conviene revisar gastos variables.");
+    recommendations.push("This month's cash flow is negative; review variable expenses.");
   }
 
   return recommendations;
