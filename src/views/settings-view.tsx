@@ -64,6 +64,9 @@ export function SettingsView() {
   const [newCategoryParentId, setNewCategoryParentId] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
   const [newCategoryIcon, setNewCategoryIcon] = useState("tag");
+  const [editingCategoryIconId, setEditingCategoryIconId] = useState<
+    string | null
+  >(null);
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<
     Record<string, boolean>
   >({});
@@ -248,6 +251,37 @@ export function SettingsView() {
     clearTagDraft(tagId);
   }
 
+  function renderCategoryIconGrid({
+    selectedIcon,
+    color,
+    onSelect,
+  }: {
+    selectedIcon: string;
+    color: string;
+    onSelect: (icon: string) => void;
+  }) {
+    return (
+      <div className="grid max-h-44 grid-cols-7 gap-2 overflow-y-auto rounded-md border p-2">
+        {categoryIconOptions.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`flex h-10 w-10 items-center justify-center rounded-full border transition hover:border-primary ${
+              selectedIcon === option.value
+                ? "border-primary bg-secondary"
+                : "border-transparent"
+            }`}
+            title={option.label}
+            aria-label={`Usar icono ${option.label}`}
+            onClick={() => onSelect(option.value)}
+          >
+            <CategoryIcon icon={option.value} color={color} size="sm" />
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   function renderCategoryEditor(category: Category, level = 0) {
     const draft = getCategoryDraft(category);
     const children = childCategories(dataset.categories, category.id);
@@ -283,7 +317,15 @@ export function SettingsView() {
           ) : (
             <span className="hidden h-10 w-10 md:block" aria-hidden="true" />
           )}
-          <CategoryIcon icon={draft.icon} color={draft.color} />
+          <button
+            type="button"
+            className="rounded-full outline-none ring-offset-background transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            aria-label={`Cambiar icono de ${category.name}`}
+            title="Cambiar icono"
+            onClick={() => setEditingCategoryIconId(category.id)}
+          >
+            <CategoryIcon icon={draft.icon} color={draft.color} />
+          </button>
           <input
             value={draft.color}
             onChange={(event) =>
@@ -301,20 +343,6 @@ export function SettingsView() {
             className={`${inlineFieldClassName} min-w-40 flex-1`}
             placeholder="Name"
           />
-          <select
-            value={draft.icon}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, { icon: event.target.value })
-            }
-            className={`${inlineFieldClassName} min-w-36`}
-            aria-label={`Icono de ${category.name}`}
-          >
-            {categoryIconOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
           <Button
             type="button"
             variant="outline"
@@ -359,6 +387,13 @@ export function SettingsView() {
       </div>
     );
   }
+
+  const editingCategoryIcon = editingCategoryIconId
+    ? dataset.categories.find((category) => category.id === editingCategoryIconId)
+    : undefined;
+  const editingCategoryIconDraft = editingCategoryIcon
+    ? getCategoryDraft(editingCategoryIcon)
+    : undefined;
 
   return (
     <div>
@@ -493,28 +528,11 @@ export function SettingsView() {
                       </label>
                       <div className="space-y-2">
                         <span className="text-sm font-medium">Icono</span>
-                        <div className="grid max-h-44 grid-cols-7 gap-2 overflow-y-auto rounded-md border p-2">
-                          {categoryIconOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              className={`flex h-10 w-10 items-center justify-center rounded-full border transition hover:border-primary ${
-                                newCategoryIcon === option.value
-                                  ? "border-primary bg-secondary"
-                                  : "border-transparent"
-                              }`}
-                              title={option.label}
-                              aria-label={`Usar icono ${option.label}`}
-                              onClick={() => setNewCategoryIcon(option.value)}
-                            >
-                              <CategoryIcon
-                                icon={option.value}
-                                color={newCategoryColor}
-                                size="sm"
-                              />
-                            </button>
-                          ))}
-                        </div>
+                        {renderCategoryIconGrid({
+                          selectedIcon: newCategoryIcon,
+                          color: newCategoryColor,
+                          onSelect: setNewCategoryIcon,
+                        })}
                       </div>
                     </div>
                     <Button className="w-full" type="submit">
@@ -537,6 +555,49 @@ export function SettingsView() {
             </div>
           </CardContent>
         </Card>
+
+        <Dialog
+          open={Boolean(editingCategoryIcon)}
+          onOpenChange={(open) => {
+            if (!open) setEditingCategoryIconId(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                Icono de {editingCategoryIcon?.name ?? "categoria"}
+              </DialogTitle>
+              <DialogDescription>
+                Elegi un icono para combinarlo con el color actual de la categoria.
+              </DialogDescription>
+            </DialogHeader>
+            {editingCategoryIcon && editingCategoryIconDraft ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 rounded-md border p-3">
+                  <CategoryIcon
+                    icon={editingCategoryIconDraft.icon}
+                    color={editingCategoryIconDraft.color}
+                    size="lg"
+                  />
+                  <div>
+                    <p className="font-medium">{editingCategoryIcon.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Despues de elegir, usa Guardar en la fila para confirmar.
+                    </p>
+                  </div>
+                </div>
+                {renderCategoryIconGrid({
+                  selectedIcon: editingCategoryIconDraft.icon,
+                  color: editingCategoryIconDraft.color,
+                  onSelect: (icon) => {
+                    updateCategoryDraft(editingCategoryIcon.id, { icon });
+                    setEditingCategoryIconId(null);
+                  },
+                })}
+              </div>
+            ) : null}
+          </DialogContent>
+        </Dialog>
 
         <Card>
           <CardHeader>
