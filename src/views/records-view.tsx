@@ -95,6 +95,17 @@ function defaultDestinationAccountId(
   );
 }
 
+function toDateTimeLocal(value: string | Date) {
+  const date = typeof value === "string" ? new Date(value) : value;
+  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+
+  return localDate.toISOString().slice(0, 16);
+}
+
+function dateTimeLocalToIso(value: string) {
+  return value ? new Date(value).toISOString() : new Date().toISOString();
+}
+
 function typeButtonClassName(item: RecordType, currentType: RecordType) {
   if (item === currentType) {
     if (item === "expense") {
@@ -146,9 +157,26 @@ export function RecordsView() {
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
   const [counterpartyName, setCounterpartyName] = useState("");
+  const [occurredAtLocal, setOccurredAtLocal] = useState(() =>
+    toDateTimeLocal(new Date()),
+  );
   const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
-  const categories = sortCategoriesForSelect(dataset.categories);
+  const [categorySearch, setCategorySearch] = useState("");
+  const categories = useMemo(
+    () => sortCategoriesForSelect(dataset.categories),
+    [dataset.categories],
+  );
+  const filteredCategories = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase();
+    if (!query) return categories;
+
+    return categories.filter((category) =>
+      formatCategoryName(dataset.categories, category)
+        .toLowerCase()
+        .includes(query),
+    );
+  }, [categories, categorySearch, dataset.categories]);
   const selectedAccountBalance = recordFilters.accountId
     ? calculateAccountBalances(dataset).find(
         (balance) => balance.account.id === recordFilters.accountId,
@@ -178,6 +206,7 @@ export function RecordsView() {
       setNote("");
       setTagId("");
       setCounterpartyName("");
+      setOccurredAtLocal(toDateTimeLocal(new Date()));
       setPaymentType("credit");
       setPaymentStatus("cleared");
       setIsRecordDialogOpen(true);
@@ -286,6 +315,8 @@ export function RecordsView() {
     setNote("");
     setTagId("");
     setCounterpartyName("");
+    setOccurredAtLocal(toDateTimeLocal(new Date()));
+    setCategorySearch("");
     setPaymentType(nextType === "transfer" ? "transfer" : "credit");
     setPaymentStatus("cleared");
   }
@@ -305,6 +336,8 @@ export function RecordsView() {
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
     setCounterpartyName(record.counterpartyName ?? "");
+    setOccurredAtLocal(toDateTimeLocal(record.occurredAt));
+    setCategorySearch("");
     setPaymentType(record.paymentType);
     setPaymentStatus(record.paymentStatus);
     setIsRecordDialogOpen(true);
@@ -335,10 +368,7 @@ export function RecordsView() {
       paymentType,
       paymentStatus,
       exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
-      occurredAt: editingId
-        ? (dataset.records.find((record) => record.id === editingId)
-            ?.occurredAt ?? new Date().toISOString())
-        : new Date().toISOString(),
+      occurredAt: dateTimeLocalToIso(occurredAtLocal),
       note: note || undefined,
     };
   }
@@ -409,6 +439,7 @@ export function RecordsView() {
                     onClick={() => {
                       setType(item);
                       setCategoryId(firstCategoryId(dataset.categories));
+                      setCategorySearch("");
                       setPaymentType(
                         item === "transfer" ? "transfer" : "credit",
                       );
@@ -437,6 +468,18 @@ export function RecordsView() {
                 />
               </label>
 
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Date and time</span>
+                <input
+                  value={occurredAtLocal}
+                  onChange={(event) => setOccurredAtLocal(event.target.value)}
+                  className={fieldClassName}
+                  type="datetime-local"
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Account</span>
                 <select
@@ -480,39 +523,111 @@ export function RecordsView() {
                 </select>
               </label>
             ) : (
-              <label className="block space-y-2">
+              <div className="space-y-2">
                 <span className="text-sm font-medium">Category</span>
-                <select
-                  value={categoryId}
-                  onChange={(event) => setCategoryId(event.target.value)}
+                <input
+                  value={categorySearch}
+                  onChange={(event) => setCategorySearch(event.target.value)}
                   className={fieldClassName}
-                >
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.parentId
-                        ? `-- ${category.name}`
-                        : category.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  placeholder="Search categories..."
+                />
+                <div className="max-h-56 overflow-y-auto rounded-md border bg-background p-1">
+                  {filteredCategories.map((category) => {
+                    const parent = category.parentId
+                      ? dataset.categories.find(
+                          (item) => item.id === category.parentId,
+                        )
+                      : undefined;
+                    const isSelected = category.id === categoryId;
+
+                    return (
+                      <button
+                        key={category.id}
+                        type="button"
+                        onClick={() => setCategoryId(category.id)}
+                        className={
+                          isSelected
+                            ? "flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm font-medium bg-primary text-primary-foreground"
+                            : "flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm transition hover:bg-secondary"
+                        }
+                      >
+                        <CategoryIcon
+                          icon={category.icon}
+                          color={isSelected ? "#ffffff" : category.color}
+                          size="sm"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate">
+                            {category.name}
+                          </span>
+                          {parent ? (
+                            <span
+                              className={
+                                isSelected
+                                  ? "block truncate text-xs text-primary-foreground/75"
+                                  : "block truncate text-xs text-muted-foreground"
+                              }
+                            >
+                              {parent.name}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {filteredCategories.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">
+                      No categories found
+                    </div>
+                  ) : null}
+                </div>
+              </div>
             )}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Tag</span>
-                <select
-                  value={tagId}
-                  onChange={(event) => setTagId(event.target.value)}
-                  className={fieldClassName}
-                >
-                  <option value="">No tag</option>
-                  {dataset.tags.map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
+                  <button
+                    type="button"
+                    onClick={() => setTagId("")}
+                    className={
+                      tagId
+                        ? "rounded-md border px-2 py-1 text-xs text-muted-foreground transition hover:bg-secondary"
+                        : "rounded-md border border-primary bg-primary px-2 py-1 text-xs text-primary-foreground"
+                    }
+                  >
+                    No tag
+                  </button>
+                  {dataset.tags.map((tag) => {
+                    const isSelected = tag.id === tagId;
+
+                    return (
+                      <button
+                        key={tag.id}
+                        type="button"
+                        onClick={() => setTagId(tag.id)}
+                        className={
+                          isSelected
+                            ? "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground"
+                            : "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground transition hover:bg-secondary"
+                        }
+                        style={{
+                          borderColor: tag.color,
+                          backgroundColor: isSelected
+                            ? `${tag.color}22`
+                            : undefined,
+                        }}
+                      >
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                        {tag.name}
+                      </button>
+                    );
+                  })}
+                </div>
               </label>
 
               <label className="block space-y-2">

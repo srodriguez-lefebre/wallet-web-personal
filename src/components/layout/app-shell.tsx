@@ -212,9 +212,8 @@ export function AppShell({ children }: PropsWithChildren) {
             </span>
           </div>
 
-          <Button onClick={openNewRecord}>
+          <Button size="icon" onClick={openNewRecord} aria-label="New record">
             <Plus className="h-4 w-4" />
-            Record
           </Button>
           <Button
             variant="outline"
