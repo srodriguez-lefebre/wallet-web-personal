@@ -14,17 +14,22 @@ import {
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Banknote,
+  CheckCircle2,
   Flag,
   Landmark,
   WalletCards,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
+import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
+import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalanceAtDate,
@@ -34,13 +39,15 @@ import {
   calculateGoalProgress,
   calculateSummary,
   calculateSummaryForDateRange,
+  calculateVisibleDebtSummary,
   dateKeysForRange,
   dateRangeForMonth,
   formatMoney,
+  isOpenDebt,
   relativeDateRanges,
   relativeMonthKeys,
 } from "@shared/calculations";
-import { goalStatusLabels } from "@shared/constants";
+import { debtDirectionLabels, goalStatusLabels } from "@shared/constants";
 import type { DateRange } from "@shared/types";
 
 export function DashboardView() {
@@ -51,6 +58,7 @@ export function DashboardView() {
     selectedPeriodMode,
     selectedDateRange,
     setRecordFilters,
+    recordDebtPayment,
   } = useWallet();
   const summary =
     selectedPeriodMode === "custom"
@@ -71,6 +79,10 @@ export function DashboardView() {
   const visibleGoals = calculateGoalProgress(dataset).filter(
     (item) => item.goal.isVisible,
   );
+  const visibleOpenDebts = dataset.debts.filter(
+    (debt) => debt.isVisible && isOpenDebt(debt),
+  );
+  const debtSummary = calculateVisibleDebtSummary(dataset);
   const balanceCurrency =
     primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
   const balancePeriods =
@@ -91,14 +103,43 @@ export function DashboardView() {
         new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
     )
     .slice(0, 5);
+  const { toast, runAction } = useActionToast();
 
   function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
     navigate("/records");
   }
 
+  async function settleDebt(debt: (typeof dataset.debts)[number]) {
+    if (!debt.accountId || debt.pendingAmount === undefined) return;
+
+    await runAction(
+      () =>
+        recordDebtPayment(debt.id, {
+          amount: debt.pendingAmount ?? 0,
+          accountId: debt.accountId ?? "",
+          occurredAt: new Date().toISOString(),
+          note:
+            debt.direction === "receivable"
+              ? `Full debt received: ${debt.name}`
+              : `Full debt paid: ${debt.name}`,
+          saveAccountToDebt: true,
+        }),
+      {
+        processing:
+          debt.direction === "receivable"
+            ? "Receiving debt..."
+            : "Paying debt...",
+        success:
+          debt.direction === "receivable" ? "Debt received" : "Debt paid",
+        error: "Could not close debt",
+      },
+    );
+  }
+
   return (
     <div>
+      <ActionToast toast={toast} />
       <PageHeader
         eyebrow="Dashboard"
         title="Financial overview"
@@ -289,7 +330,7 @@ export function DashboardView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Visible accounts & goals</CardTitle>
+            <CardTitle>Resume</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleBalances.map(
@@ -388,6 +429,123 @@ export function DashboardView() {
               ) : (
                 <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
                   No visible goals
+                </div>
+              )}
+            </div>
+            <div className="border-t pt-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="text-xs font-semibold uppercase text-muted-foreground">
+                  Debts
+                </p>
+                {visibleOpenDebts.length > 0 ? (
+                  <Badge variant={debtSummary.net >= 0 ? "success" : "danger"}>
+                    Net{" "}
+                    {formatMoney(
+                      debtSummary.net,
+                      dataset.settings.primaryCurrency,
+                    )}
+                  </Badge>
+                ) : null}
+              </div>
+              {visibleOpenDebts.length > 0 ? (
+                <div className="space-y-3">
+                  {visibleOpenDebts.slice(0, 5).map((debt) => (
+                    <div
+                      key={debt.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => navigate("/debts")}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate("/debts");
+                        }
+                      }}
+                      className="cursor-pointer rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={
+                              debt.direction === "receivable"
+                                ? "grid h-8 w-8 shrink-0 place-items-center rounded-md bg-emerald-500/10 text-emerald-600"
+                                : "grid h-8 w-8 shrink-0 place-items-center rounded-md bg-red-500/10 text-red-600"
+                            }
+                          >
+                            <Banknote className="h-4 w-4" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{debt.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {debtDirectionLabels[debt.direction]} -{" "}
+                              {debt.counterpartyName}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="shrink-0 text-right">
+                          <p
+                            className={
+                              debt.direction === "receivable"
+                                ? "font-semibold text-emerald-600"
+                                : "font-semibold text-red-600"
+                            }
+                          >
+                            {debt.pendingAmount === undefined
+                              ? "Amount pending"
+                              : `${debt.direction === "receivable" ? "+" : "-"}${formatMoney(
+                                  debt.pendingAmount,
+                                  debt.currency,
+                                )}`}
+                          </p>
+                          {debt.dueAt ? (
+                            <p className="text-xs text-muted-foreground">
+                              due {debt.dueAt.slice(0, 10)}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate("/debts");
+                          }}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                          Partial
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={
+                            debt.pendingAmount === undefined || !debt.accountId
+                          }
+                          title={
+                            debt.accountId
+                              ? undefined
+                              : "Assign an account to settle this debt directly."
+                          }
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void settleDebt(debt);
+                          }}
+                          className={
+                            debt.direction === "receivable"
+                              ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                              : "bg-red-600 text-white hover:bg-red-700"
+                          }
+                        >
+                          <Banknote className="h-4 w-4" />
+                          {debt.direction === "receivable" ? "Receive" : "Pay"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  No open debts
                 </div>
               )}
             </div>

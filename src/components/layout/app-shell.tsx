@@ -1,6 +1,7 @@
 import { useMemo, useState, type PropsWithChildren } from "react";
 import {
   BarChart3,
+  Banknote,
   CircleDollarSign,
   Download,
   Flag,
@@ -30,6 +31,7 @@ const navItems = [
   { label: "Records", href: "/records", icon: ReceiptText },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Goals", href: "/goals", icon: Flag },
+  { label: "Debts", href: "/debts", icon: Banknote },
   { label: "Investments", href: "/investments", icon: LineChart },
   { label: "Imports", href: "/imports", icon: Download },
   { label: "Settings", href: "/settings", icon: Settings },

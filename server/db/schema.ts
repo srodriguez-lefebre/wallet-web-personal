@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -112,6 +113,7 @@ export const records = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     note: text("note"),
     isFixed: boolean("is_fixed").notNull().default(false),
+    debtId: uuid("debt_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -239,18 +241,53 @@ export const investments = pgTable("investments", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const debts = pgTable("debts", {
+export const debts = pgTable(
+  "debts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    direction: text("direction").notNull().default("payable"),
+    originalAmount: numeric("original_amount", { precision: 14, scale: 2 }),
+    pendingAmount: numeric("pending_amount", { precision: 14, scale: 2 }),
+    currency: text("currency").notNull(),
+    counterpartyName: text("counterparty_name").notNull().default("Counterparty"),
+    accountId: uuid("account_id").references(() => accounts.id),
+    categoryId: uuid("category_id")
+      .notNull()
+      .references(() => categories.id),
+    status: debtStatusEnum("status").notNull().default("active"),
+    isVisible: boolean("is_visible").notNull().default(true),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    note: text("note"),
+    recurringDebtId: uuid("recurring_debt_id"),
+    recurringMonth: text("recurring_month"),
+  },
+  (table) => ({
+    recurringGeneratedIdx: uniqueIndex("debts_recurring_generated_idx").on(
+      table.recurringDebtId,
+      table.recurringMonth,
+    ),
+  }),
+);
+
+export const recurringDebts = pgTable("recurring_debts", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
-  originalAmount: numeric("original_amount", { precision: 14, scale: 2 }).notNull(),
-  pendingAmount: numeric("pending_amount", { precision: 14, scale: 2 }).notNull(),
+  direction: text("direction").notNull().default("payable"),
+  amount: numeric("amount", { precision: 14, scale: 2 }),
   currency: text("currency").notNull(),
-  counterpartyName: text("counterparty_name"),
+  counterpartyName: text("counterparty_name").notNull(),
   accountId: uuid("account_id").references(() => accounts.id),
-  status: debtStatusEnum("status").notNull().default("active"),
+  categoryId: uuid("category_id")
+    .notNull()
+    .references(() => categories.id),
+  dayOfMonth: numeric("day_of_month", { precision: 2, scale: 0 }).notNull(),
+  isActive: boolean("is_active").notNull().default(true),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
-  dueAt: timestamp("due_at", { withTimezone: true }),
   note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const installmentPlans = pgTable("installment_plans", {

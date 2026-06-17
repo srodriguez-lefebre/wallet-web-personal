@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyDebtPayment,
+  buildDueRecurringDebtInstances,
   calculateAccountBalanceAtDate,
   calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
@@ -7,6 +9,7 @@ import {
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
   calculateGoalProgress,
+  calculateVisibleDebtSummary,
   calculateSummary,
   calculateSummaryForDateRange,
   dateKeysForRange,
@@ -138,6 +141,154 @@ describe("wallet calculations", () => {
 
     expect(general?.spent).toBe(35030);
     expect(general?.status).toBe("ok");
+  });
+
+  it("summarizes visible open debts with receivables as positive and payables as negative", () => {
+    const summary = calculateVisibleDebtSummary({
+      ...mockWalletData,
+      debts: [
+        {
+          id: "debt-receivable",
+          name: "Loan to friend",
+          direction: "receivable",
+          originalAmount: 10000,
+          pendingAmount: 6000,
+          currency: "UYU",
+          counterpartyName: "Friend",
+          categoryId: "cat-income",
+          status: "active",
+          isVisible: true,
+          startedAt: "2026-06-01T12:00:00.000Z",
+        },
+        {
+          id: "debt-payable",
+          name: "Mobile bill",
+          direction: "payable",
+          originalAmount: 1200,
+          pendingAmount: 1200,
+          currency: "UYU",
+          counterpartyName: "Carrier",
+          categoryId: "cat-shopping",
+          status: "active",
+          isVisible: true,
+          startedAt: "2026-06-03T12:00:00.000Z",
+        },
+        {
+          id: "debt-closed",
+          name: "Closed",
+          direction: "payable",
+          originalAmount: 500,
+          pendingAmount: 0,
+          currency: "UYU",
+          counterpartyName: "Store",
+          categoryId: "cat-shopping",
+          status: "paid",
+          isVisible: true,
+          startedAt: "2026-06-01T12:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(summary.toCollect).toBe(6000);
+    expect(summary.toPay).toBe(1200);
+    expect(summary.net).toBe(4800);
+    expect(summary.openCount).toBe(2);
+  });
+
+  it("keeps amount-pending debts visible without adding them to totals", () => {
+    const summary = calculateVisibleDebtSummary({
+      ...mockWalletData,
+      debts: [
+        {
+          id: "debt-pending",
+          name: "Bill without amount",
+          direction: "payable",
+          currency: "UYU",
+          counterpartyName: "Carrier",
+          categoryId: "cat-shopping",
+          status: "active",
+          isVisible: true,
+          startedAt: "2026-06-03T12:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(summary.amountPendingCount).toBe(1);
+    expect(summary.toPay).toBe(0);
+    expect(summary.openCount).toBe(1);
+  });
+
+  it("creates all due monthly recurring debt instances without duplicates", () => {
+    const instances = buildDueRecurringDebtInstances(
+      {
+        ...mockWalletData,
+        debts: [
+          {
+            id: "existing-generated",
+            name: "Mobile contract - 2026-06",
+            direction: "payable",
+            originalAmount: 1200,
+            pendingAmount: 1200,
+            currency: "UYU",
+            counterpartyName: "Carrier",
+            categoryId: "cat-shopping",
+            status: "active",
+            isVisible: true,
+            startedAt: "2026-06-03T12:00:00.000Z",
+            dueAt: "2026-06-03T12:00:00.000Z",
+            recurringDebtId: "recurring-mobile",
+            recurringMonth: "2026-06",
+          },
+        ],
+        recurringDebts: [
+          {
+            id: "recurring-mobile",
+            name: "Mobile contract",
+            direction: "payable",
+            amount: 1200,
+            currency: "UYU",
+            counterpartyName: "Carrier",
+            categoryId: "cat-shopping",
+            dayOfMonth: 3,
+            isActive: true,
+            startedAt: "2026-06-01T12:00:00.000Z",
+          },
+        ],
+      },
+      new Date("2026-08-10T12:00:00.000Z"),
+    );
+
+    expect(instances.map((debt) => debt.recurringMonth)).toEqual([
+      "2026-07",
+      "2026-08",
+    ]);
+    expect(instances[0]).toMatchObject({
+      name: "Mobile contract - 2026-07",
+      dueAt: "2026-07-03T12:00:00.000Z",
+      pendingAmount: 1200,
+    });
+  });
+
+  it("closes a debt when a partial payment clears the remaining amount", () => {
+    const result = applyDebtPayment(
+      {
+        id: "debt-payable",
+        name: "Mobile bill",
+        direction: "payable",
+        originalAmount: 1200,
+        pendingAmount: 500,
+        currency: "UYU",
+        counterpartyName: "Carrier",
+        categoryId: "cat-shopping",
+        status: "active",
+        isVisible: true,
+        startedAt: "2026-06-03T12:00:00.000Z",
+      },
+      500,
+    );
+
+    expect(result.pendingAmount).toBe(0);
+    expect(result.status).toBe("paid");
   });
 
   it("groups records by day", () => {

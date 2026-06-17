@@ -19,7 +19,10 @@ import type {
   Category,
   CurrencyCode,
   DateRange,
+  Debt,
   GoalProgress,
+  RecurringDebt,
+  VisibleDebtSummary,
   WalletDataset,
   WalletRecord,
 } from "./types.js";
@@ -249,6 +252,124 @@ export function calculateVisibleBalance(dataset: WalletDataset) {
   return calculateAccountBalances(dataset)
     .filter(({ account }) => account.isVisible)
     .reduce((total, item) => total + item.balanceInPrimary, 0);
+}
+
+export function isOpenDebt(debt: Debt) {
+  return debt.status !== "paid" && (debt.pendingAmount === undefined || debt.pendingAmount > 0);
+}
+
+export function calculateVisibleDebtSummary(
+  dataset: WalletDataset,
+): VisibleDebtSummary {
+  return dataset.debts
+    .filter((debt) => debt.isVisible && isOpenDebt(debt))
+    .reduce<VisibleDebtSummary>(
+      (summary, debt) => {
+        const pendingAmount = debt.pendingAmount;
+
+        if (pendingAmount === undefined) {
+          return {
+            ...summary,
+            openCount: summary.openCount + 1,
+            amountPendingCount: summary.amountPendingCount + 1,
+          };
+        }
+
+        const toCollect =
+          debt.direction === "receivable"
+            ? summary.toCollect + pendingAmount
+            : summary.toCollect;
+        const toPay =
+          debt.direction === "payable"
+            ? summary.toPay + pendingAmount
+            : summary.toPay;
+
+        return {
+          toCollect,
+          toPay,
+          net: toCollect - toPay,
+          openCount: summary.openCount + 1,
+          amountPendingCount: summary.amountPendingCount,
+        };
+      },
+      {
+        toCollect: 0,
+        toPay: 0,
+        net: 0,
+        openCount: 0,
+        amountPendingCount: 0,
+      },
+    );
+}
+
+export function applyDebtPayment(debt: Debt, amount: number): Debt {
+  if (amount <= 0 || debt.pendingAmount === undefined) return debt;
+
+  const pendingAmount = Math.max(0, debt.pendingAmount - amount);
+  return {
+    ...debt,
+    pendingAmount,
+    status: pendingAmount === 0 ? "paid" : debt.status,
+  };
+}
+
+function recurringDebtDueDate(rule: RecurringDebt, month: string) {
+  const monthStart = parseISO(`${month}-01T12:00:00.000Z`);
+  const lastDay = endOfMonth(monthStart).getDate();
+  return parseISO(
+    `${month}-${String(Math.min(rule.dayOfMonth, lastDay)).padStart(2, "0")}T12:00:00.000Z`,
+  );
+}
+
+export function buildDueRecurringDebtInstances(
+  dataset: WalletDataset,
+  currentDate = new Date(),
+): Array<Omit<Debt, "id">> {
+  const currentMonth = monthKey(currentDate);
+  const generatedKeys = new Set(
+    dataset.debts
+      .filter((debt) => debt.recurringDebtId && debt.recurringMonth)
+      .map((debt) => `${debt.recurringDebtId}:${debt.recurringMonth}`),
+  );
+
+  return dataset.recurringDebts.flatMap((rule) => {
+    if (!rule.isActive) return [];
+
+    const startMonth = monthKey(rule.startedAt);
+    const instances: Array<Omit<Debt, "id">> = [];
+    let cursor = parseISO(`${startMonth}-15T12:00:00.000Z`);
+    const end = parseISO(`${currentMonth}-15T12:00:00.000Z`);
+
+    while (!isAfter(cursor, end)) {
+      const recurringMonth = format(cursor, "yyyy-MM");
+      const dueDate = recurringDebtDueDate(rule, recurringMonth);
+      const key = `${rule.id}:${recurringMonth}`;
+
+      if (!isAfter(dueDate, currentDate) && !generatedKeys.has(key)) {
+        instances.push({
+          name: `${rule.name} - ${recurringMonth}`,
+          direction: rule.direction,
+          originalAmount: rule.amount,
+          pendingAmount: rule.amount,
+          currency: rule.currency,
+          counterpartyName: rule.counterpartyName,
+          accountId: rule.accountId,
+          categoryId: rule.categoryId,
+          status: "active",
+          isVisible: true,
+          startedAt: dueDate.toISOString(),
+          dueAt: dueDate.toISOString(),
+          note: rule.note,
+          recurringDebtId: rule.id,
+          recurringMonth,
+        });
+      }
+
+      cursor = addMonths(cursor, 1);
+    }
+
+    return instances;
+  });
 }
 
 export function calculateSummary(

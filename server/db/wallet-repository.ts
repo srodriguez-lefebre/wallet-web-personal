@@ -13,6 +13,7 @@ import {
   investments,
   records,
   recordTags,
+  recurringDebts,
   settings,
   tags,
 } from "./schema.js";
@@ -26,6 +27,7 @@ import type {
   GoalReservation,
   InstallmentPlan,
   Investment,
+  RecurringDebt,
   Tag,
   WalletDataset,
   WalletRecord,
@@ -42,6 +44,8 @@ type NewGoalReservation = Omit<GoalReservation, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
   startedAt?: string;
 };
+type NewDebt = Omit<Debt, "id">;
+type NewRecurringDebt = Omit<RecurringDebt, "id">;
 
 function asNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
@@ -135,6 +139,7 @@ function mapRecord(
     occurredAt: asRequiredIso(row.occurredAt),
     note: optional(row.note),
     isFixed: row.isFixed,
+    debtId: optional(row.debtId),
   };
 }
 
@@ -216,14 +221,40 @@ function mapDebt(row: typeof debts.$inferSelect): Debt {
   return {
     id: row.id,
     name: row.name,
-    originalAmount: asNumber(row.originalAmount),
-    pendingAmount: asNumber(row.pendingAmount),
+    direction: row.direction as Debt["direction"],
+    originalAmount:
+      row.originalAmount === null ? undefined : asNumber(row.originalAmount),
+    pendingAmount:
+      row.pendingAmount === null ? undefined : asNumber(row.pendingAmount),
     currency: row.currency as Debt["currency"],
-    counterpartyName: optional(row.counterpartyName),
+    counterpartyName: row.counterpartyName,
     accountId: optional(row.accountId),
+    categoryId: row.categoryId,
     status: row.status,
+    isVisible: row.isVisible,
     startedAt: asRequiredIso(row.startedAt),
     dueAt: asIso(row.dueAt),
+    note: optional(row.note),
+    recurringDebtId: optional(row.recurringDebtId),
+    recurringMonth: optional(row.recurringMonth),
+  };
+}
+
+function mapRecurringDebt(
+  row: typeof recurringDebts.$inferSelect,
+): RecurringDebt {
+  return {
+    id: row.id,
+    name: row.name,
+    direction: row.direction as RecurringDebt["direction"],
+    amount: row.amount === null ? undefined : asNumber(row.amount),
+    currency: row.currency as RecurringDebt["currency"],
+    counterpartyName: row.counterpartyName,
+    accountId: optional(row.accountId),
+    categoryId: row.categoryId,
+    dayOfMonth: asNumber(row.dayOfMonth),
+    isActive: row.isActive,
+    startedAt: asRequiredIso(row.startedAt),
     note: optional(row.note),
   };
 }
@@ -272,6 +303,7 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     exchangeRateRows,
     investmentRows,
     debtRows,
+    recurringDebtRows,
     installmentPlanRows,
   ] = await Promise.all([
     db.select().from(settings).limit(1),
@@ -291,6 +323,7 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)),
     db.select().from(investments).orderBy(desc(investments.startedAt)),
     db.select().from(debts),
+    db.select().from(recurringDebts).orderBy(desc(recurringDebts.startedAt)),
     db.select().from(installmentPlans),
   ]);
 
@@ -309,6 +342,7 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     exchangeRates: exchangeRateRows.map(mapExchangeRate),
     investments: investmentRows.map(mapInvestment),
     debts: debtRows.map(mapDebt),
+    recurringDebts: recurringDebtRows.map(mapRecurringDebt),
     installmentPlans: installmentPlanRows.map(mapInstallmentPlan),
   };
 }
@@ -359,6 +393,10 @@ export async function deleteAccount(id: string, db: Db = createDb()) {
   await db.update(goals).set({ accountId: null }).where(eq(goals.accountId, id));
   await db.update(budgets).set({ accountId: null }).where(eq(budgets.accountId, id));
   await db.update(debts).set({ accountId: null }).where(eq(debts.accountId, id));
+  await db
+    .update(recurringDebts)
+    .set({ accountId: null, updatedAt: new Date() })
+    .where(eq(recurringDebts.accountId, id));
   await db.delete(goalReservations).where(eq(goalReservations.accountId, id));
   await db.delete(installmentPlans).where(eq(installmentPlans.accountId, id));
 
@@ -425,6 +463,8 @@ export async function deleteCategory(id: string, db: Db = createDb()) {
   const ids = await categoryTreeIds(id, db);
   await db.update(records).set({ categoryId: null }).where(inArray(records.categoryId, ids));
   await db.update(budgets).set({ categoryId: null }).where(inArray(budgets.categoryId, ids));
+  await db.delete(debts).where(inArray(debts.categoryId, ids));
+  await db.delete(recurringDebts).where(inArray(recurringDebts.categoryId, ids));
   await db.delete(installmentPlans).where(inArray(installmentPlans.categoryId, ids));
 
   for (const categoryId of ids.reverse()) {
@@ -515,6 +555,7 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
       occurredAt: new Date(input.occurredAt),
       note: input.note ?? null,
       isFixed: input.isFixed ?? false,
+      debtId: input.debtId ?? null,
     })
     .returning();
   await replaceRecordTags(row.id, input.tagIds, db);
@@ -542,6 +583,7 @@ export async function updateRecord(
       occurredAt: new Date(input.occurredAt),
       note: input.note ?? null,
       isFixed: input.isFixed ?? false,
+      debtId: input.debtId ?? null,
       updatedAt: new Date(),
     })
     .where(eq(records.id, id))
@@ -702,6 +744,222 @@ export async function updateInvestment(
 export async function deleteInvestment(id: string, db: Db = createDb()) {
   const rows = await db.delete(investments).where(eq(investments.id, id)).returning();
   return rows.length > 0;
+}
+
+export async function listDebts(db: Db = createDb()) {
+  const rows = await db.select().from(debts).orderBy(desc(debts.startedAt));
+  return rows.map(mapDebt);
+}
+
+export async function createDebt(input: NewDebt, db: Db = createDb()) {
+  const [row] = await db
+    .insert(debts)
+    .values({
+      name: input.name,
+      direction: input.direction,
+      originalAmount:
+        input.originalAmount === undefined ? null : decimal(input.originalAmount),
+      pendingAmount:
+        input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
+      currency: input.currency,
+      counterpartyName: input.counterpartyName,
+      accountId: input.accountId ?? null,
+      categoryId: input.categoryId,
+      status: input.status,
+      isVisible: input.isVisible,
+      startedAt: new Date(input.startedAt),
+      dueAt: toDate(input.dueAt),
+      note: input.note ?? null,
+      recurringDebtId: input.recurringDebtId ?? null,
+      recurringMonth: input.recurringMonth ?? null,
+    })
+    .returning();
+  return mapDebt(row);
+}
+
+export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
+  if (inputs.length === 0) return [];
+
+  const rows = await db
+    .insert(debts)
+    .values(
+      inputs.map((input) => ({
+        name: input.name,
+        direction: input.direction,
+        originalAmount:
+          input.originalAmount === undefined ? null : decimal(input.originalAmount),
+        pendingAmount:
+          input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
+        currency: input.currency,
+        counterpartyName: input.counterpartyName,
+        accountId: input.accountId ?? null,
+        categoryId: input.categoryId,
+        status: input.status,
+        isVisible: input.isVisible,
+        startedAt: new Date(input.startedAt),
+        dueAt: toDate(input.dueAt),
+        note: input.note ?? null,
+        recurringDebtId: input.recurringDebtId ?? null,
+        recurringMonth: input.recurringMonth ?? null,
+      })),
+    )
+    .onConflictDoNothing()
+    .returning();
+
+  return rows.map(mapDebt);
+}
+
+export async function updateDebt(id: string, input: NewDebt, db: Db = createDb()) {
+  const [row] = await db
+    .update(debts)
+    .set({
+      name: input.name,
+      direction: input.direction,
+      originalAmount:
+        input.originalAmount === undefined ? null : decimal(input.originalAmount),
+      pendingAmount:
+        input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
+      currency: input.currency,
+      counterpartyName: input.counterpartyName,
+      accountId: input.accountId ?? null,
+      categoryId: input.categoryId,
+      status: input.status,
+      isVisible: input.isVisible,
+      startedAt: new Date(input.startedAt),
+      dueAt: toDate(input.dueAt),
+      note: input.note ?? null,
+      recurringDebtId: input.recurringDebtId ?? null,
+      recurringMonth: input.recurringMonth ?? null,
+    })
+    .where(eq(debts.id, id))
+    .returning();
+
+  return row ? mapDebt(row) : null;
+}
+
+export async function deleteDebt(id: string, db: Db = createDb()) {
+  const rows = await db.delete(debts).where(eq(debts.id, id)).returning();
+  return rows.length > 0;
+}
+
+export async function listRecurringDebts(db: Db = createDb()) {
+  const rows = await db
+    .select()
+    .from(recurringDebts)
+    .orderBy(desc(recurringDebts.startedAt));
+  return rows.map(mapRecurringDebt);
+}
+
+export async function createRecurringDebt(
+  input: NewRecurringDebt,
+  db: Db = createDb(),
+) {
+  const [row] = await db
+    .insert(recurringDebts)
+    .values({
+      name: input.name,
+      direction: input.direction,
+      amount: input.amount === undefined ? null : decimal(input.amount),
+      currency: input.currency,
+      counterpartyName: input.counterpartyName,
+      accountId: input.accountId ?? null,
+      categoryId: input.categoryId,
+      dayOfMonth: decimal(input.dayOfMonth),
+      isActive: input.isActive,
+      startedAt: new Date(input.startedAt),
+      note: input.note ?? null,
+    })
+    .returning();
+  return mapRecurringDebt(row);
+}
+
+export async function updateRecurringDebt(
+  id: string,
+  input: NewRecurringDebt,
+  db: Db = createDb(),
+) {
+  const [row] = await db
+    .update(recurringDebts)
+    .set({
+      name: input.name,
+      direction: input.direction,
+      amount: input.amount === undefined ? null : decimal(input.amount),
+      currency: input.currency,
+      counterpartyName: input.counterpartyName,
+      accountId: input.accountId ?? null,
+      categoryId: input.categoryId,
+      dayOfMonth: decimal(input.dayOfMonth),
+      isActive: input.isActive,
+      startedAt: new Date(input.startedAt),
+      note: input.note ?? null,
+      updatedAt: new Date(),
+    })
+    .where(eq(recurringDebts.id, id))
+    .returning();
+
+  return row ? mapRecurringDebt(row) : null;
+}
+
+export async function deleteRecurringDebt(id: string, db: Db = createDb()) {
+  const rows = await db.delete(recurringDebts).where(eq(recurringDebts.id, id)).returning();
+  return rows.length > 0;
+}
+
+interface DebtPaymentInput {
+  amount: number;
+  accountId: string;
+  occurredAt: string;
+  note?: string;
+  saveAccountToDebt?: boolean;
+}
+
+export async function recordDebtPayment(
+  id: string,
+  input: DebtPaymentInput,
+  db: Db = createDb(),
+) {
+  const [debtRow] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
+  if (!debtRow) return null;
+
+  const debt = mapDebt(debtRow);
+  if (debt.pendingAmount === undefined || input.amount > debt.pendingAmount) {
+    throw new Error("Invalid debt payment amount");
+  }
+
+  const [recordRow] = await db
+    .insert(records)
+    .values({
+      type: debt.direction === "receivable" ? "income" : "expense",
+      amount: decimal(input.amount),
+      currency: debt.currency,
+      accountId: input.accountId,
+      categoryId: debt.categoryId,
+      counterpartyName: debt.counterpartyName,
+      paymentType: "transfer",
+      paymentStatus: "cleared",
+      exchangeRateToPrimary: "1",
+      occurredAt: new Date(input.occurredAt),
+      note: input.note ?? `Debt payment: ${debt.name}`,
+      isFixed: false,
+      debtId: id,
+    })
+    .returning();
+
+  const nextPendingAmount = Math.max(0, debt.pendingAmount - input.amount);
+  const [updatedDebtRow] = await db
+    .update(debts)
+    .set({
+      pendingAmount: decimal(nextPendingAmount),
+      status: nextPendingAmount === 0 ? "paid" : debt.status,
+      accountId: input.saveAccountToDebt ? input.accountId : (debt.accountId ?? null),
+    })
+    .where(eq(debts.id, id))
+    .returning();
+
+  return {
+    debt: mapDebt(updatedDebtRow),
+    record: mapRecord(recordRow, { [recordRow.id]: [] }),
+  };
 }
 
 export async function getSettings(db: Db = createDb()) {

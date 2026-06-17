@@ -21,6 +21,8 @@ export type BudgetStatus = "ok" | "warning" | "exceeded";
 
 export type DebtStatus = "active" | "paid" | "paused";
 
+export type DebtDirection = "payable" | "receivable";
+
 export interface Money {
   amount: number;
   currency: CurrencyCode;
@@ -75,6 +77,7 @@ export interface WalletRecord {
   occurredAt: string;
   note?: string;
   isFixed?: boolean;
+  debtId?: string;
 }
 
 export interface Goal {
@@ -139,14 +142,34 @@ export interface Investment {
 export interface Debt {
   id: string;
   name: string;
-  originalAmount: number;
-  pendingAmount: number;
+  direction: DebtDirection;
+  originalAmount?: number;
+  pendingAmount?: number;
   currency: CurrencyCode;
-  counterpartyName?: string;
+  counterpartyName: string;
   accountId?: string;
+  categoryId: string;
   status: DebtStatus;
+  isVisible: boolean;
   startedAt: string;
   dueAt?: string;
+  note?: string;
+  recurringDebtId?: string;
+  recurringMonth?: string;
+}
+
+export interface RecurringDebt {
+  id: string;
+  name: string;
+  direction: DebtDirection;
+  amount?: number;
+  currency: CurrencyCode;
+  counterpartyName: string;
+  accountId?: string;
+  categoryId: string;
+  dayOfMonth: number;
+  isActive: boolean;
+  startedAt: string;
   note?: string;
 }
 
@@ -190,6 +213,7 @@ export interface WalletDataset {
   exchangeRates: ExchangeRate[];
   investments: Investment[];
   debts: Debt[];
+  recurringDebts: RecurringDebt[];
   installmentPlans: InstallmentPlan[];
 }
 
@@ -234,4 +258,12 @@ export interface AnalyticsSummary {
   spending: number;
   dailyAverageExpense: number;
   availableDaily: number;
+}
+
+export interface VisibleDebtSummary {
+  toCollect: number;
+  toPay: number;
+  net: number;
+  openCount: number;
+  amountPendingCount: number;
 }

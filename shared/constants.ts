@@ -1,6 +1,8 @@
 import type {
   AccountType,
   CurrencyCode,
+  DebtDirection,
+  DebtStatus,
   GoalStatus,
   Investment,
   PaymentStatus,
@@ -59,6 +61,17 @@ export const investmentTypeLabels: Record<Investment["type"], string> = {
   crypto: "Crypto",
   deposit: "Deposit",
   other: "Other",
+};
+
+export const debtDirectionLabels: Record<DebtDirection, string> = {
+  payable: "I owe",
+  receivable: "They owe me",
+};
+
+export const debtStatusLabels: Record<DebtStatus, string> = {
+  active: "Active",
+  paid: "Paid",
+  paused: "Paused",
 };
 
 export const primaryCurrency: CurrencyCode = "UYU";

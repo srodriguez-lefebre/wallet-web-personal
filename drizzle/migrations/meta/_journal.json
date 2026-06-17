@@ -43,6 +43,13 @@
       "when": 1781574953213,
       "tag": "0005_fresh_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781705800000,
+      "tag": "0006_classic_debts",
+      "breakpoints": true
     }
   ]
 }

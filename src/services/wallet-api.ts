@@ -1,6 +1,8 @@
 import type {
   Account,
   Category,
+  Debt,
+  RecurringDebt,
   WalletDataset,
   WalletRecord,
   WalletSettings,
@@ -116,6 +118,92 @@ export function deleteCategory(token: string, categoryId: string) {
   return requestApi<{ deleted: true }>(token, `/api/categories/${categoryId}`, {
     method: "DELETE",
   });
+}
+
+export function createDebt(token: string, debt: Omit<Debt, "id">) {
+  return requestApi<Debt>(token, "/api/debts", {
+    method: "POST",
+    ...body(debt),
+  });
+}
+
+export function updateDebt(
+  token: string,
+  debtId: string,
+  debt: Omit<Debt, "id">,
+) {
+  return requestApi<Debt>(token, `/api/debts/${debtId}`, {
+    method: "PATCH",
+    ...body(debt),
+  });
+}
+
+export function deleteDebt(token: string, debtId: string) {
+  return requestApi<{ deleted: true }>(token, `/api/debts/${debtId}`, {
+    method: "DELETE",
+  });
+}
+
+export function recordDebtPayment(
+  token: string,
+  debtId: string,
+  payment: {
+    amount: number;
+    accountId: string;
+    occurredAt: string;
+    note?: string;
+    saveAccountToDebt?: boolean;
+  },
+) {
+  return requestApi<{ debt: Debt; record: WalletRecord }>(
+    token,
+    `/api/debts/${debtId}/payments`,
+    {
+      method: "POST",
+      ...body(payment),
+    },
+  );
+}
+
+export function generateRecurringDebts(token: string) {
+  return requestApi<Debt[]>(token, "/api/debts/generate-recurring", {
+    method: "POST",
+  });
+}
+
+export function createRecurringDebt(
+  token: string,
+  recurringDebt: Omit<RecurringDebt, "id">,
+) {
+  return requestApi<RecurringDebt>(token, "/api/recurring-debts", {
+    method: "POST",
+    ...body(recurringDebt),
+  });
+}
+
+export function updateRecurringDebt(
+  token: string,
+  recurringDebtId: string,
+  recurringDebt: Omit<RecurringDebt, "id">,
+) {
+  return requestApi<RecurringDebt>(
+    token,
+    `/api/recurring-debts/${recurringDebtId}`,
+    {
+      method: "PATCH",
+      ...body(recurringDebt),
+    },
+  );
+}
+
+export function deleteRecurringDebt(token: string, recurringDebtId: string) {
+  return requestApi<{ deleted: true }>(
+    token,
+    `/api/recurring-debts/${recurringDebtId}`,
+    {
+      method: "DELETE",
+    },
+  );
 }
 
 export function updateSettings(token: string, settings: WalletSettings) {

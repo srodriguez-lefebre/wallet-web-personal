@@ -21,10 +21,12 @@ import type {
   Account,
   Category,
   DateRange,
+  Debt,
   Goal,
   GoalReservation,
   Investment,
   RecordFilters,
+  RecurringDebt,
   Tag,
   WalletDataset,
   WalletRecord,
@@ -79,6 +81,27 @@ interface WalletContextValue {
     investment: Omit<Investment, "id">,
   ) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
+  addDebt: (debt: Omit<Debt, "id">) => Promise<string>;
+  updateDebt: (debtId: string, debt: Omit<Debt, "id">) => Promise<void>;
+  deleteDebt: (debtId: string) => Promise<void>;
+  recordDebtPayment: (
+    debtId: string,
+    payment: {
+      amount: number;
+      accountId: string;
+      occurredAt: string;
+      note?: string;
+      saveAccountToDebt?: boolean;
+    },
+  ) => Promise<void>;
+  addRecurringDebt: (
+    recurringDebt: Omit<RecurringDebt, "id">,
+  ) => Promise<string>;
+  updateRecurringDebt: (
+    recurringDebtId: string,
+    recurringDebt: Omit<RecurringDebt, "id">,
+  ) => Promise<void>;
+  deleteRecurringDebt: (recurringDebtId: string) => Promise<void>;
   toggleAccountVisibility: (accountId: string) => Promise<void>;
   setPrimaryAccount: (accountId: string) => Promise<void>;
 }
@@ -116,7 +139,11 @@ function readCachedDataset() {
   if (!cached) return null;
 
   try {
-    return JSON.parse(cached) as WalletDataset;
+    const parsed = JSON.parse(cached) as WalletDataset;
+    return {
+      ...parsed,
+      recurringDebts: parsed.recurringDebts ?? [],
+    };
   } catch {
     return null;
   }
@@ -157,6 +184,18 @@ function defaultRecordAccountId(dataset: WalletDataset) {
     activeVisibleAccounts[0]?.id ??
     dataset.accounts.find((account) => account.isActive)?.id
   );
+}
+
+async function loadWalletDataset(apiToken: string) {
+  const nextDataset = await walletApi.getWallet(apiToken);
+  const generatedDebts = await walletApi.generateRecurringDebts(apiToken);
+
+  if (generatedDebts.length === 0) return nextDataset;
+
+  return {
+    ...nextDataset,
+    debts: [...generatedDebts, ...nextDataset.debts],
+  };
 }
 
 export function WalletProvider({ children }: PropsWithChildren) {
@@ -212,7 +251,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setIsRefreshing(true);
     setLoadError("");
     try {
-      const nextDataset = await walletApi.getWallet(token);
+      const nextDataset = await loadWalletDataset(token);
       setDataset(nextDataset);
       cacheDataset(nextDataset);
     } catch (error) {
@@ -236,7 +275,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       }
 
       try {
-        const nextDataset = await walletApi.getWallet(token);
+        const nextDataset = await loadWalletDataset(token);
         if (isCancelled) return;
         setDataset(nextDataset);
         cacheDataset(nextDataset);
@@ -622,6 +661,106 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
 
+  async function addDebt(debt: Omit<Debt, "id">) {
+    const created = await walletApi.createDebt(requireToken(), debt);
+    setDataset((current) => ({
+      ...current,
+      debts: [created, ...current.debts],
+    }));
+    return created.id;
+  }
+
+  async function updateDebt(debtId: string, debt: Omit<Debt, "id">) {
+    const updated = await walletApi.updateDebt(requireToken(), debtId, debt);
+    setDataset((current) => ({
+      ...current,
+      debts: current.debts.map((currentDebt) =>
+        currentDebt.id === debtId ? updated : currentDebt,
+      ),
+    }));
+  }
+
+  async function deleteDebt(debtId: string) {
+    await walletApi.deleteDebt(requireToken(), debtId);
+    setDataset((current) => ({
+      ...current,
+      debts: current.debts.filter((debt) => debt.id !== debtId),
+      records: current.records.map((record) =>
+        record.debtId === debtId
+          ? {
+              ...record,
+              debtId: undefined,
+            }
+          : record,
+      ),
+    }));
+  }
+
+  async function recordDebtPayment(
+    debtId: string,
+    payment: {
+      amount: number;
+      accountId: string;
+      occurredAt: string;
+      note?: string;
+      saveAccountToDebt?: boolean;
+    },
+  ) {
+    const result = await walletApi.recordDebtPayment(
+      requireToken(),
+      debtId,
+      payment,
+    );
+    setDataset((current) => ({
+      ...current,
+      debts: current.debts.map((debt) =>
+        debt.id === debtId ? result.debt : debt,
+      ),
+      records: [result.record, ...current.records],
+    }));
+  }
+
+  async function addRecurringDebt(recurringDebt: Omit<RecurringDebt, "id">) {
+    const created = await walletApi.createRecurringDebt(
+      requireToken(),
+      recurringDebt,
+    );
+    setDataset((current) => ({
+      ...current,
+      recurringDebts: [created, ...current.recurringDebts],
+    }));
+    return created.id;
+  }
+
+  async function updateRecurringDebt(
+    recurringDebtId: string,
+    recurringDebt: Omit<RecurringDebt, "id">,
+  ) {
+    const updated = await walletApi.updateRecurringDebt(
+      requireToken(),
+      recurringDebtId,
+      recurringDebt,
+    );
+    setDataset((current) => ({
+      ...current,
+      recurringDebts: current.recurringDebts.map((currentRecurringDebt) =>
+        currentRecurringDebt.id === recurringDebtId
+          ? updated
+          : currentRecurringDebt,
+      ),
+    }));
+  }
+
+  async function deleteRecurringDebt(recurringDebtId: string) {
+    await walletApi.deleteRecurringDebt(requireToken(), recurringDebtId);
+    setDataset((current) => ({
+      ...current,
+      recurringDebts: current.recurringDebts.filter(
+        (recurringDebt) => recurringDebt.id !== recurringDebtId,
+      ),
+    }));
+  }
+
   async function toggleAccountVisibility(accountId: string) {
     const account = dataset.accounts.find((item) => item.id === accountId);
     if (!account) return;
@@ -709,6 +848,13 @@ export function WalletProvider({ children }: PropsWithChildren) {
         addInvestment,
         updateInvestment,
         deleteInvestment,
+        addDebt,
+        updateDebt,
+        deleteDebt,
+        recordDebtPayment,
+        addRecurringDebt,
+        updateRecurringDebt,
+        deleteRecurringDebt,
         toggleAccountVisibility,
         setPrimaryAccount,
       }}

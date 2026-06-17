@@ -14,6 +14,10 @@ export const paymentTypeSchema = z.enum([
 
 export const paymentStatusSchema = z.enum(["cleared", "pending", "cancelled"]);
 
+export const debtDirectionSchema = z.enum(["payable", "receivable"]);
+
+export const debtStatusSchema = z.enum(["active", "paid", "paused"]);
+
 export const accountSchema = z.object({
   name: z.string().min(1),
   type: z.enum([
@@ -63,6 +67,7 @@ export const recordSchema = z
     occurredAt: z.string().datetime(),
     note: z.string().optional(),
     isFixed: z.boolean().optional(),
+    debtId: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type !== "transfer" && !value.categoryId) {
@@ -124,6 +129,60 @@ export const investmentSchema = z.object({
   isVisible: z.boolean().default(true),
   startedAt: z.string().datetime().or(z.string().date()),
   note: z.string().optional(),
+});
+
+export const debtSchema = z
+  .object({
+    name: z.string().min(1),
+    direction: debtDirectionSchema,
+    originalAmount: z.number().positive().optional(),
+    pendingAmount: z.number().nonnegative().optional(),
+    currency: currencySchema,
+    counterpartyName: z.string().min(1),
+    accountId: z.string().optional(),
+    categoryId: z.string().min(1),
+    status: debtStatusSchema.default("active"),
+    isVisible: z.boolean().default(true),
+    startedAt: z.string().datetime().or(z.string().date()),
+    dueAt: z.string().datetime().or(z.string().date()).optional(),
+    note: z.string().optional(),
+    recurringDebtId: z.string().optional(),
+    recurringMonth: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (
+      value.originalAmount !== undefined &&
+      value.pendingAmount !== undefined &&
+      value.pendingAmount > value.originalAmount
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["pendingAmount"],
+        message: "Pending amount cannot be greater than original amount",
+      });
+    }
+  });
+
+export const recurringDebtSchema = z.object({
+  name: z.string().min(1),
+  direction: debtDirectionSchema,
+  amount: z.number().positive().optional(),
+  currency: currencySchema,
+  counterpartyName: z.string().min(1),
+  accountId: z.string().optional(),
+  categoryId: z.string().min(1),
+  dayOfMonth: z.number().int().min(1).max(31),
+  isActive: z.boolean().default(true),
+  startedAt: z.string().datetime().or(z.string().date()),
+  note: z.string().optional(),
+});
+
+export const debtPaymentSchema = z.object({
+  amount: z.number().positive(),
+  accountId: z.string().min(1),
+  occurredAt: z.string().datetime(),
+  note: z.string().optional(),
+  saveAccountToDebt: z.boolean().optional(),
 });
 
 export const budgetSchema = z.object({

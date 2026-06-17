@@ -632,20 +632,30 @@ export function InvestmentsView() {
           </CardHeader>
           <CardContent className="space-y-3">
             {dataset.debts.map((debt) => {
-              const paid = debt.originalAmount - debt.pendingAmount;
-              const percentage = (paid / debt.originalAmount) * 100;
+              const originalAmount = debt.originalAmount;
+              const pendingAmount = debt.pendingAmount;
+              const hasAmount =
+                originalAmount !== undefined && pendingAmount !== undefined;
+              const paid = hasAmount ? originalAmount - pendingAmount : 0;
+              const percentage = hasAmount ? (paid / originalAmount) * 100 : 0;
               return (
                 <div key={debt.id} className="rounded-md border p-3">
                   <div className="flex justify-between gap-3">
                     <p className="font-medium">{debt.name}</p>
                     <p className="font-semibold">
-                      {formatMoney(debt.pendingAmount, debt.currency)}
+                      {debt.pendingAmount === undefined
+                        ? "Amount pending"
+                        : formatMoney(debt.pendingAmount, debt.currency)}
                     </p>
                   </div>
-                  <Progress value={percentage} className="mt-3" />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Paid {percentage.toFixed(0)}%
-                  </p>
+                  {hasAmount ? (
+                    <>
+                      <Progress value={percentage} className="mt-3" />
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Paid {percentage.toFixed(0)}%
+                      </p>
+                    </>
+                  ) : null}
                 </div>
               );
             })}
