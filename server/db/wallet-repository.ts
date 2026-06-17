@@ -44,8 +44,12 @@ type NewGoalReservation = Omit<GoalReservation, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
   startedAt?: string;
 };
-type NewDebt = Omit<Debt, "id">;
-type NewRecurringDebt = Omit<RecurringDebt, "id">;
+type NewDebt = Omit<Debt, "id" | "startedAt"> & {
+  startedAt?: string;
+};
+type NewRecurringDebt = Omit<RecurringDebt, "id" | "startedAt"> & {
+  startedAt?: string;
+};
 
 function asNumber(value: string | number | null | undefined) {
   return Number(value ?? 0);
@@ -767,7 +771,7 @@ export async function createDebt(input: NewDebt, db: Db = createDb()) {
       categoryId: input.categoryId,
       status: input.status,
       isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       dueAt: toDate(input.dueAt),
       note: input.note ?? null,
       recurringDebtId: input.recurringDebtId ?? null,
@@ -796,7 +800,7 @@ export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
         categoryId: input.categoryId,
         status: input.status,
         isVisible: input.isVisible,
-        startedAt: new Date(input.startedAt),
+        startedAt: new Date(input.startedAt ?? new Date().toISOString()),
         dueAt: toDate(input.dueAt),
         note: input.note ?? null,
         recurringDebtId: input.recurringDebtId ?? null,
@@ -825,7 +829,7 @@ export async function updateDebt(id: string, input: NewDebt, db: Db = createDb()
       categoryId: input.categoryId,
       status: input.status,
       isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       dueAt: toDate(input.dueAt),
       note: input.note ?? null,
       recurringDebtId: input.recurringDebtId ?? null,
@@ -866,7 +870,7 @@ export async function createRecurringDebt(
       categoryId: input.categoryId,
       dayOfMonth: decimal(input.dayOfMonth),
       isActive: input.isActive,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       note: input.note ?? null,
     })
     .returning();
@@ -890,7 +894,7 @@ export async function updateRecurringDebt(
       categoryId: input.categoryId,
       dayOfMonth: decimal(input.dayOfMonth),
       isActive: input.isActive,
-      startedAt: new Date(input.startedAt),
+      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
       note: input.note ?? null,
       updatedAt: new Date(),
     })

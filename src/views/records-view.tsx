@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
+import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import {
@@ -163,6 +165,7 @@ export function RecordsView() {
   const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const [categorySearch, setCategorySearch] = useState("");
+  const { toast, runAction } = useActionToast();
   const categories = useMemo(
     () => sortCategoriesForSelect(dataset.categories),
     [dataset.categories],
@@ -378,10 +381,22 @@ export function RecordsView() {
     const nextRecord = buildRecord();
     if (!nextRecord) return;
 
-    if (editingId) {
-      await updateRecord(editingId, nextRecord);
-    } else {
-      await addRecord(nextRecord);
+    try {
+      if (editingId) {
+        await runAction(() => updateRecord(editingId, nextRecord), {
+          processing: "Saving record...",
+          success: "Record saved",
+          error: "Could not save record",
+        });
+      } else {
+        await runAction(() => addRecord(nextRecord), {
+          processing: "Creating record...",
+          success: "Record created",
+          error: "Could not create record",
+        });
+      }
+    } catch {
+      return;
     }
 
     closeRecordDialog();
@@ -389,7 +404,16 @@ export function RecordsView() {
 
   async function handleDeleteEditingRecord() {
     if (!editingId) return;
-    await deleteRecord(editingId);
+    try {
+      await runAction(() => deleteRecord(editingId), {
+        processing: "Deleting record...",
+        success: "Record deleted",
+        error: "Could not delete record",
+      });
+    } catch {
+      return;
+    }
+
     closeRecordDialog();
   }
 
@@ -399,6 +423,7 @@ export function RecordsView() {
 
   return (
     <div>
+      <ActionToast toast={toast} />
       <PageHeader
         eyebrow="Records"
         title="Records"
@@ -919,7 +944,14 @@ export function RecordsView() {
                             size="icon"
                             onClick={(event) => {
                               event.stopPropagation();
-                              deleteRecord(record.id);
+                              void runAction(
+                                () => deleteRecord(record.id),
+                                {
+                                  processing: "Deleting record...",
+                                  success: "Record deleted",
+                                  error: "Could not delete record",
+                                },
+                              ).catch(() => undefined);
                             }}
                             aria-label="Delete record"
                           >
