@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { CategoryIcon } from "@/components/wallet/category-icon";
+import { CategoryPicker } from "@/components/wallet/category-picker";
 import {
   Dialog,
   DialogContent,
@@ -164,22 +165,11 @@ export function RecordsView() {
   );
   const [paymentType, setPaymentType] = useState<PaymentType>("credit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
-  const [categorySearch, setCategorySearch] = useState("");
   const { toast, runAction } = useActionToast();
   const categories = useMemo(
     () => sortCategoriesForSelect(dataset.categories),
     [dataset.categories],
   );
-  const filteredCategories = useMemo(() => {
-    const query = categorySearch.trim().toLowerCase();
-    if (!query) return categories;
-
-    return categories.filter((category) =>
-      formatCategoryName(dataset.categories, category)
-        .toLowerCase()
-        .includes(query),
-    );
-  }, [categories, categorySearch, dataset.categories]);
   const selectedAccountBalance = recordFilters.accountId
     ? calculateAccountBalances(dataset).find(
         (balance) => balance.account.id === recordFilters.accountId,
@@ -319,7 +309,6 @@ export function RecordsView() {
     setTagId("");
     setCounterpartyName("");
     setOccurredAtLocal(toDateTimeLocal(new Date()));
-    setCategorySearch("");
     setPaymentType(nextType === "transfer" ? "transfer" : "credit");
     setPaymentStatus("cleared");
   }
@@ -340,7 +329,6 @@ export function RecordsView() {
     setTagId(record.tagIds[0] ?? "");
     setCounterpartyName(record.counterpartyName ?? "");
     setOccurredAtLocal(toDateTimeLocal(record.occurredAt));
-    setCategorySearch("");
     setPaymentType(record.paymentType);
     setPaymentStatus(record.paymentStatus);
     setIsRecordDialogOpen(true);
@@ -464,7 +452,6 @@ export function RecordsView() {
                     onClick={() => {
                       setType(item);
                       setCategoryId(firstCategoryId(dataset.categories));
-                      setCategorySearch("");
                       setPaymentType(
                         item === "transfer" ? "transfer" : "credit",
                       );
@@ -550,62 +537,15 @@ export function RecordsView() {
             ) : (
               <div className="space-y-2">
                 <span className="text-sm font-medium">Category</span>
-                <input
-                  value={categorySearch}
-                  onChange={(event) => setCategorySearch(event.target.value)}
-                  className={fieldClassName}
-                  placeholder="Search categories..."
+                <CategoryPicker
+                  categories={categories}
+                  value={categoryId}
+                  onChange={setCategoryId}
+                  inputClassName={fieldClassName}
+                  getLabel={(category) =>
+                    formatCategoryName(dataset.categories, category)
+                  }
                 />
-                <div className="max-h-56 overflow-y-auto rounded-md border bg-background p-1">
-                  {filteredCategories.map((category) => {
-                    const parent = category.parentId
-                      ? dataset.categories.find(
-                          (item) => item.id === category.parentId,
-                        )
-                      : undefined;
-                    const isSelected = category.id === categoryId;
-
-                    return (
-                      <button
-                        key={category.id}
-                        type="button"
-                        onClick={() => setCategoryId(category.id)}
-                        className={
-                          isSelected
-                            ? "flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm font-medium bg-primary text-primary-foreground"
-                            : "flex w-full items-center gap-3 rounded px-3 py-2 text-left text-sm transition hover:bg-secondary"
-                        }
-                      >
-                        <CategoryIcon
-                          icon={category.icon}
-                          color={isSelected ? "#ffffff" : category.color}
-                          size="sm"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate">
-                            {category.name}
-                          </span>
-                          {parent ? (
-                            <span
-                              className={
-                                isSelected
-                                  ? "block truncate text-xs text-primary-foreground/75"
-                                  : "block truncate text-xs text-muted-foreground"
-                              }
-                            >
-                              {parent.name}
-                            </span>
-                          ) : null}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  {filteredCategories.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground">
-                      No categories found
-                    </div>
-                  ) : null}
-                </div>
               </div>
             )}
 
