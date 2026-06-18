@@ -41,12 +41,6 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
-function firstCategoryId(
-  categories: ReturnType<typeof useWallet>["dataset"]["categories"],
-) {
-  return categories[0]?.id ?? "";
-}
-
 function formatCategoryName(categories: Category[], category: Category) {
   const parent = category.parentId
     ? categories.find((candidate) => candidate.id === category.parentId)
@@ -153,9 +147,7 @@ export function RecordsView() {
   const [destinationAccountId, setDestinationAccountId] = useState(
     defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
   );
-  const [categoryId, setCategoryId] = useState(
-    firstCategoryId(dataset.categories),
-  );
+  const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
@@ -177,6 +169,10 @@ export function RecordsView() {
     : undefined;
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const canSubmit =
+    Number(amount) > 0 &&
+    Boolean(accountId) &&
+    (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId));
 
   useEffect(() => {
     if (
@@ -194,7 +190,7 @@ export function RecordsView() {
       setDestinationAccountId(
         defaultDestinationAccountId(dataset, nextAccountId),
       );
-      setCategoryId(firstCategoryId(dataset.categories));
+      setCategoryId("");
       setAmount("");
       setNote("");
       setTagId("");
@@ -303,7 +299,7 @@ export function RecordsView() {
     setDestinationAccountId(
       defaultDestinationAccountId(dataset, nextAccountId),
     );
-    setCategoryId(firstCategoryId(dataset.categories));
+    setCategoryId("");
     setAmount("");
     setNote("");
     setTagId("");
@@ -323,7 +319,7 @@ export function RecordsView() {
     setType(record.type);
     setAccountId(record.accountId);
     setDestinationAccountId(record.destinationAccountId ?? "");
-    setCategoryId(record.categoryId ?? firstCategoryId(dataset.categories));
+    setCategoryId(record.categoryId ?? "");
     setAmount(String(record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
@@ -451,7 +447,7 @@ export function RecordsView() {
                     type="button"
                     onClick={() => {
                       setType(item);
-                      setCategoryId(firstCategoryId(dataset.categories));
+                      setCategoryId("");
                       setPaymentType(
                         item === "transfer" ? "transfer" : "credit",
                       );
@@ -508,46 +504,48 @@ export function RecordsView() {
                     ))}
                 </select>
               </label>
-            </div>
 
-            {type === "transfer" ? (
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Destination account</span>
-                <select
-                  value={destinationAccountId}
-                  onChange={(event) =>
-                    setDestinationAccountId(event.target.value)
-                  }
-                  className={fieldClassName}
-                >
-                  {dataset.accounts
-                    .filter(
-                      (account) =>
-                        account.isActive &&
-                        account.isVisible &&
-                        account.id !== accountId,
-                    )
-                    .map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
-            ) : (
-              <div className="space-y-2">
-                <span className="text-sm font-medium">Category</span>
-                <CategoryPicker
-                  categories={categories}
-                  value={categoryId}
-                  onChange={setCategoryId}
-                  inputClassName={fieldClassName}
-                  getLabel={(category) =>
-                    formatCategoryName(dataset.categories, category)
-                  }
-                />
-              </div>
-            )}
+              {type === "transfer" ? (
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">
+                    Destination account
+                  </span>
+                  <select
+                    value={destinationAccountId}
+                    onChange={(event) =>
+                      setDestinationAccountId(event.target.value)
+                    }
+                    className={fieldClassName}
+                  >
+                    {dataset.accounts
+                      .filter(
+                        (account) =>
+                          account.isActive &&
+                          account.isVisible &&
+                          account.id !== accountId,
+                      )
+                      .map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              ) : (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Category</span>
+                  <CategoryPicker
+                    categories={categories}
+                    value={categoryId}
+                    onChange={setCategoryId}
+                    inputClassName={fieldClassName}
+                    getLabel={(category) =>
+                      formatCategoryName(dataset.categories, category)
+                    }
+                  />
+                </div>
+              )}
+            </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
@@ -672,7 +670,7 @@ export function RecordsView() {
                   Cancel
                 </Button>
               )}
-              <Button type="submit">
+              <Button type="submit" disabled={!canSubmit}>
                 {editingId ? (
                   <Save className="h-4 w-4" />
                 ) : (
