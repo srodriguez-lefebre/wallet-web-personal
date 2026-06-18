@@ -43,11 +43,18 @@ import {
   upsertSettings,
 } from "../server/db/wallet-repository.js";
 
-// Single catch-all Serverless Function. Vercel's Hobby plan caps a deployment at
-// 12 functions, so every `/api/*` route is dispatched from here instead of living
-// in its own file. Route segments are parsed from the request URL (deterministic
-// and independent of the catch-all param name).
+// Single router Serverless Function. Vercel's Hobby plan caps a deployment at
+// 12 functions, so vercel.json rewrites every `/api/*` request here and the
+// original path is dispatched below.
 function pathSegments(req: VercelRequest) {
+  const rewrittenPath = req.query.path;
+  if (rewrittenPath) {
+    const path = Array.isArray(rewrittenPath)
+      ? rewrittenPath.join("/")
+      : rewrittenPath;
+    return path.split("/").filter(Boolean);
+  }
+
   const pathname = (req.url ?? "").split("?")[0];
   const segments = pathname.split("/").filter(Boolean);
   if (segments[0] === "api") segments.shift();
