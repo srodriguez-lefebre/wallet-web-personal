@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { findApiOperation } from "../shared/api-contract.js";
 import {
   accountSchema,
   accountPatchSchema,
@@ -514,6 +515,13 @@ async function handleAuth(
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const segments = pathSegments(req);
   const [resource] = segments;
+  const operation = findApiOperation(req.method, `/api/${segments.join("/")}`);
+  if (operation) res.setHeader("X-Operation-Id", operation.operationId);
+  const clientOperationId = req.headers["x-client-operation-id"];
+  if (operation && typeof clientOperationId === "string" && clientOperationId !== operation.operationId) {
+    sendError(res, 400, "CONTRACT_MISMATCH", "Client operation does not match request route");
+    return;
+  }
 
   try {
     switch (resource) {

@@ -13,6 +13,7 @@ import type {
   WalletSettings,
 } from "@shared/types";
 import type { AccountPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, RecordPatch, RecurringDebtPatch, SettingsPatch } from "@shared/schemas";
+import type { ApiOperationId } from "@shared/api-contract";
 
 interface ApiResponse<T> {
   data: T | null;
@@ -24,6 +25,7 @@ interface ApiResponse<T> {
 
 async function requestApi<T>(
   token: string,
+  operationId: ApiOperationId,
   path: string,
   options: RequestInit = {},
 ) {
@@ -32,6 +34,7 @@ async function requestApi<T>(
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
+      "X-Client-Operation-Id": operationId,
       ...options.headers,
     },
   });
@@ -55,11 +58,11 @@ function body(value: unknown): RequestInit {
 }
 
 export function getWallet(token: string) {
-  return requestApi<WalletDataset>(token, "/api/wallet");
+  return requestApi<WalletDataset>(token, "wallet.get", "/api/wallet");
 }
 
 export function bootstrapWallet(token: string, recordsLimit = 200) {
-  return requestApi<WalletBootstrap>(token, "/api/wallet/bootstrap", {
+  return requestApi<WalletBootstrap>(token, "wallet.bootstrap", "/api/wallet/bootstrap", {
     method: "POST",
     ...body({ recordsLimit, recordsCursor: null }),
   });
@@ -74,11 +77,11 @@ export function getRecordsPage(
   if (options.cursor) query.set("cursor", options.cursor);
   if (options.from) query.set("from", options.from);
   if (options.to) query.set("to", options.to);
-  return requestApi<RecordPage>(token, `/api/records?${query.toString()}`);
+  return requestApi<RecordPage>(token, "records.list", `/api/records?${query.toString()}`);
 }
 
 export function createAccount(token: string, account: Omit<Account, "id">) {
-  return requestApi<Account>(token, "/api/accounts", {
+  return requestApi<Account>(token, "accounts.create", "/api/accounts", {
     method: "POST",
     ...body(account),
   });
@@ -89,20 +92,20 @@ export function updateAccount(
   accountId: string,
   account: AccountPatch,
 ) {
-  return requestApi<Account>(token, `/api/accounts/${accountId}`, {
+  return requestApi<Account>(token, "accounts.patch", `/api/accounts/${accountId}`, {
     method: "PATCH",
     ...body(account),
   });
 }
 
 export function deleteAccount(token: string, accountId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/accounts/${accountId}`, {
+  return requestApi<{ deleted: true }>(token, "accounts.delete", `/api/accounts/${accountId}`, {
     method: "DELETE",
   });
 }
 
 export function createRecord(token: string, record: Omit<WalletRecord, "id">) {
-  return requestApi<WalletRecord>(token, "/api/records", {
+  return requestApi<WalletRecord>(token, "records.create", "/api/records", {
     method: "POST",
     ...body(record),
   });
@@ -113,20 +116,20 @@ export function updateRecord(
   recordId: string,
   record: RecordPatch,
 ) {
-  return requestApi<WalletRecord>(token, `/api/records/${recordId}`, {
+  return requestApi<WalletRecord>(token, "records.patch", `/api/records/${recordId}`, {
     method: "PATCH",
     ...body(record),
   });
 }
 
 export function deleteRecord(token: string, recordId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/records/${recordId}`, {
+  return requestApi<{ deleted: true }>(token, "records.delete", `/api/records/${recordId}`, {
     method: "DELETE",
   });
 }
 
 export function createCategory(token: string, category: Omit<Category, "id">) {
-  return requestApi<Category>(token, "/api/categories", {
+  return requestApi<Category>(token, "categories.create", "/api/categories", {
     method: "POST",
     ...body(category),
   });
@@ -137,20 +140,20 @@ export function updateCategory(
   categoryId: string,
   category: CategoryPatch,
 ) {
-  return requestApi<Category>(token, `/api/categories/${categoryId}`, {
+  return requestApi<Category>(token, "categories.patch", `/api/categories/${categoryId}`, {
     method: "PATCH",
     ...body(category),
   });
 }
 
 export function deleteCategory(token: string, categoryId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/categories/${categoryId}`, {
+  return requestApi<{ deleted: true }>(token, "categories.delete", `/api/categories/${categoryId}`, {
     method: "DELETE",
   });
 }
 
 export function createCreditCard(token: string, card: Omit<CreditCard, "id">) {
-  return requestApi<CreditCard>(token, "/api/cards", {
+  return requestApi<CreditCard>(token, "cards.create", "/api/cards", {
     method: "POST",
     ...body(card),
   });
@@ -161,14 +164,14 @@ export function updateCreditCard(
   cardId: string,
   card: CreditCardPatch,
 ) {
-  return requestApi<CreditCard>(token, `/api/cards/${cardId}`, {
+  return requestApi<CreditCard>(token, "cards.patch", `/api/cards/${cardId}`, {
     method: "PATCH",
     ...body(card),
   });
 }
 
 export function deleteCreditCard(token: string, cardId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}`, {
+  return requestApi<{ deleted: true }>(token, "cards.delete", `/api/cards/${cardId}`, {
     method: "DELETE",
   });
 }
@@ -178,38 +181,38 @@ export function createCreditCardPayment(
   cardId: string,
   payment: Omit<CreditCardPayment, "id" | "creditCardId">,
 ) {
-  return requestApi<CreditCardPayment>(token, `/api/cards/${cardId}/payments`, {
+  return requestApi<CreditCardPayment>(token, "cardPayments.create", `/api/cards/${cardId}/payments`, {
     method: "POST",
     ...body(payment),
   });
 }
 
 export function createCreditCardRecord(token: string, cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
-  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records`, { method: "POST", ...body(movement) });
+  return requestApi<CreditCardRecord>(token, "cardRecords.create", `/api/cards/${cardId}/records`, { method: "POST", ...body(movement) });
 }
 
 export function updateCreditCardRecord(token: string, cardId: string, movementId: string, movement: CreditCardRecordPatch) {
-  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records/${movementId}`, { method: "PATCH", ...body(movement) });
+  return requestApi<CreditCardRecord>(token, "cardRecords.patch", `/api/cards/${cardId}/records/${movementId}`, { method: "PATCH", ...body(movement) });
 }
 
 export function deleteCreditCardRecord(token: string, cardId: string, movementId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}/records/${movementId}`, { method: "DELETE" });
+  return requestApi<{ deleted: true }>(token, "cardRecords.delete", `/api/cards/${cardId}/records/${movementId}`, { method: "DELETE" });
 }
 
 export function createCreditCardRefund(token: string, cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
-  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/refunds`, { method: "POST", ...body(movement) });
+  return requestApi<CreditCardRecord>(token, "cardRecords.refund", `/api/cards/${cardId}/refunds`, { method: "POST", ...body(movement) });
 }
 
 export function payCreditCardStatement(token: string, cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) {
-  return requestApi<CreditCardPayment>(token, `/api/cards/${cardId}/statements/${statementId}/payments`, { method: "POST", ...body(payment) });
+  return requestApi<CreditCardPayment>(token, "cardStatements.pay", `/api/cards/${cardId}/statements/${statementId}/payments`, { method: "POST", ...body(payment) });
 }
 
 export function deleteCreditCardPayment(token: string, cardId: string, paymentId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}/payments/${paymentId}`, { method: "DELETE" });
+  return requestApi<{ deleted: true }>(token, "cardPayments.delete", `/api/cards/${cardId}/payments/${paymentId}`, { method: "DELETE" });
 }
 
 export function createDebt(token: string, debt: Omit<Debt, "id">) {
-  return requestApi<Debt>(token, "/api/debts", {
+  return requestApi<Debt>(token, "debts.create", "/api/debts", {
     method: "POST",
     ...body(debt),
   });
@@ -220,14 +223,14 @@ export function updateDebt(
   debtId: string,
   debt: DebtPatch,
 ) {
-  return requestApi<Debt>(token, `/api/debts/${debtId}`, {
+  return requestApi<Debt>(token, "debts.patch", `/api/debts/${debtId}`, {
     method: "PATCH",
     ...body(debt),
   });
 }
 
 export function deleteDebt(token: string, debtId: string) {
-  return requestApi<{ deleted: true }>(token, `/api/debts/${debtId}`, {
+  return requestApi<{ deleted: true }>(token, "debts.delete", `/api/debts/${debtId}`, {
     method: "DELETE",
   });
 }
@@ -246,6 +249,7 @@ export function recordDebtPayment(
 ) {
   return requestApi<{ debt: Debt; record: WalletRecord }>(
     token,
+    "debts.pay",
     `/api/debts/${debtId}/payments`,
     {
       method: "POST",
@@ -255,7 +259,7 @@ export function recordDebtPayment(
 }
 
 export function generateRecurringDebts(token: string) {
-  return requestApi<Debt[]>(token, "/api/debts/generate-recurring", {
+  return requestApi<Debt[]>(token, "debts.generateRecurring", "/api/debts/generate-recurring", {
     method: "POST",
   });
 }
@@ -264,7 +268,7 @@ export function createRecurringDebt(
   token: string,
   recurringDebt: RecurringDebtPatch,
 ) {
-  return requestApi<RecurringDebt>(token, "/api/recurring-debts", {
+  return requestApi<RecurringDebt>(token, "recurringDebts.create", "/api/recurring-debts", {
     method: "POST",
     ...body(recurringDebt),
   });
@@ -277,6 +281,7 @@ export function updateRecurringDebt(
 ) {
   return requestApi<RecurringDebt>(
     token,
+    "recurringDebts.patch",
     `/api/recurring-debts/${recurringDebtId}`,
     {
       method: "PATCH",
@@ -288,6 +293,7 @@ export function updateRecurringDebt(
 export function deleteRecurringDebt(token: string, recurringDebtId: string) {
   return requestApi<{ deleted: true }>(
     token,
+    "recurringDebts.delete",
     `/api/recurring-debts/${recurringDebtId}`,
     {
       method: "DELETE",
@@ -296,7 +302,7 @@ export function deleteRecurringDebt(token: string, recurringDebtId: string) {
 }
 
 export function updateSettings(token: string, settings: SettingsPatch) {
-  return requestApi<WalletSettings>(token, "/api/settings", {
+  return requestApi<WalletSettings>(token, "settings.patch", "/api/settings", {
     method: "PATCH",
     ...body(settings),
   });

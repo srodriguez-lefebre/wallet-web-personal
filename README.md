@@ -2,6 +2,17 @@
 
 Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credito, goals, presupuestos y analiticas.
 
+## Estado actual
+
+La persistencia completa por API cubre cuentas, records, categorias, settings,
+deudas, reglas recurrentes, tarjetas, movimientos y pagos de tarjeta. Goals,
+reservas, inversiones y tags tienen soporte parcial en repositorio/UI, pero sus
+mutaciones del frontend todavia son locales y se pierden al recargar.
+
+El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/openapi.yaml).
+`docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
+comportamiento desplegado.
+
 ## Stack
 
 - React + Vite + TypeScript
@@ -24,6 +35,8 @@ Crear `.env.local` con:
 ```txt
 DATABASE_URL="postgresql://..."
 API_TOKEN="token-largo"
+SESSION_SECRET="secreto-independiente-para-firmar-sesiones"
+SESSION_TTL_SECONDS="43200"
 INGEST_API_TOKEN="otro-token-largo"
 OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
 OPENAI_MODEL="gpt-5-nano"
@@ -38,13 +51,18 @@ npm run dev
 npm run build
 npm run lint
 npm run test
+npm run check
+npm run api:spec
+npm run api:spec:check
+npm run benchmark:api
 npm run db:generate
 npm run db:migrate
 npm run db:import-wallet-records
 npm run db:import-merchant-rules
 ```
 
-En desarrollo local, el unlock acepta un token de al menos 4 caracteres si la API de Vercel no esta corriendo. En deploy, el endpoint `/api/auth/unlock` valida contra `API_TOKEN`.
+El unlock siempre valida contra `API_TOKEN`; no existe un bypass de desarrollo.
+El token maestro se intercambia por una sesión firmada de duración limitada.
 
 Para probar la app completa con endpoints reales en local, usar Vercel Dev:
 
@@ -66,8 +84,8 @@ Los pagos pueden ser externos o descontarse de una cuenta. Un pago reduce la
 deuda y el limite utilizado; cuando se elige una cuenta tambien reduce su saldo.
 Superar el limite muestra una advertencia, pero no bloquea el movimiento.
 
-Antes de usar esta funcionalidad contra una base existente, aplicar la migracion
-pendiente con `npm run db:migrate`. La migracion es aditiva y no convierte
+Antes de usar esta funcionalidad contra una base existente, aplicar las migraciones
+con `npm run db:migrate`. Las migraciones son aditivas y no convierten
 automaticamente cuentas antiguas de tipo `credit_card`, porque no contienen el
 limite, los ultimos cuatro digitos ni las fechas necesarias.
 
@@ -77,9 +95,29 @@ Para Vercel:
 
 - Configurar `DATABASE_URL`.
 - Configurar `API_TOKEN`.
+- Configurar `SESSION_SECRET` con un valor distinto de `API_TOKEN`.
+- Configurar `INGEST_API_TOKEN` si se usa la automatización de correo.
 - Deployar el repo.
 
 Neon Auth no es necesario para esta version. Neon se usa como PostgreSQL.
+
+## API
+
+Todas las respuestas usan `{ data, error }`. Salvo `POST /api/auth/unlock` y la
+ingesta con token dedicado, las rutas requieren la sesión en
+`Authorization: Bearer <token>`.
+
+| Método | Ruta | Uso |
+|---|---|---|
+| `POST` | `/api/auth/unlock` | valida el token maestro y crea una sesión |
+| `GET` | `/api/health` | smoke check autenticado |
+| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado |
+| `GET` | `/api/records` | pagina records por cursor y filtros |
+
+Vercel despliega una sola Serverless Function: `vercel.json` reescribe todas las
+rutas `/api/*` al router consolidado de `api/index.ts`. La API es privada y
+pre-1.0; frontend y backend se actualizan juntos y todavía no se garantiza
+compatibilidad pública.
 
 ## Ingestion de correos
 
