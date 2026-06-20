@@ -10,6 +10,7 @@ import {
   calculateCategoryExpensesForDateRange,
   calculateCreditCardSummary,
   calculateCreditCardCategoryUsage,
+  creditCardStatementStatusAfterPaymentChange,
   calculateGoalProgress,
   calculateVisibleDebtSummary,
   calculateSummary,
@@ -551,5 +552,17 @@ describe("wallet calculations", () => {
     expect(dataset.records.some((record) => record.id === "direct")).toBe(false);
     expect(calculateCreditCardSummary(dataset, card, new Date("2026-06-12T12:00:00.000Z")).usedLimit).toBe(1_500);
     expect(calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")!.balance).toBe(baseline - 1_500);
+  });
+});
+
+describe("credit-card statement status", () => {
+  const futureDueAt = "2026-07-01T12:00:00.000Z";
+  const now = new Date("2026-06-20T12:00:00.000Z");
+
+  it("restores pending, partial, paid and overdue after payment changes", () => {
+    expect(creditCardStatementStatusAfterPaymentChange(100, 0, futureDueAt, now)).toBe("pending");
+    expect(creditCardStatementStatusAfterPaymentChange(100, 25, futureDueAt, now)).toBe("partial");
+    expect(creditCardStatementStatusAfterPaymentChange(100, 100, futureDueAt, now)).toBe("paid");
+    expect(creditCardStatementStatusAfterPaymentChange(100, 0, "2026-06-01T12:00:00.000Z", now)).toBe("overdue");
   });
 });

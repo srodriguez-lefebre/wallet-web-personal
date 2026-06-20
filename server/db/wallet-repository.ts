@@ -65,6 +65,7 @@ import {
 } from "../../shared/schemas.js";
 import { conflictError, validationError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
+import { creditCardStatementStatusAfterPaymentChange } from "../../shared/calculations.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -783,22 +784,35 @@ export async function createCreditCardRecord(
   let walletRecordId: string | null = null;
   let walletRefundValues: typeof records.$inferInsert | undefined;
   if (input.kind === "refund" && input.originalRecordId) {
-    const [original] = await db
-      .select()
-      .from(creditCardRecords)
-      .where(
-        and(
-          eq(creditCardRecords.id, input.originalRecordId),
-          eq(creditCardRecords.creditCardId, creditCardId),
-        ),
-      )
-      .limit(1);
-    if (!original) throw new Error("Original movement not found");
+    const [[original], previousRefunds] = await db.batch([
+      db
+        .select()
+        .from(creditCardRecords)
+        .where(
+          and(
+            eq(creditCardRecords.id, input.originalRecordId),
+            eq(creditCardRecords.creditCardId, creditCardId),
+            eq(creditCardRecords.kind, "purchase"),
+            isNull(creditCardRecords.deletedAt),
+          ),
+        )
+        .limit(1),
+      db
+        .select({ amount: creditCardRecords.amountInLimitCurrency })
+        .from(creditCardRecords)
+        .where(and(
+          eq(creditCardRecords.originalRecordId, input.originalRecordId),
+          eq(creditCardRecords.kind, "refund"),
+          isNull(creditCardRecords.deletedAt),
+        )),
+    ]);
+    if (!original) throw validationError("Original movement not found");
+    const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + asNumber(refund.amount), 0);
     if (
       input.amountInLimitCurrency >
-      asNumber(original.amountInLimitCurrency) + 0.005
+      asNumber(original.amountInLimitCurrency) - alreadyRefunded + 0.005
     ) {
-      throw new Error("Refund exceeds original movement");
+      throw validationError("Refund exceeds original movement");
     }
     if (original.walletRecordId && original.accountId) {
       const [account] = await db
@@ -1007,7 +1021,7 @@ export async function payCreditCardStatement(
     0,
   );
   if (input.amountInLimitCurrency > outstanding + 0.005)
-    throw new Error("Payment exceeds statement balance");
+    throw validationError("Payment exceeds statement balance");
   let remaining = input.amountInLimitCurrency;
   const drafts: Array<{
     purchase: (typeof purchases)[number];
@@ -1095,15 +1109,38 @@ export async function deleteCreditCardPayment(
     )
     .limit(1);
   if (!payment) return false;
-  if (payment.statementId)
+  if (payment.statementId) {
+    const [purchaseRows, refundRows, remainingAllocationRows, [statement]] = await db.batch([
+      db.select({ id: creditCardRecords.id, amount: creditCardRecords.amountInLimitCurrency })
+        .from(creditCardRecords)
+        .where(and(eq(creditCardRecords.statementId, payment.statementId), eq(creditCardRecords.kind, "purchase"), isNull(creditCardRecords.deletedAt))),
+      db.select({ originalRecordId: creditCardRecords.originalRecordId, amount: creditCardRecords.amountInLimitCurrency })
+        .from(creditCardRecords)
+        .where(and(eq(creditCardRecords.creditCardId, creditCardId), eq(creditCardRecords.kind, "refund"), isNull(creditCardRecords.deletedAt))),
+      db.select({ amount: creditCardPaymentAllocations.amountInLimitCurrency })
+        .from(creditCardPaymentAllocations)
+        .innerJoin(creditCardPayments, eq(creditCardPayments.id, creditCardPaymentAllocations.paymentId))
+        .where(and(eq(creditCardPayments.statementId, payment.statementId), ne(creditCardPayments.id, paymentId))),
+      db.select().from(creditCardStatements).where(eq(creditCardStatements.id, payment.statementId)).limit(1),
+    ]);
+    const purchaseIds = new Set(purchaseRows.map((row) => row.id));
+    const total = purchaseRows.reduce((sum, row) => sum + asNumber(row.amount), 0) - refundRows
+      .filter((row) => row.originalRecordId && purchaseIds.has(row.originalRecordId))
+      .reduce((sum, row) => sum + asNumber(row.amount), 0);
+    const paid = remainingAllocationRows.reduce((sum, row) => sum + asNumber(row.amount), 0);
+    const status = creditCardStatementStatusAfterPaymentChange(
+      total,
+      paid,
+      statement?.dueAt ?? new Date(),
+    );
     await db.batch([
       db.delete(creditCardPayments).where(eq(creditCardPayments.id, paymentId)),
       db
         .update(creditCardStatements)
-        .set({ status: "partial", paidAt: null, updatedAt: new Date() })
+        .set({ status, paidAt: status === "paid" ? statement?.paidAt ?? new Date() : null, updatedAt: new Date() })
         .where(eq(creditCardStatements.id, payment.statementId)),
     ]);
-  else
+  } else
     await db
       .delete(creditCardPayments)
       .where(eq(creditCardPayments.id, paymentId));

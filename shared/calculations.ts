@@ -607,6 +607,18 @@ export function applyDebtPayment(debt: Debt, amount: number): Debt {
   };
 }
 
+export function creditCardStatementStatusAfterPaymentChange(
+  total: number,
+  paid: number,
+  dueAt: string | Date,
+  now = new Date(),
+) {
+  const remaining = Math.max(0, total - paid);
+  if (remaining <= 0.005) return "paid" as const;
+  if (paid > 0.005) return "partial" as const;
+  return new Date(dueAt) < now ? "overdue" as const : "pending" as const;
+}
+
 function recurringDebtDueDate(rule: RecurringDebt, month: string) {
   const monthStart = parseISO(`${month}-01T12:00:00.000Z`);
   const lastDay = endOfMonth(monthStart).getDate();

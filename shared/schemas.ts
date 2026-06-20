@@ -225,13 +225,6 @@ export const creditCardRecordSchema = z
         message: "Account amount is required",
       });
     }
-    if (value.kind === "refund" && !value.originalRecordId) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["originalRecordId"],
-        message: "Original movement is required",
-      });
-    }
   });
 
 export const goalSchema = z.object({

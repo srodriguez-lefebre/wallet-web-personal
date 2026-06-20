@@ -51,6 +51,21 @@ describe("credit-card validation", () => {
     ).toBe(true);
   });
 
+  it("accepts a manual refund when the original movement cannot be found", () => {
+    expect(
+      creditCardRecordSchema.safeParse({
+        kind: "refund",
+        amount: 25,
+        currency: "UYU",
+        categoryId,
+        amountInLimitCurrency: 25,
+        exchangeRateToLimitCurrency: 1,
+        accountImpactAtCreation: false,
+        occurredAt: baseRecord.occurredAt,
+      }).success,
+    ).toBe(true);
+  });
+
   it("keeps legacy account-backed credit records editable", () => {
     expect(
       recordSchema.safeParse({
