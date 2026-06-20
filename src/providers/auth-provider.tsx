@@ -2,13 +2,13 @@ import {
   createContext,
   type PropsWithChildren,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
-import { readStorage, removeStorage, writeStorage } from "@/lib/storage";
-import { validateToken } from "@/services/auth-service";
+import { createSession } from "@/services/auth-service";
 
-const tokenKey = "wallet-api-token";
+const tokenKey = "wallet-session-token";
 
 interface AuthContextValue {
   isUnlocked: boolean;
@@ -20,24 +20,32 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [token, setToken] = useState(() => readStorage(tokenKey));
+  const [token, setToken] = useState(() =>
+    typeof window === "undefined" ? null : window.sessionStorage.getItem(tokenKey),
+  );
 
   async function unlock(nextToken: string) {
     const cleanToken = nextToken.trim();
     if (cleanToken.length < 4) return false;
 
-    const isValid = await validateToken(cleanToken);
-    if (!isValid) return false;
-
-    writeStorage(tokenKey, cleanToken);
-    setToken(cleanToken);
+    const session = await createSession(cleanToken);
+    if (!session) return false;
+    window.sessionStorage.setItem(tokenKey, session.token);
+    setToken(session.token);
     return true;
   }
 
   function lock() {
-    removeStorage(tokenKey);
+    window.sessionStorage.removeItem(tokenKey);
     setToken(null);
   }
+
+  useEffect(() => {
+    window.localStorage.removeItem("wallet-api-token");
+    const handleUnauthorized = () => lock();
+    window.addEventListener("wallet:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("wallet:unauthorized", handleUnauthorized);
+  }, []);
 
   const value = useMemo(
     () => ({

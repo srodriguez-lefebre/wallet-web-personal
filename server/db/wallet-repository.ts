@@ -1,5 +1,5 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
+import { createHash, randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
 import {
   accounts,
@@ -17,6 +17,7 @@ import {
   goals,
   installmentPlans,
   investments,
+  merchants,
   records,
   recordTags,
   recurringDebts,
@@ -44,6 +45,25 @@ import type {
   WalletRecord,
   WalletSettings,
 } from "../../shared/types.js";
+import {
+  accountSchema,
+  categorySchema,
+  creditCardRecordSchema,
+  creditCardSchema,
+  debtSchema,
+  recordSchema,
+  recurringDebtSchema,
+  settingsSchema,
+  type AccountPatch,
+  type CategoryPatch,
+  type CreditCardPatch,
+  type CreditCardRecordPatch,
+  type DebtPatch,
+  type RecordPatch,
+  type RecurringDebtPatch,
+  type SettingsPatch,
+} from "../../shared/schemas.js";
+import { conflictError, validationError } from "../api/errors.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -95,6 +115,10 @@ function toDate(value: string | undefined) {
 
 function decimal(value: number) {
   return String(value);
+}
+
+function hasOwn<T extends object>(value: T, key: PropertyKey) {
+  return Object.prototype.hasOwnProperty.call(value, key);
 }
 
 function groupIds<T extends { [key: string]: string }>(
@@ -545,17 +569,26 @@ export async function createCreditCard(
 
 export async function updateCreditCard(
   id: string,
-  input: NewCreditCard,
+  input: CreditCardPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(creditCards).where(eq(creditCards.id, id)).limit(1);
+  if (!current) return null;
+  const merged = creditCardSchema.parse({
+    ...mapCreditCard(current),
+    ...input,
+    note: input.note === null ? undefined : (input.note ?? optional(current.note)),
+  });
+  const values: Partial<typeof creditCards.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["name", "issuer", "lastFour", "limitCurrency", "closingDay", "dueDay", "color", "icon", "isActive"] as const) {
+    if (hasOwn(input, key)) values[key] = merged[key] as never;
+  }
+  if (hasOwn(input, "creditLimit")) values.creditLimit = decimal(merged.creditLimit);
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
+  if (hasOwn(input, "isActive")) values.deletedAt = merged.isActive ? null : new Date();
   const [row] = await db
     .update(creditCards)
-    .set({
-      ...input,
-      creditLimit: decimal(input.creditLimit),
-      deletedAt: input.isActive ? null : undefined,
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(creditCards.id, id))
     .returning();
   return row ? mapCreditCard(row) : null;
@@ -798,28 +831,42 @@ export async function createCreditCardRecord(
 export async function updateCreditCardRecord(
   creditCardId: string,
   id: string,
-  input: NewCreditCardRecord,
+  input: CreditCardRecordPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(creditCardRecords).where(and(
+    eq(creditCardRecords.id, id),
+    eq(creditCardRecords.creditCardId, creditCardId),
+    isNull(creditCardRecords.walletRecordId),
+  )).limit(1);
+  if (!current) return null;
+  const mapped = mapCreditCardRecord(current);
+  const merged = creditCardRecordSchema.parse({
+    ...mapped,
+    ...input,
+    originalRecordId: input.originalRecordId === null ? undefined : (input.originalRecordId ?? mapped.originalRecordId),
+    counterpartyName: input.counterpartyName === null ? undefined : (input.counterpartyName ?? mapped.counterpartyName),
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+    accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
+    accountAmount: input.accountAmount === null ? undefined : (input.accountAmount ?? mapped.accountAmount),
+  });
+  const values: Partial<typeof creditCardRecords.$inferInsert> = { updatedAt: new Date() };
+  if (hasOwn(input, "originalRecordId")) values.originalRecordId = merged.originalRecordId ?? null;
+  if (hasOwn(input, "kind")) values.kind = merged.kind;
+  if (hasOwn(input, "amount")) values.amount = decimal(merged.amount);
+  if (hasOwn(input, "currency")) values.currency = merged.currency;
+  if (hasOwn(input, "amountInLimitCurrency")) values.amountInLimitCurrency = decimal(merged.amountInLimitCurrency);
+  if (hasOwn(input, "exchangeRateToLimitCurrency")) values.exchangeRateToLimitCurrency = decimal(merged.exchangeRateToLimitCurrency);
+  if (hasOwn(input, "categoryId")) values.categoryId = merged.categoryId;
+  if (hasOwn(input, "counterpartyName")) values.counterpartyName = merged.counterpartyName ?? null;
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
+  if (hasOwn(input, "accountId")) values.accountId = merged.accountId ?? null;
+  if (hasOwn(input, "accountAmount")) values.accountAmount = merged.accountAmount === undefined ? null : decimal(merged.accountAmount);
+  if (hasOwn(input, "accountImpactAtCreation")) values.accountImpactAtCreation = merged.accountImpactAtCreation;
+  if (hasOwn(input, "occurredAt")) values.occurredAt = new Date(merged.occurredAt);
   const [row] = await db
     .update(creditCardRecords)
-    .set({
-      originalRecordId: input.originalRecordId ?? null,
-      kind: input.kind,
-      amount: decimal(input.amount),
-      currency: input.currency,
-      amountInLimitCurrency: decimal(input.amountInLimitCurrency),
-      exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency),
-      categoryId: input.categoryId,
-      counterpartyName: input.counterpartyName ?? null,
-      note: input.note ?? null,
-      accountId: input.accountId ?? null,
-      accountAmount:
-        input.accountAmount === undefined ? null : decimal(input.accountAmount),
-      accountImpactAtCreation: input.accountImpactAtCreation,
-      occurredAt: new Date(input.occurredAt),
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(
       and(
         eq(creditCardRecords.id, id),
@@ -1046,60 +1093,49 @@ export async function createAccount(input: NewAccount, db: Db = createDb()) {
 
 export async function updateAccount(
   id: string,
-  input: NewAccount,
+  input: AccountPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+  if (!current) return null;
+  const merged = accountSchema.parse({
+    ...mapAccount(current),
+    ...input,
+    note: input.note === null ? undefined : (input.note ?? optional(current.note)),
+  });
+  const values: Partial<typeof accounts.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["name", "type", "currency", "color", "icon", "isVisible", "isActive"] as const) {
+    if (hasOwn(input, key)) values[key] = merged[key] as never;
+  }
+  if (hasOwn(input, "initialBalance")) values.initialBalance = decimal(merged.initialBalance);
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
   const [row] = await db
     .update(accounts)
-    .set({
-      ...input,
-      initialBalance: decimal(input.initialBalance),
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(accounts.id, id))
     .returning();
   return row ? mapAccount(row) : null;
 }
 
 export async function deleteAccount(id: string, db: Db = createDb()) {
-  await db
-    .update(records)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        isNull(records.deletedAt),
-        or(eq(records.accountId, id), eq(records.destinationAccountId, id)),
-      ),
-    );
-  await db
-    .update(goals)
-    .set({ accountId: null })
-    .where(eq(goals.accountId, id));
-  await db
-    .update(budgets)
-    .set({ accountId: null })
-    .where(eq(budgets.accountId, id));
-  await db
-    .update(debts)
-    .set({ accountId: null })
-    .where(eq(debts.accountId, id));
-  await db
-    .update(recurringDebts)
-    .set({ accountId: null, updatedAt: new Date() })
-    .where(eq(recurringDebts.accountId, id));
-  await db.delete(goalReservations).where(eq(goalReservations.accountId, id));
-  await db.delete(installmentPlans).where(eq(installmentPlans.accountId, id));
-
-  const [row] = await db
-    .update(accounts)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(accounts.id, id))
-    .returning();
-  return Boolean(row);
+  const [current] = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+  if (!current) return false;
+  if (current.deletedAt) return true;
+  const [replacement] = await db.select().from(accounts).where(and(isNull(accounts.deletedAt), ne(accounts.id, id))).orderBy(accounts.createdAt).limit(1);
+  const now = new Date();
+  await db.batch([
+    db.update(accounts).set({ isActive: false, isVisible: false, deletedAt: now, updatedAt: now }).where(eq(accounts.id, id)),
+    db.update(recurringDebts).set({ isActive: false, updatedAt: now }).where(eq(recurringDebts.accountId, id)),
+    db.update(budgets).set({ isActive: false, updatedAt: now }).where(eq(budgets.accountId, id)),
+    db.update(goals).set({ status: "paused", updatedAt: now }).where(and(eq(goals.accountId, id), eq(goals.status, "active"))),
+    db.update(settings).set({ primaryAccountId: replacement?.id ?? null, updatedAt: now }).where(eq(settings.primaryAccountId, id)),
+    db.update(settings).set({ defaultAccountId: replacement?.id ?? null, updatedAt: now }).where(eq(settings.defaultAccountId, id)),
+  ]);
+  return true;
 }
 
 export async function listCategories(db: Db = createDb()) {
-  const rows = await db.select().from(categories);
+  const rows = await db.select().from(categories).where(isNull(categories.deletedAt));
   return rows.map(mapCategory);
 }
 
@@ -1116,23 +1152,47 @@ export async function createCategory(input: NewCategory, db: Db = createDb()) {
 
 export async function updateCategory(
   id: string,
-  input: NewCategory,
+  input: CategoryPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
+  if (!current) return null;
+  if (input.parentId === id) throw validationError("A category cannot be its own parent");
+  if (current.systemKey && hasOwn(input, "parentId") && (input.parentId ?? null) !== current.parentId) {
+    throw conflictError("System categories cannot be moved");
+  }
+  if (input.parentId) {
+    const [parent] = await db.select({ id: categories.id }).from(categories).where(and(
+      eq(categories.id, input.parentId),
+      isNull(categories.deletedAt),
+    )).limit(1);
+    if (!parent) throw validationError("Parent category does not exist");
+    const descendants = await categoryTreeIds(id, db);
+    if (descendants.includes(input.parentId)) {
+      throw validationError("A category cannot be moved below one of its descendants");
+    }
+  }
+  const merged = categorySchema.parse({
+    ...mapCategory(current),
+    ...input,
+    parentId: input.parentId === null ? undefined : (input.parentId ?? optional(current.parentId)),
+  });
+  const values: Partial<typeof categories.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["name", "color", "icon"] as const) {
+    if (hasOwn(input, key)) values[key] = merged[key];
+  }
+  if (hasOwn(input, "parentId")) values.parentId = merged.parentId ?? null;
   const [row] = await db
     .update(categories)
-    .set({
-      ...input,
-      parentId: input.parentId ?? null,
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(categories.id, id))
     .returning();
   return row ? mapCategory(row) : null;
 }
 
 async function categoryTreeIds(id: string, db: Db) {
-  const rows = await db.select().from(categories);
+  const rows = await db.select().from(categories).where(isNull(categories.deletedAt));
+  if (!rows.some((row) => row.id === id)) return [];
   const ids = new Set([id]);
   let didAdd = true;
 
@@ -1151,32 +1211,42 @@ async function categoryTreeIds(id: string, db: Db) {
 
 export async function deleteCategory(id: string, db: Db = createDb()) {
   const ids = await categoryTreeIds(id, db);
+  if (ids.length === 0) return { deleted: false as const, reason: "not_found" as const };
   const protectedRows = await db
     .select({ id: categories.id })
     .from(categories)
     .where(and(inArray(categories.id, ids), isNotNull(categories.systemKey)));
-  if (protectedRows.length > 0) return false;
-  await db
-    .update(records)
-    .set({ categoryId: null })
-    .where(inArray(records.categoryId, ids));
-  await db
-    .update(budgets)
-    .set({ categoryId: null })
-    .where(inArray(budgets.categoryId, ids));
-  await db.delete(debts).where(inArray(debts.categoryId, ids));
-  await db
-    .delete(recurringDebts)
-    .where(inArray(recurringDebts.categoryId, ids));
-  await db
-    .delete(installmentPlans)
-    .where(inArray(installmentPlans.categoryId, ids));
-
-  for (const categoryId of ids.reverse()) {
-    await db.delete(categories).where(eq(categories.id, categoryId));
-  }
-
-  return true;
+  if (protectedRows.length > 0) return { deleted: false as const, reason: "protected" as const };
+  const [fallback] = await db.select().from(categories).where(and(
+    eq(categories.systemKey, "category_eliminated"),
+    isNull(categories.deletedAt),
+  )).limit(1);
+  if (!fallback) throw new Error("Category eliminated fallback is not configured");
+  const now = new Date();
+  const results = await db.batch([
+    db.update(records).set({ categoryId: fallback.id, updatedAt: now }).where(inArray(records.categoryId, ids)).returning({ id: records.id }),
+    db.update(creditCardRecords).set({ categoryId: fallback.id, updatedAt: now }).where(inArray(creditCardRecords.categoryId, ids)).returning({ id: creditCardRecords.id }),
+    db.update(budgets).set({ categoryId: fallback.id, updatedAt: now }).where(inArray(budgets.categoryId, ids)).returning({ id: budgets.id }),
+    db.update(debts).set({ categoryId: fallback.id }).where(inArray(debts.categoryId, ids)).returning({ id: debts.id }),
+    db.update(recurringDebts).set({ categoryId: fallback.id, updatedAt: now }).where(inArray(recurringDebts.categoryId, ids)).returning({ id: recurringDebts.id }),
+    db.update(installmentPlans).set({ categoryId: fallback.id }).where(inArray(installmentPlans.categoryId, ids)).returning({ id: installmentPlans.id }),
+    db.update(merchants).set({ categoryId: fallback.id, updatedAt: now }).where(inArray(merchants.categoryId, ids)).returning({ id: merchants.id }),
+    db.update(categories).set({ deletedAt: now, updatedAt: now }).where(inArray(categories.id, ids)).returning({ id: categories.id }),
+  ]);
+  return {
+    deleted: true as const,
+    fallbackCategoryId: fallback.id,
+    archivedCategoryIds: ids,
+    reassigned: {
+      records: results[0].length,
+      creditCardRecords: results[1].length,
+      budgets: results[2].length,
+      debts: results[3].length,
+      recurringDebts: results[4].length,
+      installmentPlans: results[5].length,
+      merchants: results[6].length,
+    },
+  };
 }
 
 export async function listTags(db: Db = createDb()) {
@@ -1243,18 +1313,6 @@ export async function listRecords(
   return rows.map((record) => mapRecord(record, tagIdsByRecord));
 }
 
-async function replaceRecordTags(recordId: string, tagIds: string[], db: Db) {
-  await db.delete(recordTags).where(eq(recordTags.recordId, recordId));
-  if (tagIds.length > 0) {
-    await db.insert(recordTags).values(
-      tagIds.map((tagId) => ({
-        recordId,
-        tagId,
-      })),
-    );
-  }
-}
-
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
   const recordId = randomUUID();
   const recordValues = {
@@ -1286,9 +1344,8 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
     debtId: input.debtId ?? null,
   };
   if (input.creditCardId && input.categoryId) {
-    const [recordResult] = await db.batch([
-      db.insert(records).values(recordValues).returning(),
-      db.insert(creditCardRecords).values({
+    const recordInsert = db.insert(records).values(recordValues).returning();
+    const cardInsert = db.insert(creditCardRecords).values({
         id: randomUUID(),
         creditCardId: input.creditCardId,
         walletRecordId: recordId,
@@ -1310,127 +1367,112 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
           : null,
         accountImpactAtCreation: Boolean(input.accountId),
         occurredAt: new Date(input.occurredAt),
-      }),
-    ]);
+      });
+    const [recordResult] = input.tagIds.length
+      ? await db.batch([recordInsert, cardInsert, db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId })))])
+      : await db.batch([recordInsert, cardInsert]);
     const row = recordResult[0];
-    await replaceRecordTags(row.id, input.tagIds, db);
     return mapRecord(row, { [row.id]: input.tagIds });
   }
-  const [row] = await db.insert(records).values(recordValues).returning();
-  await replaceRecordTags(row.id, input.tagIds, db);
+  const recordInsert = db.insert(records).values(recordValues).returning();
+  const [rows] = input.tagIds.length
+    ? await db.batch([recordInsert, db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId })))])
+    : await db.batch([recordInsert]);
+  const row = rows[0];
   return mapRecord(row, { [row.id]: input.tagIds });
 }
 
 export async function updateRecord(
   id: string,
-  input: NewRecord,
+  input: RecordPatch,
   db: Db = createDb(),
 ) {
-  const [[linked], [existingRecord]] = await Promise.all([
+  const [[linked], [existingRecord], existingTagRows] = await Promise.all([
     db
       .select()
       .from(creditCardRecords)
       .where(eq(creditCardRecords.walletRecordId, id))
       .limit(1),
     db.select().from(records).where(eq(records.id, id)).limit(1),
+    db.select().from(recordTags).where(eq(recordTags.recordId, id)),
   ]);
+  if (!existingRecord) return null;
+  const current = mapRecord(existingRecord, { [id]: existingTagRows.map((item) => item.tagId) });
+  const merged = recordSchema.parse({
+    ...current,
+    ...input,
+    destinationAccountId: input.destinationAccountId === null ? undefined : (input.destinationAccountId ?? current.destinationAccountId),
+    categoryId: input.categoryId === null ? undefined : (input.categoryId ?? current.categoryId),
+    counterpartyName: input.counterpartyName === null ? undefined : (input.counterpartyName ?? current.counterpartyName),
+    note: input.note === null ? undefined : (input.note ?? current.note),
+    debtId: input.debtId === null ? undefined : (input.debtId ?? current.debtId),
+  });
   const resolveAsCardOnly = Boolean(
-    existingRecord?.paymentStatus === "needs_review" &&
+    existingRecord.paymentStatus === "needs_review" &&
     !existingRecord.accountId &&
-    input.creditCardId &&
-    !input.accountId &&
-    input.paymentStatus === "cleared",
+    merged.creditCardId &&
+    !merged.accountId &&
+    merged.paymentStatus === "cleared",
   );
+  const recordValues: Partial<typeof records.$inferInsert> = { updatedAt: new Date() };
+  if (hasOwn(input, "type")) recordValues.type = merged.type;
+  if (hasOwn(input, "amount")) recordValues.amount = decimal(merged.amount);
+  if (hasOwn(input, "currency")) recordValues.currency = merged.currency;
+  if (hasOwn(input, "accountId")) recordValues.accountId = merged.accountId ?? null;
+  if (hasOwn(input, "accountAmount")) recordValues.accountAmount = merged.accountAmount === undefined ? null : decimal(merged.accountAmount);
+  if (hasOwn(input, "creditCardId")) recordValues.creditCardId = merged.creditCardId ?? null;
+  if (hasOwn(input, "destinationAccountId")) recordValues.destinationAccountId = merged.destinationAccountId ?? null;
+  if (hasOwn(input, "categoryId")) recordValues.categoryId = merged.categoryId ?? null;
+  if (hasOwn(input, "counterpartyName")) recordValues.counterpartyName = merged.counterpartyName ?? null;
+  if (hasOwn(input, "paymentType")) recordValues.paymentType = merged.paymentType;
+  if (hasOwn(input, "paymentStatus")) recordValues.paymentStatus = merged.paymentStatus;
+  if (hasOwn(input, "exchangeRateToPrimary")) recordValues.exchangeRateToPrimary = decimal(merged.exchangeRateToPrimary);
+  if (hasOwn(input, "amountInLimitCurrency")) recordValues.amountInLimitCurrency = merged.amountInLimitCurrency === undefined ? null : decimal(merged.amountInLimitCurrency);
+  if (hasOwn(input, "exchangeRateToLimitCurrency")) recordValues.exchangeRateToLimitCurrency = merged.exchangeRateToLimitCurrency === undefined ? null : decimal(merged.exchangeRateToLimitCurrency);
+  if (hasOwn(input, "occurredAt")) recordValues.occurredAt = new Date(merged.occurredAt);
+  if (hasOwn(input, "note")) recordValues.note = merged.note ?? null;
+  if (hasOwn(input, "isFixed")) recordValues.isFixed = merged.isFixed ?? false;
+  if (hasOwn(input, "debtId")) recordValues.debtId = merged.debtId ?? null;
+  if (resolveAsCardOnly) recordValues.deletedAt = new Date();
   const recordUpdate = db
     .update(records)
-    .set({
-      type: input.type,
-      amount: decimal(input.amount),
-      currency: input.currency,
-      accountId: input.accountId ?? null,
-      accountAmount:
-        input.accountAmount === undefined ? null : decimal(input.accountAmount),
-      creditCardId: input.creditCardId ?? null,
-      destinationAccountId: input.destinationAccountId ?? null,
-      categoryId: input.categoryId ?? null,
-      counterpartyName: input.counterpartyName ?? null,
-      paymentType: input.paymentType,
-      paymentStatus: input.paymentStatus,
-      exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
-      amountInLimitCurrency:
-        input.amountInLimitCurrency === undefined
-          ? null
-          : decimal(input.amountInLimitCurrency),
-      exchangeRateToLimitCurrency:
-        input.exchangeRateToLimitCurrency === undefined
-          ? null
-          : decimal(input.exchangeRateToLimitCurrency),
-      occurredAt: new Date(input.occurredAt),
-      note: input.note ?? null,
-      isFixed: input.isFixed ?? false,
-      debtId: input.debtId ?? null,
-      updatedAt: new Date(),
-      deletedAt: resolveAsCardOnly ? new Date() : null,
-    })
+    .set(recordValues)
     .where(eq(records.id, id))
     .returning();
-  let row: typeof records.$inferSelect | undefined;
-  if (input.creditCardId && input.categoryId) {
+  const sideQueries = [];
+  if (merged.creditCardId && merged.categoryId) {
     const values = {
-      creditCardId: input.creditCardId,
+      creditCardId: merged.creditCardId,
       walletRecordId: resolveAsCardOnly ? null : id,
-      kind: input.type === "income" ? "refund" : "purchase",
-      amount: decimal(input.amount),
-      currency: input.currency,
-      amountInLimitCurrency: decimal(
-        input.amountInLimitCurrency ?? input.amount,
-      ),
-      exchangeRateToLimitCurrency: decimal(
-        input.exchangeRateToLimitCurrency ?? 1,
-      ),
-      categoryId: input.categoryId,
-      counterpartyName: input.counterpartyName ?? null,
-      note: input.note ?? null,
-      accountId: input.accountId ?? null,
-      accountAmount: input.accountId
-        ? decimal(input.accountAmount ?? input.amount)
+      kind: merged.type === "income" ? "refund" : "purchase",
+      amount: decimal(merged.amount), currency: merged.currency,
+      amountInLimitCurrency: decimal(merged.amountInLimitCurrency ?? merged.amount),
+      exchangeRateToLimitCurrency: decimal(merged.exchangeRateToLimitCurrency ?? 1),
+      categoryId: merged.categoryId, counterpartyName: merged.counterpartyName ?? null,
+      note: merged.note ?? null, accountId: merged.accountId ?? null,
+      accountAmount: merged.accountId
+        ? decimal(merged.accountAmount ?? merged.amount)
         : null,
-      accountImpactAtCreation: Boolean(input.accountId),
-      occurredAt: new Date(input.occurredAt),
+      accountImpactAtCreation: Boolean(merged.accountId),
+      occurredAt: new Date(merged.occurredAt),
       updatedAt: new Date(),
       deletedAt: null,
     };
-    if (linked) {
-      const [recordResult] = await db.batch([
-        recordUpdate,
-        db
-          .update(creditCardRecords)
-          .set(values)
-          .where(eq(creditCardRecords.id, linked.id)),
-      ]);
-      row = recordResult[0];
-    } else {
-      const [recordResult] = await db.batch([
-        recordUpdate,
-        db.insert(creditCardRecords).values({ id: randomUUID(), ...values }),
-      ]);
-      row = recordResult[0];
-    }
+    sideQueries.push(linked
+      ? db.update(creditCardRecords).set(values).where(eq(creditCardRecords.id, linked.id))
+      : db.insert(creditCardRecords).values({ id: randomUUID(), ...values }));
   } else if (linked) {
-    const [recordResult] = await db.batch([
-      recordUpdate,
-      db
-        .update(creditCardRecords)
-        .set({ deletedAt: new Date(), updatedAt: new Date() })
-        .where(eq(creditCardRecords.id, linked.id)),
-    ]);
-    row = recordResult[0];
-  } else {
-    [row] = await recordUpdate;
+    sideQueries.push(db.update(creditCardRecords).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(creditCardRecords.id, linked.id)));
   }
-  if (!row) return null;
-  await replaceRecordTags(id, input.tagIds, db);
-  return mapRecord(row, { [id]: input.tagIds });
+  if (hasOwn(input, "tagIds")) {
+    sideQueries.push(db.delete(recordTags).where(eq(recordTags.recordId, id)));
+    if (merged.tagIds.length) sideQueries.push(db.insert(recordTags).values(merged.tagIds.map((tagId) => ({ recordId: id, tagId }))));
+  }
+  const [rows] = sideQueries.length
+    ? await db.batch([recordUpdate, ...sideQueries] as unknown as Parameters<Db["batch"]>[0])
+    : await db.batch([recordUpdate]);
+  const row = rows[0];
+  return mapRecord(row, { [id]: merged.tagIds });
 }
 
 export async function deleteRecord(id: string, db: Db = createDb()) {
@@ -1677,32 +1719,35 @@ export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
 
 export async function updateDebt(
   id: string,
-  input: NewDebt,
+  input: DebtPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
+  if (!current) return null;
+  const mapped = mapDebt(current);
+  const merged = debtSchema.parse({
+    ...mapped, ...input,
+    originalAmount: input.originalAmount === null ? undefined : (input.originalAmount ?? mapped.originalAmount),
+    pendingAmount: input.pendingAmount === null ? undefined : (input.pendingAmount ?? mapped.pendingAmount),
+    accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
+    dueAt: input.dueAt === null ? undefined : (input.dueAt ?? mapped.dueAt),
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+    recurringDebtId: input.recurringDebtId === null ? undefined : (input.recurringDebtId ?? mapped.recurringDebtId),
+    recurringMonth: input.recurringMonth === null ? undefined : (input.recurringMonth ?? mapped.recurringMonth),
+  });
+  const values: Partial<typeof debts.$inferInsert> = {};
+  for (const key of ["name", "direction", "currency", "counterpartyName", "categoryId", "status", "isVisible"] as const) if (hasOwn(input, key)) values[key] = merged[key] as never;
+  if (hasOwn(input, "originalAmount")) values.originalAmount = merged.originalAmount === undefined ? null : decimal(merged.originalAmount);
+  if (hasOwn(input, "pendingAmount")) values.pendingAmount = merged.pendingAmount === undefined ? null : decimal(merged.pendingAmount);
+  if (hasOwn(input, "accountId")) values.accountId = merged.accountId ?? null;
+  if (hasOwn(input, "startedAt")) values.startedAt = new Date(merged.startedAt);
+  if (hasOwn(input, "dueAt")) values.dueAt = toDate(merged.dueAt);
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
+  if (hasOwn(input, "recurringDebtId")) values.recurringDebtId = merged.recurringDebtId ?? null;
+  if (hasOwn(input, "recurringMonth")) values.recurringMonth = merged.recurringMonth ?? null;
   const [row] = await db
     .update(debts)
-    .set({
-      name: input.name,
-      direction: input.direction,
-      originalAmount:
-        input.originalAmount === undefined
-          ? null
-          : decimal(input.originalAmount),
-      pendingAmount:
-        input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
-      currency: input.currency,
-      counterpartyName: input.counterpartyName,
-      accountId: input.accountId ?? null,
-      categoryId: input.categoryId,
-      status: input.status,
-      isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
-      dueAt: toDate(input.dueAt),
-      note: input.note ?? null,
-      recurringDebtId: input.recurringDebtId ?? null,
-      recurringMonth: input.recurringMonth ?? null,
-    })
+    .set(values)
     .where(eq(debts.id, id))
     .returning();
 
@@ -1747,25 +1792,28 @@ export async function createRecurringDebt(
 
 export async function updateRecurringDebt(
   id: string,
-  input: NewRecurringDebt,
+  input: RecurringDebtPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(recurringDebts).where(eq(recurringDebts.id, id)).limit(1);
+  if (!current) return null;
+  const mapped = mapRecurringDebt(current);
+  const merged = recurringDebtSchema.parse({
+    ...mapped, ...input,
+    amount: input.amount === null ? undefined : (input.amount ?? mapped.amount),
+    accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+  });
+  const values: Partial<typeof recurringDebts.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["name", "direction", "currency", "counterpartyName", "categoryId", "isActive"] as const) if (hasOwn(input, key)) values[key] = merged[key] as never;
+  if (hasOwn(input, "amount")) values.amount = merged.amount === undefined ? null : decimal(merged.amount);
+  if (hasOwn(input, "accountId")) values.accountId = merged.accountId ?? null;
+  if (hasOwn(input, "dayOfMonth")) values.dayOfMonth = decimal(merged.dayOfMonth);
+  if (hasOwn(input, "startedAt")) values.startedAt = new Date(merged.startedAt);
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
   const [row] = await db
     .update(recurringDebts)
-    .set({
-      name: input.name,
-      direction: input.direction,
-      amount: input.amount === undefined ? null : decimal(input.amount),
-      currency: input.currency,
-      counterpartyName: input.counterpartyName,
-      accountId: input.accountId ?? null,
-      categoryId: input.categoryId,
-      dayOfMonth: decimal(input.dayOfMonth),
-      isActive: input.isActive,
-      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
-      note: input.note ?? null,
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(recurringDebts.id, id))
     .returning();
 
@@ -1786,6 +1834,7 @@ interface DebtPaymentInput {
   occurredAt: string;
   note?: string;
   saveAccountToDebt?: boolean;
+  idempotencyKey?: string;
 }
 
 export async function recordDebtPayment(
@@ -1793,54 +1842,56 @@ export async function recordDebtPayment(
   input: DebtPaymentInput,
   db: Db = createDb(),
 ) {
-  const [debtRow] = await db
-    .select()
-    .from(debts)
-    .where(eq(debts.id, id))
-    .limit(1);
-  if (!debtRow) return null;
-
-  const debt = mapDebt(debtRow);
-  if (debt.pendingAmount === undefined || input.amount > debt.pendingAmount) {
-    throw new Error("Invalid debt payment amount");
+  const idempotencyKey = input.idempotencyKey ?? randomUUID();
+  const requestHash = createHash("sha256").update(JSON.stringify({
+    debtId: id, amount: input.amount, accountId: input.accountId,
+    occurredAt: input.occurredAt, note: input.note ?? null,
+    saveAccountToDebt: Boolean(input.saveAccountToDebt),
+  })).digest("hex");
+  const [existing] = await db.select().from(records).where(eq(records.idempotencyKey, idempotencyKey)).limit(1);
+  if (existing) {
+    if (existing.requestHash !== requestHash) throw conflictError("Idempotency key was already used with another payment");
+    const [debtRow] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
+    return debtRow ? { debt: mapDebt(debtRow), record: mapRecord(existing, { [existing.id]: [] }) } : null;
   }
-
-  const [recordRow] = await db
-    .insert(records)
-    .values({
-      type: debt.direction === "receivable" ? "income" : "expense",
-      amount: decimal(input.amount),
-      currency: debt.currency,
-      accountId: input.accountId,
-      categoryId: debt.categoryId,
-      counterpartyName: debt.counterpartyName,
-      paymentType: "transfer",
-      paymentStatus: "cleared",
-      exchangeRateToPrimary: "1",
-      occurredAt: new Date(input.occurredAt),
-      note: input.note ?? `Debt payment: ${debt.name}`,
-      isFixed: false,
-      debtId: id,
-    })
-    .returning();
-
-  const nextPendingAmount = Math.max(0, debt.pendingAmount - input.amount);
-  const [updatedDebtRow] = await db
-    .update(debts)
-    .set({
-      pendingAmount: decimal(nextPendingAmount),
-      status: nextPendingAmount === 0 ? "paid" : debt.status,
-      accountId: input.saveAccountToDebt
-        ? input.accountId
-        : (debt.accountId ?? null),
-    })
-    .where(eq(debts.id, id))
-    .returning();
-
-  return {
-    debt: mapDebt(updatedDebtRow),
-    record: mapRecord(recordRow, { [recordRow.id]: [] }),
-  };
+  const recordId = randomUUID();
+  try {
+    await db.execute(sql`
+      WITH updated_debt AS (
+        UPDATE ${debts}
+        SET pending_amount = pending_amount - ${decimal(input.amount)}::numeric,
+            status = CASE WHEN pending_amount - ${decimal(input.amount)}::numeric = 0 THEN 'paid'::debt_status ELSE status END,
+            account_id = CASE WHEN ${Boolean(input.saveAccountToDebt)} THEN ${input.accountId}::uuid ELSE account_id END
+        WHERE id = ${id}::uuid
+          AND pending_amount IS NOT NULL
+          AND pending_amount >= ${decimal(input.amount)}::numeric
+          AND status <> 'paid'::debt_status
+        RETURNING *
+      )
+      INSERT INTO ${records} (
+        id, type, amount, currency, account_id, category_id, counterparty_name,
+        payment_type, payment_status, exchange_rate_to_primary, occurred_at, note,
+        is_fixed, debt_id, idempotency_key, request_hash
+      )
+      SELECT ${recordId}::uuid,
+        CASE WHEN direction = 'receivable' THEN 'income'::record_type ELSE 'expense'::record_type END,
+        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, category_id, counterparty_name,
+        'transfer'::payment_type, 'cleared'::payment_status, 1, ${new Date(input.occurredAt)},
+        COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
+      FROM updated_debt
+    `);
+  } catch (error) {
+    const [raced] = await db.select().from(records).where(eq(records.idempotencyKey, idempotencyKey)).limit(1);
+    if (!raced) throw error;
+    if (raced.requestHash !== requestHash) throw conflictError("Idempotency key was already used with another payment");
+  }
+  const [[updatedDebtRow], [recordRow]] = await Promise.all([
+    db.select().from(debts).where(eq(debts.id, id)).limit(1),
+    db.select().from(records).where(eq(records.idempotencyKey, idempotencyKey)).limit(1),
+  ]);
+  if (!updatedDebtRow) return null;
+  if (!recordRow) throw validationError("Payment amount is invalid for this debt");
+  return { debt: mapDebt(updatedDebtRow), record: mapRecord(recordRow, { [recordRow.id]: [] }) };
 }
 
 export async function getSettings(db: Db = createDb()) {
@@ -1878,5 +1929,31 @@ export async function upsertSettings(
           .returning()
       : await db.insert(settings).values(values).returning();
 
+  return mapSettings(row);
+}
+
+export async function patchSettings(input: SettingsPatch, db: Db = createDb()) {
+  const [current] = await db.select().from(settings).limit(1);
+  if (!current) {
+    const merged = settingsSchema.parse({
+      ...mapSettings(undefined),
+      ...input,
+      primaryAccountId: input.primaryAccountId === null ? undefined : input.primaryAccountId,
+      defaultAccountId: input.defaultAccountId === null ? undefined : input.defaultAccountId,
+      defaultCreditCardId: input.defaultCreditCardId === null ? undefined : input.defaultCreditCardId,
+    });
+    return upsertSettings(merged, db);
+  }
+  const values: Partial<typeof settings.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["primaryCurrency", "theme", "defaultDashboardPreset", "locale", "includeHiddenAccountsInReports", "defaultPaymentType", "defaultPaymentStatus"] as const) {
+    if (hasOwn(input, key)) values[key] = input[key] as never;
+  }
+  if (hasOwn(input, "primaryAccountId")) values.primaryAccountId = input.primaryAccountId ?? null;
+  if (hasOwn(input, "defaultAccountId")) values.defaultAccountId = input.defaultAccountId ?? null;
+  if (hasOwn(input, "defaultCreditCardId")) {
+    values.defaultCreditCardId = input.defaultCreditCardId ?? null;
+    if (input.defaultCreditCardId) values.defaultPaymentType = "credit";
+  }
+  const [row] = await db.update(settings).set(values).where(eq(settings.id, current.id)).returning();
   return mapSettings(row);
 }

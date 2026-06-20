@@ -93,6 +93,7 @@ export const categories = pgTable("categories", {
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
 export const merchants = pgTable(
@@ -206,6 +207,8 @@ export const records = pgTable(
     note: text("note"),
     isFixed: boolean("is_fixed").notNull().default(false),
     debtId: uuid("debt_id"),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -219,6 +222,7 @@ export const records = pgTable(
     creditCardIdx: index("records_credit_card_idx").on(table.creditCardId),
     occurredAtIdx: index("records_occurred_at_idx").on(table.occurredAt),
     typeIdx: index("records_type_idx").on(table.type),
+    idempotencyIdx: uniqueIndex("records_idempotency_idx").on(table.idempotencyKey),
   }),
 );
 
@@ -546,6 +550,17 @@ export const ingestionEvents = pgTable(
     expiryIdx: index("ingestion_events_expiry_idx").on(table.metadataExpiresAt),
   }),
 );
+
+export const authAttempts = pgTable("auth_attempts", {
+  key: text("key").primaryKey(),
+  failedCount: integer("failed_count").notNull().default(0),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedUntil: timestamp("blocked_until", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
 
 export const investments = pgTable("investments", {
   id: uuid("id").primaryKey().defaultRandom(),

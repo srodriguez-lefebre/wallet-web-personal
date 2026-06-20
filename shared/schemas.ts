@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
+export const uuidSchema = z.string().uuid("Invalid UUID");
 
 export const recordTypeSchema = z.enum(["expense", "income", "transfer"]);
 
@@ -45,7 +46,7 @@ export const accountSchema = z.object({
 
 export const categorySchema = z.object({
   name: z.string().min(1),
-  parentId: z.string().optional(),
+  parentId: uuidSchema.optional(),
   color: z.string().min(1),
   icon: z.string().min(1),
 });
@@ -61,13 +62,13 @@ export const recordSchema = z
     type: recordTypeSchema,
     amount: z.number().positive(),
     currency: currencySchema,
-    accountId: z.string().min(1).optional(),
+    accountId: uuidSchema.optional(),
     accountAmount: z.number().positive().optional(),
-    creditCardId: z.string().min(1).optional(),
-    destinationAccountId: z.string().optional(),
-    categoryId: z.string().optional(),
+    creditCardId: uuidSchema.optional(),
+    destinationAccountId: uuidSchema.optional(),
+    categoryId: uuidSchema.optional(),
     counterpartyName: z.string().optional(),
-    tagIds: z.array(z.string()).default([]),
+    tagIds: z.array(uuidSchema).default([]),
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
     exchangeRateToPrimary: z.number().positive().default(1),
@@ -76,7 +77,7 @@ export const recordSchema = z
     occurredAt: z.string().datetime(),
     note: z.string().optional(),
     isFixed: z.boolean().optional(),
-    debtId: z.string().optional(),
+    debtId: uuidSchema.optional(),
   })
   .superRefine((value, ctx) => {
     if (value.type !== "transfer") {
@@ -171,7 +172,7 @@ export const creditCardPaymentSchema = z
     amount: z.number().positive(),
     currency: currencySchema,
     amountInLimitCurrency: z.number().positive(),
-    accountId: z.string().min(1).optional(),
+    accountId: uuidSchema.optional(),
     accountAmount: z.number().positive().optional(),
     occurredAt: z.string().datetime(),
     note: z.string().optional(),
@@ -196,15 +197,15 @@ export const creditCardPaymentSchema = z
 export const creditCardRecordSchema = z
   .object({
     kind: z.enum(["purchase", "refund"]).default("purchase"),
-    originalRecordId: z.string().min(1).optional(),
+    originalRecordId: uuidSchema.optional(),
     amount: z.number().positive(),
     currency: currencySchema,
     amountInLimitCurrency: z.number().positive(),
     exchangeRateToLimitCurrency: z.number().positive(),
-    categoryId: z.string().min(1),
+    categoryId: uuidSchema,
     counterpartyName: z.string().optional(),
     note: z.string().optional(),
-    accountId: z.string().min(1).optional(),
+    accountId: uuidSchema.optional(),
     accountAmount: z.number().positive().optional(),
     accountImpactAtCreation: z.boolean().default(false),
     occurredAt: z.string().datetime(),
@@ -244,14 +245,14 @@ export const goalSchema = z.object({
   status: z
     .enum(["active", "completed", "paused", "cancelled"])
     .default("active"),
-  tagIds: z.array(z.string()).default([]),
-  accountId: z.string().optional(),
+  tagIds: z.array(uuidSchema).default([]),
+  accountId: uuidSchema.optional(),
   note: z.string().optional(),
 });
 
 export const goalReservationSchema = z.object({
-  goalId: z.string().min(1),
-  accountId: z.string().min(1),
+  goalId: uuidSchema,
+  accountId: uuidSchema,
   amount: z.number().positive(),
   currency: currencySchema,
   createdAt: z.string().datetime(),
@@ -277,14 +278,14 @@ export const debtSchema = z
     pendingAmount: z.number().nonnegative().optional(),
     currency: currencySchema,
     counterpartyName: z.string().min(1),
-    accountId: z.string().optional(),
-    categoryId: z.string().min(1),
+    accountId: uuidSchema.optional(),
+    categoryId: uuidSchema,
     status: debtStatusSchema.default("active"),
     isVisible: z.boolean().default(true),
     startedAt: z.string().datetime().or(z.string().date()),
     dueAt: z.string().datetime().or(z.string().date()).optional(),
     note: z.string().optional(),
-    recurringDebtId: z.string().optional(),
+    recurringDebtId: uuidSchema.optional(),
     recurringMonth: z.string().optional(),
   })
   .superRefine((value, ctx) => {
@@ -307,8 +308,8 @@ export const recurringDebtSchema = z.object({
   amount: z.number().positive().optional(),
   currency: currencySchema,
   counterpartyName: z.string().min(1),
-  accountId: z.string().optional(),
-  categoryId: z.string().min(1),
+  accountId: uuidSchema.optional(),
+  categoryId: uuidSchema,
   dayOfMonth: z.number().int().min(1).max(31),
   isActive: z.boolean().default(true),
   startedAt: z.string().datetime().or(z.string().date()),
@@ -317,10 +318,11 @@ export const recurringDebtSchema = z.object({
 
 export const debtPaymentSchema = z.object({
   amount: z.number().positive(),
-  accountId: z.string().min(1),
+  accountId: uuidSchema,
   occurredAt: z.string().datetime(),
   note: z.string().optional(),
   saveAccountToDebt: z.boolean().optional(),
+  idempotencyKey: uuidSchema.optional(),
 });
 
 export const budgetSchema = z.object({
@@ -328,17 +330,17 @@ export const budgetSchema = z.object({
   limitAmount: z.number().positive(),
   currency: currencySchema,
   period: z.literal("monthly"),
-  categoryId: z.string().optional(),
-  tagId: z.string().optional(),
-  accountId: z.string().optional(),
-  goalId: z.string().optional(),
+  categoryId: uuidSchema.optional(),
+  tagId: uuidSchema.optional(),
+  accountId: uuidSchema.optional(),
+  goalId: uuidSchema.optional(),
   color: z.string().min(1),
   isActive: z.boolean().default(true),
 });
 
 export const settingsSchema = z.object({
   primaryCurrency: currencySchema,
-  primaryAccountId: z.string().optional(),
+  primaryAccountId: uuidSchema.optional(),
   theme: z.enum(["light", "dark", "system"]),
   defaultDashboardPreset: z.enum([
     "general",
@@ -350,9 +352,9 @@ export const settingsSchema = z.object({
   ]),
   locale: z.literal("es-UY"),
   includeHiddenAccountsInReports: z.boolean(),
-  defaultAccountId: z.string().optional(),
+  defaultAccountId: uuidSchema.optional(),
   defaultPaymentType: paymentTypeSchema,
-  defaultCreditCardId: z.string().optional(),
+  defaultCreditCardId: uuidSchema.optional(),
   defaultPaymentStatus: paymentStatusSchema,
 });
 
@@ -360,7 +362,103 @@ export const unlockSchema = z.object({
   token: z.string().min(1),
 });
 
-const optionalUuidSchema = z.string().uuid().optional();
+function nonEmptyPatch<T extends z.ZodRawShape>(shape: T) {
+  return z.object(shape).strict().refine((value) => Object.keys(value).length > 0, {
+    message: "Patch must contain at least one field",
+  });
+}
+
+export const accountPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(),
+  type: accountSchema.shape.type.optional(),
+  currency: currencySchema.optional(),
+  initialBalance: z.number().optional(),
+  color: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(),
+  isVisible: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+  note: z.string().nullable().optional(),
+});
+
+export const categoryPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(),
+  parentId: uuidSchema.nullable().optional(),
+  color: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(),
+});
+
+export const recordPatchSchema = nonEmptyPatch({
+  type: recordTypeSchema.optional(), amount: z.number().positive().optional(),
+  currency: currencySchema.optional(), accountId: uuidSchema.optional(),
+  accountAmount: z.number().positive().optional(), creditCardId: uuidSchema.optional(),
+  destinationAccountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.nullable().optional(),
+  counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).optional(),
+  paymentType: paymentTypeSchema.optional(), paymentStatus: paymentStatusSchema.optional(),
+  exchangeRateToPrimary: z.number().positive().optional(), amountInLimitCurrency: z.number().positive().optional(),
+  exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
+  note: z.string().nullable().optional(), isFixed: z.boolean().optional(), debtId: uuidSchema.nullable().optional(),
+});
+
+export const creditCardPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), issuer: z.string().min(1).optional(),
+  lastFour: z.string().regex(/^\d{4}$/).optional(), creditLimit: z.number().positive().optional(),
+  limitCurrency: currencySchema.optional(), closingDay: z.number().int().min(1).max(31).optional(),
+  dueDay: z.number().int().min(1).max(31).optional(), color: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(), isActive: z.boolean().optional(), note: z.string().nullable().optional(),
+});
+
+export const creditCardRecordPatchSchema = nonEmptyPatch({
+  kind: z.enum(["purchase", "refund"]).optional(), originalRecordId: uuidSchema.nullable().optional(),
+  amount: z.number().positive().optional(), currency: currencySchema.optional(),
+  amountInLimitCurrency: z.number().positive().optional(), exchangeRateToLimitCurrency: z.number().positive().optional(),
+  categoryId: uuidSchema.optional(), counterpartyName: z.string().nullable().optional(), note: z.string().nullable().optional(),
+  accountId: uuidSchema.nullable().optional(), accountAmount: z.number().positive().nullable().optional(),
+  accountImpactAtCreation: z.boolean().optional(), occurredAt: z.string().datetime().optional(),
+});
+
+export const debtPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), direction: debtDirectionSchema.optional(),
+  originalAmount: z.number().positive().nullable().optional(), pendingAmount: z.number().nonnegative().nullable().optional(),
+  currency: currencySchema.optional(), counterpartyName: z.string().min(1).optional(),
+  accountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.optional(), status: debtStatusSchema.optional(),
+  isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(),
+  dueAt: z.string().datetime().or(z.string().date()).nullable().optional(), note: z.string().nullable().optional(),
+  recurringDebtId: uuidSchema.nullable().optional(), recurringMonth: z.string().nullable().optional(),
+});
+
+export const recurringDebtPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), direction: debtDirectionSchema.optional(), amount: z.number().positive().nullable().optional(),
+  currency: currencySchema.optional(), counterpartyName: z.string().min(1).optional(), accountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.optional(), dayOfMonth: z.number().int().min(1).max(31).optional(), isActive: z.boolean().optional(),
+  startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
+});
+
+export const settingsPatchSchema = nonEmptyPatch({
+  primaryCurrency: currencySchema.optional(), primaryAccountId: uuidSchema.nullable().optional(),
+  theme: z.enum(["light", "dark", "system"]).optional(),
+  defaultDashboardPreset: settingsSchema.shape.defaultDashboardPreset.optional(), locale: z.literal("es-UY").optional(),
+  includeHiddenAccountsInReports: z.boolean().optional(), defaultAccountId: uuidSchema.nullable().optional(),
+  defaultPaymentType: paymentTypeSchema.optional(), defaultCreditCardId: uuidSchema.nullable().optional(),
+  defaultPaymentStatus: paymentStatusSchema.optional(),
+});
+
+export type AccountPatch = z.infer<typeof accountPatchSchema>;
+export type CategoryPatch = z.infer<typeof categoryPatchSchema>;
+export type RecordPatch = z.infer<typeof recordPatchSchema>;
+export type CreditCardPatch = z.infer<typeof creditCardPatchSchema>;
+export type CreditCardRecordPatch = z.infer<typeof creditCardRecordPatchSchema>;
+export type DebtPatch = z.infer<typeof debtPatchSchema>;
+export type RecurringDebtPatch = z.infer<typeof recurringDebtPatchSchema>;
+export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
+
+export const recordFiltersSchema = z.object({
+  type: z.enum(["all", "expense", "income", "transfer"]).optional(),
+  accountId: uuidSchema.optional(),
+  creditCardId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+});
+
+const optionalUuidSchema = uuidSchema.optional();
 
 export const mailIngestionSchema = z.object({
   idempotencyKey: z.string().min(8).max(300),

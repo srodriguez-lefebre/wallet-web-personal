@@ -113,6 +113,7 @@ interface WalletContextValue {
       occurredAt: string;
       note?: string;
       saveAccountToDebt?: boolean;
+      idempotencyKey?: string;
     },
   ) => Promise<void>;
   addRecurringDebt: (
@@ -129,27 +130,6 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 const datasetCacheKey = "wallet-dataset-cache";
-
-function collectCategoryTreeIds(categories: Category[], categoryId: string) {
-  const ids = new Set([categoryId]);
-  let didAdd = true;
-
-  while (didAdd) {
-    didAdd = false;
-    categories.forEach((category) => {
-      if (
-        category.parentId &&
-        ids.has(category.parentId) &&
-        !ids.has(category.id)
-      ) {
-        ids.add(category.id);
-        didAdd = true;
-      }
-    });
-  }
-
-  return ids;
-}
 
 function localId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -495,38 +475,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   async function deleteCategory(categoryId: string) {
     await walletApi.deleteCategory(requireToken(), categoryId);
-    setDataset((current) => {
-      const categoryIds = collectCategoryTreeIds(
-        current.categories,
-        categoryId,
-      );
-
-      return {
-        ...current,
-        categories: current.categories.filter(
-          (category) => !categoryIds.has(category.id),
-        ),
-        records: current.records.map((record) =>
-          record.categoryId && categoryIds.has(record.categoryId)
-            ? {
-                ...record,
-                categoryId: undefined,
-              }
-            : record,
-        ),
-        budgets: current.budgets.map((budget) =>
-          budget.categoryId && categoryIds.has(budget.categoryId)
-            ? {
-                ...budget,
-                categoryId: undefined,
-              }
-            : budget,
-        ),
-        installmentPlans: current.installmentPlans.filter(
-          (plan) => !categoryIds.has(plan.categoryId),
-        ),
-      };
-    });
+    await reloadWallet();
     setRecordFiltersState((current) => ({
       ...current,
       categoryId: undefined,
@@ -794,6 +743,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       occurredAt: string;
       note?: string;
       saveAccountToDebt?: boolean;
+      idempotencyKey?: string;
     },
   ) {
     const result = await walletApi.recordDebtPayment(

@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { creditCardPaymentSchema, creditCardRecordSchema, recordSchema } from "./schemas";
 
+const categoryId = "00000000-0000-4000-8000-000000000001";
+const cardId = "00000000-0000-4000-8000-000000000002";
+const accountId = "00000000-0000-4000-8000-000000000003";
+
 const baseRecord = {
   type: "expense" as const,
   amount: 100,
   currency: "UYU" as const,
-  categoryId: "category-1",
+  categoryId,
   tagIds: [],
   paymentType: "credit" as const,
   paymentStatus: "cleared" as const,
@@ -18,7 +22,7 @@ describe("credit-card validation", () => {
     const result = recordSchema.safeParse({
       ...baseRecord,
       categoryId: undefined,
-      creditCardId: "card-1",
+      creditCardId: cardId,
     });
 
     expect(result.success).toBe(false);
@@ -38,7 +42,7 @@ describe("credit-card validation", () => {
         kind: "purchase",
         amount: 100,
         currency: "UYU",
-        categoryId: "category-1",
+        categoryId,
         amountInLimitCurrency: 2.5,
         exchangeRateToLimitCurrency: 0.025,
         accountImpactAtCreation: false,
@@ -51,7 +55,7 @@ describe("credit-card validation", () => {
     expect(
       recordSchema.safeParse({
         ...baseRecord,
-        accountId: "legacy-credit-account",
+        accountId,
       }).success,
     ).toBe(true);
   });
@@ -68,13 +72,13 @@ describe("credit-card validation", () => {
     expect(
       creditCardPaymentSchema.safeParse({
         ...payment,
-        accountId: "bank-1",
+        accountId,
       }).success,
     ).toBe(false);
     expect(
       creditCardPaymentSchema.safeParse({
         ...payment,
-        accountId: "bank-1",
+        accountId,
         accountAmount: 100,
       }).success,
     ).toBe(true);

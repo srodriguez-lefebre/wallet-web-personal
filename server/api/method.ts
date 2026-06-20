@@ -7,6 +7,7 @@ export function requireMethod(
   allowed: string[],
 ) {
   if (!req.method || !allowed.includes(req.method)) {
+    res.setHeader("Allow", allowed.join(", "));
     sendError(res, 405, "METHOD_NOT_ALLOWED", "Method not allowed");
     return false;
   }

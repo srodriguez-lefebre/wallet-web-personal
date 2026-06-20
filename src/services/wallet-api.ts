@@ -10,6 +10,7 @@ import type {
   WalletRecord,
   WalletSettings,
 } from "@shared/types";
+import type { AccountPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, RecordPatch, RecurringDebtPatch, SettingsPatch } from "@shared/schemas";
 
 interface ApiResponse<T> {
   data: T | null;
@@ -33,6 +34,10 @@ async function requestApi<T>(
     },
   });
   const payload = (await response.json()) as ApiResponse<T>;
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event("wallet:unauthorized"));
+  }
 
   if (!response.ok || payload.error || payload.data === null) {
     throw new Error(payload.error?.message ?? "API request failed");
@@ -61,7 +66,7 @@ export function createAccount(token: string, account: Omit<Account, "id">) {
 export function updateAccount(
   token: string,
   accountId: string,
-  account: Omit<Account, "id">,
+  account: AccountPatch,
 ) {
   return requestApi<Account>(token, `/api/accounts/${accountId}`, {
     method: "PATCH",
@@ -85,7 +90,7 @@ export function createRecord(token: string, record: Omit<WalletRecord, "id">) {
 export function updateRecord(
   token: string,
   recordId: string,
-  record: Omit<WalletRecord, "id">,
+  record: RecordPatch,
 ) {
   return requestApi<WalletRecord>(token, `/api/records/${recordId}`, {
     method: "PATCH",
@@ -109,7 +114,7 @@ export function createCategory(token: string, category: Omit<Category, "id">) {
 export function updateCategory(
   token: string,
   categoryId: string,
-  category: Omit<Category, "id">,
+  category: CategoryPatch,
 ) {
   return requestApi<Category>(token, `/api/categories/${categoryId}`, {
     method: "PATCH",
@@ -133,7 +138,7 @@ export function createCreditCard(token: string, card: Omit<CreditCard, "id">) {
 export function updateCreditCard(
   token: string,
   cardId: string,
-  card: Omit<CreditCard, "id">,
+  card: CreditCardPatch,
 ) {
   return requestApi<CreditCard>(token, `/api/cards/${cardId}`, {
     method: "PATCH",
@@ -162,7 +167,7 @@ export function createCreditCardRecord(token: string, cardId: string, movement: 
   return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records`, { method: "POST", ...body(movement) });
 }
 
-export function updateCreditCardRecord(token: string, cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+export function updateCreditCardRecord(token: string, cardId: string, movementId: string, movement: CreditCardRecordPatch) {
   return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records/${movementId}`, { method: "PATCH", ...body(movement) });
 }
 
@@ -192,7 +197,7 @@ export function createDebt(token: string, debt: Omit<Debt, "id">) {
 export function updateDebt(
   token: string,
   debtId: string,
-  debt: Omit<Debt, "id">,
+  debt: DebtPatch,
 ) {
   return requestApi<Debt>(token, `/api/debts/${debtId}`, {
     method: "PATCH",
@@ -215,6 +220,7 @@ export function recordDebtPayment(
     occurredAt: string;
     note?: string;
     saveAccountToDebt?: boolean;
+    idempotencyKey?: string;
   },
 ) {
   return requestApi<{ debt: Debt; record: WalletRecord }>(
@@ -222,7 +228,7 @@ export function recordDebtPayment(
     `/api/debts/${debtId}/payments`,
     {
       method: "POST",
-      ...body(payment),
+      ...body({ ...payment, idempotencyKey: payment.idempotencyKey ?? crypto.randomUUID() }),
     },
   );
 }
@@ -235,7 +241,7 @@ export function generateRecurringDebts(token: string) {
 
 export function createRecurringDebt(
   token: string,
-  recurringDebt: Omit<RecurringDebt, "id">,
+  recurringDebt: RecurringDebtPatch,
 ) {
   return requestApi<RecurringDebt>(token, "/api/recurring-debts", {
     method: "POST",
@@ -268,9 +274,9 @@ export function deleteRecurringDebt(token: string, recurringDebtId: string) {
   );
 }
 
-export function updateSettings(token: string, settings: WalletSettings) {
+export function updateSettings(token: string, settings: SettingsPatch) {
   return requestApi<WalletSettings>(token, "/api/settings", {
-    method: "PUT",
+    method: "PATCH",
     ...body(settings),
   });
 }

@@ -1,26 +1,36 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   accountSchema,
+  accountPatchSchema,
   categorySchema,
+  categoryPatchSchema,
   creditCardPaymentSchema,
   creditCardRecordSchema,
+  creditCardRecordPatchSchema,
   creditCardSchema,
+  creditCardPatchSchema,
   debtPaymentSchema,
   debtSchema,
+  debtPatchSchema,
   recordSchema,
+  recordPatchSchema,
   recurringDebtSchema,
+  recurringDebtPatchSchema,
   settingsSchema,
+  settingsPatchSchema,
   unlockSchema,
   mailIngestionSchema,
+  recordFiltersSchema,
 } from "../shared/schemas.js";
 import {
   buildDueRecurringDebtInstances,
   calculateCreditCardSummary,
 } from "../shared/calculations.js";
-import { isValidApiToken, requireIngestToken } from "../server/api/auth.js";
+import { createSessionToken, isValidApiToken, requireIngestToken } from "../server/api/auth.js";
+import { assertUnlockAllowed, clearUnlockFailures, registerUnlockFailure } from "../server/api/rate-limit.js";
 import { guardApi } from "../server/api/guard.js";
 import { requireMethod } from "../server/api/method.js";
-import { routeError, validateBody } from "../server/api/request.js";
+import { routeError, validateBody, validatePathId, validateQuery } from "../server/api/request.js";
 import { sendData, sendError } from "../server/api/response.js";
 import {
   IngestionInProgressError,
@@ -63,6 +73,7 @@ import {
   updateRecord,
   updateRecurringDebt,
   upsertSettings,
+  patchSettings,
   payCreditCardStatement,
 } from "../server/db/wallet-repository.js";
 
@@ -98,10 +109,11 @@ async function handleAccounts(
     sendData(res, await listAccounts());
     return;
   }
+  id = validatePathId(id);
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
-    const account = await updateAccount(id, validateBody(req, accountSchema));
+    const account = await updateAccount(id, validateBody(req, accountPatchSchema));
     if (!account) {
       sendError(res, 404, "NOT_FOUND", "Account not found");
       return;
@@ -135,12 +147,13 @@ async function handleCategories(
     sendData(res, await listCategories());
     return;
   }
+  id = validatePathId(id);
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
     const category = await updateCategory(
       id,
-      validateBody(req, categorySchema),
+      validateBody(req, categoryPatchSchema),
     );
     if (!category) {
       sendError(res, 404, "NOT_FOUND", "Category not found");
@@ -150,11 +163,16 @@ async function handleCategories(
     return;
   }
 
-  if (!(await deleteCategory(id))) {
+  const result = await deleteCategory(id);
+  if (!result.deleted && result.reason === "not_found") {
+    sendError(res, 404, "NOT_FOUND", "Category not found");
+    return;
+  }
+  if (!result.deleted) {
     sendError(res, 409, "CONFLICT", "Protected categories cannot be deleted");
     return;
   }
-  sendData(res, { deleted: true });
+  sendData(res, result);
 }
 
 async function handleRecords(
@@ -168,30 +186,14 @@ async function handleRecords(
       sendData(res, await createRecord(validateBody(req, recordSchema)), 201);
       return;
     }
-    sendData(
-      res,
-      await listRecords({
-        type: typeof req.query.type === "string" ? req.query.type : undefined,
-        accountId:
-          typeof req.query.accountId === "string"
-            ? req.query.accountId
-            : undefined,
-        creditCardId:
-          typeof req.query.creditCardId === "string"
-            ? req.query.creditCardId
-            : undefined,
-        categoryId:
-          typeof req.query.categoryId === "string"
-            ? req.query.categoryId
-            : undefined,
-      }),
-    );
+    sendData(res, await listRecords(validateQuery(req, recordFiltersSchema)));
     return;
   }
+  id = validatePathId(id);
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
-    const record = await updateRecord(id, validateBody(req, recordSchema));
+    const record = await updateRecord(id, validateBody(req, recordPatchSchema));
     if (!record) {
       sendError(res, 404, "NOT_FOUND", "Record not found");
       return;
@@ -212,6 +214,17 @@ async function handleCards(
   res: VercelResponse,
   segments: string[],
 ) {
+  const validShape =
+    segments.length <= 2 ||
+    (segments[2] === "summary" && segments.length === 3) ||
+    (segments[2] === "payments" && (segments.length === 3 || segments.length === 4)) ||
+    (segments[2] === "records" && (segments.length === 3 || segments.length === 4)) ||
+    (segments[2] === "refunds" && segments.length === 3) ||
+    (segments[2] === "statements" && (segments.length === 3 || (segments.length === 5 && segments[4] === "payments")));
+  if (!validShape) {
+    sendError(res, 404, "NOT_FOUND", "Not found");
+    return;
+  }
   const id = segments[1];
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
@@ -226,8 +239,10 @@ async function handleCards(
     sendData(res, await listCreditCards());
     return;
   }
+  validatePathId(id);
 
   if (segments[2] === "payments" && segments[3]) {
+    validatePathId(segments[3]);
     if (!guardApi(req, res, ["DELETE"])) return;
     if (!(await deleteCreditCardPayment(id, segments[3]))) {
       sendError(res, 404, "NOT_FOUND", "Payment not found");
@@ -278,12 +293,13 @@ async function handleCards(
       else sendData(res, await listCreditCardRecords(id));
       return;
     }
+    validatePathId(recordId);
     if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
     if (req.method === "PATCH") {
       const movement = await updateCreditCardRecord(
         id,
         recordId,
-        validateBody(req, creditCardRecordSchema),
+        validateBody(req, creditCardRecordPatchSchema),
       );
       if (!movement)
         sendError(res, 404, "NOT_FOUND", "Card movement not found");
@@ -314,6 +330,7 @@ async function handleCards(
       sendData(res, await listCreditCardStatements(id));
       return;
     }
+    validatePathId(statementId);
     if (segments[4] === "payments") {
       if (!guardApi(req, res, ["POST"])) return;
       sendData(
@@ -335,7 +352,7 @@ async function handleCards(
   if (req.method === "PATCH") {
     const card = await updateCreditCard(
       id,
-      validateBody(req, creditCardSchema),
+      validateBody(req, creditCardPatchSchema),
     );
     if (!card) {
       sendError(res, 404, "NOT_FOUND", "Credit card not found");
@@ -357,6 +374,13 @@ async function handleDebts(
   res: VercelResponse,
   segments: string[],
 ) {
+  const validShape =
+    segments.length <= 2 ||
+    (segments.length === 3 && segments[2] === "payments");
+  if (!validShape) {
+    sendError(res, 404, "NOT_FOUND", "Not found");
+    return;
+  }
   // /api/debts/generate-recurring
   if (segments.length === 2 && segments[1] === "generate-recurring") {
     if (!guardApi(req, res, ["POST"])) return;
@@ -374,31 +398,16 @@ async function handleDebts(
       sendError(res, 400, "VALIDATION_ERROR", "Debt id is required");
       return;
     }
-    try {
-      const result = await recordDebtPayment(
-        id,
-        validateBody(req, debtPaymentSchema),
-      );
-      if (!result) {
-        sendError(res, 404, "NOT_FOUND", "Debt not found");
-        return;
-      }
-      sendData(res, result, 201);
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message === "Invalid debt payment amount"
-      ) {
-        sendError(
-          res,
-          400,
-          "VALIDATION_ERROR",
-          "Payment amount is invalid for this debt",
-        );
-        return;
-      }
-      throw error;
+    validatePathId(id);
+    const result = await recordDebtPayment(
+      id,
+      validateBody(req, debtPaymentSchema),
+    );
+    if (!result) {
+      sendError(res, 404, "NOT_FOUND", "Debt not found");
+      return;
     }
+    sendData(res, result, 201);
     return;
   }
 
@@ -412,10 +421,11 @@ async function handleDebts(
     sendData(res, await listDebts());
     return;
   }
+  validatePathId(id);
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
-    const debt = await updateDebt(id, validateBody(req, debtSchema));
+    const debt = await updateDebt(id, validateBody(req, debtPatchSchema));
     if (!debt) {
       sendError(res, 404, "NOT_FOUND", "Debt not found");
       return;
@@ -449,12 +459,13 @@ async function handleRecurringDebts(
     sendData(res, await listRecurringDebts());
     return;
   }
+  id = validatePathId(id);
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
     const recurringDebt = await updateRecurringDebt(
       id,
-      validateBody(req, recurringDebtSchema),
+      validateBody(req, recurringDebtPatchSchema),
     );
     if (!recurringDebt) {
       sendError(res, 404, "NOT_FOUND", "Recurring debt not found");
@@ -471,7 +482,7 @@ async function handleRecurringDebts(
   sendData(res, { deleted: true });
 }
 
-function handleAuth(
+async function handleAuth(
   req: VercelRequest,
   res: VercelResponse,
   segments: string[],
@@ -480,18 +491,25 @@ function handleAuth(
     sendError(res, 404, "NOT_FOUND", "Not found");
     return;
   }
-  if (!requireMethod(req, res, ["POST"])) return;
-
-  const parsed = unlockSchema.safeParse(req.body);
-  if (!parsed.success) {
-    sendError(res, 400, "VALIDATION_ERROR", "Token is required");
+  if (segments.length !== 2) {
+    sendError(res, 404, "NOT_FOUND", "Not found");
     return;
   }
-  if (!isValidApiToken(parsed.data.token)) {
+  if (!requireMethod(req, res, ["POST"])) return;
+  const limit = await assertUnlockAllowed(req);
+  if (!limit.allowed) {
+    res.setHeader("Retry-After", String(limit.retryAfter));
+    sendError(res, 429, "TOO_MANY_REQUESTS", "Too many unlock attempts");
+    return;
+  }
+  const parsed = validateBody(req, unlockSchema);
+  if (!isValidApiToken(parsed.token)) {
+    await registerUnlockFailure(limit.key);
     sendError(res, 401, "UNAUTHORIZED", "Invalid token");
     return;
   }
-  sendData(res, { valid: true });
+  await clearUnlockFailures(limit.key);
+  sendData(res, createSessionToken());
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -501,15 +519,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     switch (resource) {
       case "health":
+        if (segments.length !== 1) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         if (!guardApi(req, res, ["GET"])) return;
         sendData(res, { ok: true, service: "wallet-web-personal" });
         return;
       case "wallet":
+        if (segments.length !== 1) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         if (!guardApi(req, res, ["GET"])) return;
         sendData(res, await getWalletDataset());
         return;
       case "settings":
-        if (!guardApi(req, res, ["GET", "PUT"])) return;
+        if (segments.length !== 1) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        if (!guardApi(req, res, ["GET", "PUT", "PATCH"])) return;
         if (req.method === "PUT") {
           sendData(
             res,
@@ -517,10 +538,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           );
           return;
         }
+        if (req.method === "PATCH") {
+          sendData(res, await patchSettings(validateBody(req, settingsPatchSchema)));
+          return;
+        }
         sendData(res, await getSettings());
         return;
       case "auth":
-        handleAuth(req, res, segments);
+        await handleAuth(req, res, segments);
         return;
       case "ingest":
         if (segments[1] !== "mail" || segments[2] !== "transactions") {
@@ -543,12 +568,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
         return;
       case "accounts":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleAccounts(req, res, segments[1]);
         return;
       case "categories":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleCategories(req, res, segments[1]);
         return;
       case "records":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleRecords(req, res, segments[1]);
         return;
       case "cards":
@@ -558,6 +586,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await handleDebts(req, res, segments);
         return;
       case "recurring-debts":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleRecurringDebts(req, res, segments[1]);
         return;
       default:

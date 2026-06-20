@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
+import { ActionToast } from "@/components/ui/action-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/wallet/category-icon";
@@ -30,6 +31,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/providers/auth-provider";
+import { useActionToast } from "@/lib/use-action-toast";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
 import type { Category, CurrencyCode, Tag } from "@shared/types";
@@ -58,6 +60,7 @@ export function SettingsView() {
   } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
+  const { toast, runAction } = useActionToast();
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryParentId, setNewCategoryParentId] = useState("");
@@ -206,7 +209,12 @@ export function SettingsView() {
   }
 
   async function handleDeleteCategory(categoryId: string) {
-    await deleteCategory(categoryId);
+    if (!window.confirm("Delete this category tree and reassign its history to Category eliminated?")) return;
+    await runAction(() => deleteCategory(categoryId), {
+      processing: "Reassigning category history...",
+      success: "Category eliminated and history reassigned",
+      error: "Could not eliminate category",
+    });
     clearCategoryDraft(categoryId);
   }
 
@@ -388,8 +396,9 @@ export function SettingsView() {
             type="button"
             variant="destructive"
             size="icon"
+            disabled={Boolean(category.systemKey)}
             aria-label={`Delete ${category.name}`}
-            title={hasChildren ? "Delete category and children" : "Delete"}
+            title={category.systemKey ? "System category" : hasChildren ? "Delete category and children" : "Delete"}
             onClick={() => handleDeleteCategory(category.id)}
           >
             <Trash2 className="h-4 w-4" />
@@ -415,6 +424,7 @@ export function SettingsView() {
 
   return (
     <div>
+      <ActionToast toast={toast} />
       <PageHeader
         eyebrow="Settings"
         title="Settings"
