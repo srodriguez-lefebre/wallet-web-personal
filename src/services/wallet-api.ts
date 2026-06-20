@@ -3,6 +3,7 @@ import type {
   Category,
   CreditCard,
   CreditCardPayment,
+  CreditCardRecord,
   Debt,
   RecurringDebt,
   WalletDataset,
@@ -155,6 +156,30 @@ export function createCreditCardPayment(
     method: "POST",
     ...body(payment),
   });
+}
+
+export function createCreditCardRecord(token: string, cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records`, { method: "POST", ...body(movement) });
+}
+
+export function updateCreditCardRecord(token: string, cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/records/${movementId}`, { method: "PATCH", ...body(movement) });
+}
+
+export function deleteCreditCardRecord(token: string, cardId: string, movementId: string) {
+  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}/records/${movementId}`, { method: "DELETE" });
+}
+
+export function createCreditCardRefund(token: string, cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+  return requestApi<CreditCardRecord>(token, `/api/cards/${cardId}/refunds`, { method: "POST", ...body(movement) });
+}
+
+export function payCreditCardStatement(token: string, cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) {
+  return requestApi<CreditCardPayment>(token, `/api/cards/${cardId}/statements/${statementId}/payments`, { method: "POST", ...body(payment) });
+}
+
+export function deleteCreditCardPayment(token: string, cardId: string, paymentId: string) {
+  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}/payments/${paymentId}`, { method: "DELETE" });
 }
 
 export function createDebt(token: string, debt: Omit<Debt, "id">) {

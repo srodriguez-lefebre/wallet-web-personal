@@ -8,6 +8,8 @@ export const mockWalletData: WalletDataset = {
     defaultDashboardPreset: "general",
     locale: "es-UY",
     includeHiddenAccountsInReports: false,
+    defaultPaymentType: "debit",
+    defaultPaymentStatus: "cleared",
   },
   accounts: [
     {
@@ -313,7 +315,10 @@ export const mockWalletData: WalletDataset = {
     },
   ],
   creditCards: [],
+  creditCardRecords: [],
+  creditCardStatements: [],
   creditCardPayments: [],
+  creditCardPaymentAllocations: [],
   goals: [
     {
       id: "goal-trip",

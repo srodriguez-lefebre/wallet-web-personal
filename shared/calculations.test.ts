@@ -519,4 +519,37 @@ describe("wallet calculations", () => {
     ]);
     expect(usage.reduce((total, item) => total + item.amount, 0)).toBe(3000);
   });
+
+  it("keeps card-only movements outside Records and applies their optional account impact once", () => {
+    const card = {
+      id: "card-owned-ledger", name: "Test", issuer: "Bank", lastFour: "4006",
+      creditLimit: 10_000, limitCurrency: "UYU" as const, closingDay: 20,
+      dueDay: 5, color: "#000000", icon: "credit-card", isActive: true,
+    };
+    const baseline = calculateAccountBalances(mockWalletData).find((item) => item.account.id === "acc-bank")!.balance;
+    const dataset = {
+      ...mockWalletData,
+      creditCards: [card],
+      creditCardRecords: [
+        {
+          id: "direct", creditCardId: card.id, kind: "purchase" as const,
+          amount: 2_000, currency: "UYU" as const, amountInLimitCurrency: 2_000,
+          exchangeRateToLimitCurrency: 1, categoryId: "cat-shopping",
+          accountId: "acc-bank", accountAmount: 2_000, accountImpactAtCreation: true,
+          occurredAt: "2026-06-10T12:00:00.000Z",
+        },
+        {
+          id: "refund", creditCardId: card.id, originalRecordId: "direct", kind: "refund" as const,
+          amount: 500, currency: "UYU" as const, amountInLimitCurrency: 500,
+          exchangeRateToLimitCurrency: 1, categoryId: "cat-shopping",
+          accountId: "acc-bank", accountAmount: 500, accountImpactAtCreation: true,
+          occurredAt: "2026-06-11T12:00:00.000Z",
+        },
+      ],
+    };
+
+    expect(dataset.records.some((record) => record.id === "direct")).toBe(false);
+    expect(calculateCreditCardSummary(dataset, card, new Date("2026-06-12T12:00:00.000Z")).usedLimit).toBe(1_500);
+    expect(calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")!.balance).toBe(baseline - 1_500);
+  });
 });

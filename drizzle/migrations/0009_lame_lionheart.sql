@@ -1,0 +1,2 @@
+ALTER TABLE "records" ADD COLUMN "account_amount" numeric(14, 2);--> statement-breakpoint
+ALTER TABLE "credit_card_payments" ADD CONSTRAINT "credit_card_payments_statement_id_credit_card_statements_id_fk" FOREIGN KEY ("statement_id") REFERENCES "public"."credit_card_statements"("id") ON DELETE no action ON UPDATE no action;

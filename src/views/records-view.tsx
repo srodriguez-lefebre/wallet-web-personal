@@ -73,7 +73,7 @@ function defaultAccountId(dataset: WalletDataset) {
   );
   return (
     activeVisibleAccounts.find(
-      (account) => account.id === dataset.settings.primaryAccountId,
+      (account) => account.id === (dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId),
     )?.id ??
     activeVisibleAccounts[0]?.id ??
     dataset.accounts.find((account) => account.isActive)?.id ??
@@ -153,6 +153,7 @@ export function RecordsView() {
   );
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
+  const [accountAmount, setAccountAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
   const [counterpartyName, setCounterpartyName] = useState("");
@@ -175,7 +176,7 @@ export function RecordsView() {
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const canSubmit =
     Number(amount) > 0 &&
-    (type === "transfer" ? Boolean(accountId) : Boolean(accountId) !== Boolean(creditCardId)) &&
+    Boolean(accountId) &&
     (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId));
   const selectedCard = dataset.creditCards.find((card) => card.id === creditCardId);
   const purchaseInLimitCurrency =
@@ -187,6 +188,7 @@ export function RecordsView() {
       ? {
           ...dataset,
           records: dataset.records.filter((record) => record.id !== editingId),
+          creditCardRecords: dataset.creditCardRecords.filter((record) => record.walletRecordId !== editingId),
         }
       : dataset;
     const occurredAt = new Date(occurredAtLocal).getTime();
@@ -213,21 +215,24 @@ export function RecordsView() {
       );
       setEditingId(null);
       setType("expense");
-      setAccountId(requestedCard ? "" : nextAccountId);
-      setCreditCardId(requestedCard?.id ?? "");
-      setCurrency(requestedCard?.limitCurrency ?? "UYU");
+      const defaultCard = dataset.creditCards.find((card) => card.id === dataset.settings.defaultCreditCardId && card.isActive);
+      const nextCard = requestedCard ?? defaultCard;
+      setAccountId(nextAccountId);
+      setCreditCardId(nextCard?.id ?? "");
+      setCurrency(nextCard?.limitCurrency ?? dataset.accounts.find((account) => account.id === nextAccountId)?.currency ?? "UYU");
       setExchangeRateToLimitCurrency("1");
       setDestinationAccountId(
         defaultDestinationAccountId(dataset, nextAccountId),
       );
       setCategoryId("");
       setAmount("");
+      setAccountAmount("");
       setNote("");
       setTagId("");
       setCounterpartyName("");
       setOccurredAtLocal(toDateTimeLocal(new Date()));
-      setPaymentType(requestedCard ? "credit" : "debit");
-      setPaymentStatus("cleared");
+      setPaymentType(nextCard ? "credit" : dataset.settings.defaultPaymentType);
+      setPaymentStatus(dataset.settings.defaultPaymentStatus);
       setIsRecordDialogOpen(true);
       consumeNewRecordRequest();
     });
@@ -340,7 +345,8 @@ export function RecordsView() {
     setEditingId(null);
     setType(nextType);
     setAccountId(nextAccountId);
-    setCreditCardId("");
+    const defaultCard = dataset.creditCards.find((card) => card.id === dataset.settings.defaultCreditCardId && card.isActive);
+    setCreditCardId(nextType === "transfer" ? "" : defaultCard?.id ?? "");
     setCurrency(
       dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
         "UYU",
@@ -351,12 +357,13 @@ export function RecordsView() {
     );
     setCategoryId("");
     setAmount("");
+    setAccountAmount("");
     setNote("");
     setTagId("");
     setCounterpartyName("");
     setOccurredAtLocal(toDateTimeLocal(new Date()));
-    setPaymentType(nextType === "transfer" ? "transfer" : "debit");
-    setPaymentStatus("cleared");
+    setPaymentType(nextType === "transfer" ? "transfer" : defaultCard ? "credit" : dataset.settings.defaultPaymentType);
+    setPaymentStatus(dataset.settings.defaultPaymentStatus);
   }
 
   function openNewRecordDialog() {
@@ -376,6 +383,7 @@ export function RecordsView() {
     setDestinationAccountId(record.destinationAccountId ?? "");
     setCategoryId(record.categoryId ?? "");
     setAmount(String(record.amount));
+    setAccountAmount(String(record.accountAmount ?? record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
     setCounterpartyName(record.counterpartyName ?? "");
@@ -403,7 +411,8 @@ export function RecordsView() {
       type,
       amount: numericAmount,
       currency: creditCardId ? currency : ((account?.currency ?? currency) as CurrencyCode),
-      accountId: creditCardId ? undefined : accountId,
+      accountId,
+      accountAmount: creditCardId ? Number(accountAmount) || numericAmount * limitRate : undefined,
       creditCardId: creditCardId || undefined,
       destinationAccountId:
         type === "transfer" ? destinationAccountId : undefined,
@@ -563,7 +572,15 @@ export function RecordsView() {
               </div>
             ) : null}
 
+            {creditCardId ? <label className="block space-y-2"><span className="text-sm font-medium">Amount debited from account</span><input className={fieldClassName} type="number" min="0" step="0.01" value={accountAmount} placeholder={String(purchaseInLimitCurrency || amount)} onChange={(event) => setAccountAmount(event.target.value)} /></label> : null}
+
             <div className="grid gap-3 sm:grid-cols-2">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Account</span>
+                <select value={accountId} onChange={(event) => setAccountId(event.target.value)} className={fieldClassName}>
+                  {dataset.accounts.filter((account) => account.isActive && account.isVisible).map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+                </select>
+              </label>
               {creditCardId ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
@@ -595,28 +612,7 @@ export function RecordsView() {
                     </label>
                   ) : null}
                 </div>
-              ) : (
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Account</span>
-                  <select
-                    value={accountId}
-                    onChange={(event) => {
-                      setAccountId(event.target.value);
-                      const account = dataset.accounts.find((item) => item.id === event.target.value);
-                      if (account) setCurrency(account.currency);
-                    }}
-                    className={fieldClassName}
-                  >
-                    {dataset.accounts
-                      .filter((account) => account.isActive && account.isVisible)
-                      .map((account) => (
-                        <option key={account.id} value={account.id}>
-                          {account.name}
-                        </option>
-                      ))}
-                  </select>
-                </label>
-              )}
+              ) : null}
 
               {type === "transfer" ? (
                 <label className="block space-y-2">
@@ -728,7 +724,6 @@ export function RecordsView() {
                       const nextCardId = value.slice(5);
                       const card = dataset.creditCards.find((item) => item.id === nextCardId);
                       setCreditCardId(nextCardId);
-                      setAccountId("");
                       setPaymentType("credit");
                       setCurrency(card?.limitCurrency ?? "UYU");
                       setExchangeRateToLimitCurrency("1");

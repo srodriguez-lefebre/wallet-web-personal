@@ -3,6 +3,7 @@ import {
   accountSchema,
   categorySchema,
   creditCardPaymentSchema,
+  creditCardRecordSchema,
   creditCardSchema,
   debtPaymentSchema,
   debtSchema,
@@ -25,6 +26,7 @@ import {
   createCategory,
   createCreditCard,
   createCreditCardPayment,
+  createCreditCardRecord,
   createDebt,
   createDebts,
   createRecord,
@@ -35,22 +37,28 @@ import {
   archiveCreditCard,
   deleteDebt,
   deleteRecord,
+  deleteCreditCardRecord,
+  deleteCreditCardPayment,
   deleteRecurringDebt,
   getSettings,
   getWalletDataset,
   listAccounts,
   listCategories,
   listCreditCards,
+  listCreditCardRecords,
+  listCreditCardStatements,
   listRecords,
   listRecurringDebts,
   recordDebtPayment,
   updateAccount,
   updateCategory,
   updateCreditCard,
+  updateCreditCardRecord,
   updateDebt,
   updateRecord,
   updateRecurringDebt,
   upsertSettings,
+  payCreditCardStatement,
 } from "../server/db/wallet-repository.js";
 
 // Single router Serverless Function. Vercel's Hobby plan caps a deployment at
@@ -200,21 +208,17 @@ async function handleCards(
     return;
   }
 
+  if (segments[2] === "payments" && segments[3]) {
+    if (!guardApi(req, res, ["DELETE"])) return;
+    if (!(await deleteCreditCardPayment(id, segments[3]))) {
+      sendError(res, 404, "NOT_FOUND", "Payment not found"); return;
+    }
+    sendData(res, { deleted: true }); return;
+  }
+
   if (segments[2] === "payments") {
     if (!guardApi(req, res, ["POST"])) return;
-    const cards = await listCreditCards();
-    if (!cards.some((card) => card.id === id)) {
-      sendError(res, 404, "NOT_FOUND", "Credit card not found");
-      return;
-    }
-    sendData(
-      res,
-      await createCreditCardPayment(
-        id,
-        validateBody(req, creditCardPaymentSchema),
-      ),
-      201,
-    );
+    sendData(res, await createCreditCardPayment(id, validateBody(req, creditCardPaymentSchema)), 201);
     return;
   }
 
@@ -231,8 +235,44 @@ async function handleCards(
   }
 
   if (segments[2] === "records") {
-    if (!guardApi(req, res, ["GET"])) return;
-    sendData(res, await listRecords({ creditCardId: id }));
+    const recordId = segments[3];
+    if (!recordId) {
+      if (!guardApi(req, res, ["GET", "POST"])) return;
+      if (req.method === "POST") sendData(res, await createCreditCardRecord(id, validateBody(req, creditCardRecordSchema)), 201);
+      else sendData(res, await listCreditCardRecords(id));
+      return;
+    }
+    if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+    if (req.method === "PATCH") {
+      const movement = await updateCreditCardRecord(id, recordId, validateBody(req, creditCardRecordSchema));
+      if (!movement) sendError(res, 404, "NOT_FOUND", "Card movement not found");
+      else sendData(res, movement);
+      return;
+    }
+    if (!(await deleteCreditCardRecord(id, recordId))) sendError(res, 404, "NOT_FOUND", "Card movement not found");
+    else sendData(res, { deleted: true });
+    return;
+  }
+
+  if (segments[2] === "refunds") {
+    if (!guardApi(req, res, ["POST"])) return;
+    const input = validateBody(req, creditCardRecordSchema);
+    sendData(res, await createCreditCardRecord(id, { ...input, kind: "refund" }), 201);
+    return;
+  }
+
+  if (segments[2] === "statements") {
+    const statementId = segments[3];
+    if (!statementId) {
+      if (!guardApi(req, res, ["GET"])) return;
+      sendData(res, await listCreditCardStatements(id)); return;
+    }
+    if (segments[4] === "payments") {
+      if (!guardApi(req, res, ["POST"])) return;
+      sendData(res, await payCreditCardStatement(id, statementId, validateBody(req, creditCardPaymentSchema)), 201);
+      return;
+    }
+    sendError(res, 404, "NOT_FOUND", "Not found");
     return;
   }
 

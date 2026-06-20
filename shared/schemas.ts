@@ -57,6 +57,7 @@ export const recordSchema = z
     amount: z.number().positive(),
     currency: currencySchema,
     accountId: z.string().min(1).optional(),
+    accountAmount: z.number().positive().optional(),
     creditCardId: z.string().min(1).optional(),
     destinationAccountId: z.string().optional(),
     categoryId: z.string().optional(),
@@ -74,12 +75,11 @@ export const recordSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.type !== "transfer") {
-      const sourceCount = Number(Boolean(value.accountId)) + Number(Boolean(value.creditCardId));
-      if (sourceCount !== 1) {
+      if (!value.accountId) {
         ctx.addIssue({
           code: "custom",
           path: ["accountId"],
-          message: "A record must belong to exactly one account or credit card",
+          message: "An account is required",
         });
       }
     }
@@ -179,6 +179,34 @@ export const creditCardPaymentSchema = z
         path: ["accountAmount"],
         message: "Account amount requires an account",
       });
+    }
+  });
+
+export const creditCardRecordSchema = z
+  .object({
+    kind: z.enum(["purchase", "refund"]).default("purchase"),
+    originalRecordId: z.string().min(1).optional(),
+    amount: z.number().positive(),
+    currency: currencySchema,
+    amountInLimitCurrency: z.number().positive(),
+    exchangeRateToLimitCurrency: z.number().positive(),
+    categoryId: z.string().min(1),
+    counterpartyName: z.string().optional(),
+    note: z.string().optional(),
+    accountId: z.string().min(1).optional(),
+    accountAmount: z.number().positive().optional(),
+    accountImpactAtCreation: z.boolean().default(false),
+    occurredAt: z.string().datetime(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.accountImpactAtCreation && !value.accountId) {
+      ctx.addIssue({ code: "custom", path: ["accountId"], message: "Account is required" });
+    }
+    if (value.accountId && value.accountAmount === undefined) {
+      ctx.addIssue({ code: "custom", path: ["accountAmount"], message: "Account amount is required" });
+    }
+    if (value.kind === "refund" && !value.originalRecordId) {
+      ctx.addIssue({ code: "custom", path: ["originalRecordId"], message: "Original movement is required" });
     }
   });
 
@@ -297,6 +325,10 @@ export const settingsSchema = z.object({
   ]),
   locale: z.literal("es-UY"),
   includeHiddenAccountsInReports: z.boolean(),
+  defaultAccountId: z.string().optional(),
+  defaultPaymentType: paymentTypeSchema,
+  defaultCreditCardId: z.string().optional(),
+  defaultPaymentStatus: paymentStatusSchema,
 });
 
 export const unlockSchema = z.object({

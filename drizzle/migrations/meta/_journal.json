@@ -57,6 +57,20 @@
       "when": 1781915400000,
       "tag": "0007_calm_credit_cards",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781972002711,
+      "tag": "0008_conscious_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781973067023,
+      "tag": "0009_lame_lionheart",
+      "breakpoints": true
     }
   ]
 }

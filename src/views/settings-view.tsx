@@ -56,6 +56,7 @@ export function SettingsView() {
     addTag,
     updateTag,
     deleteTag,
+    updateWalletSettings,
   } = useWallet();
   const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
@@ -76,6 +77,9 @@ export function SettingsView() {
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#2563EB");
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
+  const [defaultAccountId, setDefaultAccountId] = useState(dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId ?? "");
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(dataset.settings.defaultCreditCardId ? `card:${dataset.settings.defaultCreditCardId}` : dataset.settings.defaultPaymentType);
+  const [defaultPaymentStatus, setDefaultPaymentStatus] = useState(dataset.settings.defaultPaymentStatus);
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const inlineFieldClassName =
@@ -86,6 +90,17 @@ export function SettingsView() {
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
     navigate("/records");
+  }
+
+  async function saveRecordDefaults() {
+    const cardId = defaultPaymentMethod.startsWith("card:") ? defaultPaymentMethod.slice(5) : undefined;
+    await updateWalletSettings({
+      ...dataset.settings,
+      defaultAccountId: defaultAccountId || undefined,
+      defaultPaymentType: cardId ? "credit" : defaultPaymentMethod as typeof dataset.settings.defaultPaymentType,
+      defaultCreditCardId: cardId,
+      defaultPaymentStatus,
+    });
   }
 
   function getCategoryDraft(category: Category): CategoryDraft {
@@ -389,6 +404,16 @@ export function SettingsView() {
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <Card>
+          <CardHeader><CardTitle className="flex items-center gap-2"><WalletCards className="h-4 w-4" />Record defaults</CardTitle></CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
+            <label className="space-y-2"><span className="text-sm font-medium">Account</span><select className={fieldClassName} value={defaultAccountId} onChange={(event) => setDefaultAccountId(event.target.value)}>{dataset.accounts.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+            <label className="space-y-2"><span className="text-sm font-medium">Payment method</span><select className={fieldClassName} value={defaultPaymentMethod} onChange={(event) => setDefaultPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="debit">Debit</option>{dataset.creditCards.filter((item) => item.isActive).map((item) => <option key={item.id} value={`card:${item.id}`}>Credit •••• {item.lastFour} — {item.name}</option>)}<option value="transfer">Transfer</option><option value="other">Other</option></select></label>
+            <label className="space-y-2"><span className="text-sm font-medium">Status</span><select className={fieldClassName} value={defaultPaymentStatus} onChange={(event) => setDefaultPaymentStatus(event.target.value as typeof defaultPaymentStatus)}><option value="cleared">Cleared</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option></select></label>
+            <Button className="self-end" onClick={() => void saveRecordDefaults()}><Save className="h-4 w-4" />Save</Button>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

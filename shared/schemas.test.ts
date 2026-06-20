@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creditCardPaymentSchema, recordSchema } from "./schemas";
+import { creditCardPaymentSchema, creditCardRecordSchema, recordSchema } from "./schemas";
 
 const baseRecord = {
   type: "expense" as const,
@@ -32,13 +32,17 @@ describe("credit-card validation", () => {
     );
   });
 
-  it("accepts a categorized card movement independent from accounts", () => {
+  it("accepts a categorized card-only movement independent from accounts", () => {
     expect(
-      recordSchema.safeParse({
-        ...baseRecord,
-        creditCardId: "card-1",
+      creditCardRecordSchema.safeParse({
+        kind: "purchase",
+        amount: 100,
+        currency: "UYU",
+        categoryId: "category-1",
         amountInLimitCurrency: 2.5,
         exchangeRateToLimitCurrency: 0.025,
+        accountImpactAtCreation: false,
+        occurredAt: baseRecord.occurredAt,
       }).success,
     ).toBe(true);
   });

@@ -67,6 +67,7 @@ export interface WalletRecord {
   amount: number;
   currency: CurrencyCode;
   accountId?: string;
+  accountAmount?: number;
   creditCardId?: string;
   destinationAccountId?: string;
   categoryId?: string;
@@ -101,6 +102,7 @@ export interface CreditCard {
 export interface CreditCardPayment {
   id: string;
   creditCardId: string;
+  statementId?: string;
   amount: number;
   currency: CurrencyCode;
   amountInLimitCurrency: number;
@@ -108,6 +110,47 @@ export interface CreditCardPayment {
   accountAmount?: number;
   occurredAt: string;
   note?: string;
+}
+
+export type CreditCardRecordKind = "purchase" | "refund";
+
+export interface CreditCardRecord {
+  id: string;
+  creditCardId: string;
+  walletRecordId?: string;
+  originalRecordId?: string;
+  statementId?: string;
+  kind: CreditCardRecordKind;
+  amount: number;
+  currency: CurrencyCode;
+  amountInLimitCurrency: number;
+  exchangeRateToLimitCurrency: number;
+  categoryId: string;
+  counterpartyName?: string;
+  note?: string;
+  accountId?: string;
+  accountAmount?: number;
+  accountImpactAtCreation: boolean;
+  occurredAt: string;
+}
+
+export interface CreditCardStatement {
+  id: string;
+  creditCardId: string;
+  cycleStart: string;
+  cycleEnd: string;
+  dueAt: string;
+  status: "pending" | "partial" | "paid" | "overdue";
+  closedAt: string;
+  paidAt?: string;
+}
+
+export interface CreditCardPaymentAllocation {
+  id: string;
+  paymentId: string;
+  creditCardRecordId: string;
+  amount: number;
+  amountInLimitCurrency: number;
 }
 
 export interface CreditCardCurrencyAmount {
@@ -256,6 +299,10 @@ export interface WalletSettings {
     | "monthly-review";
   locale: "es-UY";
   includeHiddenAccountsInReports: boolean;
+  defaultAccountId?: string;
+  defaultPaymentType: PaymentType;
+  defaultCreditCardId?: string;
+  defaultPaymentStatus: PaymentStatus;
 }
 
 export interface WalletDataset {
@@ -265,7 +312,10 @@ export interface WalletDataset {
   tags: Tag[];
   records: WalletRecord[];
   creditCards: CreditCard[];
+  creditCardRecords: CreditCardRecord[];
+  creditCardStatements: CreditCardStatement[];
   creditCardPayments: CreditCardPayment[];
+  creditCardPaymentAllocations: CreditCardPaymentAllocation[];
   goals: Goal[];
   goalReservations: GoalReservation[];
   budgets: Budget[];

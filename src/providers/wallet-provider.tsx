@@ -22,6 +22,7 @@ import type {
   Category,
   CreditCard,
   CreditCardPayment,
+  CreditCardRecord,
   DateRange,
   Debt,
   Goal,
@@ -32,6 +33,7 @@ import type {
   Tag,
   WalletDataset,
   WalletRecord,
+  WalletSettings,
 } from "@shared/types";
 
 type PeriodMode = "month" | "custom";
@@ -78,6 +80,13 @@ interface WalletContextValue {
     cardId: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId">,
   ) => Promise<void>;
+  addCreditCardRecord: (cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
+  updateCreditCardRecord: (cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
+  deleteCreditCardRecord: (cardId: string, movementId: string) => Promise<void>;
+  addCreditCardRefund: (cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
+  payCreditCardStatement: (cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) => Promise<void>;
+  deleteCreditCardPayment: (cardId: string, paymentId: string) => Promise<void>;
+  updateWalletSettings: (settings: WalletSettings) => Promise<void>;
   addTag: (tag: Omit<Tag, "id">) => Promise<string>;
   updateTag: (tagId: string, tag: Omit<Tag, "id">) => Promise<void>;
   deleteTag: (tagId: string) => Promise<void>;
@@ -156,7 +165,10 @@ function readCachedDataset() {
       ...parsed,
       recurringDebts: parsed.recurringDebts ?? [],
       creditCards: parsed.creditCards ?? [],
+      creditCardRecords: parsed.creditCardRecords ?? [],
+      creditCardStatements: parsed.creditCardStatements ?? [],
       creditCardPayments: parsed.creditCardPayments ?? [],
+      creditCardPaymentAllocations: parsed.creditCardPaymentAllocations ?? [],
     };
   } catch {
     return null;
@@ -434,36 +446,25 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addRecord(record: Omit<WalletRecord, "id">) {
-    const created = await walletApi.createRecord(requireToken(), record);
-    setDataset((current) => ({
-      ...current,
-      records: [created, ...current.records],
-    }));
+    await walletApi.createRecord(requireToken(), record);
+    await reloadWallet();
   }
 
   async function deleteRecord(recordId: string) {
     await walletApi.deleteRecord(requireToken(), recordId);
-    setDataset((current) => ({
-      ...current,
-      records: current.records.filter((record) => record.id !== recordId),
-    }));
+    await reloadWallet();
   }
 
   async function updateRecord(
     recordId: string,
     record: Omit<WalletRecord, "id">,
   ) {
-    const updated = await walletApi.updateRecord(
+    await walletApi.updateRecord(
       requireToken(),
       recordId,
       record,
     );
-    setDataset((current) => ({
-      ...current,
-      records: current.records.map((currentRecord) =>
-        currentRecord.id === recordId ? updated : currentRecord,
-      ),
-    }));
+    await reloadWallet();
   }
 
   async function addCategory(category: Omit<Category, "id">) {
@@ -581,6 +582,30 @@ export function WalletProvider({ children }: PropsWithChildren) {
       ...current,
       creditCardPayments: [created, ...current.creditCardPayments],
     }));
+  }
+
+  async function addCreditCardRecord(cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+    await walletApi.createCreditCardRecord(requireToken(), cardId, movement); await reloadWallet();
+  }
+  async function updateCreditCardRecord(cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+    await walletApi.updateCreditCardRecord(requireToken(), cardId, movementId, movement); await reloadWallet();
+  }
+  async function deleteCreditCardRecord(cardId: string, movementId: string) {
+    await walletApi.deleteCreditCardRecord(requireToken(), cardId, movementId); await reloadWallet();
+  }
+  async function addCreditCardRefund(cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
+    await walletApi.createCreditCardRefund(requireToken(), cardId, movement); await reloadWallet();
+  }
+  async function payCreditCardStatement(cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) {
+    await walletApi.payCreditCardStatement(requireToken(), cardId, statementId, payment); await reloadWallet();
+  }
+  async function deleteCreditCardPayment(cardId: string, paymentId: string) {
+    await walletApi.deleteCreditCardPayment(requireToken(), cardId, paymentId); await reloadWallet();
+  }
+
+  async function updateWalletSettings(nextSettings: WalletSettings) {
+    const updated = await walletApi.updateSettings(requireToken(), nextSettings);
+    setDataset((current) => ({ ...current, settings: updated }));
   }
 
   async function addTag(tag: Omit<Tag, "id">) {
@@ -907,6 +932,13 @@ export function WalletProvider({ children }: PropsWithChildren) {
         updateCreditCard,
         deleteCreditCard,
         addCreditCardPayment,
+        addCreditCardRecord,
+        updateCreditCardRecord,
+        deleteCreditCardRecord,
+        addCreditCardRefund,
+        payCreditCardStatement,
+        deleteCreditCardPayment,
+        updateWalletSettings,
         addTag,
         updateTag,
         deleteTag,
