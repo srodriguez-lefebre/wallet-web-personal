@@ -17,6 +17,10 @@ import type {
   Budget,
   BudgetProgress,
   Category,
+  CreditCard,
+  CreditCardCategoryUsage,
+  CreditCardCurrencyAmount,
+  CreditCardSummary,
   CurrencyCode,
   DateRange,
   Debt,
@@ -138,7 +142,7 @@ export function calculateAccountBalances(
   dataset: WalletDataset,
 ): AccountBalance[] {
   return dataset.accounts.map((account) => {
-    const balance = dataset.records.reduce((total, record) => {
+    const recordBalance = dataset.records.reduce((total, record) => {
       if (record.paymentStatus === "cancelled") return total;
 
       if (record.type === "income" && record.accountId === account.id) {
@@ -157,6 +161,16 @@ export function calculateAccountBalances(
 
       return total;
     }, account.initialBalance);
+
+    const balance = dataset.creditCardPayments.reduce((total, payment) => {
+      if (
+        payment.accountId !== account.id ||
+        payment.accountAmount === undefined
+      ) {
+        return total;
+      }
+      return total - payment.accountAmount;
+    }, recordBalance);
 
     const reserved = dataset.goalReservations
       .filter((reservation) => reservation.accountId === account.id)
@@ -210,7 +224,7 @@ function calculateAccountBalanceAtCutoff(
   const account = dataset.accounts.find((item) => item.id === accountId);
   if (!account) return 0;
 
-  return dataset.records.reduce((total, record) => {
+  const recordBalance = dataset.records.reduce((total, record) => {
     if (record.paymentStatus === "cancelled") return total;
     if (isAfter(parseISO(record.occurredAt), cutoff)) return total;
 
@@ -230,6 +244,266 @@ function calculateAccountBalanceAtCutoff(
 
     return total;
   }, account.initialBalance);
+
+  return dataset.creditCardPayments.reduce((total, payment) => {
+    if (
+      payment.accountId !== account.id ||
+      payment.accountAmount === undefined
+    ) {
+      return total;
+    }
+    if (isAfter(parseISO(payment.occurredAt), cutoff)) return total;
+    return total - payment.accountAmount;
+  }, recordBalance);
+}
+
+function cardCycleDate(year: number, month: number, day: number) {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(
+    Date.UTC(year, month, Math.min(day, lastDay), 23, 59, 59, 999),
+  );
+}
+
+function aggregateCurrencyAmounts(
+  values: Array<{ currency: CurrencyCode; amount: number }>,
+): CreditCardCurrencyAmount[] {
+  const totals = new Map<CurrencyCode, number>();
+  values.forEach(({ currency, amount }) => {
+    totals.set(currency, (totals.get(currency) ?? 0) + amount);
+  });
+  return [...totals.entries()]
+    .map(([currency, amount]) => ({ currency, amount: Math.max(0, amount) }))
+    .filter((item) => item.amount > 0.000001)
+    .sort((a, b) => a.currency.localeCompare(b.currency));
+}
+
+export function creditCardCycleDates(
+  card: CreditCard,
+  asOf: Date = new Date(),
+) {
+  const year = asOf.getUTCFullYear();
+  const month = asOf.getUTCMonth();
+  const closeThisMonth = cardCycleDate(year, month, card.closingDay);
+  const currentCycleEnd =
+    asOf <= closeThisMonth
+      ? closeThisMonth
+      : cardCycleDate(
+          new Date(Date.UTC(year, month + 1, 1)).getUTCFullYear(),
+          new Date(Date.UTC(year, month + 1, 1)).getUTCMonth(),
+          card.closingDay,
+        );
+  const lastClosingDate =
+    asOf <= closeThisMonth
+      ? cardCycleDate(
+          new Date(Date.UTC(year, month - 1, 1)).getUTCFullYear(),
+          new Date(Date.UTC(year, month - 1, 1)).getUTCMonth(),
+          card.closingDay,
+        )
+      : closeThisMonth;
+  const currentCycleStart = addDays(lastClosingDate, 1);
+  const dueMonthOffset = card.dueDay > card.closingDay ? 0 : 1;
+  const dueMonth = new Date(
+    Date.UTC(
+      lastClosingDate.getUTCFullYear(),
+      lastClosingDate.getUTCMonth() + dueMonthOffset,
+      1,
+    ),
+  );
+  const dueDate = cardCycleDate(
+    dueMonth.getUTCFullYear(),
+    dueMonth.getUTCMonth(),
+    card.dueDay,
+  );
+
+  return { currentCycleStart, currentCycleEnd, lastClosingDate, dueDate };
+}
+
+export function calculateCreditCardSummary(
+  dataset: WalletDataset,
+  card: CreditCard,
+  asOf: Date = new Date(),
+): CreditCardSummary {
+  const dates = creditCardCycleDates(card, asOf);
+  const purchases = dataset.records.filter(
+    (record) =>
+      record.creditCardId === card.id &&
+      record.type === "expense" &&
+      record.paymentStatus !== "cancelled" &&
+      !isAfter(parseISO(record.occurredAt), asOf),
+  );
+  const payments = dataset.creditCardPayments.filter(
+    (payment) =>
+      payment.creditCardId === card.id &&
+      !isAfter(parseISO(payment.occurredAt), asOf),
+  );
+  const paymentByCurrency = payments.map((payment) => ({
+    currency: payment.currency,
+    amount: -payment.amount,
+  }));
+  const outstanding = aggregateCurrencyAmounts([
+    ...purchases.map((record) => ({
+      currency: record.currency,
+      amount: record.amount,
+    })),
+    ...paymentByCurrency,
+  ]);
+  const currentCycle = aggregateCurrencyAmounts(
+    purchases
+      .filter((record) => {
+        const occurredAt = parseISO(record.occurredAt);
+        return (
+          !isBefore(occurredAt, dates.currentCycleStart) &&
+          !isAfter(occurredAt, dates.currentCycleEnd)
+        );
+      })
+      .map((record) => ({ currency: record.currency, amount: record.amount })),
+  );
+  const statementDue = aggregateCurrencyAmounts([
+    ...purchases
+      .filter(
+        (record) =>
+          record.paymentStatus === "cleared" &&
+          !isAfter(parseISO(record.occurredAt), dates.lastClosingDate),
+      )
+      .map((record) => ({ currency: record.currency, amount: record.amount })),
+    ...paymentByCurrency,
+  ]);
+  const purchaseLimitAmount = purchases.reduce(
+    (total, record) =>
+      total +
+      (record.amountInLimitCurrency ??
+        record.amount * (record.exchangeRateToLimitCurrency ?? 1)),
+    0,
+  );
+  const paidLimitAmount = payments.reduce(
+    (total, payment) => total + payment.amountInLimitCurrency,
+    0,
+  );
+  const usedLimit = Math.max(0, purchaseLimitAmount - paidLimitAmount);
+  const availableLimit = card.creditLimit - usedLimit;
+  const statementTotal = statementDue.reduce(
+    (total, item) => total + item.amount,
+    0,
+  );
+  const hasPayments = payments.length > 0;
+  const status =
+    usedLimit > card.creditLimit
+      ? "over_limit"
+      : statementTotal > 0 && asOf > dates.dueDate
+        ? "overdue"
+        : statementTotal > 0 && hasPayments
+          ? "partial"
+          : "ok";
+
+  return {
+    card,
+    usedLimit,
+    availableLimit,
+    utilizationPercent:
+      card.creditLimit > 0 ? (usedLimit / card.creditLimit) * 100 : 0,
+    currentCycleStart: dateKey(dates.currentCycleStart),
+    currentCycleEnd: dateKey(dates.currentCycleEnd),
+    lastClosingDate: dateKey(dates.lastClosingDate),
+    dueDate: dateKey(dates.dueDate),
+    currentCycle,
+    outstanding,
+    statementDue,
+    status,
+  };
+}
+
+export function calculateCreditCardSummaries(
+  dataset: WalletDataset,
+  asOf: Date = new Date(),
+) {
+  return dataset.creditCards.map((card) =>
+    calculateCreditCardSummary(dataset, card, asOf),
+  );
+}
+
+export function calculateCreditCardCategoryUsage(
+  dataset: WalletDataset,
+  card: CreditCard,
+  asOf: Date = new Date(),
+): CreditCardCategoryUsage[] {
+  const purchases = dataset.records.filter(
+    (record) =>
+      record.creditCardId === card.id &&
+      record.type === "expense" &&
+      record.paymentStatus !== "cancelled" &&
+      !isAfter(parseISO(record.occurredAt), asOf),
+  );
+  const summary = calculateCreditCardSummary(dataset, card, asOf);
+  const rootCategories = dataset.categories.filter(
+    (category) => !category.parentId,
+  );
+  const usage = rootCategories.map((category) => ({
+    id: category.id,
+    name: category.name,
+    color: category.color,
+    amount: purchases
+      .filter(
+        (record) =>
+          record.categoryId &&
+          isCategoryOrDescendant(
+            dataset.categories,
+            record.categoryId,
+            category.id,
+          ),
+      )
+      .reduce(
+        (total, record) =>
+          total +
+          (record.amountInLimitCurrency ??
+            record.amount * (record.exchangeRateToLimitCurrency ?? 1)),
+        0,
+      ),
+  }));
+  const categorizedRecordIds = new Set(
+    purchases
+      .filter((record) =>
+        rootCategories.some(
+          (category) =>
+            record.categoryId &&
+            isCategoryOrDescendant(
+              dataset.categories,
+              record.categoryId,
+              category.id,
+            ),
+        ),
+      )
+      .map((record) => record.id),
+  );
+  const uncategorizedAmount = purchases
+    .filter((record) => !categorizedRecordIds.has(record.id))
+    .reduce(
+      (total, record) =>
+        total +
+        (record.amountInLimitCurrency ??
+          record.amount * (record.exchangeRateToLimitCurrency ?? 1)),
+      0,
+    );
+  const grossAmount =
+    usage.reduce((total, item) => total + item.amount, 0) + uncategorizedAmount;
+  const outstandingShare =
+    grossAmount > 0 ? summary.usedLimit / grossAmount : 0;
+  const adjustedUsage = usage.map((item) => ({
+    ...item,
+    amount: item.amount * outstandingShare,
+  }));
+
+  if (uncategorizedAmount > 0) {
+    adjustedUsage.push({
+      id: "uncategorized",
+      name: "Uncategorized",
+      color: "#94A3B8",
+      amount: uncategorizedAmount * outstandingShare,
+    });
+  }
+
+  return adjustedUsage
+    .filter((item) => item.amount > 0.000001)
+    .sort((a, b) => b.amount - a.amount);
 }
 
 function convertAccountBalanceToPrimary(
@@ -255,7 +529,10 @@ export function calculateVisibleBalance(dataset: WalletDataset) {
 }
 
 export function isOpenDebt(debt: Debt) {
-  return debt.status !== "paid" && (debt.pendingAmount === undefined || debt.pendingAmount > 0);
+  return (
+    debt.status !== "paid" &&
+    (debt.pendingAmount === undefined || debt.pendingAmount > 0)
+  );
 }
 
 export function calculateVisibleDebtSummary(

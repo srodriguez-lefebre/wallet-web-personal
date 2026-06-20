@@ -1,6 +1,6 @@
 ﻿# Wallet Web Personal
 
-Wallet web personal para controlar gastos, ingresos, cuentas, goals, presupuestos y analiticas.
+Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credito, goals, presupuestos y analiticas.
 
 ## Stack
 
@@ -50,6 +50,22 @@ npx vercel dev --listen 3001
 
 El CLI puede pedir login la primera vez. Una vez levantado, entrar a
 `http://localhost:3001` y desbloquear con `API_TOKEN`.
+
+## Tarjetas de credito
+
+La vista `/cards` administra tarjetas con un unico limite y moneda de limite,
+dias fijos de cierre y vencimiento. Sus consumos se registran sin afectar una
+cuenta bancaria, conservan la moneda original y guardan la conversion usada para
+consumir el limite. Cada consumo requiere categoria.
+
+Los pagos pueden ser externos o descontarse de una cuenta. Un pago reduce la
+deuda y el limite utilizado; cuando se elige una cuenta tambien reduce su saldo.
+Superar el limite muestra una advertencia, pero no bloquea el movimiento.
+
+Antes de usar esta funcionalidad contra una base existente, aplicar la migracion
+pendiente con `npm run db:migrate`. La migracion es aditiva y no convierte
+automaticamente cuentas antiguas de tipo `credit_card`, porque no contienen el
+limite, los ultimos cuatro digitos ni las fechas necesarias.
 
 ## Deploy
 

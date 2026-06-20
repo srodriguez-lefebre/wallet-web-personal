@@ -8,6 +8,8 @@ import {
   calculateBudgetProgress,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
+  calculateCreditCardSummary,
+  calculateCreditCardCategoryUsage,
   calculateGoalProgress,
   calculateVisibleDebtSummary,
   calculateSummary,
@@ -295,5 +297,226 @@ describe("wallet calculations", () => {
     const groups = groupRecordsByDay(mockWalletData.records);
 
     expect(groups["2026-06-14"]).toHaveLength(2);
+  });
+
+  it("tracks one card limit across currencies without changing an account on purchase", () => {
+    const card = {
+      id: "card-4006",
+      name: "International",
+      issuer: "Itau",
+      lastFour: "4006",
+      creditLimit: 10000,
+      limitCurrency: "UYU" as const,
+      closingDay: 20,
+      dueDay: 5,
+      color: "#2563EB",
+      icon: "credit-card",
+      isActive: true,
+    };
+    const dataset = {
+      ...mockWalletData,
+      creditCards: [card],
+      records: [
+        ...mockWalletData.records,
+        {
+          id: "card-expense-usd",
+          type: "expense" as const,
+          amount: 100,
+          currency: "USD" as const,
+          creditCardId: card.id,
+          categoryId: "cat-shopping",
+          tagIds: [],
+          paymentType: "credit" as const,
+          paymentStatus: "cleared" as const,
+          exchangeRateToPrimary: 40,
+          amountInLimitCurrency: 4000,
+          exchangeRateToLimitCurrency: 40,
+          occurredAt: "2026-06-10T12:00:00.000Z",
+        },
+        {
+          id: "card-expense-uyu",
+          type: "expense" as const,
+          amount: 1000,
+          currency: "UYU" as const,
+          creditCardId: card.id,
+          categoryId: "cat-shopping",
+          tagIds: [],
+          paymentType: "credit" as const,
+          paymentStatus: "pending" as const,
+          exchangeRateToPrimary: 1,
+          amountInLimitCurrency: 1000,
+          exchangeRateToLimitCurrency: 1,
+          occurredAt: "2026-06-22T12:00:00.000Z",
+        },
+      ],
+      creditCardPayments: [],
+    };
+    const bankBefore = calculateAccountBalances(dataset).find(
+      (item) => item.account.id === "acc-bank",
+    )?.balance;
+    const summary = calculateCreditCardSummary(
+      dataset,
+      card,
+      new Date("2026-06-25T12:00:00.000Z"),
+    );
+
+    expect(summary.usedLimit).toBe(5000);
+    expect(summary.availableLimit).toBe(5000);
+    expect(summary.statementDue).toEqual([{ currency: "USD", amount: 100 }]);
+    expect(summary.currentCycle).toEqual([{ currency: "UYU", amount: 1000 }]);
+    expect(summary.currentCycleStart).toBe("2026-06-21");
+    expect(summary.currentCycleEnd).toBe("2026-07-20");
+    expect(summary.dueDate).toBe("2026-07-05");
+    expect(
+      calculateAccountBalances(dataset).find(
+        (item) => item.account.id === "acc-bank",
+      )?.balance,
+    ).toBe(bankBefore);
+  });
+
+  it("applies a partial card payment to debt, limit and the selected account", () => {
+    const card = {
+      id: "card-4006",
+      name: "International",
+      issuer: "Itau",
+      lastFour: "4006",
+      creditLimit: 10000,
+      limitCurrency: "UYU" as const,
+      closingDay: 20,
+      dueDay: 5,
+      color: "#2563EB",
+      icon: "credit-card",
+      isActive: true,
+    };
+    const base = {
+      ...mockWalletData,
+      creditCards: [card],
+      records: [
+        ...mockWalletData.records,
+        {
+          id: "card-expense",
+          type: "expense" as const,
+          amount: 100,
+          currency: "USD" as const,
+          creditCardId: card.id,
+          categoryId: "cat-shopping",
+          tagIds: [],
+          paymentType: "credit" as const,
+          paymentStatus: "cleared" as const,
+          exchangeRateToPrimary: 40,
+          amountInLimitCurrency: 4000,
+          exchangeRateToLimitCurrency: 40,
+          occurredAt: "2026-06-10T12:00:00.000Z",
+        },
+      ],
+      creditCardPayments: [],
+    };
+    const before =
+      calculateAccountBalances(base).find(
+        (item) => item.account.id === "acc-bank",
+      )?.balance ?? 0;
+    const dataset = {
+      ...base,
+      creditCardPayments: [
+        {
+          id: "payment-1",
+          creditCardId: card.id,
+          amount: 25,
+          currency: "USD" as const,
+          amountInLimitCurrency: 1000,
+          accountId: "acc-bank",
+          accountAmount: 1000,
+          occurredAt: "2026-06-25T12:00:00.000Z",
+        },
+      ],
+    };
+    const summary = calculateCreditCardSummary(
+      dataset,
+      card,
+      new Date("2026-06-25T13:00:00.000Z"),
+    );
+
+    expect(summary.usedLimit).toBe(3000);
+    expect(summary.outstanding).toEqual([{ currency: "USD", amount: 75 }]);
+    expect(summary.statementDue).toEqual([{ currency: "USD", amount: 75 }]);
+    expect(
+      calculateAccountBalances(dataset).find(
+        (item) => item.account.id === "acc-bank",
+      )?.balance,
+    ).toBe(before - 1000);
+  });
+
+  it("splits the remaining card usage by root category after payments", () => {
+    const card = {
+      id: "card-chart",
+      name: "Chart card",
+      issuer: "Test",
+      lastFour: "4006",
+      creditLimit: 10000,
+      limitCurrency: "UYU" as const,
+      closingDay: 20,
+      dueDay: 5,
+      color: "#2563EB",
+      icon: "credit-card",
+      isActive: true,
+    };
+    const dataset = {
+      ...mockWalletData,
+      creditCards: [card],
+      records: [
+        {
+          id: "food-purchase",
+          type: "expense" as const,
+          amount: 3000,
+          currency: "UYU" as const,
+          creditCardId: card.id,
+          categoryId: "cat-groceries",
+          tagIds: [],
+          paymentType: "credit" as const,
+          paymentStatus: "cleared" as const,
+          exchangeRateToPrimary: 1,
+          amountInLimitCurrency: 3000,
+          exchangeRateToLimitCurrency: 1,
+          occurredAt: "2026-06-10T12:00:00.000Z",
+        },
+        {
+          id: "shopping-purchase",
+          type: "expense" as const,
+          amount: 1000,
+          currency: "UYU" as const,
+          creditCardId: card.id,
+          categoryId: "cat-shopping",
+          tagIds: [],
+          paymentType: "credit" as const,
+          paymentStatus: "cleared" as const,
+          exchangeRateToPrimary: 1,
+          amountInLimitCurrency: 1000,
+          exchangeRateToLimitCurrency: 1,
+          occurredAt: "2026-06-11T12:00:00.000Z",
+        },
+      ],
+      creditCardPayments: [
+        {
+          id: "chart-payment",
+          creditCardId: card.id,
+          amount: 1000,
+          currency: "UYU" as const,
+          amountInLimitCurrency: 1000,
+          occurredAt: "2026-06-12T12:00:00.000Z",
+        },
+      ],
+    };
+
+    const usage = calculateCreditCardCategoryUsage(
+      dataset,
+      card,
+      new Date("2026-06-13T12:00:00.000Z"),
+    );
+
+    expect(usage).toEqual([
+      expect.objectContaining({ id: "cat-groceries", amount: 2250 }),
+      expect.objectContaining({ id: "cat-shopping", amount: 750 }),
+    ]);
+    expect(usage.reduce((total, item) => total + item.amount, 0)).toBe(3000);
   });
 });

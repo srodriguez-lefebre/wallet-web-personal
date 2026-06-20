@@ -50,6 +50,13 @@
       "when": 1781705800000,
       "tag": "0006_classic_debts",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781915400000,
+      "tag": "0007_calm_credit_cards",
+      "breakpoints": true
     }
   ]
 }

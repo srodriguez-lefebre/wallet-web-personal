@@ -21,6 +21,7 @@ import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
+  calculateCreditCardSummary,
   formatMoney,
   groupRecordsByDay,
   isCategoryOrDescendant,
@@ -144,6 +145,9 @@ export function RecordsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(defaultAccountId(dataset));
+  const [creditCardId, setCreditCardId] = useState(recordFilters.creditCardId ?? "");
+  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
+  const [exchangeRateToLimitCurrency, setExchangeRateToLimitCurrency] = useState("1");
   const [destinationAccountId, setDestinationAccountId] = useState(
     defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
   );
@@ -155,7 +159,7 @@ export function RecordsView() {
   const [occurredAtLocal, setOccurredAtLocal] = useState(() =>
     toDateTimeLocal(new Date()),
   );
-  const [paymentType, setPaymentType] = useState<PaymentType>("credit");
+  const [paymentType, setPaymentType] = useState<PaymentType>("debit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const { toast, runAction } = useActionToast();
   const categories = useMemo(
@@ -171,8 +175,28 @@ export function RecordsView() {
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const canSubmit =
     Number(amount) > 0 &&
-    Boolean(accountId) &&
+    (type === "transfer" ? Boolean(accountId) : Boolean(accountId) !== Boolean(creditCardId)) &&
     (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId));
+  const selectedCard = dataset.creditCards.find((card) => card.id === creditCardId);
+  const purchaseInLimitCurrency =
+    Number(amount) * (Number(exchangeRateToLimitCurrency) || 0);
+  const cardSummaryBeforeEdit = useMemo(() => {
+    if (!selectedCard) return undefined;
+
+    const summaryDataset = editingId
+      ? {
+          ...dataset,
+          records: dataset.records.filter((record) => record.id !== editingId),
+        }
+      : dataset;
+    const occurredAt = new Date(occurredAtLocal).getTime();
+    const asOf = new Date(Number.isNaN(occurredAt) ? 0 : occurredAt);
+    return calculateCreditCardSummary(summaryDataset, selectedCard, asOf);
+  }, [dataset, editingId, occurredAtLocal, selectedCard]);
+  const projectedCardUsage =
+    (cardSummaryBeforeEdit?.usedLimit ?? 0) + purchaseInLimitCurrency;
+  const exceedsCardLimit =
+    Boolean(selectedCard) && projectedCardUsage > (selectedCard?.creditLimit ?? 0);
 
   useEffect(() => {
     if (
@@ -184,9 +208,15 @@ export function RecordsView() {
     queueMicrotask(() => {
       openedNewRecordRef.current = newRecordRequestId;
       const nextAccountId = defaultAccountId(dataset);
+      const requestedCard = dataset.creditCards.find(
+        (card) => card.id === recordFilters.creditCardId && card.isActive,
+      );
       setEditingId(null);
       setType("expense");
-      setAccountId(nextAccountId);
+      setAccountId(requestedCard ? "" : nextAccountId);
+      setCreditCardId(requestedCard?.id ?? "");
+      setCurrency(requestedCard?.limitCurrency ?? "UYU");
+      setExchangeRateToLimitCurrency("1");
       setDestinationAccountId(
         defaultDestinationAccountId(dataset, nextAccountId),
       );
@@ -196,12 +226,17 @@ export function RecordsView() {
       setTagId("");
       setCounterpartyName("");
       setOccurredAtLocal(toDateTimeLocal(new Date()));
-      setPaymentType("credit");
+      setPaymentType(requestedCard ? "credit" : "debit");
       setPaymentStatus("cleared");
       setIsRecordDialogOpen(true);
       consumeNewRecordRequest();
     });
-  }, [consumeNewRecordRequest, dataset, newRecordRequestId]);
+  }, [
+    consumeNewRecordRequest,
+    dataset,
+    newRecordRequestId,
+    recordFilters.creditCardId,
+  ]);
 
   const filteredRecords = useMemo(() => {
     const periodRecords =
@@ -216,6 +251,11 @@ export function RecordsView() {
         !recordFilters.type || recordFilters.type === "all"
           ? true
           : record.type === recordFilters.type,
+      )
+      .filter((record) =>
+        recordFilters.creditCardId
+          ? record.creditCardId === recordFilters.creditCardId
+          : true,
       )
       .filter((record) =>
         recordFilters.accountId
@@ -275,6 +315,10 @@ export function RecordsView() {
           (account) => account.id === recordFilters.accountId,
         )?.name
       : null,
+    recordFilters.creditCardId
+      ? dataset.creditCards.find((card) => card.id === recordFilters.creditCardId)
+          ?.name
+      : null,
     recordFilters.categoryId
       ? (() => {
           const category = dataset.categories.find(
@@ -296,6 +340,12 @@ export function RecordsView() {
     setEditingId(null);
     setType(nextType);
     setAccountId(nextAccountId);
+    setCreditCardId("");
+    setCurrency(
+      dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
+        "UYU",
+    );
+    setExchangeRateToLimitCurrency("1");
     setDestinationAccountId(
       defaultDestinationAccountId(dataset, nextAccountId),
     );
@@ -305,7 +355,7 @@ export function RecordsView() {
     setTagId("");
     setCounterpartyName("");
     setOccurredAtLocal(toDateTimeLocal(new Date()));
-    setPaymentType(nextType === "transfer" ? "transfer" : "credit");
+    setPaymentType(nextType === "transfer" ? "transfer" : "debit");
     setPaymentStatus("cleared");
   }
 
@@ -317,7 +367,12 @@ export function RecordsView() {
   function loadRecord(record: WalletRecord) {
     setEditingId(record.id);
     setType(record.type);
-    setAccountId(record.accountId);
+    setAccountId(record.accountId ?? "");
+    setCreditCardId(record.creditCardId ?? "");
+    setCurrency(record.currency);
+    setExchangeRateToLimitCurrency(
+      String(record.exchangeRateToLimitCurrency ?? 1),
+    );
     setDestinationAccountId(record.destinationAccountId ?? "");
     setCategoryId(record.categoryId ?? "");
     setAmount(String(record.amount));
@@ -341,12 +396,15 @@ export function RecordsView() {
     if (!numericAmount || numericAmount <= 0) return null;
 
     const account = dataset.accounts.find((item) => item.id === accountId);
+    const card = dataset.creditCards.find((item) => item.id === creditCardId);
+    const limitRate = Number(exchangeRateToLimitCurrency) || 1;
 
     return {
       type,
       amount: numericAmount,
-      currency: (account?.currency ?? "UYU") as CurrencyCode,
-      accountId,
+      currency: creditCardId ? currency : ((account?.currency ?? currency) as CurrencyCode),
+      accountId: creditCardId ? undefined : accountId,
+      creditCardId: creditCardId || undefined,
       destinationAccountId:
         type === "transfer" ? destinationAccountId : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
@@ -355,6 +413,8 @@ export function RecordsView() {
       paymentType,
       paymentStatus,
       exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
+      amountInLimitCurrency: card ? numericAmount * limitRate : undefined,
+      exchangeRateToLimitCurrency: card ? limitRate : undefined,
       occurredAt: dateTimeLocalToIso(occurredAtLocal),
       note: note || undefined,
     };
@@ -449,8 +509,10 @@ export function RecordsView() {
                       setType(item);
                       setCategoryId("");
                       setPaymentType(
-                        item === "transfer" ? "transfer" : "credit",
+                        item === "transfer" ? "transfer" : "debit",
                       );
+                      setCreditCardId("");
+                      if (!accountId) setAccountId(defaultAccountId(dataset));
                     }}
                     className={typeButtonClassName(item, type)}
                   >
@@ -487,23 +549,74 @@ export function RecordsView() {
               </label>
             </div>
 
+            {selectedCard && Number(amount) > 0 ? (
+              <div
+                className={`rounded-md border px-3 py-2 text-sm ${
+                  exceedsCardLimit
+                    ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    : "border-border bg-secondary/40 text-muted-foreground"
+                }`}
+              >
+                {exceedsCardLimit
+                  ? `Warning: this movement takes the card to ${formatMoney(projectedCardUsage, selectedCard.limitCurrency)}, above its ${formatMoney(selectedCard.creditLimit, selectedCard.limitCurrency)} limit. You can still save it.`
+                  : `${formatMoney(purchaseInLimitCurrency, selectedCard.limitCurrency)} will consume the card limit; ${formatMoney(selectedCard.creditLimit - projectedCardUsage, selectedCard.limitCurrency)} will remain available.`}
+              </div>
+            ) : null}
+
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Account</span>
-                <select
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                  className={fieldClassName}
-                >
-                  {dataset.accounts
-                    .filter((account) => account.isActive && account.isVisible)
-                    .map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                </select>
-              </label>
+              {creditCardId ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Purchase currency</span>
+                    <select
+                      value={currency}
+                      onChange={(event) => {
+                        const nextCurrency = event.target.value as CurrencyCode;
+                        setCurrency(nextCurrency);
+                        const card = dataset.creditCards.find((item) => item.id === creditCardId);
+                        if (card?.limitCurrency === nextCurrency) setExchangeRateToLimitCurrency("1");
+                      }}
+                      className={fieldClassName}
+                    >
+                      {(["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]).map((item) => <option key={item}>{item}</option>)}
+                    </select>
+                  </label>
+                  {dataset.creditCards.find((item) => item.id === creditCardId)?.limitCurrency !== currency ? (
+                    <label className="block space-y-2">
+                      <span className="text-sm font-medium">Rate to limit currency</span>
+                      <input
+                        value={exchangeRateToLimitCurrency}
+                        onChange={(event) => setExchangeRateToLimitCurrency(event.target.value)}
+                        className={fieldClassName}
+                        type="number"
+                        min="0"
+                        step="0.000001"
+                      />
+                    </label>
+                  ) : null}
+                </div>
+              ) : (
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Account</span>
+                  <select
+                    value={accountId}
+                    onChange={(event) => {
+                      setAccountId(event.target.value);
+                      const account = dataset.accounts.find((item) => item.id === event.target.value);
+                      if (account) setCurrency(account.currency);
+                    }}
+                    className={fieldClassName}
+                  >
+                    {dataset.accounts
+                      .filter((account) => account.isActive && account.isVisible)
+                      .map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              )}
 
               {type === "transfer" ? (
                 <label className="block space-y-2">
@@ -608,15 +721,35 @@ export function RecordsView() {
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Payment type</span>
                 <select
-                  value={paymentType}
-                  onChange={(event) =>
-                    setPaymentType(event.target.value as PaymentType)
-                  }
+                  value={creditCardId ? `card:${creditCardId}` : paymentType}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    if (value.startsWith("card:")) {
+                      const nextCardId = value.slice(5);
+                      const card = dataset.creditCards.find((item) => item.id === nextCardId);
+                      setCreditCardId(nextCardId);
+                      setAccountId("");
+                      setPaymentType("credit");
+                      setCurrency(card?.limitCurrency ?? "UYU");
+                      setExchangeRateToLimitCurrency("1");
+                      return;
+                    }
+                    setCreditCardId("");
+                    setPaymentType(value as PaymentType);
+                    const nextAccountId = accountId || defaultAccountId(dataset);
+                    setAccountId(nextAccountId);
+                    const account = dataset.accounts.find((item) => item.id === nextAccountId);
+                    if (account) setCurrency(account.currency);
+                  }}
                   className={fieldClassName}
                 >
                   <option value="cash">{paymentTypeLabels.cash}</option>
                   <option value="debit">{paymentTypeLabels.debit}</option>
-                  <option value="credit">{paymentTypeLabels.credit}</option>
+                  {dataset.creditCards.filter((card) => card.isActive).map((card) => (
+                    <option key={card.id} value={`card:${card.id}`}>
+                      Credit •••• {card.lastFour} — {card.name}
+                    </option>
+                  ))}
                   <option value="transfer">{paymentTypeLabels.transfer}</option>
                   <option value="other">{paymentTypeLabels.other}</option>
                 </select>
@@ -724,6 +857,23 @@ export function RecordsView() {
               ))}
             </select>
             <select
+              value={recordFilters.creditCardId ?? ""}
+              onChange={(event) =>
+                setRecordFilters({
+                  creditCardId: event.target.value || undefined,
+                  accountId: event.target.value ? undefined : recordFilters.accountId,
+                })
+              }
+              className={fieldClassName}
+            >
+              <option value="">Cards</option>
+              {dataset.creditCards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name} •••• {card.lastFour}
+                </option>
+              ))}
+            </select>
+            <select
               value={recordFilters.categoryId ?? ""}
               onChange={(event) =>
                 setRecordFilters({
@@ -787,6 +937,9 @@ export function RecordsView() {
                     const account = dataset.accounts.find(
                       (item) => item.id === record.accountId,
                     );
+                    const creditCard = dataset.creditCards.find(
+                      (item) => item.id === record.creditCardId,
+                    );
                     const tags = record.tagIds
                       .map((id) => dataset.tags.find((tag) => tag.id === id))
                       .filter(Boolean);
@@ -836,7 +989,9 @@ export function RecordsView() {
                             </Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {account?.name}
+                            {creditCard
+                              ? `${creditCard.name} •••• ${creditCard.lastFour}`
+                              : account?.name}
                             {record.counterpartyName
                               ? ` · ${record.counterpartyName}`
                               : " · No counterparty"}

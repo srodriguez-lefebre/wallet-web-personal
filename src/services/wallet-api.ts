@@ -1,6 +1,8 @@
 import type {
   Account,
   Category,
+  CreditCard,
+  CreditCardPayment,
   Debt,
   RecurringDebt,
   WalletDataset,
@@ -117,6 +119,41 @@ export function updateCategory(
 export function deleteCategory(token: string, categoryId: string) {
   return requestApi<{ deleted: true }>(token, `/api/categories/${categoryId}`, {
     method: "DELETE",
+  });
+}
+
+export function createCreditCard(token: string, card: Omit<CreditCard, "id">) {
+  return requestApi<CreditCard>(token, "/api/cards", {
+    method: "POST",
+    ...body(card),
+  });
+}
+
+export function updateCreditCard(
+  token: string,
+  cardId: string,
+  card: Omit<CreditCard, "id">,
+) {
+  return requestApi<CreditCard>(token, `/api/cards/${cardId}`, {
+    method: "PATCH",
+    ...body(card),
+  });
+}
+
+export function deleteCreditCard(token: string, cardId: string) {
+  return requestApi<{ deleted: true }>(token, `/api/cards/${cardId}`, {
+    method: "DELETE",
+  });
+}
+
+export function createCreditCardPayment(
+  token: string,
+  cardId: string,
+  payment: Omit<CreditCardPayment, "id" | "creditCardId">,
+) {
+  return requestApi<CreditCardPayment>(token, `/api/cards/${cardId}/payments`, {
+    method: "POST",
+    ...body(payment),
   });
 }
 

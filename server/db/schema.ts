@@ -2,6 +2,7 @@ import {
   boolean,
   type AnyPgColumn,
   index,
+  integer,
   numeric,
   pgEnum,
   pgTable,
@@ -89,6 +90,24 @@ export const tags = pgTable("tags", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const creditCards = pgTable("credit_cards", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  issuer: text("issuer").notNull(),
+  lastFour: text("last_four").notNull(),
+  creditLimit: numeric("credit_limit", { precision: 14, scale: 2 }).notNull(),
+  limitCurrency: text("limit_currency").notNull(),
+  closingDay: integer("closing_day").notNull(),
+  dueDay: integer("due_day").notNull(),
+  color: text("color").notNull(),
+  icon: text("icon").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+});
+
 export const records = pgTable(
   "records",
   {
@@ -96,9 +115,8 @@ export const records = pgTable(
     type: recordTypeEnum("type").notNull(),
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     currency: text("currency").notNull(),
-    accountId: uuid("account_id")
-      .notNull()
-      .references(() => accounts.id),
+    accountId: uuid("account_id").references(() => accounts.id),
+    creditCardId: uuid("credit_card_id").references(() => creditCards.id),
     destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
     categoryId: uuid("category_id").references(() => categories.id),
     counterpartyName: text("counterparty_name"),
@@ -110,6 +128,14 @@ export const records = pgTable(
     })
       .notNull()
       .default("1"),
+    amountInLimitCurrency: numeric("amount_in_limit_currency", {
+      precision: 14,
+      scale: 2,
+    }),
+    exchangeRateToLimitCurrency: numeric("exchange_rate_to_limit_currency", {
+      precision: 14,
+      scale: 6,
+    }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     note: text("note"),
     isFixed: boolean("is_fixed").notNull().default(false),
@@ -120,8 +146,35 @@ export const records = pgTable(
   },
   (table) => ({
     accountIdx: index("records_account_idx").on(table.accountId),
+    creditCardIdx: index("records_credit_card_idx").on(table.creditCardId),
     occurredAtIdx: index("records_occurred_at_idx").on(table.occurredAt),
     typeIdx: index("records_type_idx").on(table.type),
+  }),
+);
+
+export const creditCardPayments = pgTable(
+  "credit_card_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    creditCardId: uuid("credit_card_id")
+      .notNull()
+      .references(() => creditCards.id),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    currency: text("currency").notNull(),
+    amountInLimitCurrency: numeric("amount_in_limit_currency", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    accountId: uuid("account_id").references(() => accounts.id),
+    accountAmount: numeric("account_amount", { precision: 14, scale: 2 }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    cardIdx: index("credit_card_payments_card_idx").on(table.creditCardId),
+    accountIdx: index("credit_card_payments_account_idx").on(table.accountId),
+    occurredAtIdx: index("credit_card_payments_occurred_at_idx").on(table.occurredAt),
   }),
 );
 

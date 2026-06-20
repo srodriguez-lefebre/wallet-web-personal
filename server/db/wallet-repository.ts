@@ -4,6 +4,8 @@ import {
   accounts,
   budgets,
   categories,
+  creditCardPayments,
+  creditCards,
   debts,
   exchangeRates,
   goalReservations,
@@ -21,6 +23,8 @@ import type {
   Account,
   Budget,
   Category,
+  CreditCard,
+  CreditCardPayment,
   Debt,
   ExchangeRate,
   Goal,
@@ -39,6 +43,8 @@ type NewAccount = Omit<Account, "id">;
 type NewCategory = Omit<Category, "id">;
 type NewTag = Omit<Tag, "id">;
 type NewRecord = Omit<WalletRecord, "id">;
+type NewCreditCard = Omit<CreditCard, "id">;
+type NewCreditCardPayment = Omit<CreditCardPayment, "id" | "creditCardId">;
 type NewGoal = Omit<Goal, "id">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
@@ -132,7 +138,8 @@ function mapRecord(
     type: row.type,
     amount: asNumber(row.amount),
     currency: row.currency as WalletRecord["currency"],
-    accountId: row.accountId,
+    accountId: optional(row.accountId),
+    creditCardId: optional(row.creditCardId),
     destinationAccountId: optional(row.destinationAccountId),
     categoryId: optional(row.categoryId),
     counterpartyName: optional(row.counterpartyName),
@@ -140,10 +147,52 @@ function mapRecord(
     paymentType: row.paymentType,
     paymentStatus: row.paymentStatus,
     exchangeRateToPrimary: asNumber(row.exchangeRateToPrimary),
+    amountInLimitCurrency:
+      row.amountInLimitCurrency === null
+        ? undefined
+        : asNumber(row.amountInLimitCurrency),
+    exchangeRateToLimitCurrency:
+      row.exchangeRateToLimitCurrency === null
+        ? undefined
+        : asNumber(row.exchangeRateToLimitCurrency),
     occurredAt: asRequiredIso(row.occurredAt),
     note: optional(row.note),
     isFixed: row.isFixed,
     debtId: optional(row.debtId),
+  };
+}
+
+function mapCreditCard(row: typeof creditCards.$inferSelect): CreditCard {
+  return {
+    id: row.id,
+    name: row.name,
+    issuer: row.issuer,
+    lastFour: row.lastFour,
+    creditLimit: asNumber(row.creditLimit),
+    limitCurrency: row.limitCurrency as CreditCard["limitCurrency"],
+    closingDay: row.closingDay,
+    dueDay: row.dueDay,
+    color: row.color,
+    icon: row.icon,
+    isActive: row.isActive && row.deletedAt === null,
+    note: optional(row.note),
+  };
+}
+
+function mapCreditCardPayment(
+  row: typeof creditCardPayments.$inferSelect,
+): CreditCardPayment {
+  return {
+    id: row.id,
+    creditCardId: row.creditCardId,
+    amount: asNumber(row.amount),
+    currency: row.currency as CreditCardPayment["currency"],
+    amountInLimitCurrency: asNumber(row.amountInLimitCurrency),
+    accountId: optional(row.accountId),
+    accountAmount:
+      row.accountAmount === null ? undefined : asNumber(row.accountAmount),
+    occurredAt: asRequiredIso(row.occurredAt),
+    note: optional(row.note),
   };
 }
 
@@ -298,6 +347,8 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     accountRows,
     categoryRows,
     tagRows,
+    creditCardRows,
+    creditCardPaymentRows,
     recordRows,
     recordTagRows,
     goalRows,
@@ -314,6 +365,11 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     db.select().from(accounts).where(isNull(accounts.deletedAt)),
     db.select().from(categories),
     db.select().from(tags),
+    db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
+    db
+      .select()
+      .from(creditCardPayments)
+      .orderBy(desc(creditCardPayments.occurredAt)),
     db
       .select()
       .from(records)
@@ -339,6 +395,8 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     accounts: accountRows.map(mapAccount),
     categories: categoryRows.map(mapCategory),
     tags: tagRows.map(mapTag),
+    creditCards: creditCardRows.map(mapCreditCard),
+    creditCardPayments: creditCardPaymentRows.map(mapCreditCardPayment),
     records: recordRows.map((record) => mapRecord(record, tagIdsByRecord)),
     goals: goalRows.map((goal) => mapGoal(goal, tagIdsByGoal)),
     goalReservations: goalReservationRows.map(mapGoalReservation),
@@ -354,6 +412,71 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
 export async function listAccounts(db: Db = createDb()) {
   const rows = await db.select().from(accounts).where(isNull(accounts.deletedAt));
   return rows.map(mapAccount);
+}
+
+export async function listCreditCards(db: Db = createDb()) {
+  const rows = await db.select().from(creditCards).orderBy(desc(creditCards.createdAt));
+  return rows.map(mapCreditCard);
+}
+
+export async function createCreditCard(input: NewCreditCard, db: Db = createDb()) {
+  const [row] = await db
+    .insert(creditCards)
+    .values({
+      ...input,
+      creditLimit: decimal(input.creditLimit),
+    })
+    .returning();
+  return mapCreditCard(row);
+}
+
+export async function updateCreditCard(
+  id: string,
+  input: NewCreditCard,
+  db: Db = createDb(),
+) {
+  const [row] = await db
+    .update(creditCards)
+    .set({
+      ...input,
+      creditLimit: decimal(input.creditLimit),
+      deletedAt: input.isActive ? null : undefined,
+      updatedAt: new Date(),
+    })
+    .where(eq(creditCards.id, id))
+    .returning();
+  return row ? mapCreditCard(row) : null;
+}
+
+export async function archiveCreditCard(id: string, db: Db = createDb()) {
+  const [row] = await db
+    .update(creditCards)
+    .set({ isActive: false, deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(creditCards.id, id))
+    .returning();
+  return Boolean(row);
+}
+
+export async function createCreditCardPayment(
+  creditCardId: string,
+  input: NewCreditCardPayment,
+  db: Db = createDb(),
+) {
+  const [row] = await db
+    .insert(creditCardPayments)
+    .values({
+      creditCardId,
+      amount: decimal(input.amount),
+      currency: input.currency,
+      amountInLimitCurrency: decimal(input.amountInLimitCurrency),
+      accountId: input.accountId ?? null,
+      accountAmount:
+        input.accountAmount === undefined ? null : decimal(input.accountAmount),
+      occurredAt: new Date(input.occurredAt),
+      note: input.note ?? null,
+    })
+    .returning();
+  return mapCreditCardPayment(row);
 }
 
 export async function createAccount(input: NewAccount, db: Db = createDb()) {
@@ -509,7 +632,12 @@ export async function deleteTag(id: string, db: Db = createDb()) {
 }
 
 export async function listRecords(
-  filters: { type?: string; accountId?: string; categoryId?: string } = {},
+  filters: {
+    type?: string;
+    accountId?: string;
+    creditCardId?: string;
+    categoryId?: string;
+  } = {},
   db: Db = createDb(),
 ) {
   const clauses = [isNull(records.deletedAt)];
@@ -517,6 +645,8 @@ export async function listRecords(
     clauses.push(eq(records.type, filters.type as WalletRecord["type"]));
   }
   if (filters.accountId) clauses.push(eq(records.accountId, filters.accountId));
+  if (filters.creditCardId)
+    clauses.push(eq(records.creditCardId, filters.creditCardId));
   if (filters.categoryId) clauses.push(eq(records.categoryId, filters.categoryId));
 
   const rows = await db
@@ -549,13 +679,22 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
       type: input.type,
       amount: decimal(input.amount),
       currency: input.currency,
-      accountId: input.accountId,
+      accountId: input.accountId ?? null,
+      creditCardId: input.creditCardId ?? null,
       destinationAccountId: input.destinationAccountId ?? null,
       categoryId: input.categoryId ?? null,
       counterpartyName: input.counterpartyName ?? null,
       paymentType: input.paymentType,
       paymentStatus: input.paymentStatus,
       exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
+      amountInLimitCurrency:
+        input.amountInLimitCurrency === undefined
+          ? null
+          : decimal(input.amountInLimitCurrency),
+      exchangeRateToLimitCurrency:
+        input.exchangeRateToLimitCurrency === undefined
+          ? null
+          : decimal(input.exchangeRateToLimitCurrency),
       occurredAt: new Date(input.occurredAt),
       note: input.note ?? null,
       isFixed: input.isFixed ?? false,
@@ -577,13 +716,22 @@ export async function updateRecord(
       type: input.type,
       amount: decimal(input.amount),
       currency: input.currency,
-      accountId: input.accountId,
+      accountId: input.accountId ?? null,
+      creditCardId: input.creditCardId ?? null,
       destinationAccountId: input.destinationAccountId ?? null,
       categoryId: input.categoryId ?? null,
       counterpartyName: input.counterpartyName ?? null,
       paymentType: input.paymentType,
       paymentStatus: input.paymentStatus,
       exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
+      amountInLimitCurrency:
+        input.amountInLimitCurrency === undefined
+          ? null
+          : decimal(input.amountInLimitCurrency),
+      exchangeRateToLimitCurrency:
+        input.exchangeRateToLimitCurrency === undefined
+          ? null
+          : decimal(input.exchangeRateToLimitCurrency),
       occurredAt: new Date(input.occurredAt),
       note: input.note ?? null,
       isFixed: input.isFixed ?? false,

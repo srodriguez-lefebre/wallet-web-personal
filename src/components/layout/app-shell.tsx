@@ -3,6 +3,7 @@ import {
   BarChart3,
   Banknote,
   CircleDollarSign,
+  CreditCard as CreditCardIcon,
   Download,
   Flag,
   Home,
@@ -28,6 +29,7 @@ import { monthKey, recentMonthKeys } from "@shared/calculations";
 const navItems = [
   { label: "Dashboard", href: "/", icon: Home },
   { label: "Accounts", href: "/accounts", icon: WalletCards },
+  { label: "Cards", href: "/cards", icon: CreditCardIcon },
   { label: "Records", href: "/records", icon: ReceiptText },
   { label: "Analytics", href: "/analytics", icon: BarChart3 },
   { label: "Goals", href: "/goals", icon: Flag },

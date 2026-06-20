@@ -312,6 +312,8 @@ export const mockWalletData: WalletDataset = {
       note: "Freelance pequeno",
     },
   ],
+  creditCards: [],
+  creditCardPayments: [],
   goals: [
     {
       id: "goal-trip",

@@ -66,7 +66,8 @@ export interface WalletRecord {
   type: RecordType;
   amount: number;
   currency: CurrencyCode;
-  accountId: string;
+  accountId?: string;
+  creditCardId?: string;
   destinationAccountId?: string;
   categoryId?: string;
   counterpartyName?: string;
@@ -74,10 +75,66 @@ export interface WalletRecord {
   paymentType: PaymentType;
   paymentStatus: PaymentStatus;
   exchangeRateToPrimary: number;
+  amountInLimitCurrency?: number;
+  exchangeRateToLimitCurrency?: number;
   occurredAt: string;
   note?: string;
   isFixed?: boolean;
   debtId?: string;
+}
+
+export interface CreditCard {
+  id: string;
+  name: string;
+  issuer: string;
+  lastFour: string;
+  creditLimit: number;
+  limitCurrency: CurrencyCode;
+  closingDay: number;
+  dueDay: number;
+  color: string;
+  icon: string;
+  isActive: boolean;
+  note?: string;
+}
+
+export interface CreditCardPayment {
+  id: string;
+  creditCardId: string;
+  amount: number;
+  currency: CurrencyCode;
+  amountInLimitCurrency: number;
+  accountId?: string;
+  accountAmount?: number;
+  occurredAt: string;
+  note?: string;
+}
+
+export interface CreditCardCurrencyAmount {
+  currency: CurrencyCode;
+  amount: number;
+}
+
+export interface CreditCardSummary {
+  card: CreditCard;
+  usedLimit: number;
+  availableLimit: number;
+  utilizationPercent: number;
+  currentCycleStart: string;
+  currentCycleEnd: string;
+  lastClosingDate: string;
+  dueDate: string;
+  currentCycle: CreditCardCurrencyAmount[];
+  outstanding: CreditCardCurrencyAmount[];
+  statementDue: CreditCardCurrencyAmount[];
+  status: "ok" | "partial" | "overdue" | "over_limit";
+}
+
+export interface CreditCardCategoryUsage {
+  id: string;
+  name: string;
+  color: string;
+  amount: number;
 }
 
 export interface Goal {
@@ -207,6 +264,8 @@ export interface WalletDataset {
   categories: Category[];
   tags: Tag[];
   records: WalletRecord[];
+  creditCards: CreditCard[];
+  creditCardPayments: CreditCardPayment[];
   goals: Goal[];
   goalReservations: GoalReservation[];
   budgets: Budget[];
@@ -220,6 +279,7 @@ export interface WalletDataset {
 export interface RecordFilters {
   type?: RecordType | "all";
   accountId?: string;
+  creditCardId?: string;
   categoryId?: string;
   tagId?: string;
   search?: string;

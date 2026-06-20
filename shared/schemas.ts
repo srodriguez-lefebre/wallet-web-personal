@@ -56,7 +56,8 @@ export const recordSchema = z
     type: recordTypeSchema,
     amount: z.number().positive(),
     currency: currencySchema,
-    accountId: z.string().min(1),
+    accountId: z.string().min(1).optional(),
+    creditCardId: z.string().min(1).optional(),
     destinationAccountId: z.string().optional(),
     categoryId: z.string().optional(),
     counterpartyName: z.string().optional(),
@@ -64,12 +65,48 @@ export const recordSchema = z
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
     exchangeRateToPrimary: z.number().positive().default(1),
+    amountInLimitCurrency: z.number().positive().optional(),
+    exchangeRateToLimitCurrency: z.number().positive().optional(),
     occurredAt: z.string().datetime(),
     note: z.string().optional(),
     isFixed: z.boolean().optional(),
     debtId: z.string().optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.type !== "transfer") {
+      const sourceCount = Number(Boolean(value.accountId)) + Number(Boolean(value.creditCardId));
+      if (sourceCount !== 1) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["accountId"],
+          message: "A record must belong to exactly one account or credit card",
+        });
+      }
+    }
+
+    if (value.creditCardId && value.paymentType !== "credit") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["paymentType"],
+        message: "Credit card records must use credit as payment type",
+      });
+    }
+
+    if (value.creditCardId && value.amountInLimitCurrency === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["amountInLimitCurrency"],
+        message: "Amount in the card limit currency is required",
+      });
+    }
+
+    if (value.creditCardId && value.exchangeRateToLimitCurrency === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["exchangeRateToLimitCurrency"],
+        message: "Exchange rate to the card limit currency is required",
+      });
+    }
     if (value.type !== "transfer" && !value.categoryId) {
       ctx.addIssue({
         code: "custom",
@@ -79,6 +116,13 @@ export const recordSchema = z
     }
 
     if (value.type === "transfer") {
+      if (!value.accountId) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["accountId"],
+          message: "Source account is required for transfers",
+        });
+      }
       if (!value.destinationAccountId) {
         ctx.addIssue({
           code: "custom",
@@ -94,6 +138,47 @@ export const recordSchema = z
           message: "Destination account must be different",
         });
       }
+    }
+  });
+
+export const creditCardSchema = z.object({
+  name: z.string().min(1),
+  issuer: z.string().min(1),
+  lastFour: z.string().regex(/^\d{4}$/, "Last four must contain exactly four digits"),
+  creditLimit: z.number().positive(),
+  limitCurrency: currencySchema,
+  closingDay: z.number().int().min(1).max(31),
+  dueDay: z.number().int().min(1).max(31),
+  color: z.string().min(1),
+  icon: z.string().min(1),
+  isActive: z.boolean(),
+  note: z.string().optional(),
+});
+
+export const creditCardPaymentSchema = z
+  .object({
+    amount: z.number().positive(),
+    currency: currencySchema,
+    amountInLimitCurrency: z.number().positive(),
+    accountId: z.string().min(1).optional(),
+    accountAmount: z.number().positive().optional(),
+    occurredAt: z.string().datetime(),
+    note: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.accountId && value.accountAmount === undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["accountAmount"],
+        message: "Account amount is required when an account is selected",
+      });
+    }
+    if (!value.accountId && value.accountAmount !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["accountAmount"],
+        message: "Account amount requires an account",
+      });
     }
   });
 

@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import {
   accountSchema,
   categorySchema,
+  creditCardPaymentSchema,
+  creditCardSchema,
   debtPaymentSchema,
   debtSchema,
   recordSchema,
@@ -9,7 +11,10 @@ import {
   settingsSchema,
   unlockSchema,
 } from "../shared/schemas.js";
-import { buildDueRecurringDebtInstances } from "../shared/calculations.js";
+import {
+  buildDueRecurringDebtInstances,
+  calculateCreditCardSummary,
+} from "../shared/calculations.js";
 import { isValidApiToken } from "../server/api/auth.js";
 import { guardApi } from "../server/api/guard.js";
 import { requireMethod } from "../server/api/method.js";
@@ -18,6 +23,8 @@ import { sendData, sendError } from "../server/api/response.js";
 import {
   createAccount,
   createCategory,
+  createCreditCard,
+  createCreditCardPayment,
   createDebt,
   createDebts,
   createRecord,
@@ -25,6 +32,7 @@ import {
   listDebts,
   deleteAccount,
   deleteCategory,
+  archiveCreditCard,
   deleteDebt,
   deleteRecord,
   deleteRecurringDebt,
@@ -32,11 +40,13 @@ import {
   getWalletDataset,
   listAccounts,
   listCategories,
+  listCreditCards,
   listRecords,
   listRecurringDebts,
   recordDebtPayment,
   updateAccount,
   updateCategory,
+  updateCreditCard,
   updateDebt,
   updateRecord,
   updateRecurringDebt,
@@ -143,6 +153,10 @@ async function handleRecords(
           typeof req.query.accountId === "string"
             ? req.query.accountId
             : undefined,
+        creditCardId:
+          typeof req.query.creditCardId === "string"
+            ? req.query.creditCardId
+            : undefined,
         categoryId:
           typeof req.query.categoryId === "string"
             ? req.query.categoryId
@@ -165,6 +179,76 @@ async function handleRecords(
 
   if (!(await deleteRecord(id))) {
     sendError(res, 404, "NOT_FOUND", "Record not found");
+    return;
+  }
+  sendData(res, { deleted: true });
+}
+
+async function handleCards(
+  req: VercelRequest,
+  res: VercelResponse,
+  segments: string[],
+) {
+  const id = segments[1];
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") {
+      sendData(res, await createCreditCard(validateBody(req, creditCardSchema)), 201);
+      return;
+    }
+    sendData(res, await listCreditCards());
+    return;
+  }
+
+  if (segments[2] === "payments") {
+    if (!guardApi(req, res, ["POST"])) return;
+    const cards = await listCreditCards();
+    if (!cards.some((card) => card.id === id)) {
+      sendError(res, 404, "NOT_FOUND", "Credit card not found");
+      return;
+    }
+    sendData(
+      res,
+      await createCreditCardPayment(
+        id,
+        validateBody(req, creditCardPaymentSchema),
+      ),
+      201,
+    );
+    return;
+  }
+
+  if (segments[2] === "summary") {
+    if (!guardApi(req, res, ["GET"])) return;
+    const dataset = await getWalletDataset();
+    const card = dataset.creditCards.find((item) => item.id === id);
+    if (!card) {
+      sendError(res, 404, "NOT_FOUND", "Credit card not found");
+      return;
+    }
+    sendData(res, calculateCreditCardSummary(dataset, card));
+    return;
+  }
+
+  if (segments[2] === "records") {
+    if (!guardApi(req, res, ["GET"])) return;
+    sendData(res, await listRecords({ creditCardId: id }));
+    return;
+  }
+
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const card = await updateCreditCard(id, validateBody(req, creditCardSchema));
+    if (!card) {
+      sendError(res, 404, "NOT_FOUND", "Credit card not found");
+      return;
+    }
+    sendData(res, card);
+    return;
+  }
+
+  if (!(await archiveCreditCard(id))) {
+    sendError(res, 404, "NOT_FOUND", "Credit card not found");
     return;
   }
   sendData(res, { deleted: true });
@@ -345,6 +429,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
       case "records":
         await handleRecords(req, res, segments[1]);
+        return;
+      case "cards":
+        await handleCards(req, res, segments);
         return;
       case "debts":
         await handleDebts(req, res, segments);

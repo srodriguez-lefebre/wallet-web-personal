@@ -4,6 +4,8 @@ import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
 import { WalletProvider } from "@/providers/wallet-provider";
 import { AccountsView } from "@/views/accounts-view";
+import { CardDetailView } from "@/views/card-detail-view";
+import { CardsView } from "@/views/cards-view";
 import { AnalyticsView } from "@/views/analytics-view";
 import { DashboardView } from "@/views/dashboard-view";
 import { DebtsView } from "@/views/debts-view";
@@ -29,6 +31,8 @@ function ProtectedApp() {
         <Routes>
           <Route path="/" element={<DashboardView />} />
           <Route path="/accounts" element={<AccountsView />} />
+          <Route path="/cards" element={<CardsView />} />
+          <Route path="/cards/:cardId" element={<CardDetailView />} />
           <Route path="/records" element={<RecordsView />} />
           <Route path="/analytics" element={<AnalyticsView />} />
           <Route path="/goals" element={<GoalsView />} />
