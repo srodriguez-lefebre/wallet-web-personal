@@ -7,6 +7,8 @@ import type {
   Debt,
   RecurringDebt,
   WalletDataset,
+  WalletBootstrap,
+  RecordPage,
   WalletRecord,
   WalletSettings,
 } from "@shared/types";
@@ -54,6 +56,25 @@ function body(value: unknown): RequestInit {
 
 export function getWallet(token: string) {
   return requestApi<WalletDataset>(token, "/api/wallet");
+}
+
+export function bootstrapWallet(token: string, recordsLimit = 200) {
+  return requestApi<WalletBootstrap>(token, "/api/wallet/bootstrap", {
+    method: "POST",
+    ...body({ recordsLimit, recordsCursor: null }),
+  });
+}
+
+export function getRecordsPage(
+  token: string,
+  options: { limit?: number; cursor?: string | null; from?: string; to?: string } = {},
+) {
+  const query = new URLSearchParams();
+  query.set("limit", String(options.limit ?? 100));
+  if (options.cursor) query.set("cursor", options.cursor);
+  if (options.from) query.set("from", options.from);
+  if (options.to) query.set("to", options.to);
+  return requestApi<RecordPage>(token, `/api/records?${query.toString()}`);
 }
 
 export function createAccount(token: string, account: Omit<Account, "id">) {

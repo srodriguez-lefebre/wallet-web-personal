@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { sendError } from "./response.js";
 
 const DEFAULT_SESSION_TTL_SECONDS = 12 * 60 * 60;
@@ -45,6 +45,7 @@ export function createSessionToken(now = new Date()) {
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(now.getTime() / 1000) + ttl,
       jti: randomUUID(),
+      sub: createHash("sha256").update(process.env.API_TOKEN ?? authSecret()).digest("base64url").slice(0, 24),
     }),
   ).toString("base64url");
   return { token: `${payload}.${sign(payload)}`, expiresAt: new Date(now.getTime() + ttl * 1000).toISOString() };

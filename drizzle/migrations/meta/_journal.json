@@ -85,6 +85,13 @@
       "when": 1781996995262,
       "tag": "0011_heavy_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1781997741656,
+      "tag": "0012_clever_jimmy_woo",
+      "breakpoints": true
     }
   ]
 }

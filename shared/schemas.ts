@@ -451,12 +451,32 @@ export type DebtPatch = z.infer<typeof debtPatchSchema>;
 export type RecurringDebtPatch = z.infer<typeof recurringDebtPatchSchema>;
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
+const dateOnlySchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
+  .refine((value) => {
+    const parsed = new Date(`${value}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, "Invalid calendar date");
+
 export const recordFiltersSchema = z.object({
   type: z.enum(["all", "expense", "income", "transfer"]).optional(),
   accountId: uuidSchema.optional(),
   creditCardId: uuidSchema.optional(),
   categoryId: uuidSchema.optional(),
+  from: dateOnlySchema.optional(),
+  to: dateOnlySchema.optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  cursor: z.string().min(1).max(500).optional(),
+}).superRefine((value, context) => {
+  if (value.from && value.to && value.from > value.to) {
+    context.addIssue({ code: "custom", path: ["to"], message: "End date must be on or after start date" });
+  }
 });
+
+export const walletBootstrapSchema = z.object({
+  recordsLimit: z.number().int().min(1).max(500).default(200),
+  recordsCursor: z.string().min(1).max(500).nullable().default(null),
+}).strict();
 
 const optionalUuidSchema = uuidSchema.optional();
 

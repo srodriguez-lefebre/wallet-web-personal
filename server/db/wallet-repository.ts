@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
 import {
@@ -64,6 +64,7 @@ import {
   type SettingsPatch,
 } from "../../shared/schemas.js";
 import { conflictError, validationError } from "../api/errors.js";
+import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -447,6 +448,7 @@ function mapSettings(
 
 export async function getWalletDataset(
   db: Db = createDb(),
+  options: { recordsOverride?: WalletRecord[] } = {},
 ): Promise<WalletDataset> {
   await ensureCreditCardStatements(db);
   const [
@@ -470,10 +472,10 @@ export async function getWalletDataset(
     debtRows,
     recurringDebtRows,
     installmentPlanRows,
-  ] = await Promise.all([
+  ] = await db.batch([
     db.select().from(settings).limit(1),
     db.select().from(accounts).where(isNull(accounts.deletedAt)),
-    db.select().from(categories),
+    db.select().from(categories).where(isNull(categories.deletedAt)),
     db.select().from(tags),
     db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
     db
@@ -490,12 +492,16 @@ export async function getWalletDataset(
       .from(creditCardStatements)
       .orderBy(desc(creditCardStatements.cycleEnd)),
     db.select().from(creditCardPaymentAllocations),
-    db
-      .select()
-      .from(records)
-      .where(isNull(records.deletedAt))
-      .orderBy(desc(records.occurredAt)),
-    db.select().from(recordTags),
+    options.recordsOverride
+      ? db.select().from(records).where(sql`false`).limit(0)
+      : db
+          .select()
+          .from(records)
+          .where(isNull(records.deletedAt))
+          .orderBy(desc(records.occurredAt), desc(records.id)),
+    options.recordsOverride
+      ? db.select().from(recordTags).where(sql`false`).limit(0)
+      : db.select().from(recordTags),
     db.select().from(goals).where(isNull(goals.deletedAt)),
     db.select().from(goalTags),
     db
@@ -525,7 +531,7 @@ export async function getWalletDataset(
     creditCardPaymentAllocations: creditCardAllocationRows.map(
       mapCreditCardPaymentAllocation,
     ),
-    records: recordRows.map((record) => mapRecord(record, tagIdsByRecord)),
+    records: options.recordsOverride ?? recordRows.map((record) => mapRecord(record, tagIdsByRecord)),
     goals: goalRows.map((goal) => mapGoal(goal, tagIdsByGoal)),
     goalReservations: goalReservationRows.map(mapGoalReservation),
     budgets: budgetRows.map(mapBudget),
@@ -534,6 +540,28 @@ export async function getWalletDataset(
     debts: debtRows.map(mapDebt),
     recurringDebts: recurringDebtRows.map(mapRecurringDebt),
     installmentPlans: installmentPlanRows.map(mapInstallmentPlan),
+  };
+}
+
+export async function bootstrapWallet(
+  input: { recordsLimit: number; recordsCursor?: string | null },
+  currentDate = new Date(),
+  db: Db = createDb(),
+) {
+  const generatedDebts = await generateDueRecurringDebts(currentDate, db);
+  const recordsPage = await listRecords({
+    limit: input.recordsLimit,
+    cursor: input.recordsCursor ?? undefined,
+  }, db);
+  const dataset = await getWalletDataset(db, { recordsOverride: recordsPage.items });
+  return {
+    dataset,
+    recordsPage: {
+      nextCursor: recordsPage.nextCursor,
+      hasMore: recordsPage.hasMore,
+    },
+    generatedDebts,
+    serverDate: currentDate.toISOString().slice(0, 10),
   };
 }
 
@@ -668,16 +696,18 @@ function cardCycle(card: CreditCard, occurredAt: Date) {
 }
 
 export async function ensureCreditCardStatements(db: Db = createDb()) {
-  const cardRows = await db.select().from(creditCards);
-  const movementRows = await db
-    .select()
-    .from(creditCardRecords)
-    .where(
-      and(
-        isNull(creditCardRecords.deletedAt),
-        isNull(creditCardRecords.statementId),
+  const [cardRows, movementRows] = await db.batch([
+    db.select().from(creditCards),
+    db
+      .select()
+      .from(creditCardRecords)
+      .where(
+        and(
+          isNull(creditCardRecords.deletedAt),
+          isNull(creditCardRecords.statementId),
+        ),
       ),
-    );
+  ]);
   const now = new Date();
   for (const movement of movementRows) {
     const card = cardRows.find((item) => item.id === movement.creditCardId);
@@ -1289,6 +1319,10 @@ export async function listRecords(
     accountId?: string;
     creditCardId?: string;
     categoryId?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+    cursor?: string;
   } = {},
   db: Db = createDb(),
 ) {
@@ -1301,16 +1335,43 @@ export async function listRecords(
     clauses.push(eq(records.creditCardId, filters.creditCardId));
   if (filters.categoryId)
     clauses.push(eq(records.categoryId, filters.categoryId));
+  if (filters.from) clauses.push(gte(records.occurredAt, new Date(`${filters.from}T00:00:00.000Z`)));
+  if (filters.to) {
+    const exclusiveEnd = new Date(`${filters.to}T00:00:00.000Z`);
+    exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
+    clauses.push(lt(records.occurredAt, exclusiveEnd));
+  }
+  if (filters.cursor) {
+    const cursor = decodeRecordCursor(filters.cursor);
+    const occurredAt = new Date(cursor.occurredAt);
+    clauses.push(or(
+      lt(records.occurredAt, occurredAt),
+      and(eq(records.occurredAt, occurredAt), lt(records.id, cursor.id)),
+    )!);
+  }
 
+  const limit = filters.limit ?? 100;
   const rows = await db
     .select()
     .from(records)
     .where(and(...clauses))
-    .orderBy(desc(records.occurredAt));
-  const recordTagRows = await db.select().from(recordTags);
+    .orderBy(desc(records.occurredAt), desc(records.id))
+    .limit(limit + 1);
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const recordTagRows = pageRows.length > 0
+    ? await db.select().from(recordTags).where(inArray(recordTags.recordId, pageRows.map((row) => row.id)))
+    : [];
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
+  const last = pageRows.at(-1);
 
-  return rows.map((record) => mapRecord(record, tagIdsByRecord));
+  return {
+    items: pageRows.map((record) => mapRecord(record, tagIdsByRecord)),
+    hasMore,
+    nextCursor: hasMore && last
+      ? encodeRecordCursor({ occurredAt: last.occurredAt.toISOString(), id: last.id })
+      : null,
+  };
 }
 
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
@@ -1715,6 +1776,70 @@ export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
     .returning();
 
   return rows.map(mapDebt);
+}
+
+function recurringDueAt(year: number, month: number, dayOfMonth: number) {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(dayOfMonth, lastDay), 12));
+}
+
+export async function generateDueRecurringDebts(
+  currentDate = new Date(),
+  db: Db = createDb(),
+) {
+  const [rules, generated] = await db.batch([
+    db.select().from(recurringDebts).where(and(
+      eq(recurringDebts.isActive, true),
+      lt(recurringDebts.startedAt, new Date(currentDate.getTime() + 1)),
+    )),
+    db.select({
+      recurringDebtId: debts.recurringDebtId,
+      recurringMonth: debts.recurringMonth,
+    }).from(debts).where(and(
+      isNotNull(debts.recurringDebtId),
+      isNotNull(debts.recurringMonth),
+    )),
+  ]);
+  const existing = new Set(generated.map((row) => `${row.recurringDebtId}:${row.recurringMonth}`));
+  const due: NewDebt[] = [];
+
+  for (const rule of rules) {
+    let year = rule.startedAt.getUTCFullYear();
+    let month = rule.startedAt.getUTCMonth();
+    const endYear = currentDate.getUTCFullYear();
+    const endMonth = currentDate.getUTCMonth();
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      const recurringMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
+      const dueAt = recurringDueAt(year, month, Number(rule.dayOfMonth));
+      const key = `${rule.id}:${recurringMonth}`;
+      if (dueAt <= currentDate && !existing.has(key)) {
+        due.push({
+          name: `${rule.name} - ${recurringMonth}`,
+          direction: rule.direction as Debt["direction"],
+          originalAmount: asNumber(rule.amount),
+          pendingAmount: asNumber(rule.amount),
+          currency: rule.currency as Debt["currency"],
+          counterpartyName: rule.counterpartyName,
+          accountId: optional(rule.accountId),
+          categoryId: rule.categoryId,
+          status: "active",
+          isVisible: true,
+          startedAt: dueAt.toISOString(),
+          dueAt: dueAt.toISOString(),
+          note: optional(rule.note),
+          recurringDebtId: rule.id,
+          recurringMonth,
+        });
+      }
+      month += 1;
+      if (month === 12) {
+        month = 0;
+        year += 1;
+      }
+    }
+  }
+
+  return createDebts(due, db);
 }
 
 export async function updateDebt(

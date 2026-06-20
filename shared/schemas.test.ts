@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creditCardPaymentSchema, creditCardRecordSchema, recordSchema } from "./schemas";
+import { creditCardPaymentSchema, creditCardRecordSchema, recordFiltersSchema, recordSchema } from "./schemas";
 
 const categoryId = "00000000-0000-4000-8000-000000000001";
 const cardId = "00000000-0000-4000-8000-000000000002";
@@ -82,5 +82,17 @@ describe("credit-card validation", () => {
         accountAmount: 100,
       }).success,
     ).toBe(true);
+  });
+});
+
+describe("record filters", () => {
+  it("coerces a bounded page limit", () => {
+    expect(recordFiltersSchema.parse({ limit: "200" }).limit).toBe(200);
+    expect(recordFiltersSchema.safeParse({ limit: "501" }).success).toBe(false);
+  });
+
+  it("rejects invalid or reversed date ranges", () => {
+    expect(recordFiltersSchema.safeParse({ from: "2026-02-30" }).success).toBe(false);
+    expect(recordFiltersSchema.safeParse({ from: "2026-06-20", to: "2026-06-01" }).success).toBe(false);
   });
 });

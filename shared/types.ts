@@ -345,6 +345,19 @@ export interface WalletDataset {
   installmentPlans: InstallmentPlan[];
 }
 
+export interface RecordPage {
+  items: WalletRecord[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}
+
+export interface WalletBootstrap {
+  dataset: WalletDataset;
+  recordsPage: Omit<RecordPage, "items">;
+  generatedDebts: Debt[];
+  serverDate: string;
+}
+
 export interface RecordFilters {
   type?: RecordType | "all";
   accountId?: string;

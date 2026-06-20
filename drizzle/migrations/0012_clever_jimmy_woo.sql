@@ -1,0 +1,1 @@
+CREATE INDEX "records_occurred_at_id_idx" ON "records" USING btree ("occurred_at" DESC NULLS LAST,"id" DESC NULLS LAST) WHERE "records"."deleted_at" IS NULL;

@@ -12,6 +12,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 export const accountTypeEnum = pgEnum("account_type", [
   "cash",
@@ -221,6 +222,9 @@ export const records = pgTable(
     accountIdx: index("records_account_idx").on(table.accountId),
     creditCardIdx: index("records_credit_card_idx").on(table.creditCardId),
     occurredAtIdx: index("records_occurred_at_idx").on(table.occurredAt),
+    occurredAtIdIdx: index("records_occurred_at_id_idx")
+      .on(table.occurredAt.desc(), table.id.desc())
+      .where(sql`${table.deletedAt} IS NULL`),
     typeIdx: index("records_type_idx").on(table.type),
     idempotencyIdx: uniqueIndex("records_idempotency_idx").on(table.idempotencyKey),
   }),

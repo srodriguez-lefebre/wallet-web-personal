@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import * as walletApi from "@/services/wallet-api";
-import { mockWalletData } from "@shared/mock-data";
 import {
   availableMonthKeys,
   dateKey,
@@ -32,6 +31,7 @@ import type {
   RecurringDebt,
   Tag,
   WalletDataset,
+  RecordPage,
   WalletRecord,
   WalletSettings,
 } from "@shared/types";
@@ -126,37 +126,79 @@ interface WalletContextValue {
   deleteRecurringDebt: (recurringDebtId: string) => Promise<void>;
   toggleAccountVisibility: (accountId: string) => Promise<void>;
   setPrimaryAccount: (accountId: string) => Promise<void>;
+  recordsPage: Omit<RecordPage, "items">;
+  isLoadingMoreRecords: boolean;
+  isSelectedRangeComplete: boolean;
+  loadMoreRecords: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 const datasetCacheKey = "wallet-dataset-cache";
+const cacheSchemaVersion = 2;
+const cacheMaxAgeMs = 24 * 60 * 60 * 1000;
+
+const emptyDataset: WalletDataset = {
+  settings: {
+    primaryCurrency: "UYU",
+    theme: "system",
+    defaultDashboardPreset: "monthly-review",
+    locale: "es-UY",
+    includeHiddenAccountsInReports: false,
+    defaultPaymentType: "debit",
+    defaultPaymentStatus: "cleared",
+  },
+  accounts: [], categories: [], tags: [], records: [], creditCards: [],
+  creditCardRecords: [], creditCardStatements: [], creditCardPayments: [],
+  creditCardPaymentAllocations: [], goals: [], goalReservations: [], budgets: [],
+  exchangeRates: [], investments: [], debts: [], recurringDebts: [], installmentPlans: [],
+};
 
 function localId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
-function readCachedDataset() {
-  const cached = readStorage(datasetCacheKey);
-  if (!cached) return null;
-
+function sessionOwnerKey(token: string | null) {
+  if (!token) return null;
   try {
-    const parsed = JSON.parse(cached) as WalletDataset;
-    return {
-      ...parsed,
-      recurringDebts: parsed.recurringDebts ?? [],
-      creditCards: parsed.creditCards ?? [],
-      creditCardRecords: parsed.creditCardRecords ?? [],
-      creditCardStatements: parsed.creditCardStatements ?? [],
-      creditCardPayments: parsed.creditCardPayments ?? [],
-      creditCardPaymentAllocations: parsed.creditCardPaymentAllocations ?? [],
-    };
+    const encoded = token.split(".")[0];
+    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
+    const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    return (JSON.parse(atob(normalized)) as { sub?: string }).sub ?? null;
   } catch {
     return null;
   }
 }
 
-function cacheDataset(dataset: WalletDataset) {
-  writeStorage(datasetCacheKey, JSON.stringify(dataset));
+function readCachedDataset(token: string | null) {
+  const cached = readStorage(datasetCacheKey);
+  if (!cached) return null;
+
+  try {
+    const parsed = JSON.parse(cached) as {
+      schemaVersion: number; cachedAt: string; environment: string; ownerKey: string;
+      dataset: WalletDataset; recordsPage: Omit<RecordPage, "items">;
+    };
+    const ownerKey = sessionOwnerKey(token);
+    const environment = window.location.origin;
+    if (parsed.schemaVersion !== cacheSchemaVersion || !ownerKey || parsed.ownerKey !== ownerKey || parsed.environment !== environment) return null;
+    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function cacheDataset(dataset: WalletDataset, recordsPage: Omit<RecordPage, "items">, token: string) {
+  const ownerKey = sessionOwnerKey(token);
+  if (!ownerKey) return;
+  writeStorage(datasetCacheKey, JSON.stringify({
+    schemaVersion: cacheSchemaVersion,
+    cachedAt: new Date().toISOString(),
+    environment: window.location.origin,
+    ownerKey,
+    dataset,
+    recordsPage,
+  }));
 }
 
 function defaultCustomDateRange(): DateRange {
@@ -192,24 +234,49 @@ function defaultRecordAccountId(dataset: WalletDataset) {
   );
 }
 
-async function loadWalletDataset(apiToken: string) {
-  const nextDataset = await walletApi.getWallet(apiToken);
-  const generatedDebts = await walletApi.generateRecurringDebts(apiToken);
+let bootstrapInFlight: { token: string; request: ReturnType<typeof walletApi.bootstrapWallet> } | null = null;
 
-  if (generatedDebts.length === 0) return nextDataset;
+function loadWalletBootstrap(apiToken: string) {
+  if (bootstrapInFlight?.token === apiToken) return bootstrapInFlight.request;
+  const request = walletApi.bootstrapWallet(apiToken).finally(() => {
+    if (bootstrapInFlight?.request === request) bootstrapInFlight = null;
+  });
+  bootstrapInFlight = { token: apiToken, request };
+  return request;
+}
 
-  return {
-    ...nextDataset,
-    debts: [...generatedDebts, ...nextDataset.debts],
-  };
+const rangeRequests = new Map<string, Promise<WalletRecord[]>>();
+
+function loadRecordRange(apiToken: string, range: DateRange) {
+  const key = `${apiToken}:${range.from}:${range.to}`;
+  const existing = rangeRequests.get(key);
+  if (existing) return existing;
+  const request = (async () => {
+    const items: WalletRecord[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await walletApi.getRecordsPage(apiToken, { limit: 500, cursor, ...range });
+      items.push(...page.items);
+      cursor = page.nextCursor;
+    } while (cursor);
+    return items;
+  })().finally(() => rangeRequests.delete(key));
+  rangeRequests.set(key, request);
+  return request;
 }
 
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
-  const [hasCachedDataset] = useState(() => Boolean(readCachedDataset()));
+  const [initialCache] = useState(() => readCachedDataset(token));
+  const [hasCachedDataset] = useState(() => Boolean(initialCache));
   const [dataset, setDataset] = useState<WalletDataset>(
-    () => readCachedDataset() ?? mockWalletData,
+    () => initialCache?.dataset ?? emptyDataset,
   );
+  const [recordsPage, setRecordsPage] = useState<Omit<RecordPage, "items">>(
+    () => initialCache?.recordsPage ?? { nextCursor: null, hasMore: false },
+  );
+  const [isLoadingMoreRecords, setIsLoadingMoreRecords] = useState(false);
+  const [completeRanges, setCompleteRanges] = useState<Set<string>>(() => new Set());
   const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -257,9 +324,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setIsRefreshing(true);
     setLoadError("");
     try {
-      const nextDataset = await loadWalletDataset(token);
-      setDataset(nextDataset);
-      cacheDataset(nextDataset);
+      const result = await loadWalletBootstrap(token);
+      setDataset(result.dataset);
+      setRecordsPage(result.recordsPage);
+      setCompleteRanges(new Set());
+      cacheDataset(result.dataset, result.recordsPage, token);
     } catch (error) {
       setLoadError(
         error instanceof Error ? error.message : "Could not load wallet",
@@ -281,10 +350,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
       }
 
       try {
-        const nextDataset = await loadWalletDataset(token);
+        const result = await loadWalletBootstrap(token);
         if (isCancelled) return;
-        setDataset(nextDataset);
-        cacheDataset(nextDataset);
+        setDataset(result.dataset);
+        setRecordsPage(result.recordsPage);
+        cacheDataset(result.dataset, result.recordsPage, token);
         setLoadError("");
       } catch (error) {
         if (isCancelled) return;
@@ -306,6 +376,55 @@ export function WalletProvider({ children }: PropsWithChildren) {
       isCancelled = true;
     };
   }, [hasCachedDataset, token]);
+
+  const selectedRangeKey = `${selectedDateRange.from}:${selectedDateRange.to}`;
+  const oldestLoadedRecordDate = dataset.records.at(-1)?.occurredAt.slice(0, 10);
+  const isSelectedRangeComplete =
+    completeRanges.has(selectedRangeKey) ||
+    !recordsPage.hasMore ||
+    Boolean(oldestLoadedRecordDate && oldestLoadedRecordDate < selectedDateRange.from);
+
+  useEffect(() => {
+    if (!token || isSelectedRangeComplete) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setIsLoadingMoreRecords(true);
+    });
+    void loadRecordRange(token, selectedDateRange)
+      .then((items) => {
+        if (cancelled) return;
+        setDataset((current) => {
+          const byId = new Map(current.records.map((record) => [record.id, record]));
+          items.forEach((record) => byId.set(record.id, record));
+          return { ...current, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
+        });
+        setCompleteRanges((current) => new Set(current).add(selectedRangeKey));
+      })
+      .catch((error) => {
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Could not load records");
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingMoreRecords(false);
+      });
+    return () => { cancelled = true; };
+  }, [isSelectedRangeComplete, selectedDateRange, selectedRangeKey, token]);
+
+  async function loadMoreRecords() {
+    if (!token || !recordsPage.hasMore || !recordsPage.nextCursor || isLoadingMoreRecords) return;
+    setIsLoadingMoreRecords(true);
+    try {
+      const page = await walletApi.getRecordsPage(token, { limit: 200, cursor: recordsPage.nextCursor });
+      const byId = new Map(dataset.records.map((record) => [record.id, record]));
+      page.items.forEach((record) => byId.set(record.id, record));
+      const nextDataset = { ...dataset, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
+      setDataset(nextDataset);
+      const nextPage = { nextCursor: page.nextCursor, hasMore: page.hasMore };
+      setRecordsPage(nextPage);
+      cacheDataset(nextDataset, nextPage, token);
+    } finally {
+      setIsLoadingMoreRecords(false);
+    }
+  }
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
@@ -908,6 +1027,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
         deleteRecurringDebt,
         toggleAccountVisibility,
         setPrimaryAccount,
+        recordsPage,
+        isLoadingMoreRecords,
+        isSelectedRangeComplete,
+        loadMoreRecords,
       }}
     >
       {isRefreshing ? (

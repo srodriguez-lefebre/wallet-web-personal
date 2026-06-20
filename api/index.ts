@@ -21,9 +21,9 @@ import {
   unlockSchema,
   mailIngestionSchema,
   recordFiltersSchema,
+  walletBootstrapSchema,
 } from "../shared/schemas.js";
 import {
-  buildDueRecurringDebtInstances,
   calculateCreditCardSummary,
 } from "../shared/calculations.js";
 import { createSessionToken, isValidApiToken, requireIngestToken } from "../server/api/auth.js";
@@ -43,7 +43,6 @@ import {
   createCreditCardPayment,
   createCreditCardRecord,
   createDebt,
-  createDebts,
   createRecord,
   createRecurringDebt,
   listDebts,
@@ -57,6 +56,8 @@ import {
   deleteRecurringDebt,
   getSettings,
   getWalletDataset,
+  bootstrapWallet,
+  generateDueRecurringDebts,
   listAccounts,
   listCategories,
   listCreditCards,
@@ -384,9 +385,7 @@ async function handleDebts(
   // /api/debts/generate-recurring
   if (segments.length === 2 && segments[1] === "generate-recurring") {
     if (!guardApi(req, res, ["POST"])) return;
-    const dataset = await getWalletDataset();
-    const dueDebts = buildDueRecurringDebtInstances(dataset);
-    sendData(res, await createDebts(dueDebts), 201);
+    sendData(res, await generateDueRecurringDebts(), 201);
     return;
   }
 
@@ -524,6 +523,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sendData(res, { ok: true, service: "wallet-web-personal" });
         return;
       case "wallet":
+        if (segments.length === 2 && segments[1] === "bootstrap") {
+          if (!guardApi(req, res, ["POST"])) return;
+          const startedAt = performance.now();
+          const result = await bootstrapWallet(validateBody(req, walletBootstrapSchema));
+          const duration = performance.now() - startedAt;
+          res.setHeader("Server-Timing", `bootstrap;dur=${duration.toFixed(1)}`);
+          console.info(JSON.stringify({ event: "wallet_bootstrap", durationMs: Math.round(duration), records: result.dataset.records.length, hasMore: result.recordsPage.hasMore, generatedDebts: result.generatedDebts.length }));
+          sendData(res, result);
+          return;
+        }
         if (segments.length !== 1) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         if (!guardApi(req, res, ["GET"])) return;
         sendData(res, await getWalletDataset());

@@ -141,6 +141,10 @@ export function RecordsView() {
     deleteRecord,
     newRecordRequestId,
     consumeNewRecordRequest,
+    recordsPage,
+    isLoadingMoreRecords,
+    isSelectedRangeComplete,
+    loadMoreRecords,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
@@ -901,6 +905,7 @@ export function RecordsView() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>{filteredRecords.length} records</CardTitle>
               <div className="flex flex-wrap gap-2">
+                {!isSelectedRangeComplete ? <Badge variant="warning">Loading complete range...</Badge> : null}
                 <Badge variant="muted">
                   {selectedPeriodMode === "custom"
                     ? `${format(parseISO(selectedDateRange.from), "dd/MM/yyyy")} - ${format(parseISO(selectedDateRange.to), "dd/MM/yyyy")}`
@@ -1056,6 +1061,13 @@ export function RecordsView() {
                 </div>
               </div>
             ))}
+            {recordsPage.hasMore ? (
+              <div className="flex justify-center pt-2">
+                <Button variant="outline" disabled={isLoadingMoreRecords} onClick={() => void loadMoreRecords()}>
+                  {isLoadingMoreRecords ? "Loading records..." : "Load older records"}
+                </Button>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
       </div>
