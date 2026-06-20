@@ -8,6 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import {
@@ -172,130 +179,129 @@ export function CardsView() {
         </Button>
       </PageHeader>
 
-      {showForm ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{editingId ? "Edit card" : "New card"}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Name</span>
-                <input
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editingId ? "Edit card" : "New card"}</DialogTitle>
+            <DialogDescription>
+              Configure the card identity, limit and billing dates.
+            </DialogDescription>
+          </DialogHeader>
+          <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Name</span>
+              <input
+                className={fieldClassName}
+                value={draft.name}
+                onChange={(e) => setField("name", e.target.value)}
+                placeholder="Itaú Internacional"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Issuer</span>
+              <input
+                className={fieldClassName}
+                value={draft.issuer}
+                onChange={(e) => setField("issuer", e.target.value)}
+                placeholder="Itaú"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Last four digits</span>
+              <input
+                className={fieldClassName}
+                value={draft.lastFour}
+                onChange={(e) =>
+                  setField(
+                    "lastFour",
+                    e.target.value.replace(/\D/g, "").slice(0, 4),
+                  )
+                }
+                inputMode="numeric"
+                placeholder="4006"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Limit</span>
+              <div className="flex gap-2">
+                <select
                   className={fieldClassName}
-                  value={draft.name}
-                  onChange={(e) => setField("name", e.target.value)}
-                  placeholder="Itaú Internacional"
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Issuer</span>
-                <input
-                  className={fieldClassName}
-                  value={draft.issuer}
-                  onChange={(e) => setField("issuer", e.target.value)}
-                  placeholder="Itaú"
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Last four digits</span>
-                <input
-                  className={fieldClassName}
-                  value={draft.lastFour}
+                  value={draft.limitCurrency}
                   onChange={(e) =>
-                    setField(
-                      "lastFour",
-                      e.target.value.replace(/\D/g, "").slice(0, 4),
-                    )
+                    setField("limitCurrency", e.target.value as CurrencyCode)
                   }
-                  inputMode="numeric"
-                  placeholder="4006"
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Limit</span>
-                <div className="flex gap-2">
-                  <select
-                    className={fieldClassName}
-                    value={draft.limitCurrency}
-                    onChange={(e) =>
-                      setField("limitCurrency", e.target.value as CurrencyCode)
-                    }
-                  >
-                    {currencies.map((currency) => (
-                      <option key={currency}>{currency}</option>
-                    ))}
-                  </select>
-                  <input
-                    className={fieldClassName}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={draft.creditLimit}
-                    onChange={(e) => setField("creditLimit", e.target.value)}
-                  />
-                </div>
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Closing day</span>
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={draft.closingDay}
-                  onChange={(e) => setField("closingDay", e.target.value)}
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Due day</span>
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={draft.dueDay}
-                  onChange={(e) => setField("dueDay", e.target.value)}
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Color</span>
-                <input
-                  className={fieldClassName}
-                  type="color"
-                  value={draft.color}
-                  onChange={(e) => setField("color", e.target.value)}
-                />
-              </label>
-              <label className="space-y-2">
-                <span className="text-sm font-medium">Note</span>
-                <input
-                  className={fieldClassName}
-                  value={draft.note}
-                  onChange={(e) => setField("note", e.target.value)}
-                />
-              </label>
-              {error ? (
-                <p className="text-sm text-destructive md:col-span-2">
-                  {error}
-                </p>
-              ) : null}
-              <div className="flex gap-2 md:col-span-2">
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save card"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowForm(false)}
                 >
-                  Cancel
-                </Button>
+                  {currencies.map((currency) => (
+                    <option key={currency}>{currency}</option>
+                  ))}
+                </select>
+                <input
+                  className={fieldClassName}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={draft.creditLimit}
+                  onChange={(e) => setField("creditLimit", e.target.value)}
+                />
               </div>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Closing day</span>
+              <input
+                className={fieldClassName}
+                type="number"
+                min="1"
+                max="31"
+                value={draft.closingDay}
+                onChange={(e) => setField("closingDay", e.target.value)}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Due day</span>
+              <input
+                className={fieldClassName}
+                type="number"
+                min="1"
+                max="31"
+                value={draft.dueDay}
+                onChange={(e) => setField("dueDay", e.target.value)}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Color</span>
+              <input
+                className={fieldClassName}
+                type="color"
+                value={draft.color}
+                onChange={(e) => setField("color", e.target.value)}
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Note</span>
+              <input
+                className={fieldClassName}
+                value={draft.note}
+                onChange={(e) => setField("note", e.target.value)}
+              />
+            </label>
+            {error ? (
+              <p className="text-sm text-destructive md:col-span-2">{error}</p>
+            ) : null}
+            <div className="flex gap-2 md:col-span-2">
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Saving..." : "Save card"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowForm(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {
@@ -320,7 +326,16 @@ export function CardsView() {
           return (
             <Card
               key={summary.card.id}
-              className={!summary.card.isActive ? "opacity-60" : ""}
+              role="link"
+              tabIndex={0}
+              onClick={() => navigate(`/cards/${summary.card.id}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(`/cards/${summary.card.id}`);
+                }
+              }}
+              className={`cursor-pointer transition hover:border-primary/50 hover:shadow-md ${!summary.card.isActive ? "opacity-60" : ""}`}
             >
               <CardHeader className="flex flex-row items-start justify-between space-y-0">
                 <div className="flex items-center gap-3">
@@ -437,19 +452,28 @@ export function CardsView() {
                   ))}
                 </div>
                 <div className="flex gap-2">
-                  <Button onClick={() => navigate(`/cards/${summary.card.id}`)}>
+                  <Button
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      navigate(`/cards/${summary.card.id}`);
+                    }}
+                  >
                     Open
                   </Button>
                   <Button
                     variant="outline"
-                    onClick={() => startEdit(summary.card)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      startEdit(summary.card);
+                    }}
                   >
                     Edit
                   </Button>
                   {summary.card.isActive ? (
                     <Button
                       variant="ghost"
-                      onClick={() =>
+                      onClick={(event) => {
+                        event.stopPropagation();
                         void runAction(
                           () => deleteCreditCard(summary.card.id),
                           {
@@ -457,8 +481,8 @@ export function CardsView() {
                             success: "Card archived",
                             error: "Could not archive card",
                           },
-                        )
-                      }
+                        );
+                      }}
                     >
                       Archive
                     </Button>

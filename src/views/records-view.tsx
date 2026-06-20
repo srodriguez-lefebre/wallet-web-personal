@@ -21,7 +21,6 @@ import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
-  calculateCreditCardSummary,
   formatMoney,
   groupRecordsByDay,
   isCategoryOrDescendant,
@@ -184,33 +183,6 @@ export function RecordsView() {
     Number(amount) > 0 &&
     Boolean(accountId) &&
     (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId));
-  const selectedCard = dataset.creditCards.find(
-    (card) => card.id === creditCardId,
-  );
-  const purchaseInLimitCurrency =
-    Number(amount) * (Number(exchangeRateToLimitCurrency) || 0);
-  const cardSummaryBeforeEdit = useMemo(() => {
-    if (!selectedCard) return undefined;
-
-    const summaryDataset = editingId
-      ? {
-          ...dataset,
-          records: dataset.records.filter((record) => record.id !== editingId),
-          creditCardRecords: dataset.creditCardRecords.filter(
-            (record) => record.walletRecordId !== editingId,
-          ),
-        }
-      : dataset;
-    const occurredAt = new Date(occurredAtLocal).getTime();
-    const asOf = new Date(Number.isNaN(occurredAt) ? 0 : occurredAt);
-    return calculateCreditCardSummary(summaryDataset, selectedCard, asOf);
-  }, [dataset, editingId, occurredAtLocal, selectedCard]);
-  const projectedCardUsage =
-    (cardSummaryBeforeEdit?.usedLimit ?? 0) + purchaseInLimitCurrency;
-  const exceedsCardLimit =
-    Boolean(selectedCard) &&
-    projectedCardUsage > (selectedCard?.creditLimit ?? 0);
-
   useEffect(() => {
     if (
       !newRecordRequestId ||
@@ -599,37 +571,6 @@ export function RecordsView() {
               </label>
             </div>
 
-            {selectedCard && Number(amount) > 0 ? (
-              <div
-                className={`rounded-md border px-3 py-2 text-sm ${
-                  exceedsCardLimit
-                    ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
-                    : "border-border bg-secondary/40 text-muted-foreground"
-                }`}
-              >
-                {exceedsCardLimit
-                  ? `Warning: this movement takes the card to ${formatMoney(projectedCardUsage, selectedCard.limitCurrency)}, above its ${formatMoney(selectedCard.creditLimit, selectedCard.limitCurrency)} limit. You can still save it.`
-                  : `${formatMoney(purchaseInLimitCurrency, selectedCard.limitCurrency)} will consume the card limit; ${formatMoney(selectedCard.creditLimit - projectedCardUsage, selectedCard.limitCurrency)} will remain available.`}
-              </div>
-            ) : null}
-
-            {creditCardId ? (
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">
-                  Amount debited from account
-                </span>
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={accountAmount}
-                  placeholder={String(purchaseInLimitCurrency || amount)}
-                  onChange={(event) => setAccountAmount(event.target.value)}
-                />
-              </label>
-            ) : null}
-
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Account</span>
@@ -647,53 +588,6 @@ export function RecordsView() {
                     ))}
                 </select>
               </label>
-              {creditCardId ? (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">
-                      Purchase currency
-                    </span>
-                    <select
-                      value={currency}
-                      onChange={(event) => {
-                        const nextCurrency = event.target.value as CurrencyCode;
-                        setCurrency(nextCurrency);
-                        const card = dataset.creditCards.find(
-                          (item) => item.id === creditCardId,
-                        );
-                        if (card?.limitCurrency === nextCurrency)
-                          setExchangeRateToLimitCurrency("1");
-                      }}
-                      className={fieldClassName}
-                    >
-                      {(
-                        ["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]
-                      ).map((item) => (
-                        <option key={item}>{item}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {dataset.creditCards.find((item) => item.id === creditCardId)
-                    ?.limitCurrency !== currency ? (
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">
-                        Rate to limit currency
-                      </span>
-                      <input
-                        value={exchangeRateToLimitCurrency}
-                        onChange={(event) =>
-                          setExchangeRateToLimitCurrency(event.target.value)
-                        }
-                        className={fieldClassName}
-                        type="number"
-                        min="0"
-                        step="0.000001"
-                      />
-                    </label>
-                  ) : null}
-                </div>
-              ) : null}
-
               {type === "transfer" ? (
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">

@@ -5,11 +5,10 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  Lock,
   Moon,
-  Palette,
   Plus,
   Save,
+  Settings2,
   Tags,
   Target,
   Trash2,
@@ -18,7 +17,6 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/wallet/category-icon";
@@ -34,7 +32,7 @@ import {
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Category, Tag } from "@shared/types";
+import type { Category, CurrencyCode, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -77,9 +75,22 @@ export function SettingsView() {
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#2563EB");
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
-  const [defaultAccountId, setDefaultAccountId] = useState(dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId ?? "");
-  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(dataset.settings.defaultCreditCardId ? `card:${dataset.settings.defaultCreditCardId}` : dataset.settings.defaultPaymentType);
-  const [defaultPaymentStatus, setDefaultPaymentStatus] = useState(dataset.settings.defaultPaymentStatus);
+  const [defaultAccountId, setDefaultAccountId] = useState(
+    dataset.settings.defaultAccountId ??
+      dataset.settings.primaryAccountId ??
+      "",
+  );
+  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(
+    dataset.settings.defaultCreditCardId
+      ? `card:${dataset.settings.defaultCreditCardId}`
+      : dataset.settings.defaultPaymentType,
+  );
+  const [defaultPaymentStatus, setDefaultPaymentStatus] = useState(
+    dataset.settings.defaultPaymentStatus,
+  );
+  const [primaryCurrency, setPrimaryCurrency] = useState<CurrencyCode>(
+    dataset.settings.primaryCurrency,
+  );
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const inlineFieldClassName =
@@ -93,11 +104,16 @@ export function SettingsView() {
   }
 
   async function saveRecordDefaults() {
-    const cardId = defaultPaymentMethod.startsWith("card:") ? defaultPaymentMethod.slice(5) : undefined;
+    const cardId = defaultPaymentMethod.startsWith("card:")
+      ? defaultPaymentMethod.slice(5)
+      : undefined;
     await updateWalletSettings({
       ...dataset.settings,
+      primaryCurrency,
       defaultAccountId: defaultAccountId || undefined,
-      defaultPaymentType: cardId ? "credit" : defaultPaymentMethod as typeof dataset.settings.defaultPaymentType,
+      defaultPaymentType: cardId
+        ? "credit"
+        : (defaultPaymentMethod as typeof dataset.settings.defaultPaymentType),
       defaultCreditCardId: cardId,
       defaultPaymentStatus,
     });
@@ -389,7 +405,9 @@ export function SettingsView() {
   }
 
   const editingCategoryIcon = editingCategoryIconId
-    ? dataset.categories.find((category) => category.id === editingCategoryIconId)
+    ? dataset.categories.find(
+        (category) => category.id === editingCategoryIconId,
+      )
     : undefined;
   const editingCategoryIconDraft = editingCategoryIcon
     ? getCategoryDraft(editingCategoryIcon)
@@ -404,52 +422,114 @@ export function SettingsView() {
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle className="flex items-center gap-2"><WalletCards className="h-4 w-4" />Record defaults</CardTitle></CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-            <label className="space-y-2"><span className="text-sm font-medium">Account</span><select className={fieldClassName} value={defaultAccountId} onChange={(event) => setDefaultAccountId(event.target.value)}>{dataset.accounts.filter((item) => item.isActive).map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-            <label className="space-y-2"><span className="text-sm font-medium">Payment method</span><select className={fieldClassName} value={defaultPaymentMethod} onChange={(event) => setDefaultPaymentMethod(event.target.value)}><option value="cash">Cash</option><option value="debit">Debit</option>{dataset.creditCards.filter((item) => item.isActive).map((item) => <option key={item.id} value={`card:${item.id}`}>Credit •••• {item.lastFour} — {item.name}</option>)}<option value="transfer">Transfer</option><option value="other">Other</option></select></label>
-            <label className="space-y-2"><span className="text-sm font-medium">Status</span><select className={fieldClassName} value={defaultPaymentStatus} onChange={(event) => setDefaultPaymentStatus(event.target.value as typeof defaultPaymentStatus)}><option value="cleared">Cleared</option><option value="pending">Pending</option><option value="cancelled">Cancelled</option></select></label>
-            <Button className="self-end" onClick={() => void saveRecordDefaults()}><Save className="h-4 w-4" />Save</Button>
+        <Card className="xl:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <WalletCards className="h-4 w-4" />
+              Defaults
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Account</span>
+              <select
+                className={fieldClassName}
+                value={defaultAccountId}
+                onChange={(event) => setDefaultAccountId(event.target.value)}
+              >
+                {dataset.accounts
+                  .filter((item) => item.isActive)
+                  .map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Payment method</span>
+              <select
+                className={fieldClassName}
+                value={defaultPaymentMethod}
+                onChange={(event) =>
+                  setDefaultPaymentMethod(event.target.value)
+                }
+              >
+                <option value="cash">Cash</option>
+                <option value="debit">Debit</option>
+                {dataset.creditCards
+                  .filter((item) => item.isActive)
+                  .map((item) => (
+                    <option key={item.id} value={`card:${item.id}`}>
+                      Credit •••• {item.lastFour} — {item.name}
+                    </option>
+                  ))}
+                <option value="transfer">Transfer</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Status</span>
+              <select
+                className={fieldClassName}
+                value={defaultPaymentStatus}
+                onChange={(event) =>
+                  setDefaultPaymentStatus(
+                    event.target.value as typeof defaultPaymentStatus,
+                  )
+                }
+              >
+                <option value="cleared">Cleared</option>
+                <option value="pending">Pending</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-medium">Primary currency</span>
+              <select
+                className={fieldClassName}
+                value={primaryCurrency}
+                onChange={(event) =>
+                  setPrimaryCurrency(event.target.value as CurrencyCode)
+                }
+              >
+                {(["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]).map(
+                  (currency) => (
+                    <option key={currency}>{currency}</option>
+                  ),
+                )}
+              </select>
+            </label>
+            <Button
+              className="self-end"
+              onClick={() => void saveRecordDefaults()}
+            >
+              <Save className="h-4 w-4" />
+              Save
+            </Button>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Palette className="h-4 w-4" />
-              Preferences
+              <Settings2 className="h-4 w-4" />
+              General
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex items-center justify-between rounded-md border p-3">
-              <div>
-                <p className="font-medium">Primary currency</p>
-                <p className="text-sm text-muted-foreground">For dashboard and reports</p>
-              </div>
-              <Badge>{dataset.settings.primaryCurrency}</Badge>
-            </div>
+          <CardContent className="grid gap-3 md:grid-cols-2">
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="font-medium">Theme</p>
-                <p className="text-sm text-muted-foreground">Light by default, dark as an alternative</p>
+                <p className="text-sm text-muted-foreground">
+                  Light by default, dark as an alternative
+                </p>
               </div>
               <Button variant="outline" onClick={toggleTheme}>
                 <Moon className="h-4 w-4" />
                 {theme}
               </Button>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              Security
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="font-medium">Local token</p>
@@ -484,7 +564,8 @@ export function SettingsView() {
                   <DialogHeader>
                     <DialogTitle>New category</DialogTitle>
                     <DialogDescription>
-                      Create a parent category or select a parent to create a child.
+                      Create a parent category or select a parent to create a
+                      child.
                     </DialogDescription>
                   </DialogHeader>
                   <form className="space-y-4" onSubmit={handleAddCategory}>
@@ -492,7 +573,9 @@ export function SettingsView() {
                       <span className="text-sm font-medium">Name</span>
                       <input
                         value={newCategoryName}
-                        onChange={(event) => setNewCategoryName(event.target.value)}
+                        onChange={(event) =>
+                          setNewCategoryName(event.target.value)
+                        }
                         className={fieldClassName}
                         placeholder="Groceries, Butcher, Rent..."
                       />
@@ -689,7 +772,9 @@ export function SettingsView() {
                         size="icon"
                         aria-label={`View records for ${tag.name}`}
                         title="View records"
-                        onClick={() => openRecords({ tagId: tag.id, type: "all" })}
+                        onClick={() =>
+                          openRecords({ tagId: tag.id, type: "all" })
+                        }
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -767,4 +852,3 @@ export function SettingsView() {
     </div>
   );
 }
-
