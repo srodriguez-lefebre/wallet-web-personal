@@ -4,7 +4,9 @@ export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "VALIDATION_ERROR"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "METHOD_NOT_ALLOWED"
+  | "SERVICE_UNAVAILABLE"
   | "INTERNAL_ERROR";
 
 export interface ApiError {

@@ -12,7 +12,12 @@ export const paymentTypeSchema = z.enum([
   "other",
 ]);
 
-export const paymentStatusSchema = z.enum(["cleared", "pending", "cancelled"]);
+export const paymentStatusSchema = z.enum([
+  "cleared",
+  "pending",
+  "needs_review",
+  "cancelled",
+]);
 
 export const debtDirectionSchema = z.enum(["payable", "receivable"]);
 
@@ -75,7 +80,11 @@ export const recordSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.type !== "transfer") {
-      if (!value.accountId) {
+      if (
+        !value.accountId &&
+        !value.creditCardId &&
+        value.paymentStatus !== "needs_review"
+      ) {
         ctx.addIssue({
           code: "custom",
           path: ["accountId"],
@@ -144,7 +153,9 @@ export const recordSchema = z
 export const creditCardSchema = z.object({
   name: z.string().min(1),
   issuer: z.string().min(1),
-  lastFour: z.string().regex(/^\d{4}$/, "Last four must contain exactly four digits"),
+  lastFour: z
+    .string()
+    .regex(/^\d{4}$/, "Last four must contain exactly four digits"),
   creditLimit: z.number().positive(),
   limitCurrency: currencySchema,
   closingDay: z.number().int().min(1).max(31),
@@ -200,13 +211,25 @@ export const creditCardRecordSchema = z
   })
   .superRefine((value, ctx) => {
     if (value.accountImpactAtCreation && !value.accountId) {
-      ctx.addIssue({ code: "custom", path: ["accountId"], message: "Account is required" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["accountId"],
+        message: "Account is required",
+      });
     }
     if (value.accountId && value.accountAmount === undefined) {
-      ctx.addIssue({ code: "custom", path: ["accountAmount"], message: "Account amount is required" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["accountAmount"],
+        message: "Account amount is required",
+      });
     }
     if (value.kind === "refund" && !value.originalRecordId) {
-      ctx.addIssue({ code: "custom", path: ["originalRecordId"], message: "Original movement is required" });
+      ctx.addIssue({
+        code: "custom",
+        path: ["originalRecordId"],
+        message: "Original movement is required",
+      });
     }
   });
 
@@ -218,7 +241,9 @@ export const goalSchema = z.object({
   icon: z.string().min(1),
   isVisible: z.boolean().default(true),
   deadline: z.string().optional(),
-  status: z.enum(["active", "completed", "paused", "cancelled"]).default("active"),
+  status: z
+    .enum(["active", "completed", "paused", "cancelled"])
+    .default("active"),
   tagIds: z.array(z.string()).default([]),
   accountId: z.string().optional(),
   note: z.string().optional(),
@@ -334,3 +359,41 @@ export const settingsSchema = z.object({
 export const unlockSchema = z.object({
   token: z.string().min(1),
 });
+
+const optionalUuidSchema = z.string().uuid().optional();
+
+export const mailIngestionSchema = z.object({
+  idempotencyKey: z.string().min(8).max(300),
+  integration: z.object({
+    name: z.string().min(1).max(100),
+    version: z.string().min(1).max(100),
+  }),
+  email: z.object({
+    provider: z.literal("gmail"),
+    messageId: z.string().min(1).max(300),
+    threadId: z.string().min(1).max(300),
+    subject: z.string().max(500).default(""),
+    from: z.string().max(500).default(""),
+    date: z.string().datetime(),
+  }),
+  transaction: z.object({
+    source: z.string().min(1).max(100),
+    sourceLabel: z.string().max(100).default(""),
+    occurredAt: z.string().datetime(),
+    amount: z.number().nonnegative(),
+    currency: currencySchema,
+    merchantRaw: z.string().min(1).max(500),
+    cardAlias: z.string().max(200).default(""),
+    cardBrand: z.string().max(100).default(""),
+    cardNumber: z.string().max(100).default(""),
+    paymentType: z.literal("credit_card"),
+  }),
+  destination: z
+    .object({
+      accountId: optionalUuidSchema,
+      creditCardId: optionalUuidSchema,
+    })
+    .default({}),
+});
+
+export type MailIngestionInput = z.infer<typeof mailIngestionSchema>;

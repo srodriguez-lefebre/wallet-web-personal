@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
 import {
@@ -52,7 +52,10 @@ type NewTag = Omit<Tag, "id">;
 type NewRecord = Omit<WalletRecord, "id">;
 type NewCreditCard = Omit<CreditCard, "id">;
 type NewCreditCardPayment = Omit<CreditCardPayment, "id" | "creditCardId">;
-type NewCreditCardRecord = Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">;
+type NewCreditCardRecord = Omit<
+  CreditCardRecord,
+  "id" | "creditCardId" | "walletRecordId" | "statementId"
+>;
 type NewGoal = Omit<Goal, "id">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
@@ -75,11 +78,15 @@ function optional<T>(value: T | null | undefined) {
 
 function asIso(value: Date | string | null | undefined) {
   if (!value) return undefined;
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }
 
 function asRequiredIso(value: Date | string) {
-  return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
+  return value instanceof Date
+    ? value.toISOString()
+    : new Date(value).toISOString();
 }
 
 function toDate(value: string | undefined) {
@@ -125,6 +132,7 @@ function mapCategory(row: typeof categories.$inferSelect): Category {
     parentId: optional(row.parentId),
     color: row.color,
     icon: row.icon,
+    systemKey: optional(row.systemKey),
   };
 }
 
@@ -147,7 +155,8 @@ function mapRecord(
     amount: asNumber(row.amount),
     currency: row.currency as WalletRecord["currency"],
     accountId: optional(row.accountId),
-    accountAmount: row.accountAmount === null ? undefined : asNumber(row.accountAmount),
+    accountAmount:
+      row.accountAmount === null ? undefined : asNumber(row.accountAmount),
     creditCardId: optional(row.creditCardId),
     destinationAccountId: optional(row.destinationAccountId),
     categoryId: optional(row.categoryId),
@@ -206,7 +215,9 @@ function mapCreditCardPayment(
   };
 }
 
-function mapCreditCardRecord(row: typeof creditCardRecords.$inferSelect): CreditCardRecord {
+function mapCreditCardRecord(
+  row: typeof creditCardRecords.$inferSelect,
+): CreditCardRecord {
   return {
     id: row.id,
     creditCardId: row.creditCardId,
@@ -222,13 +233,16 @@ function mapCreditCardRecord(row: typeof creditCardRecords.$inferSelect): Credit
     counterpartyName: optional(row.counterpartyName),
     note: optional(row.note),
     accountId: optional(row.accountId),
-    accountAmount: row.accountAmount === null ? undefined : asNumber(row.accountAmount),
+    accountAmount:
+      row.accountAmount === null ? undefined : asNumber(row.accountAmount),
     accountImpactAtCreation: row.accountImpactAtCreation,
     occurredAt: asRequiredIso(row.occurredAt),
   };
 }
 
-function mapCreditCardStatement(row: typeof creditCardStatements.$inferSelect): CreditCardStatement {
+function mapCreditCardStatement(
+  row: typeof creditCardStatements.$inferSelect,
+): CreditCardStatement {
   return {
     id: row.id,
     creditCardId: row.creditCardId,
@@ -310,6 +324,7 @@ function mapExchangeRate(row: typeof exchangeRates.$inferSelect): ExchangeRate {
     toCurrency: row.toCurrency as ExchangeRate["toCurrency"],
     rate: asNumber(row.rate),
     date: asRequiredIso(row.date),
+    source: row.source,
   };
 }
 
@@ -386,15 +401,19 @@ function mapInstallmentPlan(
   };
 }
 
-function mapSettings(row: typeof settings.$inferSelect | undefined): WalletSettings {
+function mapSettings(
+  row: typeof settings.$inferSelect | undefined,
+): WalletSettings {
   return {
-    primaryCurrency: (row?.primaryCurrency ?? "UYU") as WalletSettings["primaryCurrency"],
+    primaryCurrency: (row?.primaryCurrency ??
+      "UYU") as WalletSettings["primaryCurrency"],
     primaryAccountId: optional(row?.primaryAccountId),
     theme: (row?.theme ?? "light") as WalletSettings["theme"],
     defaultDashboardPreset: (row?.defaultDashboardPreset ??
       "general") as WalletSettings["defaultDashboardPreset"],
     locale: "es-UY",
-    includeHiddenAccountsInReports: row?.includeHiddenAccountsInReports ?? false,
+    includeHiddenAccountsInReports:
+      row?.includeHiddenAccountsInReports ?? false,
     defaultAccountId: optional(row?.defaultAccountId ?? row?.primaryAccountId),
     defaultPaymentType: row?.defaultPaymentType ?? "debit",
     defaultCreditCardId: optional(row?.defaultCreditCardId),
@@ -402,7 +421,9 @@ function mapSettings(row: typeof settings.$inferSelect | undefined): WalletSetti
   };
 }
 
-export async function getWalletDataset(db: Db = createDb()): Promise<WalletDataset> {
+export async function getWalletDataset(
+  db: Db = createDb(),
+): Promise<WalletDataset> {
   await ensureCreditCardStatements(db);
   const [
     settingsRows,
@@ -435,8 +456,15 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
       .select()
       .from(creditCardPayments)
       .orderBy(desc(creditCardPayments.occurredAt)),
-    db.select().from(creditCardRecords).where(isNull(creditCardRecords.deletedAt)).orderBy(desc(creditCardRecords.occurredAt)),
-    db.select().from(creditCardStatements).orderBy(desc(creditCardStatements.cycleEnd)),
+    db
+      .select()
+      .from(creditCardRecords)
+      .where(isNull(creditCardRecords.deletedAt))
+      .orderBy(desc(creditCardRecords.occurredAt)),
+    db
+      .select()
+      .from(creditCardStatements)
+      .orderBy(desc(creditCardStatements.cycleEnd)),
     db.select().from(creditCardPaymentAllocations),
     db
       .select()
@@ -446,7 +474,10 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     db.select().from(recordTags),
     db.select().from(goals).where(isNull(goals.deletedAt)),
     db.select().from(goalTags),
-    db.select().from(goalReservations).orderBy(desc(goalReservations.createdAt)),
+    db
+      .select()
+      .from(goalReservations)
+      .orderBy(desc(goalReservations.createdAt)),
     db.select().from(budgets),
     db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)),
     db.select().from(investments).orderBy(desc(investments.startedAt)),
@@ -467,7 +498,9 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
     creditCardRecords: creditCardRecordRows.map(mapCreditCardRecord),
     creditCardStatements: creditCardStatementRows.map(mapCreditCardStatement),
     creditCardPayments: creditCardPaymentRows.map(mapCreditCardPayment),
-    creditCardPaymentAllocations: creditCardAllocationRows.map(mapCreditCardPaymentAllocation),
+    creditCardPaymentAllocations: creditCardAllocationRows.map(
+      mapCreditCardPaymentAllocation,
+    ),
     records: recordRows.map((record) => mapRecord(record, tagIdsByRecord)),
     goals: goalRows.map((goal) => mapGoal(goal, tagIdsByGoal)),
     goalReservations: goalReservationRows.map(mapGoalReservation),
@@ -481,16 +514,25 @@ export async function getWalletDataset(db: Db = createDb()): Promise<WalletDatas
 }
 
 export async function listAccounts(db: Db = createDb()) {
-  const rows = await db.select().from(accounts).where(isNull(accounts.deletedAt));
+  const rows = await db
+    .select()
+    .from(accounts)
+    .where(isNull(accounts.deletedAt));
   return rows.map(mapAccount);
 }
 
 export async function listCreditCards(db: Db = createDb()) {
-  const rows = await db.select().from(creditCards).orderBy(desc(creditCards.createdAt));
+  const rows = await db
+    .select()
+    .from(creditCards)
+    .orderBy(desc(creditCards.createdAt));
   return rows.map(mapCreditCard);
 }
 
-export async function createCreditCard(input: NewCreditCard, db: Db = createDb()) {
+export async function createCreditCard(
+  input: NewCreditCard,
+  db: Db = createDb(),
+) {
   const [row] = await db
     .insert(creditCards)
     .values({
@@ -525,7 +567,14 @@ export async function archiveCreditCard(id: string, db: Db = createDb()) {
     .set({ isActive: false, deletedAt: new Date(), updatedAt: new Date() })
     .where(eq(creditCards.id, id))
     .returning();
-  await db.update(settings).set({ defaultPaymentType: "cash", defaultCreditCardId: null, updatedAt: new Date() }).where(eq(settings.defaultCreditCardId, id));
+  await db
+    .update(settings)
+    .set({
+      defaultPaymentType: "cash",
+      defaultCreditCardId: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(settings.defaultCreditCardId, id));
   return Boolean(row);
 }
 
@@ -552,62 +601,114 @@ export async function createCreditCardPayment(
 }
 
 function dayInMonth(year: number, month: number, day: number) {
-  return new Date(Date.UTC(year, month, Math.min(day, new Date(Date.UTC(year, month + 1, 0)).getUTCDate()), 23, 59, 59, 999));
+  return new Date(
+    Date.UTC(
+      year,
+      month,
+      Math.min(day, new Date(Date.UTC(year, month + 1, 0)).getUTCDate()),
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
 }
 
 function cardCycle(card: CreditCard, occurredAt: Date) {
   const year = occurredAt.getUTCFullYear();
   const month = occurredAt.getUTCMonth();
   let cycleEnd = dayInMonth(year, month, card.closingDay);
-  if (occurredAt > cycleEnd) cycleEnd = dayInMonth(year, month + 1, card.closingDay);
-  const previousEnd = dayInMonth(cycleEnd.getUTCFullYear(), cycleEnd.getUTCMonth() - 1, card.closingDay);
+  if (occurredAt > cycleEnd)
+    cycleEnd = dayInMonth(year, month + 1, card.closingDay);
+  const previousEnd = dayInMonth(
+    cycleEnd.getUTCFullYear(),
+    cycleEnd.getUTCMonth() - 1,
+    card.closingDay,
+  );
   const cycleStart = new Date(previousEnd.getTime() + 1);
-  const dueMonth = card.dueDay > card.closingDay ? cycleEnd.getUTCMonth() : cycleEnd.getUTCMonth() + 1;
+  const dueMonth =
+    card.dueDay > card.closingDay
+      ? cycleEnd.getUTCMonth()
+      : cycleEnd.getUTCMonth() + 1;
   const dueAt = dayInMonth(cycleEnd.getUTCFullYear(), dueMonth, card.dueDay);
   return { cycleStart, cycleEnd, dueAt };
 }
 
 export async function ensureCreditCardStatements(db: Db = createDb()) {
   const cardRows = await db.select().from(creditCards);
-  const movementRows = await db.select().from(creditCardRecords).where(
-    and(isNull(creditCardRecords.deletedAt), isNull(creditCardRecords.statementId)),
-  );
+  const movementRows = await db
+    .select()
+    .from(creditCardRecords)
+    .where(
+      and(
+        isNull(creditCardRecords.deletedAt),
+        isNull(creditCardRecords.statementId),
+      ),
+    );
   const now = new Date();
   for (const movement of movementRows) {
     const card = cardRows.find((item) => item.id === movement.creditCardId);
     if (!card) continue;
     const cycle = cardCycle(mapCreditCard(card), movement.occurredAt);
     if (cycle.cycleEnd > now) continue;
-    let [statement] = await db.select().from(creditCardStatements).where(and(
-      eq(creditCardStatements.creditCardId, card.id),
-      eq(creditCardStatements.cycleStart, cycle.cycleStart),
-      eq(creditCardStatements.cycleEnd, cycle.cycleEnd),
-    )).limit(1);
+    let [statement] = await db
+      .select()
+      .from(creditCardStatements)
+      .where(
+        and(
+          eq(creditCardStatements.creditCardId, card.id),
+          eq(creditCardStatements.cycleStart, cycle.cycleStart),
+          eq(creditCardStatements.cycleEnd, cycle.cycleEnd),
+        ),
+      )
+      .limit(1);
     if (!statement) {
-      [statement] = await db.insert(creditCardStatements).values({
-        creditCardId: card.id,
-        ...cycle,
-        closedAt: cycle.cycleEnd,
-      }).returning();
+      [statement] = await db
+        .insert(creditCardStatements)
+        .values({
+          creditCardId: card.id,
+          ...cycle,
+          closedAt: cycle.cycleEnd,
+        })
+        .returning();
     }
-    await db.update(creditCardRecords).set({ statementId: statement.id, updatedAt: now }).where(and(
-      eq(creditCardRecords.creditCardId, card.id),
-      isNull(creditCardRecords.statementId),
-      // Records are assigned individually so a future movement never leaks into this statement.
-      eq(creditCardRecords.id, movement.id),
-    ));
+    await db
+      .update(creditCardRecords)
+      .set({ statementId: statement.id, updatedAt: now })
+      .where(
+        and(
+          eq(creditCardRecords.creditCardId, card.id),
+          isNull(creditCardRecords.statementId),
+          // Records are assigned individually so a future movement never leaks into this statement.
+          eq(creditCardRecords.id, movement.id),
+        ),
+      );
   }
-  await db.update(creditCardStatements).set({ status: "overdue", updatedAt: now }).where(and(
-    lt(creditCardStatements.dueAt, now),
-    eq(creditCardStatements.status, "pending"),
-  ));
+  await db
+    .update(creditCardStatements)
+    .set({ status: "overdue", updatedAt: now })
+    .where(
+      and(
+        lt(creditCardStatements.dueAt, now),
+        eq(creditCardStatements.status, "pending"),
+      ),
+    );
 }
 
-export async function listCreditCardRecords(creditCardId: string, db: Db = createDb()) {
-  const rows = await db.select().from(creditCardRecords).where(and(
-    eq(creditCardRecords.creditCardId, creditCardId),
-    isNull(creditCardRecords.deletedAt),
-  )).orderBy(desc(creditCardRecords.occurredAt));
+export async function listCreditCardRecords(
+  creditCardId: string,
+  db: Db = createDb(),
+) {
+  const rows = await db
+    .select()
+    .from(creditCardRecords)
+    .where(
+      and(
+        eq(creditCardRecords.creditCardId, creditCardId),
+        isNull(creditCardRecords.deletedAt),
+      ),
+    )
+    .orderBy(desc(creditCardRecords.occurredAt));
   return rows.map(mapCreditCardRecord);
 }
 
@@ -619,16 +720,29 @@ export async function createCreditCardRecord(
   let walletRecordId: string | null = null;
   let walletRefundValues: typeof records.$inferInsert | undefined;
   if (input.kind === "refund" && input.originalRecordId) {
-    const [original] = await db.select().from(creditCardRecords).where(and(
-      eq(creditCardRecords.id, input.originalRecordId),
-      eq(creditCardRecords.creditCardId, creditCardId),
-    )).limit(1);
+    const [original] = await db
+      .select()
+      .from(creditCardRecords)
+      .where(
+        and(
+          eq(creditCardRecords.id, input.originalRecordId),
+          eq(creditCardRecords.creditCardId, creditCardId),
+        ),
+      )
+      .limit(1);
     if (!original) throw new Error("Original movement not found");
-    if (input.amountInLimitCurrency > asNumber(original.amountInLimitCurrency) + 0.005) {
+    if (
+      input.amountInLimitCurrency >
+      asNumber(original.amountInLimitCurrency) + 0.005
+    ) {
       throw new Error("Refund exceeds original movement");
     }
     if (original.walletRecordId && original.accountId) {
-      const [account] = await db.select().from(accounts).where(eq(accounts.id, original.accountId)).limit(1);
+      const [account] = await db
+        .select()
+        .from(accounts)
+        .where(eq(accounts.id, original.accountId))
+        .limit(1);
       walletRecordId = randomUUID();
       walletRefundValues = {
         id: walletRecordId,
@@ -663,16 +777,21 @@ export async function createCreditCardRecord(
     counterpartyName: input.counterpartyName ?? null,
     note: input.note ?? null,
     accountId: input.accountId ?? null,
-    accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
+    accountAmount:
+      input.accountAmount === undefined ? null : decimal(input.accountAmount),
     accountImpactAtCreation: input.accountImpactAtCreation,
     occurredAt: new Date(input.occurredAt),
   };
   const row = walletRefundValues
-    ? (await db.batch([
-        db.insert(records).values(walletRefundValues),
-        db.insert(creditCardRecords).values(movementValues).returning(),
-      ]))[1][0]
-    : (await db.insert(creditCardRecords).values(movementValues).returning())[0];
+    ? (
+        await db.batch([
+          db.insert(records).values(walletRefundValues),
+          db.insert(creditCardRecords).values(movementValues).returning(),
+        ])
+      )[1][0]
+    : (
+        await db.insert(creditCardRecords).values(movementValues).returning()
+      )[0];
   return mapCreditCardRecord(row);
 }
 
@@ -682,35 +801,65 @@ export async function updateCreditCardRecord(
   input: NewCreditCardRecord,
   db: Db = createDb(),
 ) {
-  const [row] = await db.update(creditCardRecords).set({
-    originalRecordId: input.originalRecordId ?? null,
-    kind: input.kind,
-    amount: decimal(input.amount),
-    currency: input.currency,
-    amountInLimitCurrency: decimal(input.amountInLimitCurrency),
-    exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency),
-    categoryId: input.categoryId,
-    counterpartyName: input.counterpartyName ?? null,
-    note: input.note ?? null,
-    accountId: input.accountId ?? null,
-    accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
-    accountImpactAtCreation: input.accountImpactAtCreation,
-    occurredAt: new Date(input.occurredAt),
-    updatedAt: new Date(),
-  }).where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId))).returning();
+  const [row] = await db
+    .update(creditCardRecords)
+    .set({
+      originalRecordId: input.originalRecordId ?? null,
+      kind: input.kind,
+      amount: decimal(input.amount),
+      currency: input.currency,
+      amountInLimitCurrency: decimal(input.amountInLimitCurrency),
+      exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency),
+      categoryId: input.categoryId,
+      counterpartyName: input.counterpartyName ?? null,
+      note: input.note ?? null,
+      accountId: input.accountId ?? null,
+      accountAmount:
+        input.accountAmount === undefined ? null : decimal(input.accountAmount),
+      accountImpactAtCreation: input.accountImpactAtCreation,
+      occurredAt: new Date(input.occurredAt),
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(creditCardRecords.id, id),
+        eq(creditCardRecords.creditCardId, creditCardId),
+        isNull(creditCardRecords.walletRecordId),
+      ),
+    )
+    .returning();
   return row ? mapCreditCardRecord(row) : null;
 }
 
-export async function deleteCreditCardRecord(creditCardId: string, id: string, db: Db = createDb()) {
-  const [row] = await db.update(creditCardRecords).set({ deletedAt: new Date(), updatedAt: new Date() }).where(and(
-    eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId),
-  )).returning();
+export async function deleteCreditCardRecord(
+  creditCardId: string,
+  id: string,
+  db: Db = createDb(),
+) {
+  const [row] = await db
+    .update(creditCardRecords)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(creditCardRecords.id, id),
+        eq(creditCardRecords.creditCardId, creditCardId),
+        isNull(creditCardRecords.walletRecordId),
+      ),
+    )
+    .returning();
   return Boolean(row);
 }
 
-export async function listCreditCardStatements(creditCardId: string, db: Db = createDb()) {
+export async function listCreditCardStatements(
+  creditCardId: string,
+  db: Db = createDb(),
+) {
   await ensureCreditCardStatements(db);
-  const rows = await db.select().from(creditCardStatements).where(eq(creditCardStatements.creditCardId, creditCardId)).orderBy(desc(creditCardStatements.cycleEnd));
+  const rows = await db
+    .select()
+    .from(creditCardStatements)
+    .where(eq(creditCardStatements.creditCardId, creditCardId))
+    .orderBy(desc(creditCardStatements.cycleEnd));
   return rows.map(mapCreditCardStatement);
 }
 
@@ -720,67 +869,167 @@ export async function payCreditCardStatement(
   input: NewCreditCardPayment,
   db: Db = createDb(),
 ) {
-  const purchases = await db.select().from(creditCardRecords).where(and(
-    eq(creditCardRecords.creditCardId, creditCardId),
-    eq(creditCardRecords.statementId, statementId),
-    eq(creditCardRecords.kind, "purchase"),
-    isNull(creditCardRecords.deletedAt),
-  )).orderBy(creditCardRecords.occurredAt);
-  const existing = await db.select({ recordId: creditCardPaymentAllocations.creditCardRecordId, amount: creditCardPaymentAllocations.amountInLimitCurrency })
+  const purchases = await db
+    .select()
+    .from(creditCardRecords)
+    .where(
+      and(
+        eq(creditCardRecords.creditCardId, creditCardId),
+        eq(creditCardRecords.statementId, statementId),
+        eq(creditCardRecords.kind, "purchase"),
+        isNull(creditCardRecords.deletedAt),
+      ),
+    )
+    .orderBy(creditCardRecords.occurredAt);
+  const existing = await db
+    .select({
+      recordId: creditCardPaymentAllocations.creditCardRecordId,
+      amount: creditCardPaymentAllocations.amountInLimitCurrency,
+    })
     .from(creditCardPaymentAllocations)
-    .innerJoin(creditCardPayments, eq(creditCardPayments.id, creditCardPaymentAllocations.paymentId))
+    .innerJoin(
+      creditCardPayments,
+      eq(creditCardPayments.id, creditCardPaymentAllocations.paymentId),
+    )
     .where(eq(creditCardPayments.statementId, statementId));
   const paidByRecord = new Map<string, number>();
-  existing.forEach((item) => paidByRecord.set(item.recordId, (paidByRecord.get(item.recordId) ?? 0) + asNumber(item.amount)));
-  const refunds = await db.select().from(creditCardRecords).where(and(eq(creditCardRecords.creditCardId, creditCardId), eq(creditCardRecords.kind, "refund"), isNull(creditCardRecords.deletedAt)));
+  existing.forEach((item) =>
+    paidByRecord.set(
+      item.recordId,
+      (paidByRecord.get(item.recordId) ?? 0) + asNumber(item.amount),
+    ),
+  );
+  const refunds = await db
+    .select()
+    .from(creditCardRecords)
+    .where(
+      and(
+        eq(creditCardRecords.creditCardId, creditCardId),
+        eq(creditCardRecords.kind, "refund"),
+        isNull(creditCardRecords.deletedAt),
+      ),
+    );
   const refundedByRecord = new Map<string, number>();
-  refunds.forEach((item) => { if (item.originalRecordId) refundedByRecord.set(item.originalRecordId, (refundedByRecord.get(item.originalRecordId) ?? 0) + asNumber(item.amountInLimitCurrency)); });
-  const availableFor = (row: typeof purchases[number]) => Math.max(0, asNumber(row.amountInLimitCurrency) - (paidByRecord.get(row.id) ?? 0) - (refundedByRecord.get(row.id) ?? 0));
-  const outstanding = purchases.reduce((sum, row) => sum + availableFor(row), 0);
-  if (input.amountInLimitCurrency > outstanding + 0.005) throw new Error("Payment exceeds statement balance");
+  refunds.forEach((item) => {
+    if (item.originalRecordId)
+      refundedByRecord.set(
+        item.originalRecordId,
+        (refundedByRecord.get(item.originalRecordId) ?? 0) +
+          asNumber(item.amountInLimitCurrency),
+      );
+  });
+  const availableFor = (row: (typeof purchases)[number]) =>
+    Math.max(
+      0,
+      asNumber(row.amountInLimitCurrency) -
+        (paidByRecord.get(row.id) ?? 0) -
+        (refundedByRecord.get(row.id) ?? 0),
+    );
+  const outstanding = purchases.reduce(
+    (sum, row) => sum + availableFor(row),
+    0,
+  );
+  if (input.amountInLimitCurrency > outstanding + 0.005)
+    throw new Error("Payment exceeds statement balance");
   let remaining = input.amountInLimitCurrency;
-  const drafts: Array<{ purchase: typeof purchases[number]; allocated: number }> = [];
+  const drafts: Array<{
+    purchase: (typeof purchases)[number];
+    allocated: number;
+  }> = [];
   for (const purchase of purchases) {
     const allocated = Math.min(availableFor(purchase), remaining);
     if (allocated > 0) drafts.push({ purchase, allocated });
     remaining -= allocated;
     if (remaining <= 0.005) break;
   }
-  const unaccountedLimitAmount = drafts.filter(({ purchase }) => !purchase.accountImpactAtCreation).reduce((sum, item) => sum + item.allocated, 0);
-  const accountRatio = input.amountInLimitCurrency > 0 ? unaccountedLimitAmount / input.amountInLimitCurrency : 0;
-  const effectiveAccountAmount = input.accountId && input.accountAmount !== undefined && accountRatio > 0 ? input.accountAmount * accountRatio : undefined;
+  const unaccountedLimitAmount = drafts
+    .filter(({ purchase }) => !purchase.accountImpactAtCreation)
+    .reduce((sum, item) => sum + item.allocated, 0);
+  const accountRatio =
+    input.amountInLimitCurrency > 0
+      ? unaccountedLimitAmount / input.amountInLimitCurrency
+      : 0;
+  const effectiveAccountAmount =
+    input.accountId && input.accountAmount !== undefined && accountRatio > 0
+      ? input.accountAmount * accountRatio
+      : undefined;
   const paymentId = randomUUID();
   const paymentValues = {
     id: paymentId,
-    creditCardId, statementId, amount: decimal(input.amount), currency: input.currency,
-    amountInLimitCurrency: decimal(input.amountInLimitCurrency), accountId: effectiveAccountAmount === undefined ? null : input.accountId,
-    accountAmount: effectiveAccountAmount === undefined ? null : decimal(effectiveAccountAmount),
-    occurredAt: new Date(input.occurredAt), note: input.note ?? null,
+    creditCardId,
+    statementId,
+    amount: decimal(input.amount),
+    currency: input.currency,
+    amountInLimitCurrency: decimal(input.amountInLimitCurrency),
+    accountId: effectiveAccountAmount === undefined ? null : input.accountId,
+    accountAmount:
+      effectiveAccountAmount === undefined
+        ? null
+        : decimal(effectiveAccountAmount),
+    occurredAt: new Date(input.occurredAt),
+    note: input.note ?? null,
   };
-  const allocations = drafts.map(({ purchase, allocated }) => ({ paymentId, creditCardRecordId: purchase.id, amount: decimal(allocated / asNumber(purchase.exchangeRateToLimitCurrency)), amountInLimitCurrency: decimal(allocated) }));
-  const nextStatus = input.amountInLimitCurrency >= outstanding - 0.005 ? "paid" : "partial";
-  const statementUpdate = db.update(creditCardStatements).set({ status: nextStatus, paidAt: nextStatus === "paid" ? new Date(input.occurredAt) : null, updatedAt: new Date() }).where(eq(creditCardStatements.id, statementId));
+  const allocations = drafts.map(({ purchase, allocated }) => ({
+    paymentId,
+    creditCardRecordId: purchase.id,
+    amount: decimal(allocated / asNumber(purchase.exchangeRateToLimitCurrency)),
+    amountInLimitCurrency: decimal(allocated),
+  }));
+  const nextStatus =
+    input.amountInLimitCurrency >= outstanding - 0.005 ? "paid" : "partial";
+  const statementUpdate = db
+    .update(creditCardStatements)
+    .set({
+      status: nextStatus,
+      paidAt: nextStatus === "paid" ? new Date(input.occurredAt) : null,
+      updatedAt: new Date(),
+    })
+    .where(eq(creditCardStatements.id, statementId));
   const payment = allocations.length
-    ? (await db.batch([
-        db.insert(creditCardPayments).values(paymentValues).returning(),
-        db.insert(creditCardPaymentAllocations).values(allocations),
-        statementUpdate,
-      ]))[0][0]
-    : (await db.batch([
-        db.insert(creditCardPayments).values(paymentValues).returning(),
-        statementUpdate,
-      ]))[0][0];
+    ? (
+        await db.batch([
+          db.insert(creditCardPayments).values(paymentValues).returning(),
+          db.insert(creditCardPaymentAllocations).values(allocations),
+          statementUpdate,
+        ])
+      )[0][0]
+    : (
+        await db.batch([
+          db.insert(creditCardPayments).values(paymentValues).returning(),
+          statementUpdate,
+        ])
+      )[0][0];
   return mapCreditCardPayment(payment);
 }
 
-export async function deleteCreditCardPayment(creditCardId: string, paymentId: string, db: Db = createDb()) {
-  const [payment] = await db.select().from(creditCardPayments).where(and(eq(creditCardPayments.id, paymentId), eq(creditCardPayments.creditCardId, creditCardId))).limit(1);
+export async function deleteCreditCardPayment(
+  creditCardId: string,
+  paymentId: string,
+  db: Db = createDb(),
+) {
+  const [payment] = await db
+    .select()
+    .from(creditCardPayments)
+    .where(
+      and(
+        eq(creditCardPayments.id, paymentId),
+        eq(creditCardPayments.creditCardId, creditCardId),
+      ),
+    )
+    .limit(1);
   if (!payment) return false;
-  if (payment.statementId) await db.batch([
-    db.delete(creditCardPayments).where(eq(creditCardPayments.id, paymentId)),
-    db.update(creditCardStatements).set({ status: "partial", paidAt: null, updatedAt: new Date() }).where(eq(creditCardStatements.id, payment.statementId)),
-  ]);
-  else await db.delete(creditCardPayments).where(eq(creditCardPayments.id, paymentId));
+  if (payment.statementId)
+    await db.batch([
+      db.delete(creditCardPayments).where(eq(creditCardPayments.id, paymentId)),
+      db
+        .update(creditCardStatements)
+        .set({ status: "partial", paidAt: null, updatedAt: new Date() })
+        .where(eq(creditCardStatements.id, payment.statementId)),
+    ]);
+  else
+    await db
+      .delete(creditCardPayments)
+      .where(eq(creditCardPayments.id, paymentId));
   return true;
 }
 
@@ -822,9 +1071,18 @@ export async function deleteAccount(id: string, db: Db = createDb()) {
         or(eq(records.accountId, id), eq(records.destinationAccountId, id)),
       ),
     );
-  await db.update(goals).set({ accountId: null }).where(eq(goals.accountId, id));
-  await db.update(budgets).set({ accountId: null }).where(eq(budgets.accountId, id));
-  await db.update(debts).set({ accountId: null }).where(eq(debts.accountId, id));
+  await db
+    .update(goals)
+    .set({ accountId: null })
+    .where(eq(goals.accountId, id));
+  await db
+    .update(budgets)
+    .set({ accountId: null })
+    .where(eq(budgets.accountId, id));
+  await db
+    .update(debts)
+    .set({ accountId: null })
+    .where(eq(debts.accountId, id));
   await db
     .update(recurringDebts)
     .set({ accountId: null, updatedAt: new Date() })
@@ -893,11 +1151,26 @@ async function categoryTreeIds(id: string, db: Db) {
 
 export async function deleteCategory(id: string, db: Db = createDb()) {
   const ids = await categoryTreeIds(id, db);
-  await db.update(records).set({ categoryId: null }).where(inArray(records.categoryId, ids));
-  await db.update(budgets).set({ categoryId: null }).where(inArray(budgets.categoryId, ids));
+  const protectedRows = await db
+    .select({ id: categories.id })
+    .from(categories)
+    .where(and(inArray(categories.id, ids), isNotNull(categories.systemKey)));
+  if (protectedRows.length > 0) return false;
+  await db
+    .update(records)
+    .set({ categoryId: null })
+    .where(inArray(records.categoryId, ids));
+  await db
+    .update(budgets)
+    .set({ categoryId: null })
+    .where(inArray(budgets.categoryId, ids));
   await db.delete(debts).where(inArray(debts.categoryId, ids));
-  await db.delete(recurringDebts).where(inArray(recurringDebts.categoryId, ids));
-  await db.delete(installmentPlans).where(inArray(installmentPlans.categoryId, ids));
+  await db
+    .delete(recurringDebts)
+    .where(inArray(recurringDebts.categoryId, ids));
+  await db
+    .delete(installmentPlans)
+    .where(inArray(installmentPlans.categoryId, ids));
 
   for (const categoryId of ids.reverse()) {
     await db.delete(categories).where(eq(categories.id, categoryId));
@@ -916,7 +1189,11 @@ export async function createTag(input: NewTag, db: Db = createDb()) {
   return mapTag(row);
 }
 
-export async function updateTag(id: string, input: NewTag, db: Db = createDb()) {
+export async function updateTag(
+  id: string,
+  input: NewTag,
+  db: Db = createDb(),
+) {
   const [row] = await db
     .update(tags)
     .set({
@@ -952,7 +1229,8 @@ export async function listRecords(
   if (filters.accountId) clauses.push(eq(records.accountId, filters.accountId));
   if (filters.creditCardId)
     clauses.push(eq(records.creditCardId, filters.creditCardId));
-  if (filters.categoryId) clauses.push(eq(records.categoryId, filters.categoryId));
+  if (filters.categoryId)
+    clauses.push(eq(records.categoryId, filters.categoryId));
 
   const rows = await db
     .select()
@@ -980,51 +1258,58 @@ async function replaceRecordTags(recordId: string, tagIds: string[], db: Db) {
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
   const recordId = randomUUID();
   const recordValues = {
-      id: recordId,
-      type: input.type,
-      amount: decimal(input.amount),
-      currency: input.currency,
-      accountId: input.accountId ?? null,
-      accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
-      creditCardId: input.creditCardId ?? null,
-      destinationAccountId: input.destinationAccountId ?? null,
-      categoryId: input.categoryId ?? null,
-      counterpartyName: input.counterpartyName ?? null,
-      paymentType: input.paymentType,
-      paymentStatus: input.paymentStatus,
-      exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
-      amountInLimitCurrency:
-        input.amountInLimitCurrency === undefined
-          ? null
-          : decimal(input.amountInLimitCurrency),
-      exchangeRateToLimitCurrency:
-        input.exchangeRateToLimitCurrency === undefined
-          ? null
-          : decimal(input.exchangeRateToLimitCurrency),
-      occurredAt: new Date(input.occurredAt),
-      note: input.note ?? null,
-      isFixed: input.isFixed ?? false,
-      debtId: input.debtId ?? null,
-    };
+    id: recordId,
+    type: input.type,
+    amount: decimal(input.amount),
+    currency: input.currency,
+    accountId: input.accountId ?? null,
+    accountAmount:
+      input.accountAmount === undefined ? null : decimal(input.accountAmount),
+    creditCardId: input.creditCardId ?? null,
+    destinationAccountId: input.destinationAccountId ?? null,
+    categoryId: input.categoryId ?? null,
+    counterpartyName: input.counterpartyName ?? null,
+    paymentType: input.paymentType,
+    paymentStatus: input.paymentStatus,
+    exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
+    amountInLimitCurrency:
+      input.amountInLimitCurrency === undefined
+        ? null
+        : decimal(input.amountInLimitCurrency),
+    exchangeRateToLimitCurrency:
+      input.exchangeRateToLimitCurrency === undefined
+        ? null
+        : decimal(input.exchangeRateToLimitCurrency),
+    occurredAt: new Date(input.occurredAt),
+    note: input.note ?? null,
+    isFixed: input.isFixed ?? false,
+    debtId: input.debtId ?? null,
+  };
   if (input.creditCardId && input.categoryId) {
     const [recordResult] = await db.batch([
       db.insert(records).values(recordValues).returning(),
       db.insert(creditCardRecords).values({
-      id: randomUUID(),
-      creditCardId: input.creditCardId,
-      walletRecordId: recordId,
-      kind: input.type === "income" ? "refund" : "purchase",
-      amount: decimal(input.amount),
-      currency: input.currency,
-      amountInLimitCurrency: decimal(input.amountInLimitCurrency ?? input.amount),
-      exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency ?? 1),
-      categoryId: input.categoryId,
-      counterpartyName: input.counterpartyName ?? null,
-      note: input.note ?? null,
-      accountId: input.accountId ?? null,
-      accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
-      accountImpactAtCreation: Boolean(input.accountId),
-      occurredAt: new Date(input.occurredAt),
+        id: randomUUID(),
+        creditCardId: input.creditCardId,
+        walletRecordId: recordId,
+        kind: input.type === "income" ? "refund" : "purchase",
+        amount: decimal(input.amount),
+        currency: input.currency,
+        amountInLimitCurrency: decimal(
+          input.amountInLimitCurrency ?? input.amount,
+        ),
+        exchangeRateToLimitCurrency: decimal(
+          input.exchangeRateToLimitCurrency ?? 1,
+        ),
+        categoryId: input.categoryId,
+        counterpartyName: input.counterpartyName ?? null,
+        note: input.note ?? null,
+        accountId: input.accountId ?? null,
+        accountAmount: input.accountId
+          ? decimal(input.accountAmount ?? input.amount)
+          : null,
+        accountImpactAtCreation: Boolean(input.accountId),
+        occurredAt: new Date(input.occurredAt),
       }),
     ]);
     const row = recordResult[0];
@@ -1041,13 +1326,30 @@ export async function updateRecord(
   input: NewRecord,
   db: Db = createDb(),
 ) {
-  const [linked] = await db.select().from(creditCardRecords).where(eq(creditCardRecords.walletRecordId, id)).limit(1);
-  const recordUpdate = db.update(records).set({
+  const [[linked], [existingRecord]] = await Promise.all([
+    db
+      .select()
+      .from(creditCardRecords)
+      .where(eq(creditCardRecords.walletRecordId, id))
+      .limit(1),
+    db.select().from(records).where(eq(records.id, id)).limit(1),
+  ]);
+  const resolveAsCardOnly = Boolean(
+    existingRecord?.paymentStatus === "needs_review" &&
+    !existingRecord.accountId &&
+    input.creditCardId &&
+    !input.accountId &&
+    input.paymentStatus === "cleared",
+  );
+  const recordUpdate = db
+    .update(records)
+    .set({
       type: input.type,
       amount: decimal(input.amount),
       currency: input.currency,
       accountId: input.accountId ?? null,
-      accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
+      accountAmount:
+        input.accountAmount === undefined ? null : decimal(input.accountAmount),
       creditCardId: input.creditCardId ?? null,
       destinationAccountId: input.destinationAccountId ?? null,
       categoryId: input.categoryId ?? null,
@@ -1068,31 +1370,60 @@ export async function updateRecord(
       isFixed: input.isFixed ?? false,
       debtId: input.debtId ?? null,
       updatedAt: new Date(),
-    }).where(eq(records.id, id)).returning();
+      deletedAt: resolveAsCardOnly ? new Date() : null,
+    })
+    .where(eq(records.id, id))
+    .returning();
   let row: typeof records.$inferSelect | undefined;
   if (input.creditCardId && input.categoryId) {
     const values = {
       creditCardId: input.creditCardId,
-      walletRecordId: id,
+      walletRecordId: resolveAsCardOnly ? null : id,
       kind: input.type === "income" ? "refund" : "purchase",
-      amount: decimal(input.amount), currency: input.currency,
-      amountInLimitCurrency: decimal(input.amountInLimitCurrency ?? input.amount),
-      exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency ?? 1),
-      categoryId: input.categoryId, counterpartyName: input.counterpartyName ?? null,
-      note: input.note ?? null, accountId: input.accountId ?? null,
-      accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
-      accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
-      updatedAt: new Date(), deletedAt: null,
+      amount: decimal(input.amount),
+      currency: input.currency,
+      amountInLimitCurrency: decimal(
+        input.amountInLimitCurrency ?? input.amount,
+      ),
+      exchangeRateToLimitCurrency: decimal(
+        input.exchangeRateToLimitCurrency ?? 1,
+      ),
+      categoryId: input.categoryId,
+      counterpartyName: input.counterpartyName ?? null,
+      note: input.note ?? null,
+      accountId: input.accountId ?? null,
+      accountAmount: input.accountId
+        ? decimal(input.accountAmount ?? input.amount)
+        : null,
+      accountImpactAtCreation: Boolean(input.accountId),
+      occurredAt: new Date(input.occurredAt),
+      updatedAt: new Date(),
+      deletedAt: null,
     };
     if (linked) {
-      const [recordResult] = await db.batch([recordUpdate, db.update(creditCardRecords).set(values).where(eq(creditCardRecords.id, linked.id))]);
+      const [recordResult] = await db.batch([
+        recordUpdate,
+        db
+          .update(creditCardRecords)
+          .set(values)
+          .where(eq(creditCardRecords.id, linked.id)),
+      ]);
       row = recordResult[0];
     } else {
-      const [recordResult] = await db.batch([recordUpdate, db.insert(creditCardRecords).values({ id: randomUUID(), ...values })]);
+      const [recordResult] = await db.batch([
+        recordUpdate,
+        db.insert(creditCardRecords).values({ id: randomUUID(), ...values }),
+      ]);
       row = recordResult[0];
     }
   } else if (linked) {
-    const [recordResult] = await db.batch([recordUpdate, db.update(creditCardRecords).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(creditCardRecords.id, linked.id))]);
+    const [recordResult] = await db.batch([
+      recordUpdate,
+      db
+        .update(creditCardRecords)
+        .set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(eq(creditCardRecords.id, linked.id)),
+    ]);
     row = recordResult[0];
   } else {
     [row] = await recordUpdate;
@@ -1105,8 +1436,15 @@ export async function updateRecord(
 export async function deleteRecord(id: string, db: Db = createDb()) {
   const now = new Date();
   const [recordResult] = await db.batch([
-    db.update(records).set({ deletedAt: now, updatedAt: now }).where(eq(records.id, id)).returning(),
-    db.update(creditCardRecords).set({ deletedAt: now, updatedAt: now }).where(eq(creditCardRecords.walletRecordId, id)),
+    db
+      .update(records)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(records.id, id))
+      .returning(),
+    db
+      .update(creditCardRecords)
+      .set({ deletedAt: now, updatedAt: now })
+      .where(eq(creditCardRecords.walletRecordId, id)),
   ]);
   const row = recordResult[0];
   return Boolean(row);
@@ -1151,7 +1489,11 @@ export async function createGoal(input: NewGoal, db: Db = createDb()) {
   return mapGoal(row, { [row.id]: input.tagIds });
 }
 
-export async function updateGoal(id: string, input: NewGoal, db: Db = createDb()) {
+export async function updateGoal(
+  id: string,
+  input: NewGoal,
+  db: Db = createDb(),
+) {
   const [row] = await db
     .update(goals)
     .set({
@@ -1206,11 +1548,17 @@ export async function createGoalReservation(
 }
 
 export async function listInvestments(db: Db = createDb()) {
-  const rows = await db.select().from(investments).orderBy(desc(investments.startedAt));
+  const rows = await db
+    .select()
+    .from(investments)
+    .orderBy(desc(investments.startedAt));
   return rows.map(mapInvestment);
 }
 
-export async function createInvestment(input: NewInvestment, db: Db = createDb()) {
+export async function createInvestment(
+  input: NewInvestment,
+  db: Db = createDb(),
+) {
   const [row] = await db
     .insert(investments)
     .values({
@@ -1251,7 +1599,10 @@ export async function updateInvestment(
 }
 
 export async function deleteInvestment(id: string, db: Db = createDb()) {
-  const rows = await db.delete(investments).where(eq(investments.id, id)).returning();
+  const rows = await db
+    .delete(investments)
+    .where(eq(investments.id, id))
+    .returning();
   return rows.length > 0;
 }
 
@@ -1267,7 +1618,9 @@ export async function createDebt(input: NewDebt, db: Db = createDb()) {
       name: input.name,
       direction: input.direction,
       originalAmount:
-        input.originalAmount === undefined ? null : decimal(input.originalAmount),
+        input.originalAmount === undefined
+          ? null
+          : decimal(input.originalAmount),
       pendingAmount:
         input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
       currency: input.currency,
@@ -1296,9 +1649,13 @@ export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
         name: input.name,
         direction: input.direction,
         originalAmount:
-          input.originalAmount === undefined ? null : decimal(input.originalAmount),
+          input.originalAmount === undefined
+            ? null
+            : decimal(input.originalAmount),
         pendingAmount:
-          input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
+          input.pendingAmount === undefined
+            ? null
+            : decimal(input.pendingAmount),
         currency: input.currency,
         counterpartyName: input.counterpartyName,
         accountId: input.accountId ?? null,
@@ -1318,14 +1675,20 @@ export async function createDebts(inputs: NewDebt[], db: Db = createDb()) {
   return rows.map(mapDebt);
 }
 
-export async function updateDebt(id: string, input: NewDebt, db: Db = createDb()) {
+export async function updateDebt(
+  id: string,
+  input: NewDebt,
+  db: Db = createDb(),
+) {
   const [row] = await db
     .update(debts)
     .set({
       name: input.name,
       direction: input.direction,
       originalAmount:
-        input.originalAmount === undefined ? null : decimal(input.originalAmount),
+        input.originalAmount === undefined
+          ? null
+          : decimal(input.originalAmount),
       pendingAmount:
         input.pendingAmount === undefined ? null : decimal(input.pendingAmount),
       currency: input.currency,
@@ -1410,7 +1773,10 @@ export async function updateRecurringDebt(
 }
 
 export async function deleteRecurringDebt(id: string, db: Db = createDb()) {
-  const rows = await db.delete(recurringDebts).where(eq(recurringDebts.id, id)).returning();
+  const rows = await db
+    .delete(recurringDebts)
+    .where(eq(recurringDebts.id, id))
+    .returning();
   return rows.length > 0;
 }
 
@@ -1427,7 +1793,11 @@ export async function recordDebtPayment(
   input: DebtPaymentInput,
   db: Db = createDb(),
 ) {
-  const [debtRow] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
+  const [debtRow] = await db
+    .select()
+    .from(debts)
+    .where(eq(debts.id, id))
+    .limit(1);
   if (!debtRow) return null;
 
   const debt = mapDebt(debtRow);
@@ -1460,7 +1830,9 @@ export async function recordDebtPayment(
     .set({
       pendingAmount: decimal(nextPendingAmount),
       status: nextPendingAmount === 0 ? "paid" : debt.status,
-      accountId: input.saveAccountToDebt ? input.accountId : (debt.accountId ?? null),
+      accountId: input.saveAccountToDebt
+        ? input.accountId
+        : (debt.accountId ?? null),
     })
     .where(eq(debts.id, id))
     .returning();
@@ -1476,7 +1848,10 @@ export async function getSettings(db: Db = createDb()) {
   return mapSettings(rows[0]);
 }
 
-export async function upsertSettings(input: WalletSettings, db: Db = createDb()) {
+export async function upsertSettings(
+  input: WalletSettings,
+  db: Db = createDb(),
+) {
   const existing = await db.select().from(settings).limit(1);
   const values = {
     primaryCurrency: input.primaryCurrency,
@@ -1486,7 +1861,9 @@ export async function upsertSettings(input: WalletSettings, db: Db = createDb())
     locale: input.locale,
     includeHiddenAccountsInReports: input.includeHiddenAccountsInReports,
     defaultAccountId: input.defaultAccountId ?? null,
-    defaultPaymentType: input.defaultCreditCardId ? "credit" : input.defaultPaymentType,
+    defaultPaymentType: input.defaultCreditCardId
+      ? "credit"
+      : input.defaultPaymentType,
     defaultCreditCardId: input.defaultCreditCardId ?? null,
     defaultPaymentStatus: input.defaultPaymentStatus,
     updatedAt: new Date(),
@@ -1494,7 +1871,11 @@ export async function upsertSettings(input: WalletSettings, db: Db = createDb())
 
   const [row] =
     existing.length > 0
-      ? await db.update(settings).set(values).where(eq(settings.id, existing[0].id)).returning()
+      ? await db
+          .update(settings)
+          .set(values)
+          .where(eq(settings.id, existing[0].id))
+          .returning()
       : await db.insert(settings).values(values).returning();
 
   return mapSettings(row);

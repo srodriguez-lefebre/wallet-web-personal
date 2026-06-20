@@ -14,7 +14,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:import-wallet-records": "node scripts/import-wallet-records.mjs"
+    "db:import-wallet-records": "node scripts/import-wallet-records.mjs",
+    "db:import-merchant-rules": "node scripts/import-merchant-rules.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",

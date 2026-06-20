@@ -24,3 +24,12 @@ export function requireApiToken(req: VercelRequest, res: VercelResponse) {
 
   return true;
 }
+
+export function requireIngestToken(req: VercelRequest, res: VercelResponse) {
+  const expected = process.env.INGEST_API_TOKEN;
+  if (!expected || extractBearerToken(req) !== expected) {
+    sendError(res, 401, "UNAUTHORIZED", "Invalid or missing ingest token");
+    return false;
+  }
+  return true;
+}

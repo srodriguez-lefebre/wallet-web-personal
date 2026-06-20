@@ -24,6 +24,9 @@ Crear `.env.local` con:
 ```txt
 DATABASE_URL="postgresql://..."
 API_TOKEN="token-largo"
+INGEST_API_TOKEN="otro-token-largo"
+OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
+OPENAI_MODEL="gpt-5-nano"
 ```
 
 El archivo `.env.local` esta ignorado por git.
@@ -38,6 +41,7 @@ npm run test
 npm run db:generate
 npm run db:migrate
 npm run db:import-wallet-records
+npm run db:import-merchant-rules
 ```
 
 En desarrollo local, el unlock acepta un token de al menos 4 caracteres si la API de Vercel no esta corriendo. En deploy, el endpoint `/api/auth/unlock` valida contra `API_TOKEN`.
@@ -76,6 +80,22 @@ Para Vercel:
 - Deployar el repo.
 
 Neon Auth no es necesario para esta version. Neon se usa como PostgreSQL.
+
+## Ingestion de correos
+
+`POST /api/ingest/mail/transactions` recibe eventos normalizados del Apps Script
+de `mail-service/` y se autentica exclusivamente con `INGEST_API_TOKEN`. El backend
+resuelve comercios, categorias, moneda, destino, idempotencia y duplicados. Los
+destinos desconocidos se guardan como `needs_review` sin inventar IDs ni impactos.
+
+Después de migrar, cargar el catálogo de 254 reglas desde el checkout WSL de
+`wallet-automation`:
+
+```powershell
+npm run db:import-merchant-rules
+```
+
+Se puede pasar una ruta JSON alternativa como argumento directo al script.
 
 ## Carga de datos reales
 

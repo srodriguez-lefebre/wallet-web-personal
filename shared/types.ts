@@ -13,7 +13,11 @@ export type AccountType =
 
 export type PaymentType = "cash" | "debit" | "credit" | "transfer" | "other";
 
-export type PaymentStatus = "cleared" | "pending" | "cancelled";
+export type PaymentStatus =
+  | "cleared"
+  | "pending"
+  | "needs_review"
+  | "cancelled";
 
 export type GoalStatus = "active" | "completed" | "paused" | "cancelled";
 
@@ -52,6 +56,7 @@ export interface Category {
   parentId?: string;
   color: string;
   icon: string;
+  systemKey?: string;
 }
 
 export interface Tag {
@@ -225,6 +230,20 @@ export interface ExchangeRate {
   toCurrency: CurrencyCode;
   rate: number;
   date: string;
+  source?: string;
+}
+
+export interface MailIngestionResult {
+  status:
+    | "created"
+    | "needs_review"
+    | "already_processed"
+    | "duplicate"
+    | "ignored";
+  recordId?: string;
+  creditCardRecordId?: string;
+  duplicateOfId?: string;
+  warnings?: string[];
 }
 
 export interface Investment {
@@ -333,6 +352,7 @@ export interface RecordFilters {
   categoryId?: string;
   tagId?: string;
   search?: string;
+  paymentStatus?: PaymentStatus | "all";
 }
 
 export interface AccountBalance {

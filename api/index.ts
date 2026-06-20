@@ -11,16 +11,21 @@ import {
   recurringDebtSchema,
   settingsSchema,
   unlockSchema,
+  mailIngestionSchema,
 } from "../shared/schemas.js";
 import {
   buildDueRecurringDebtInstances,
   calculateCreditCardSummary,
 } from "../shared/calculations.js";
-import { isValidApiToken } from "../server/api/auth.js";
+import { isValidApiToken, requireIngestToken } from "../server/api/auth.js";
 import { guardApi } from "../server/api/guard.js";
 import { requireMethod } from "../server/api/method.js";
 import { routeError, validateBody } from "../server/api/request.js";
 import { sendData, sendError } from "../server/api/response.js";
+import {
+  IngestionInProgressError,
+  processMailIngestion,
+} from "../server/ingestion/process-mail-ingestion.js";
 import {
   createAccount,
   createCategory,
@@ -120,7 +125,11 @@ async function handleCategories(
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
     if (req.method === "POST") {
-      sendData(res, await createCategory(validateBody(req, categorySchema)), 201);
+      sendData(
+        res,
+        await createCategory(validateBody(req, categorySchema)),
+        201,
+      );
       return;
     }
     sendData(res, await listCategories());
@@ -129,7 +138,10 @@ async function handleCategories(
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
-    const category = await updateCategory(id, validateBody(req, categorySchema));
+    const category = await updateCategory(
+      id,
+      validateBody(req, categorySchema),
+    );
     if (!category) {
       sendError(res, 404, "NOT_FOUND", "Category not found");
       return;
@@ -138,7 +150,10 @@ async function handleCategories(
     return;
   }
 
-  await deleteCategory(id);
+  if (!(await deleteCategory(id))) {
+    sendError(res, 409, "CONFLICT", "Protected categories cannot be deleted");
+    return;
+  }
   sendData(res, { deleted: true });
 }
 
@@ -201,7 +216,11 @@ async function handleCards(
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
     if (req.method === "POST") {
-      sendData(res, await createCreditCard(validateBody(req, creditCardSchema)), 201);
+      sendData(
+        res,
+        await createCreditCard(validateBody(req, creditCardSchema)),
+        201,
+      );
       return;
     }
     sendData(res, await listCreditCards());
@@ -211,14 +230,23 @@ async function handleCards(
   if (segments[2] === "payments" && segments[3]) {
     if (!guardApi(req, res, ["DELETE"])) return;
     if (!(await deleteCreditCardPayment(id, segments[3]))) {
-      sendError(res, 404, "NOT_FOUND", "Payment not found"); return;
+      sendError(res, 404, "NOT_FOUND", "Payment not found");
+      return;
     }
-    sendData(res, { deleted: true }); return;
+    sendData(res, { deleted: true });
+    return;
   }
 
   if (segments[2] === "payments") {
     if (!guardApi(req, res, ["POST"])) return;
-    sendData(res, await createCreditCardPayment(id, validateBody(req, creditCardPaymentSchema)), 201);
+    sendData(
+      res,
+      await createCreditCardPayment(
+        id,
+        validateBody(req, creditCardPaymentSchema),
+      ),
+      201,
+    );
     return;
   }
 
@@ -238,18 +266,32 @@ async function handleCards(
     const recordId = segments[3];
     if (!recordId) {
       if (!guardApi(req, res, ["GET", "POST"])) return;
-      if (req.method === "POST") sendData(res, await createCreditCardRecord(id, validateBody(req, creditCardRecordSchema)), 201);
+      if (req.method === "POST")
+        sendData(
+          res,
+          await createCreditCardRecord(
+            id,
+            validateBody(req, creditCardRecordSchema),
+          ),
+          201,
+        );
       else sendData(res, await listCreditCardRecords(id));
       return;
     }
     if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
     if (req.method === "PATCH") {
-      const movement = await updateCreditCardRecord(id, recordId, validateBody(req, creditCardRecordSchema));
-      if (!movement) sendError(res, 404, "NOT_FOUND", "Card movement not found");
+      const movement = await updateCreditCardRecord(
+        id,
+        recordId,
+        validateBody(req, creditCardRecordSchema),
+      );
+      if (!movement)
+        sendError(res, 404, "NOT_FOUND", "Card movement not found");
       else sendData(res, movement);
       return;
     }
-    if (!(await deleteCreditCardRecord(id, recordId))) sendError(res, 404, "NOT_FOUND", "Card movement not found");
+    if (!(await deleteCreditCardRecord(id, recordId)))
+      sendError(res, 404, "NOT_FOUND", "Card movement not found");
     else sendData(res, { deleted: true });
     return;
   }
@@ -257,7 +299,11 @@ async function handleCards(
   if (segments[2] === "refunds") {
     if (!guardApi(req, res, ["POST"])) return;
     const input = validateBody(req, creditCardRecordSchema);
-    sendData(res, await createCreditCardRecord(id, { ...input, kind: "refund" }), 201);
+    sendData(
+      res,
+      await createCreditCardRecord(id, { ...input, kind: "refund" }),
+      201,
+    );
     return;
   }
 
@@ -265,11 +311,20 @@ async function handleCards(
     const statementId = segments[3];
     if (!statementId) {
       if (!guardApi(req, res, ["GET"])) return;
-      sendData(res, await listCreditCardStatements(id)); return;
+      sendData(res, await listCreditCardStatements(id));
+      return;
     }
     if (segments[4] === "payments") {
       if (!guardApi(req, res, ["POST"])) return;
-      sendData(res, await payCreditCardStatement(id, statementId, validateBody(req, creditCardPaymentSchema)), 201);
+      sendData(
+        res,
+        await payCreditCardStatement(
+          id,
+          statementId,
+          validateBody(req, creditCardPaymentSchema),
+        ),
+        201,
+      );
       return;
     }
     sendError(res, 404, "NOT_FOUND", "Not found");
@@ -278,7 +333,10 @@ async function handleCards(
 
   if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
   if (req.method === "PATCH") {
-    const card = await updateCreditCard(id, validateBody(req, creditCardSchema));
+    const card = await updateCreditCard(
+      id,
+      validateBody(req, creditCardSchema),
+    );
     if (!card) {
       sendError(res, 404, "NOT_FOUND", "Credit card not found");
       return;
@@ -453,13 +511,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "settings":
         if (!guardApi(req, res, ["GET", "PUT"])) return;
         if (req.method === "PUT") {
-          sendData(res, await upsertSettings(validateBody(req, settingsSchema)));
+          sendData(
+            res,
+            await upsertSettings(validateBody(req, settingsSchema)),
+          );
           return;
         }
         sendData(res, await getSettings());
         return;
       case "auth":
         handleAuth(req, res, segments);
+        return;
+      case "ingest":
+        if (segments[1] !== "mail" || segments[2] !== "transactions") {
+          sendError(res, 404, "NOT_FOUND", "Not found");
+          return;
+        }
+        if (!requireMethod(req, res, ["POST"]) || !requireIngestToken(req, res))
+          return;
+        {
+          const result = await processMailIngestion(
+            validateBody(req, mailIngestionSchema),
+          );
+          sendData(
+            res,
+            result,
+            result.status === "created" || result.status === "needs_review"
+              ? 201
+              : 200,
+          );
+        }
         return;
       case "accounts":
         await handleAccounts(req, res, segments[1]);
@@ -484,6 +565,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return;
     }
   } catch (error) {
+    if (error instanceof IngestionInProgressError) {
+      sendError(
+        res,
+        503,
+        "SERVICE_UNAVAILABLE",
+        "Ingestion is still processing; retry later",
+      );
+      return;
+    }
     routeError(res, error);
   }
 }

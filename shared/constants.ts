@@ -45,6 +45,7 @@ export const paymentTypeLabels: Record<PaymentType, string> = {
 export const paymentStatusLabels: Record<PaymentStatus, string> = {
   cleared: "Cleared",
   pending: "Pending",
+  needs_review: "Needs review",
   cancelled: "Cancelled",
 };
 
