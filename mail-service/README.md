@@ -24,3 +24,7 @@ Script Properties requeridas:
 Crear un trigger periódico para `processPendingEmails`. El script solo mueve un thread de
 `Wallet/Pendiente` a `Wallet/Procesado` cuando todos sus mensajes reconocibles recibieron 2xx.
 Los 5xx conservan el thread pendiente; las respuestas de duplicado también son 2xx.
+
+Cada ejecución registra la cantidad de threads encontrados, los mensajes reconocidos o
+ignorados, el estado HTTP de la wallet y el resultado final de cada thread. Los logs nunca
+incluyen `WALLET_INGEST_TOKEN`.

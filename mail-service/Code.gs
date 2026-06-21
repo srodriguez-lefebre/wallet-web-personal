@@ -8,25 +8,39 @@ const INTEGRATION_NAME = 'gmail_apps_script';
 const INTEGRATION_VERSION = 'wallet-web-personal-v1';
 
 function processPendingEmails() {
+  console.log('Iniciando procesamiento de correos pendientes.');
   const context = buildRuntimeContext();
   const threads = GmailApp.search([
     `label:"${CONFIG.pendingLabelName}"`,
     `-label:"${CONFIG.processedLabelName}"`,
     'newer_than:30d'
   ].join(' '), 0, CONFIG.maxThreads);
+  console.log(`Se encontraron ${threads.length} thread(s) pendientes.`);
 
   threads.forEach(thread => {
     let processable = 0;
     let succeeded = 0;
+    console.log(`Procesando thread ${thread.getId()} con ${thread.getMessageCount()} mensaje(s).`);
     thread.getMessages().forEach(message => {
       const consumption = parseConsumptionEmail(message);
-      if (!consumption) return;
+      if (!consumption) {
+        console.log(`Mensaje ${message.getId()} ignorado: formato no reconocido.`);
+        return;
+      }
       processable += 1;
+      console.log(
+        `Mensaje ${message.getId()} reconocido: ${consumption.source}, ` +
+        `${consumption.currency} ${consumption.amount}, comercio "${consumption.merchant}".`
+      );
       try {
-        sendWalletIngestionEvent(context, buildWalletIngestionPayload(thread, message, consumption, context.targets));
+        const result = sendWalletIngestionEvent(
+          context,
+          buildWalletIngestionPayload(thread, message, consumption, context.targets)
+        );
         succeeded += 1;
+        console.log(`Mensaje ${message.getId()} enviado correctamente: HTTP ${result.status}.`);
       } catch (error) {
-        Logger.log(`El mensaje ${message.getId()} queda pendiente: ${error.message}`);
+        console.error(`El mensaje ${message.getId()} queda pendiente: ${error.message}`);
       }
     });
 
@@ -34,8 +48,15 @@ function processPendingEmails() {
     if (processable > 0 && succeeded === processable) {
       thread.addLabel(context.processedLabel);
       thread.removeLabel(context.pendingLabel);
+      console.log(`Thread ${thread.getId()} procesado: ${succeeded}/${processable} mensaje(s) enviados.`);
+    } else if (processable === 0) {
+      console.warn(`Thread ${thread.getId()} sigue pendiente: no contiene mensajes reconocibles.`);
+    } else {
+      console.warn(`Thread ${thread.getId()} sigue pendiente: ${succeeded}/${processable} mensaje(s) enviados.`);
     }
   });
+
+  console.log('Procesamiento de correos finalizado.');
 }
 
 function buildRuntimeContext() {
@@ -104,7 +125,9 @@ function sendWalletIngestionEvent(context, payload) {
     muteHttpExceptions: true
   });
   const code = response.getResponseCode();
-  if (code >= 200 && code < 300) return response.getContentText();
+  if (code >= 200 && code < 300) {
+    return { status: code, body: response.getContentText() };
+  }
   throw new Error(`Wallet respondió HTTP ${code}: ${response.getContentText()}`);
 }
 
