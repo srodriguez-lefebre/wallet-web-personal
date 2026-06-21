@@ -59,12 +59,15 @@ export function DashboardView() {
     selectedDateRange,
     setRecordFilters,
     recordDebtPayment,
+    isAllHistoryComplete,
   } = useWallet();
   const summary =
-    selectedPeriodMode === "custom"
+    selectedPeriodMode !== "month"
       ? calculateSummaryForDateRange(dataset, selectedDateRange)
       : calculateSummary(dataset, selectedMonth);
-  const accountBalances = calculateAccountBalances(dataset);
+  const accountBalances = isAllHistoryComplete
+    ? calculateAccountBalances(dataset)
+    : [];
   const visibleBalances = accountBalances.filter(
     (item) => item.account.isVisible,
   );
@@ -73,7 +76,7 @@ export function DashboardView() {
       (item) => item.account.id === dataset.settings.primaryAccountId,
     ) ?? visibleBalances[0];
   const categories =
-    selectedPeriodMode === "custom"
+    selectedPeriodMode !== "month"
       ? calculateCategoryExpensesForDateRange(dataset, selectedDateRange)
       : calculateCategoryExpenses(dataset, selectedMonth);
   const visibleGoals = calculateGoalProgress(dataset).filter(
@@ -152,7 +155,9 @@ export function DashboardView() {
         <MetricCard
           label="Balance"
           value={
-            primaryBalance
+            !isAllHistoryComplete
+              ? "Loading history..."
+              : primaryBalance
               ? formatMoney(
                   primaryBalance.balance,
                   primaryBalance.account.currency,
@@ -160,24 +165,28 @@ export function DashboardView() {
               : formatMoney(summary.balance, dataset.settings.primaryCurrency)
           }
           detail={
-            primaryBalance
+            !isAllHistoryComplete
+              ? "Calculating the current balance"
+              : primaryBalance
               ? `Primary account: ${primaryBalance.account.name}`
               : "Primary account"
           }
           icon={<WalletCards className="h-4 w-4" />}
           tone={
-            (primaryBalance?.balance ?? summary.balance) >= 0
+            !isAllHistoryComplete
+              ? "default"
+              : (primaryBalance?.balance ?? summary.balance) >= 0
               ? "success"
               : "danger"
           }
-          onClick={() =>
+          onClick={isAllHistoryComplete ? () =>
             primaryBalance
               ? goToRecords({
                   accountId: primaryBalance.account.id,
                   type: "all",
                 })
               : goToRecords({ type: "all" })
-          }
+          : undefined}
         />
         <MetricCard
           label="Income"
@@ -218,7 +227,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={balanceTrend}>
+              <LineChart data={isAllHistoryComplete ? balanceTrend : []}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"

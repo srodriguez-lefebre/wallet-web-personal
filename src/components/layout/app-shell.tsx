@@ -49,6 +49,7 @@ export function AppShell({ children }: PropsWithChildren) {
     selectedPeriodMode,
     customDateRange,
     setSelectedMonth,
+    setAllPeriod,
     setCustomDateRange,
     requestNewRecord,
   } = useWallet();
@@ -58,7 +59,11 @@ export function AppShell({ children }: PropsWithChildren) {
     [dataset.records],
   );
   const periodSelectValue =
-    selectedPeriodMode === "custom" ? "custom" : selectedMonth;
+    selectedPeriodMode === "custom"
+      ? "custom"
+      : selectedPeriodMode === "all"
+        ? "all"
+        : selectedMonth;
 
   function formatMonthLabel(month: string) {
     return new Intl.DateTimeFormat("en-US", {
@@ -75,6 +80,11 @@ export function AppShell({ children }: PropsWithChildren) {
   }
 
   function handlePeriodChange(value: string) {
+    if (value === "all") {
+      setAllPeriod();
+      return;
+    }
+
     if (value === "custom") {
       setCustomDateRange(customDateRange);
       return;
@@ -179,6 +189,7 @@ export function AppShell({ children }: PropsWithChildren) {
                   {formatMonthLabel(month)}
                 </option>
               ))}
+              <option value="all">All history</option>
               <option value="custom">Custom range</option>
             </select>
             {selectedPeriodMode === "custom" ? (

@@ -80,6 +80,7 @@ export function AccountsView() {
     deleteAccount,
     setRecordFilters,
     setPrimaryAccount,
+    isAllHistoryComplete,
   } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -96,7 +97,7 @@ export function AccountsView() {
   const [isVisible, setIsVisible] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [note, setNote] = useState("");
-  const balances = calculateAccountBalances(dataset);
+  const balances = isAllHistoryComplete ? calculateAccountBalances(dataset) : [];
   const visibleBalances = balances.filter((item) => item.account.isVisible);
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
@@ -581,6 +582,11 @@ export function AccountsView() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {!isAllHistoryComplete ? (
+            <p className="text-sm text-muted-foreground">
+              Loading complete history to calculate current balances...
+            </p>
+          ) : null}
           {visibleBalances.map(({ account, balance, freeBalance, reserved }) => {
             const isPrimary = dataset.settings.primaryAccountId === account.id;
 

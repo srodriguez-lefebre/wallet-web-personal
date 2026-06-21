@@ -1,6 +1,5 @@
 ﻿import { FormEvent, useState } from "react";
 import {
-  Banknote,
   Edit3,
   Eye,
   EyeOff,
@@ -635,45 +634,6 @@ export function InvestmentsView() {
             </CardContent>
           </Card>
         ) : null}
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Banknote className="h-4 w-4" />
-              Debts and loans
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {dataset.debts.map((debt) => {
-              const originalAmount = debt.originalAmount;
-              const pendingAmount = debt.pendingAmount;
-              const hasAmount =
-                originalAmount !== undefined && pendingAmount !== undefined;
-              const paid = hasAmount ? originalAmount - pendingAmount : 0;
-              const percentage = hasAmount ? (paid / originalAmount) * 100 : 0;
-              return (
-                <div key={debt.id} className="rounded-md border p-3">
-                  <div className="flex justify-between gap-3">
-                    <p className="font-medium">{debt.name}</p>
-                    <p className="font-semibold">
-                      {debt.pendingAmount === undefined
-                        ? "Amount pending"
-                        : formatMoney(debt.pendingAmount, debt.currency)}
-                    </p>
-                  </div>
-                  {hasAmount ? (
-                    <>
-                      <Progress value={percentage} className="mt-3" />
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Paid {percentage.toFixed(0)}%
-                      </p>
-                    </>
-                  ) : null}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
 
         <Card>
           <CardHeader>

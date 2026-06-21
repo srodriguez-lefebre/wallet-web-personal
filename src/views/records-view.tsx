@@ -240,7 +240,7 @@ export function RecordsView() {
 
   const filteredRecords = useMemo(() => {
     const periodRecords =
-      selectedPeriodMode === "custom"
+      selectedPeriodMode !== "month"
         ? recordsForDateRange(dataset.records, selectedDateRange)
         : dataset.records.filter((record) =>
             record.occurredAt.startsWith(selectedMonth),
@@ -907,7 +907,9 @@ export function RecordsView() {
               <div className="flex flex-wrap gap-2">
                 {!isSelectedRangeComplete ? <Badge variant="warning">Loading complete range...</Badge> : null}
                 <Badge variant="muted">
-                  {selectedPeriodMode === "custom"
+                  {selectedPeriodMode === "all"
+                    ? "All history"
+                    : selectedPeriodMode === "custom"
                     ? `${format(parseISO(selectedDateRange.from), "dd/MM/yyyy")} - ${format(parseISO(selectedDateRange.to), "dd/MM/yyyy")}`
                     : selectedMonth}
                 </Badge>

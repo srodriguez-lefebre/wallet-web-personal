@@ -38,12 +38,13 @@ import type {
   WalletSettings,
 } from "@shared/types";
 
-type PeriodMode = "month" | "custom";
+type PeriodMode = "month" | "custom" | "all";
 
 interface WalletContextValue {
   dataset: WalletDataset;
   selectedMonth: string;
   setSelectedMonth: (month: string) => void;
+  setAllPeriod: () => void;
   selectedPeriodMode: PeriodMode;
   selectedDateRange: DateRange;
   customDateRange: DateRange;
@@ -139,6 +140,7 @@ interface WalletContextValue {
   recordsPage: Omit<RecordPage, "items">;
   isLoadingMoreRecords: boolean;
   isSelectedRangeComplete: boolean;
+  isAllHistoryComplete: boolean;
   loadMoreRecords: () => Promise<void>;
 }
 
@@ -226,6 +228,17 @@ function normalizeDateRange(range: DateRange): DateRange {
   };
 }
 
+function allHistoryDateRange(records: WalletRecord[]): DateRange {
+  const today = dateKey(new Date());
+  if (records.length === 0) return { from: today, to: today };
+
+  const dates = records.map((record) => record.occurredAt.slice(0, 10));
+  return {
+    from: dates.reduce((oldest, current) => current < oldest ? current : oldest),
+    to: dates.reduce((latest, current) => current > latest ? current : latest),
+  };
+}
+
 function defaultRecordAccountId(dataset: WalletDataset) {
   const activeVisibleAccounts = dataset.accounts.filter(
     (account) => account.isActive && account.isVisible,
@@ -251,23 +264,22 @@ function loadWalletBootstrap(apiToken: string) {
   return request;
 }
 
-const rangeRequests = new Map<string, Promise<WalletRecord[]>>();
+const historyRequests = new Map<string, Promise<WalletRecord[]>>();
 
-function loadRecordRange(apiToken: string, range: DateRange) {
-  const key = `${apiToken}:${range.from}:${range.to}`;
-  const existing = rangeRequests.get(key);
+function loadAllRecordHistory(apiToken: string) {
+  const existing = historyRequests.get(apiToken);
   if (existing) return existing;
   const request = (async () => {
     const items: WalletRecord[] = [];
     let cursor: string | null = null;
     do {
-      const page = await walletApi.getRecordsPage(apiToken, { limit: 500, cursor, ...range });
+      const page = await walletApi.getRecordsPage(apiToken, { limit: 500, cursor });
       items.push(...page.items);
       cursor = page.nextCursor;
     } while (cursor);
     return items;
-  })().finally(() => rangeRequests.delete(key));
-  rangeRequests.set(key, request);
+  })().finally(() => historyRequests.delete(apiToken));
+  historyRequests.set(apiToken, request);
   return request;
 }
 
@@ -282,7 +294,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
     () => initialCache?.recordsPage ?? { nextCursor: null, hasMore: false },
   );
   const [isLoadingMoreRecords, setIsLoadingMoreRecords] = useState(false);
-  const [completeRanges, setCompleteRanges] = useState<Set<string>>(() => new Set());
   const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -298,8 +309,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
     () =>
       selectedPeriodMode === "custom"
         ? customDateRange
-        : dateRangeForMonth(selectedMonth),
-    [customDateRange, selectedMonth, selectedPeriodMode],
+        : selectedPeriodMode === "all"
+          ? allHistoryDateRange(dataset.records)
+          : dateRangeForMonth(selectedMonth),
+    [customDateRange, dataset.records, selectedMonth, selectedPeriodMode],
   );
   const [newRecordRequestId, setNewRecordRequestId] = useState(0);
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>(
@@ -312,6 +325,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   function setSelectedMonth(month: string) {
     setSelectedMonthState(month);
     setSelectedPeriodMode("month");
+  }
+
+  function setAllPeriod() {
+    setSelectedPeriodMode("all");
   }
 
   function setCustomDateRange(range: DateRange) {
@@ -333,7 +350,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
       const result = await loadWalletBootstrap(token);
       setDataset(result.dataset);
       setRecordsPage(result.recordsPage);
-      setCompleteRanges(new Set());
       cacheDataset(result.dataset, result.recordsPage, token);
     } catch (error) {
       setLoadError(
@@ -383,37 +399,35 @@ export function WalletProvider({ children }: PropsWithChildren) {
     };
   }, [hasCachedDataset, token]);
 
-  const selectedRangeKey = `${selectedDateRange.from}:${selectedDateRange.to}`;
-  const oldestLoadedRecordDate = dataset.records.at(-1)?.occurredAt.slice(0, 10);
-  const isSelectedRangeComplete =
-    completeRanges.has(selectedRangeKey) ||
-    !recordsPage.hasMore ||
-    Boolean(oldestLoadedRecordDate && oldestLoadedRecordDate < selectedDateRange.from);
+  const isAllHistoryComplete = !recordsPage.hasMore;
+  const isSelectedRangeComplete = isAllHistoryComplete;
 
   useEffect(() => {
-    if (!token || isSelectedRangeComplete) return;
+    if (!token || isAllHistoryComplete) return;
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) setIsLoadingMoreRecords(true);
     });
-    void loadRecordRange(token, selectedDateRange)
+    void loadAllRecordHistory(token)
       .then((items) => {
         if (cancelled) return;
         setDataset((current) => {
           const byId = new Map(current.records.map((record) => [record.id, record]));
           items.forEach((record) => byId.set(record.id, record));
-          return { ...current, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
+          const nextDataset = { ...current, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
+          cacheDataset(nextDataset, { nextCursor: null, hasMore: false }, token);
+          return nextDataset;
         });
-        setCompleteRanges((current) => new Set(current).add(selectedRangeKey));
+        setRecordsPage({ nextCursor: null, hasMore: false });
       })
       .catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Could not load records");
+        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Could not load complete record history");
       })
       .finally(() => {
         if (!cancelled) setIsLoadingMoreRecords(false);
       });
     return () => { cancelled = true; };
-  }, [isSelectedRangeComplete, selectedDateRange, selectedRangeKey, token]);
+  }, [isAllHistoryComplete, token]);
 
   async function loadMoreRecords() {
     if (!token || !recordsPage.hasMore || !recordsPage.nextCursor || isLoadingMoreRecords) return;
@@ -1012,6 +1026,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         dataset,
         selectedMonth,
         setSelectedMonth,
+        setAllPeriod,
         selectedPeriodMode,
         selectedDateRange,
         customDateRange,
@@ -1072,6 +1087,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         recordsPage,
         isLoadingMoreRecords,
         isSelectedRangeComplete,
+        isAllHistoryComplete,
         loadMoreRecords,
       }}
     >

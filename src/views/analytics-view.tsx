@@ -61,11 +61,12 @@ export function AnalyticsView() {
     selectedDateRange,
     recordFilters,
     setRecordFilters,
+    isAllHistoryComplete,
   } = useWallet();
   const selectedAccount = recordFilters.accountId
     ? dataset.accounts.find((account) => account.id === recordFilters.accountId)
     : undefined;
-  const selectedAccountBalance = selectedAccount
+  const selectedAccountBalance = selectedAccount && isAllHistoryComplete
     ? calculateAccountBalances(dataset).find(
         (balance) => balance.account.id === selectedAccount.id,
       )
@@ -84,25 +85,25 @@ export function AnalyticsView() {
       }
     : dataset;
   const summary =
-    selectedPeriodMode === "custom"
+    selectedPeriodMode !== "month"
       ? calculateSummaryForDateRange(analyticsDataset, selectedDateRange)
       : calculateSummary(analyticsDataset, selectedMonth);
   const categories =
-    selectedPeriodMode === "custom"
+    selectedPeriodMode !== "month"
       ? calculateCategoryExpensesForDateRange(
           analyticsDataset,
           selectedDateRange,
         )
       : calculateCategoryExpenses(analyticsDataset, selectedMonth);
   const budgets =
-    selectedPeriodMode === "custom"
+    selectedPeriodMode !== "month"
       ? calculateBudgetProgressForDateRange(analyticsDataset, selectedDateRange)
       : calculateBudgetProgress(analyticsDataset, selectedMonth);
   const monthlySeries = calculateMonthlySeries(
     analyticsDataset,
     recentMonthKeys(
       analyticsDataset.records,
-      selectedPeriodMode === "custom"
+      selectedPeriodMode !== "month"
         ? monthKey(selectedDateRange.to)
         : selectedMonth,
       6,
@@ -163,6 +164,10 @@ export function AnalyticsView() {
 
       {selectedAccountBalance ? (
         <AccountStateSummary balance={selectedAccountBalance} />
+      ) : selectedAccount && !isAllHistoryComplete ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          Loading complete history to calculate the current balance...
+        </p>
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
