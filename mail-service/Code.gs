@@ -39,6 +39,7 @@ function processPendingEmails() {
         );
         succeeded += 1;
         console.log(`Mensaje ${message.getId()} enviado correctamente: HTTP ${result.status}.`);
+        logWalletIngestionResult(result.body);
       } catch (error) {
         console.error(`El mensaje ${message.getId()} queda pendiente: ${error.message}`);
       }
@@ -129,6 +130,18 @@ function sendWalletIngestionEvent(context, payload) {
     return { status: code, body: response.getContentText() };
   }
   throw new Error(`Wallet respondió HTTP ${code}: ${response.getContentText()}`);
+}
+
+function logWalletIngestionResult(responseBody) {
+  try {
+    const parsed = JSON.parse(responseBody);
+    const result = parsed && parsed.data ? parsed.data : parsed;
+    console.log(`Resultado de wallet: ${result.status || 'sin estado'}.`);
+    (result.diagnostics || []).forEach(entry => console.log(`[wallet] ${entry}`));
+    (result.warnings || []).forEach(entry => console.warn(`[wallet warning] ${entry}`));
+  } catch (_) {
+    console.warn('La wallet respondió correctamente, pero su respuesta no pudo interpretarse para mostrar diagnóstico.');
+  }
 }
 
 function getOrCreateLabel(name) {
