@@ -6,6 +6,10 @@ import {
   debtSchema, mailIngestionSchema, recordFiltersSchema, recordPatchSchema,
   recordSchema, recurringDebtPatchSchema, recurringDebtSchema, settingsPatchSchema,
   settingsSchema, unlockSchema, uuidSchema, walletBootstrapSchema,
+  tagSchema, tagPatchSchema, goalSchema, goalPatchSchema, goalReservationSchema,
+  budgetSchema, budgetPatchSchema, investmentSchema, investmentPatchSchema,
+  installmentPlanSchema, installmentPlanPatchSchema,
+  recordImportSchema,
 } from "./schemas.js";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -58,6 +62,7 @@ export const apiOperations = [
   op({ operationId: "records.create", method: "POST", path: "/api/records", auth: "session", stability: "stable", body: recordSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Create a wallet record" }),
   op({ operationId: "records.patch", method: "PATCH", path: "/api/records/{id}", auth: "session", stability: "stable", params: idParams, body: recordPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 422, 500], summary: "Update a wallet record" }),
   op({ operationId: "records.delete", method: "DELETE", path: "/api/records/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Soft-delete a record" }),
+  op({ operationId: "records.import", method: "POST", path: "/api/records/import", auth: "session", stability: "stable", body: recordImportSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Atomically import up to 200 validated records" }),
 
   op({ operationId: "cards.list", method: "GET", path: "/api/cards", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List credit cards" }),
   op({ operationId: "cards.create", method: "POST", path: "/api/cards", auth: "session", stability: "stable", body: creditCardSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Create a credit card" }),
@@ -84,6 +89,29 @@ export const apiOperations = [
   op({ operationId: "recurringDebts.create", method: "POST", path: "/api/recurring-debts", auth: "session", stability: "stable", body: recurringDebtSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Create a recurring-debt rule" }),
   op({ operationId: "recurringDebts.patch", method: "PATCH", path: "/api/recurring-debts/{id}", auth: "session", stability: "stable", params: idParams, body: recurringDebtPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 422, 500], summary: "Update a recurring-debt rule" }),
   op({ operationId: "recurringDebts.delete", method: "DELETE", path: "/api/recurring-debts/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Delete a recurring-debt rule" }),
+  op({ operationId: "tags.list", method: "GET", path: "/api/tags", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List tags" }),
+  op({ operationId: "tags.create", method: "POST", path: "/api/tags", auth: "session", stability: "stable", body: tagSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Create a tag" }),
+  op({ operationId: "tags.patch", method: "PATCH", path: "/api/tags/{id}", auth: "session", stability: "stable", params: idParams, body: tagPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Update a tag" }),
+  op({ operationId: "tags.delete", method: "DELETE", path: "/api/tags/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Delete a tag and detach its references" }),
+  op({ operationId: "goals.list", method: "GET", path: "/api/goals", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List goals" }),
+  op({ operationId: "goals.create", method: "POST", path: "/api/goals", auth: "session", stability: "stable", body: goalSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Create a goal atomically with its tags" }),
+  op({ operationId: "goals.patch", method: "PATCH", path: "/api/goals/{id}", auth: "session", stability: "stable", params: idParams, body: goalPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Update a goal" }),
+  op({ operationId: "goals.delete", method: "DELETE", path: "/api/goals/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Archive a goal" }),
+  op({ operationId: "goalReservations.list", method: "GET", path: "/api/goal-reservations", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List goal reservations" }),
+  op({ operationId: "goalReservations.create", method: "POST", path: "/api/goal-reservations", auth: "session", stability: "stable", body: goalReservationSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Reserve account funds for a goal" }),
+  op({ operationId: "goalReservations.delete", method: "DELETE", path: "/api/goal-reservations/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Release a goal reservation" }),
+  op({ operationId: "budgets.list", method: "GET", path: "/api/budgets", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List budgets" }),
+  op({ operationId: "budgets.create", method: "POST", path: "/api/budgets", auth: "session", stability: "stable", body: budgetSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Create a budget" }),
+  op({ operationId: "budgets.patch", method: "PATCH", path: "/api/budgets/{id}", auth: "session", stability: "stable", params: idParams, body: budgetPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Update a budget" }),
+  op({ operationId: "budgets.delete", method: "DELETE", path: "/api/budgets/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Delete a budget" }),
+  op({ operationId: "investments.list", method: "GET", path: "/api/investments", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List investments" }),
+  op({ operationId: "investments.create", method: "POST", path: "/api/investments", auth: "session", stability: "stable", body: investmentSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Create an investment" }),
+  op({ operationId: "investments.patch", method: "PATCH", path: "/api/investments/{id}", auth: "session", stability: "stable", params: idParams, body: investmentPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Update an investment" }),
+  op({ operationId: "investments.delete", method: "DELETE", path: "/api/investments/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Delete an investment" }),
+  op({ operationId: "installmentPlans.list", method: "GET", path: "/api/installment-plans", auth: "session", stability: "stable", response: anyResponse, successStatus: 200, errors: [401, 500], summary: "List installment plans" }),
+  op({ operationId: "installmentPlans.create", method: "POST", path: "/api/installment-plans", auth: "session", stability: "stable", body: installmentPlanSchema, response: anyResponse, successStatus: 201, errors: [400, 401, 409, 500], summary: "Create an installment plan" }),
+  op({ operationId: "installmentPlans.patch", method: "PATCH", path: "/api/installment-plans/{id}", auth: "session", stability: "stable", params: idParams, body: installmentPlanPatchSchema, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Update an installment plan" }),
+  op({ operationId: "installmentPlans.delete", method: "DELETE", path: "/api/installment-plans/{id}", auth: "session", stability: "stable", params: idParams, response: anyResponse, successStatus: 200, errors: [400, 401, 404, 500], summary: "Delete an installment plan" }),
 ] as const satisfies readonly ApiOperation[];
 
 export type ApiOperationId = (typeof apiOperations)[number]["operationId"];

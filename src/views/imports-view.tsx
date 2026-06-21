@@ -23,6 +23,17 @@ interface PreviewRow {
   error?: string;
 }
 
+function csvCell(value: unknown) {
+  const text = String(value ?? "");
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadText(filename: string, content: string, type = "text/csv") {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = filename; anchor.click(); URL.revokeObjectURL(url);
+}
+
 const sampleCsv =
   "date,description,amount,type,category\n2026-06-15,Coffee,180,expense,Food & Drinks\n2026-06-16,Sale,2500,income,Income";
 
@@ -112,7 +123,7 @@ function findCategoryId(
 }
 
 export function ImportsView() {
-  const { dataset, addRecord } = useWallet();
+  const { dataset, importRecords } = useWallet();
   const [csv, setCsv] = useState(sampleCsv);
   const [accountId, setAccountId] = useState("");
   const [expenseCategoryId, setExpenseCategoryId] = useState("");
@@ -142,6 +153,11 @@ export function ImportsView() {
       const categoryId =
         findCategoryId(dataset.categories, row.category ?? "") ??
         (type === "income" ? activeIncomeCategoryId : activeExpenseCategoryId);
+      const duplicate = dataset.records.some((record) =>
+        record.type === type && record.amount === amount &&
+        record.occurredAt.slice(0, 10) === occurredAt.slice(0, 10) &&
+        (record.counterpartyName ?? "").trim().toLowerCase() === description.trim().toLowerCase(),
+      );
       const error =
         !type
           ? "Type must be expense or income."
@@ -153,6 +169,8 @@ export function ImportsView() {
                 ? "Select an account."
                 : !categoryId
                   ? "Select a default category."
+                  : duplicate
+                    ? "Possible duplicate already in wallet."
                   : undefined;
 
       return {
@@ -175,6 +193,7 @@ export function ImportsView() {
     activeIncomeCategoryId,
     csv,
     dataset.categories,
+    dataset.records,
   ]);
 
   const validRows = preview.filter((row) => !row.error && row.type);
@@ -192,6 +211,23 @@ export function ImportsView() {
     URL.revokeObjectURL(url);
   }
 
+  function exportRecords(rows = dataset.records, filename = "wallet-records.csv") {
+    const headers = ["date", "type", "amount", "currency", "counterparty", "status", "paymentType", "note"];
+    const lines = rows.map((record) => [record.occurredAt, record.type, record.amount, record.currency, record.counterpartyName, record.paymentStatus, record.paymentType, record.note].map(csvCell).join(","));
+    downloadText(filename, [headers.join(","), ...lines].join("\n"));
+  }
+
+  function exportCurrentMonth() {
+    const month = new Date().toISOString().slice(0, 7);
+    exportRecords(dataset.records.filter((record) => record.occurredAt.startsWith(month)), `wallet-report-${month}.csv`);
+  }
+
+  async function loadCsvFile(file: File | undefined) {
+    if (!file) return;
+    setCsv(await file.text());
+    setImportMessage("");
+  }
+
   async function handleImport(event: FormEvent) {
     event.preventDefault();
     if (!selectedAccount || validRows.length === 0) return;
@@ -199,8 +235,7 @@ export function ImportsView() {
     setIsImporting(true);
     setImportMessage("");
     try {
-      for (const row of validRows) {
-        const record: Omit<WalletRecord, "id"> = {
+      const records: Array<Omit<WalletRecord, "id">> = validRows.map((row) => ({
           type: row.type ?? "expense",
           amount: row.amount,
           currency: selectedAccount.currency,
@@ -213,11 +248,9 @@ export function ImportsView() {
           exchangeRateToPrimary: selectedAccount.currency === "USD" ? 39.2 : 1,
           occurredAt: row.occurredAt,
           note: row.note?.trim() || undefined,
-        };
-        await addRecord(record);
-      }
-
-      setImportMessage(`Imported ${validRows.length} rows.`);
+        }));
+      const imported = await importRecords(records);
+      setImportMessage(`Imported ${imported} rows atomically.`);
     } finally {
       setIsImporting(false);
     }
@@ -234,6 +267,8 @@ export function ImportsView() {
           <Download className="h-4 w-4" />
           JSON backup
         </Button>
+        <Button variant="outline" onClick={() => exportRecords()}><Download className="h-4 w-4" />Records CSV</Button>
+        <Button variant="outline" onClick={exportCurrentMonth}><Download className="h-4 w-4" />Monthly CSV</Button>
       </PageHeader>
 
       <form className="grid gap-4 xl:grid-cols-[420px_1fr]" onSubmit={handleImport}>
@@ -245,6 +280,10 @@ export function ImportsView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            <label className="block space-y-2">
+              <span className="text-sm font-medium">CSV file</span>
+              <input type="file" accept=".csv,text/csv" onChange={(event) => void loadCsvFile(event.target.files?.[0])} className="block w-full text-sm" />
+            </label>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Account</span>

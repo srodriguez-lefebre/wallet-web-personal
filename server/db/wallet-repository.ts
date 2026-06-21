@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
 import {
@@ -47,14 +47,20 @@ import type {
 } from "../../shared/types.js";
 import {
   accountSchema,
+  budgetSchema,
   categorySchema,
   creditCardRecordSchema,
   creditCardSchema,
   debtSchema,
+  goalSchema,
+  investmentSchema,
   recordSchema,
   recurringDebtSchema,
   settingsSchema,
+  tagSchema,
+  installmentPlanSchema,
   type AccountPatch,
+  type BudgetPatch,
   type CategoryPatch,
   type CreditCardPatch,
   type CreditCardRecordPatch,
@@ -62,6 +68,10 @@ import {
   type RecordPatch,
   type RecurringDebtPatch,
   type SettingsPatch,
+  type GoalPatch,
+  type InvestmentPatch,
+  type InstallmentPlanPatch,
+  type TagPatch,
 } from "../../shared/schemas.js";
 import { conflictError, validationError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
@@ -80,6 +90,8 @@ type NewCreditCardRecord = Omit<
 >;
 type NewGoal = Omit<Goal, "id">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
+type NewBudget = Omit<Budget, "id">;
+type NewInstallmentPlan = Omit<InstallmentPlan, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
   startedAt?: string;
 };
@@ -1328,25 +1340,32 @@ export async function createTag(input: NewTag, db: Db = createDb()) {
 
 export async function updateTag(
   id: string,
-  input: NewTag,
+  input: TagPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(tags).where(eq(tags.id, id)).limit(1);
+  if (!current) return null;
+  const merged = tagSchema.parse({ ...mapTag(current), ...input });
+  const values: Partial<typeof tags.$inferInsert> = { updatedAt: new Date() };
+  if (hasOwn(input, "name")) values.name = merged.name;
+  if (hasOwn(input, "color")) values.color = merged.color;
+  if (hasOwn(input, "isActive")) values.isActive = merged.isActive;
   const [row] = await db
     .update(tags)
-    .set({
-      ...input,
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(tags.id, id))
     .returning();
   return row ? mapTag(row) : null;
 }
 
 export async function deleteTag(id: string, db: Db = createDb()) {
-  await db.delete(recordTags).where(eq(recordTags.tagId, id));
-  await db.delete(goalTags).where(eq(goalTags.tagId, id));
-  await db.update(budgets).set({ tagId: null }).where(eq(budgets.tagId, id));
-  const rows = await db.delete(tags).where(eq(tags.id, id)).returning();
+  const results = await db.batch([
+    db.delete(recordTags).where(eq(recordTags.tagId, id)),
+    db.delete(goalTags).where(eq(goalTags.tagId, id)),
+    db.update(budgets).set({ tagId: null, updatedAt: new Date() }).where(eq(budgets.tagId, id)),
+    db.delete(tags).where(eq(tags.id, id)).returning(),
+  ]);
+  const rows = results[3];
   return rows.length > 0;
 }
 
@@ -1356,6 +1375,9 @@ export async function listRecords(
     accountId?: string;
     creditCardId?: string;
     categoryId?: string;
+    tagId?: string;
+    search?: string;
+    paymentStatus?: string;
     from?: string;
     to?: string;
     limit?: number;
@@ -1372,6 +1394,12 @@ export async function listRecords(
     clauses.push(eq(records.creditCardId, filters.creditCardId));
   if (filters.categoryId)
     clauses.push(eq(records.categoryId, filters.categoryId));
+  if (filters.tagId) clauses.push(inArray(records.id, db.select({ id: recordTags.recordId }).from(recordTags).where(eq(recordTags.tagId, filters.tagId))));
+  if (filters.paymentStatus && filters.paymentStatus !== "all") clauses.push(eq(records.paymentStatus, filters.paymentStatus as WalletRecord["paymentStatus"]));
+  if (filters.search) {
+    const pattern = `%${filters.search.replace(/[%_]/g, "\\$&")}%`;
+    clauses.push(or(ilike(records.counterpartyName, pattern), ilike(records.note, pattern))!);
+  }
   if (filters.from) clauses.push(gte(records.occurredAt, new Date(`${filters.from}T00:00:00.000Z`)));
   if (filters.to) {
     const exclusiveEnd = new Date(`${filters.to}T00:00:00.000Z`);
@@ -1478,6 +1506,45 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
     : await db.batch([recordInsert]);
   const row = rows[0];
   return mapRecord(row, { [row.id]: input.tagIds });
+}
+
+export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()) {
+  const ids = inputs.map(() => randomUUID());
+  const queries: unknown[] = [];
+  inputs.forEach((input, index) => {
+    const id = ids[index];
+    queries.push(db.insert(records).values({
+      id, type: input.type, amount: decimal(input.amount), currency: input.currency,
+      accountId: input.accountId ?? null,
+      accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
+      creditCardId: input.creditCardId ?? null, destinationAccountId: input.destinationAccountId ?? null,
+      categoryId: input.categoryId ?? null, counterpartyName: input.counterpartyName ?? null,
+      paymentType: input.paymentType, paymentStatus: input.paymentStatus,
+      exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
+      amountInLimitCurrency: input.amountInLimitCurrency === undefined ? null : decimal(input.amountInLimitCurrency),
+      exchangeRateToLimitCurrency: input.exchangeRateToLimitCurrency === undefined ? null : decimal(input.exchangeRateToLimitCurrency),
+      occurredAt: new Date(input.occurredAt), note: input.note ?? null,
+      isFixed: input.isFixed ?? false, debtId: input.debtId ?? null,
+    }));
+    if (input.creditCardId && input.categoryId) queries.push(db.insert(creditCardRecords).values({
+      id: randomUUID(), creditCardId: input.creditCardId, walletRecordId: id,
+      kind: input.type === "income" ? "refund" : "purchase", amount: decimal(input.amount), currency: input.currency,
+      amountInLimitCurrency: decimal(input.amountInLimitCurrency ?? input.amount),
+      exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency ?? 1),
+      categoryId: input.categoryId, counterpartyName: input.counterpartyName ?? null, note: input.note ?? null,
+      accountId: input.accountId ?? null, accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
+      accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
+    }));
+    if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId: id, tagId }))));
+  });
+  await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  const [rows, tagRows] = await db.batch([
+    db.select().from(records).where(inArray(records.id, ids)),
+    db.select().from(recordTags).where(inArray(recordTags.recordId, ids)),
+  ]);
+  const tagIdsByRecord = groupIds(tagRows, "recordId", "tagId");
+  const byId = new Map(rows.map((row) => [row.id, mapRecord(row, tagIdsByRecord)]));
+  return ids.map((id) => byId.get(id)).filter((record): record is WalletRecord => Boolean(record));
 }
 
 export async function updateRecord(
@@ -1590,18 +1657,6 @@ export async function deleteRecord(id: string, db: Db = createDb()) {
   return Boolean(row);
 }
 
-async function replaceGoalTags(goalId: string, tagIds: string[], db: Db) {
-  await db.delete(goalTags).where(eq(goalTags.goalId, goalId));
-  if (tagIds.length > 0) {
-    await db.insert(goalTags).values(
-      tagIds.map((tagId) => ({
-        goalId,
-        tagId,
-      })),
-    );
-  }
-}
-
 export async function listGoals(db: Db = createDb()) {
   const rows = await db.select().from(goals).where(isNull(goals.deletedAt));
   const goalTagRows = await db.select().from(goalTags);
@@ -1610,9 +1665,10 @@ export async function listGoals(db: Db = createDb()) {
 }
 
 export async function createGoal(input: NewGoal, db: Db = createDb()) {
-  const [row] = await db
-    .insert(goals)
-    .values({
+  const id = randomUUID();
+  const queries = [
+    db.insert(goals).values({
+      id,
       name: input.name,
       targetAmount: decimal(input.targetAmount),
       currency: input.currency,
@@ -1623,49 +1679,53 @@ export async function createGoal(input: NewGoal, db: Db = createDb()) {
       status: input.status,
       accountId: input.accountId ?? null,
       note: input.note ?? null,
-    })
-    .returning();
-  await replaceGoalTags(row.id, input.tagIds, db);
-  return mapGoal(row, { [row.id]: input.tagIds });
+    }).returning(),
+  ];
+  if (input.tagIds.length) queries.push(db.insert(goalTags).values(input.tagIds.map((tagId) => ({ goalId: id, tagId }))) as never);
+  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  return mapGoal(rows[0], { [id]: input.tagIds });
 }
 
 export async function updateGoal(
   id: string,
-  input: NewGoal,
+  input: GoalPatch,
   db: Db = createDb(),
 ) {
-  const [row] = await db
-    .update(goals)
-    .set({
-      name: input.name,
-      targetAmount: decimal(input.targetAmount),
-      currency: input.currency,
-      color: input.color,
-      icon: input.icon,
-      isVisible: input.isVisible,
-      deadline: toDate(input.deadline),
-      status: input.status,
-      accountId: input.accountId ?? null,
-      note: input.note ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(goals.id, id))
-    .returning();
-
-  if (!row) return null;
-  await replaceGoalTags(id, input.tagIds, db);
-  return mapGoal(row, { [id]: input.tagIds });
+  const [[current], currentTagRows] = await db.batch([
+    db.select().from(goals).where(and(eq(goals.id, id), isNull(goals.deletedAt))).limit(1),
+    db.select().from(goalTags).where(eq(goalTags.goalId, id)),
+  ]);
+  if (!current) return null;
+  const mapped = mapGoal(current, { [id]: currentTagRows.map((row) => row.tagId) });
+  const merged = goalSchema.parse({
+    ...mapped, ...input,
+    deadline: input.deadline === null ? undefined : (input.deadline ?? mapped.deadline),
+    accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+  });
+  const update = db.update(goals).set({
+    name: merged.name, targetAmount: decimal(merged.targetAmount), currency: merged.currency,
+    color: merged.color, icon: merged.icon, isVisible: merged.isVisible,
+    deadline: toDate(merged.deadline), status: merged.status, accountId: merged.accountId ?? null,
+    note: merged.note ?? null, updatedAt: new Date(),
+  }).where(eq(goals.id, id)).returning();
+  const queries = [update];
+  if (hasOwn(input, "tagIds")) {
+    queries.push(db.delete(goalTags).where(eq(goalTags.goalId, id)) as never);
+    if (merged.tagIds.length) queries.push(db.insert(goalTags).values(merged.tagIds.map((tagId) => ({ goalId: id, tagId }))) as never);
+  }
+  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  return mapGoal(rows[0], { [id]: merged.tagIds });
 }
 
 export async function deleteGoal(id: string, db: Db = createDb()) {
-  await db.delete(goalTags).where(eq(goalTags.goalId, id));
-  await db.delete(goalReservations).where(eq(goalReservations.goalId, id));
-  await db.update(budgets).set({ goalId: null }).where(eq(budgets.goalId, id));
-  const [row] = await db
-    .update(goals)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(eq(goals.id, id))
-    .returning();
+  const results = await db.batch([
+    db.delete(goalTags).where(eq(goalTags.goalId, id)),
+    db.delete(goalReservations).where(eq(goalReservations.goalId, id)),
+    db.update(budgets).set({ goalId: null, updatedAt: new Date() }).where(eq(budgets.goalId, id)),
+    db.update(goals).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(goals.id, id)).returning(),
+  ]);
+  const row = results[3][0];
   return Boolean(row);
 }
 
@@ -1685,6 +1745,94 @@ export async function createGoalReservation(
     })
     .returning();
   return mapGoalReservation(row);
+}
+
+export async function listGoalReservations(db: Db = createDb()) {
+  return (await db.select().from(goalReservations).orderBy(desc(goalReservations.createdAt))).map(mapGoalReservation);
+}
+
+export async function deleteGoalReservation(id: string, db: Db = createDb()) {
+  const rows = await db.delete(goalReservations).where(eq(goalReservations.id, id)).returning();
+  return rows.length > 0;
+}
+
+export async function listBudgets(db: Db = createDb()) {
+  const rows = await db.select().from(budgets).orderBy(desc(budgets.createdAt));
+  return rows.map(mapBudget);
+}
+
+export async function createBudget(input: NewBudget, db: Db = createDb()) {
+  const [row] = await db.insert(budgets).values({
+    ...input,
+    limitAmount: decimal(input.limitAmount),
+    categoryId: input.categoryId ?? null,
+    tagId: input.tagId ?? null,
+    accountId: input.accountId ?? null,
+    goalId: input.goalId ?? null,
+  }).returning();
+  return mapBudget(row);
+}
+
+export async function updateBudget(id: string, input: BudgetPatch, db: Db = createDb()) {
+  const [current] = await db.select().from(budgets).where(eq(budgets.id, id)).limit(1);
+  if (!current) return null;
+  const mapped = mapBudget(current);
+  const merged = budgetSchema.parse({
+    ...mapped, ...input,
+    categoryId: input.categoryId === null ? undefined : (input.categoryId ?? mapped.categoryId),
+    tagId: input.tagId === null ? undefined : (input.tagId ?? mapped.tagId),
+    accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
+    goalId: input.goalId === null ? undefined : (input.goalId ?? mapped.goalId),
+  });
+  const [row] = await db.update(budgets).set({
+    name: merged.name, limitAmount: decimal(merged.limitAmount), currency: merged.currency,
+    period: merged.period, categoryId: merged.categoryId ?? null, tagId: merged.tagId ?? null,
+    accountId: merged.accountId ?? null, goalId: merged.goalId ?? null,
+    color: merged.color, isActive: merged.isActive, updatedAt: new Date(),
+  }).where(eq(budgets.id, id)).returning();
+  return row ? mapBudget(row) : null;
+}
+
+export async function deleteBudget(id: string, db: Db = createDb()) {
+  return (await db.delete(budgets).where(eq(budgets.id, id)).returning()).length > 0;
+}
+
+export async function listInstallmentPlans(db: Db = createDb()) {
+  return (await db.select().from(installmentPlans)).map(mapInstallmentPlan);
+}
+
+export async function createInstallmentPlan(input: NewInstallmentPlan, db: Db = createDb()) {
+  const [row] = await db.insert(installmentPlans).values({
+    ...input,
+    totalAmount: decimal(input.totalAmount),
+    installmentsTotal: decimal(input.installmentsTotal),
+    installmentsPaid: decimal(input.installmentsPaid),
+    nextPaymentAt: toDate(input.nextPaymentAt),
+    note: input.note ?? null,
+  }).returning();
+  return mapInstallmentPlan(row);
+}
+
+export async function updateInstallmentPlan(id: string, input: InstallmentPlanPatch, db: Db = createDb()) {
+  const [current] = await db.select().from(installmentPlans).where(eq(installmentPlans.id, id)).limit(1);
+  if (!current) return null;
+  const mapped = mapInstallmentPlan(current);
+  const merged = installmentPlanSchema.parse({
+    ...mapped, ...input,
+    nextPaymentAt: input.nextPaymentAt === null ? undefined : (input.nextPaymentAt ?? mapped.nextPaymentAt),
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+  });
+  const [row] = await db.update(installmentPlans).set({
+    name: merged.name, totalAmount: decimal(merged.totalAmount), currency: merged.currency,
+    installmentsTotal: decimal(merged.installmentsTotal), installmentsPaid: decimal(merged.installmentsPaid),
+    accountId: merged.accountId, categoryId: merged.categoryId,
+    nextPaymentAt: toDate(merged.nextPaymentAt), note: merged.note ?? null,
+  }).where(eq(installmentPlans.id, id)).returning();
+  return row ? mapInstallmentPlan(row) : null;
+}
+
+export async function deleteInstallmentPlan(id: string, db: Db = createDb()) {
+  return (await db.delete(installmentPlans).where(eq(installmentPlans.id, id)).returning()).length > 0;
 }
 
 export async function listInvestments(db: Db = createDb()) {
@@ -1717,20 +1865,27 @@ export async function createInvestment(
 
 export async function updateInvestment(
   id: string,
-  input: NewInvestment,
+  input: InvestmentPatch,
   db: Db = createDb(),
 ) {
+  const [current] = await db.select().from(investments).where(eq(investments.id, id)).limit(1);
+  if (!current) return null;
+  const mapped = mapInvestment(current);
+  const merged = investmentSchema.parse({
+    ...mapped, ...input,
+    note: input.note === null ? undefined : (input.note ?? mapped.note),
+  });
   const [row] = await db
     .update(investments)
     .set({
-      name: input.name,
-      type: input.type,
-      amountInvested: decimal(input.amountInvested),
-      currentValue: decimal(input.currentValue),
-      currency: input.currency,
-      isVisible: input.isVisible,
-      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
-      note: input.note ?? null,
+      name: merged.name,
+      type: merged.type,
+      amountInvested: decimal(merged.amountInvested),
+      currentValue: decimal(merged.currentValue),
+      currency: merged.currency,
+      isVisible: merged.isVisible,
+      startedAt: new Date(merged.startedAt),
+      note: merged.note ?? null,
       updatedAt: new Date(),
     })
     .where(eq(investments.id, id))

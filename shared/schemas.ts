@@ -331,6 +331,20 @@ export const budgetSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const installmentPlanSchema = z.object({
+  name: z.string().min(1),
+  totalAmount: z.number().positive(),
+  currency: currencySchema,
+  installmentsTotal: z.number().int().positive(),
+  installmentsPaid: z.number().int().nonnegative(),
+  accountId: uuidSchema,
+  categoryId: uuidSchema,
+  nextPaymentAt: z.string().datetime().or(z.string().date()).optional(),
+  note: z.string().optional(),
+}).refine((value) => value.installmentsPaid <= value.installmentsTotal, {
+  path: ["installmentsPaid"], message: "Paid installments cannot exceed the total",
+});
+
 export const settingsSchema = z.object({
   primaryCurrency: currencySchema,
   primaryAccountId: uuidSchema.optional(),
@@ -426,6 +440,31 @@ export const recurringDebtPatchSchema = nonEmptyPatch({
   startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
 });
 
+export const tagPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), color: z.string().min(1).optional(), isActive: z.boolean().optional(),
+});
+export const goalPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), targetAmount: z.number().positive().optional(), currency: currencySchema.optional(),
+  color: z.string().min(1).optional(), icon: z.string().min(1).optional(), isVisible: z.boolean().optional(),
+  deadline: z.string().nullable().optional(), status: z.enum(["active", "completed", "paused", "cancelled"]).optional(),
+  tagIds: z.array(uuidSchema).optional(), accountId: uuidSchema.nullable().optional(), note: z.string().nullable().optional(),
+});
+export const investmentPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
+  amountInvested: z.number().positive().optional(), currentValue: z.number().positive().optional(), currency: currencySchema.optional(),
+  isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
+});
+export const budgetPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), limitAmount: z.number().positive().optional(), currency: currencySchema.optional(),
+  period: z.literal("monthly").optional(), categoryId: uuidSchema.nullable().optional(), tagId: uuidSchema.nullable().optional(),
+  accountId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(), color: z.string().min(1).optional(), isActive: z.boolean().optional(),
+});
+export const installmentPlanPatchSchema = nonEmptyPatch({
+  name: z.string().min(1).optional(), totalAmount: z.number().positive().optional(), currency: currencySchema.optional(),
+  installmentsTotal: z.number().int().positive().optional(), installmentsPaid: z.number().int().nonnegative().optional(),
+  accountId: uuidSchema.optional(), categoryId: uuidSchema.optional(), nextPaymentAt: z.string().nullable().optional(), note: z.string().nullable().optional(),
+});
+
 export const settingsPatchSchema = nonEmptyPatch({
   primaryCurrency: currencySchema.optional(), primaryAccountId: uuidSchema.nullable().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
@@ -443,6 +482,11 @@ export type CreditCardRecordPatch = z.infer<typeof creditCardRecordPatchSchema>;
 export type DebtPatch = z.infer<typeof debtPatchSchema>;
 export type RecurringDebtPatch = z.infer<typeof recurringDebtPatchSchema>;
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
+export type TagPatch = z.infer<typeof tagPatchSchema>;
+export type GoalPatch = z.infer<typeof goalPatchSchema>;
+export type InvestmentPatch = z.infer<typeof investmentPatchSchema>;
+export type BudgetPatch = z.infer<typeof budgetPatchSchema>;
+export type InstallmentPlanPatch = z.infer<typeof installmentPlanPatchSchema>;
 
 const dateOnlySchema = z.string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
@@ -456,6 +500,9 @@ export const recordFiltersSchema = z.object({
   accountId: uuidSchema.optional(),
   creditCardId: uuidSchema.optional(),
   categoryId: uuidSchema.optional(),
+  tagId: uuidSchema.optional(),
+  search: z.string().trim().min(1).max(100).optional(),
+  paymentStatus: z.enum(["all", "cleared", "pending", "needs_review", "cancelled"]).optional(),
   from: dateOnlySchema.optional(),
   to: dateOnlySchema.optional(),
   limit: z.coerce.number().int().min(1).max(500).default(100),
@@ -469,6 +516,10 @@ export const recordFiltersSchema = z.object({
 export const walletBootstrapSchema = z.object({
   recordsLimit: z.number().int().min(1).max(500).default(200),
   recordsCursor: z.string().min(1).max(500).nullable().default(null),
+}).strict();
+
+export const recordImportSchema = z.object({
+  records: z.array(recordSchema).min(1).max(200),
 }).strict();
 
 const optionalUuidSchema = uuidSchema.optional();

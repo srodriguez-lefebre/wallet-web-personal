@@ -5,6 +5,12 @@ import type {
   CreditCardPayment,
   CreditCardRecord,
   Debt,
+  Goal,
+  GoalReservation,
+  Budget,
+  Investment,
+  InstallmentPlan,
+  Tag,
   RecurringDebt,
   WalletDataset,
   WalletBootstrap,
@@ -12,7 +18,7 @@ import type {
   WalletRecord,
   WalletSettings,
 } from "@shared/types";
-import type { AccountPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, RecordPatch, RecurringDebtPatch, SettingsPatch } from "@shared/schemas";
+import type { AccountPatch, BudgetPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, GoalPatch, InstallmentPlanPatch, InvestmentPatch, RecordPatch, RecurringDebtPatch, SettingsPatch, TagPatch } from "@shared/schemas";
 import type { ApiOperationId } from "@shared/api-contract";
 
 interface ApiResponse<T> {
@@ -108,6 +114,13 @@ export function createRecord(token: string, record: Omit<WalletRecord, "id">) {
   return requestApi<WalletRecord>(token, "records.create", "/api/records", {
     method: "POST",
     ...body(record),
+  });
+}
+
+export function importRecords(token: string, records: Array<Omit<WalletRecord, "id">>) {
+  return requestApi<WalletRecord[]>(token, "records.import", "/api/records/import", {
+    method: "POST",
+    ...body({ records }),
   });
 }
 
@@ -307,3 +320,21 @@ export function updateSettings(token: string, settings: SettingsPatch) {
     ...body(settings),
   });
 }
+
+export const createTag = (token: string, value: Omit<Tag, "id">) => requestApi<Tag>(token, "tags.create", "/api/tags", { method: "POST", ...body(value) });
+export const updateTag = (token: string, id: string, value: TagPatch) => requestApi<Tag>(token, "tags.patch", `/api/tags/${id}`, { method: "PATCH", ...body(value) });
+export const deleteTag = (token: string, id: string) => requestApi<{ deleted: true }>(token, "tags.delete", `/api/tags/${id}`, { method: "DELETE" });
+export const createGoal = (token: string, value: Omit<Goal, "id">) => requestApi<Goal>(token, "goals.create", "/api/goals", { method: "POST", ...body(value) });
+export const updateGoal = (token: string, id: string, value: GoalPatch) => requestApi<Goal>(token, "goals.patch", `/api/goals/${id}`, { method: "PATCH", ...body(value) });
+export const deleteGoal = (token: string, id: string) => requestApi<{ deleted: true }>(token, "goals.delete", `/api/goals/${id}`, { method: "DELETE" });
+export const createGoalReservation = (token: string, value: Omit<GoalReservation, "id">) => requestApi<GoalReservation>(token, "goalReservations.create", "/api/goal-reservations", { method: "POST", ...body(value) });
+export const deleteGoalReservation = (token: string, id: string) => requestApi<{ deleted: true }>(token, "goalReservations.delete", `/api/goal-reservations/${id}`, { method: "DELETE" });
+export const createBudget = (token: string, value: Omit<Budget, "id">) => requestApi<Budget>(token, "budgets.create", "/api/budgets", { method: "POST", ...body(value) });
+export const updateBudget = (token: string, id: string, value: BudgetPatch) => requestApi<Budget>(token, "budgets.patch", `/api/budgets/${id}`, { method: "PATCH", ...body(value) });
+export const deleteBudget = (token: string, id: string) => requestApi<{ deleted: true }>(token, "budgets.delete", `/api/budgets/${id}`, { method: "DELETE" });
+export const createInvestment = (token: string, value: Omit<Investment, "id">) => requestApi<Investment>(token, "investments.create", "/api/investments", { method: "POST", ...body(value) });
+export const updateInvestment = (token: string, id: string, value: InvestmentPatch) => requestApi<Investment>(token, "investments.patch", `/api/investments/${id}`, { method: "PATCH", ...body(value) });
+export const deleteInvestment = (token: string, id: string) => requestApi<{ deleted: true }>(token, "investments.delete", `/api/investments/${id}`, { method: "DELETE" });
+export const createInstallmentPlan = (token: string, value: Omit<InstallmentPlan, "id">) => requestApi<InstallmentPlan>(token, "installmentPlans.create", "/api/installment-plans", { method: "POST", ...body(value) });
+export const updateInstallmentPlan = (token: string, id: string, value: InstallmentPlanPatch) => requestApi<InstallmentPlan>(token, "installmentPlans.patch", `/api/installment-plans/${id}`, { method: "PATCH", ...body(value) });
+export const deleteInstallmentPlan = (token: string, id: string) => requestApi<{ deleted: true }>(token, "installmentPlans.delete", `/api/installment-plans/${id}`, { method: "DELETE" });

@@ -19,8 +19,7 @@ describe("API contract manifest", () => {
 
   it("does not expose roadmap-only modules", () => {
     const paths = apiOperations.map((operation) => operation.path);
-    expect(paths.some((path) => path.startsWith("/api/goals"))).toBe(false);
-    expect(paths.some((path) => path.startsWith("/api/investments"))).toBe(false);
-    expect(paths.some((path) => path.startsWith("/api/tags"))).toBe(false);
+    expect(paths.some((path) => path.startsWith("/api/import-batches"))).toBe(false);
+    expect(paths.some((path) => path.startsWith("/api/recommendations"))).toBe(false);
   });
 });

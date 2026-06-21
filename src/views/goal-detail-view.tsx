@@ -1,10 +1,13 @@
 ﻿import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { ActionToast } from "@/components/ui/action-toast";
+import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
@@ -12,7 +15,8 @@ import { goalStatusLabels } from "@shared/constants";
 export function GoalDetailView() {
   const { goalId } = useParams();
   const navigate = useNavigate();
-  const { dataset, setRecordFilters } = useWallet();
+  const { dataset, setRecordFilters, deleteGoalReservation } = useWallet();
+  const { toast, runAction } = useActionToast();
   const progress = calculateGoalProgress(dataset).find(
     (item) => item.goal.id === goalId,
   );
@@ -52,6 +56,7 @@ export function GoalDetailView() {
 
   return (
     <div>
+      <ActionToast toast={toast} />
       <PageHeader
         eyebrow="Goal detail"
         title={goalProgress.goal.name}
@@ -212,9 +217,28 @@ export function GoalDetailView() {
                           {reservation.note ?? "Reservation"}
                         </p>
                       </div>
-                      <p className="font-semibold">
-                        {formatMoney(reservation.amount, reservation.currency)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold">
+                          {formatMoney(reservation.amount, reservation.currency)}
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Release reservation"
+                          onClick={() =>
+                            void runAction(
+                              () => deleteGoalReservation(reservation.id),
+                              {
+                                processing: "Releasing reservation...",
+                                success: "Reservation released",
+                                error: "Could not release reservation",
+                              },
+                            ).catch(() => undefined)
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

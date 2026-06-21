@@ -56,6 +56,9 @@ export function SettingsView() {
     addTag,
     updateTag,
     deleteTag,
+    addBudget,
+    updateBudget,
+    deleteBudget,
     updateWalletSettings,
   } = useWallet();
   const { theme, toggleTheme } = useTheme();
@@ -78,6 +81,9 @@ export function SettingsView() {
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#2563EB");
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
+  const [newBudgetName, setNewBudgetName] = useState("");
+  const [newBudgetLimit, setNewBudgetLimit] = useState("");
+  const [newBudgetCategoryId, setNewBudgetCategoryId] = useState("");
   const [defaultAccountId, setDefaultAccountId] = useState(
     dataset.settings.defaultAccountId ??
       dataset.settings.primaryAccountId ??
@@ -104,6 +110,20 @@ export function SettingsView() {
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
     navigate("/records");
+  }
+
+  async function handleAddBudget(event: FormEvent) {
+    event.preventDefault();
+    const limitAmount = Number(newBudgetLimit);
+    if (!newBudgetName.trim() || limitAmount <= 0) return;
+    await runAction(() => addBudget({
+      name: newBudgetName.trim(), limitAmount, currency: primaryCurrency,
+      period: "monthly", categoryId: newBudgetCategoryId || undefined,
+      color: "#F59E0B", isActive: true,
+    }), { processing: "Creating budget...", success: "Budget created", error: "Could not create budget" });
+    setNewBudgetName("");
+    setNewBudgetLimit("");
+    setNewBudgetCategoryId("");
   }
 
   async function saveRecordDefaults() {
@@ -812,6 +832,44 @@ export function SettingsView() {
                   );
                 })}
               </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <WalletCards className="h-4 w-4" />
+              Budgets
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <form className="grid gap-2 md:grid-cols-[1fr_140px_1fr_auto]" onSubmit={handleAddBudget}>
+              <input value={newBudgetName} onChange={(event) => setNewBudgetName(event.target.value)} className={fieldClassName} placeholder="Monthly budget" />
+              <input value={newBudgetLimit} onChange={(event) => setNewBudgetLimit(event.target.value)} className={fieldClassName} type="number" min="0.01" step="0.01" placeholder="Limit" />
+              <select value={newBudgetCategoryId} onChange={(event) => setNewBudgetCategoryId(event.target.value)} className={fieldClassName}>
+                <option value="">All categories</option>
+                {dataset.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+              </select>
+              <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
+            </form>
+            <div className="space-y-2">
+              {dataset.budgets.map((budget) => (
+                <div key={budget.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                  <div>
+                    <p className="font-medium">{budget.name}</p>
+                    <p className="text-sm text-muted-foreground">{budget.limitAmount} {budget.currency} · {budget.isActive ? "Active" : "Paused"}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => void runAction(() => updateBudget(budget.id, { ...budget, isActive: !budget.isActive }), { processing: "Updating budget...", success: "Budget updated", error: "Could not update budget" }).catch(() => undefined)}>
+                      {budget.isActive ? "Pause" : "Activate"}
+                    </Button>
+                    <Button variant="destructive" size="icon" aria-label={`Delete ${budget.name}`} onClick={() => void runAction(() => deleteBudget(budget.id), { processing: "Deleting budget...", success: "Budget deleted", error: "Could not delete budget" }).catch(() => undefined)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

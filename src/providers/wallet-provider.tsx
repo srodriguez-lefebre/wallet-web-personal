@@ -18,6 +18,7 @@ import {
 } from "@shared/calculations";
 import type {
   Account,
+  Budget,
   Category,
   CreditCard,
   CreditCardPayment,
@@ -27,6 +28,7 @@ import type {
   Goal,
   GoalReservation,
   Investment,
+  InstallmentPlan,
   RecordFilters,
   RecurringDebt,
   Tag,
@@ -59,6 +61,7 @@ interface WalletContextValue {
   ) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
+  importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
   updateRecord: (
     recordId: string,
     record: Omit<WalletRecord, "id">,
@@ -96,12 +99,19 @@ interface WalletContextValue {
   addGoalReservation: (
     reservation: Omit<GoalReservation, "id">,
   ) => Promise<void>;
+  deleteGoalReservation: (reservationId: string) => Promise<void>;
+  addBudget: (budget: Omit<Budget, "id">) => Promise<string>;
+  updateBudget: (budgetId: string, budget: Omit<Budget, "id">) => Promise<void>;
+  deleteBudget: (budgetId: string) => Promise<void>;
   addInvestment: (investment: Omit<Investment, "id">) => Promise<string>;
   updateInvestment: (
     investmentId: string,
     investment: Omit<Investment, "id">,
   ) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
+  addInstallmentPlan: (plan: Omit<InstallmentPlan, "id">) => Promise<string>;
+  updateInstallmentPlan: (planId: string, plan: Omit<InstallmentPlan, "id">) => Promise<void>;
+  deleteInstallmentPlan: (planId: string) => Promise<void>;
   addDebt: (debt: Omit<Debt, "id">) => Promise<string>;
   updateDebt: (debtId: string, debt: Omit<Debt, "id">) => Promise<void>;
   deleteDebt: (debtId: string) => Promise<void>;
@@ -152,10 +162,6 @@ const emptyDataset: WalletDataset = {
   creditCardPaymentAllocations: [], goals: [], goalReservations: [], budgets: [],
   exchangeRates: [], investments: [], debts: [], recurringDebts: [], installmentPlans: [],
 };
-
-function localId(prefix: string) {
-  return `${prefix}-${crypto.randomUUID()}`;
-}
 
 function sessionOwnerKey(token: string | null) {
   if (!token) return null;
@@ -549,6 +555,12 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await reloadWallet();
   }
 
+  async function importRecords(records: Array<Omit<WalletRecord, "id">>) {
+    const created = await walletApi.importRecords(requireToken(), records);
+    setDataset((current) => ({ ...current, records: [...created, ...current.records] }));
+    return created.length;
+  }
+
   async function deleteRecord(recordId: string) {
     await walletApi.deleteRecord(requireToken(), recordId);
     await reloadWallet();
@@ -677,10 +689,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addTag(tag: Omit<Tag, "id">) {
-    const created = {
-      id: localId("tag"),
-      ...tag,
-    };
+    const created = await walletApi.createTag(requireToken(), tag);
     setDataset((current) => ({
       ...current,
       tags: [created, ...current.tags],
@@ -689,10 +698,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function updateTag(tagId: string, tag: Omit<Tag, "id">) {
-    const updated = {
-      id: tagId,
-      ...tag,
-    };
+    const updated = await walletApi.updateTag(requireToken(), tagId, tag);
     setDataset((current) => ({
       ...current,
       tags: current.tags.map((currentTag) =>
@@ -702,6 +708,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteTag(tagId: string) {
+    await walletApi.deleteTag(requireToken(), tagId);
     setDataset((current) => ({
       ...current,
       tags: current.tags.filter((tag) => tag.id !== tagId),
@@ -729,10 +736,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addGoal(goal: Omit<Goal, "id">) {
-    const created = {
-      id: localId("goal"),
-      ...goal,
-    };
+    const created = await walletApi.createGoal(requireToken(), goal);
     setDataset((current) => ({
       ...current,
       goals: [created, ...current.goals],
@@ -741,10 +745,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
-    const updated = {
-      id: goalId,
-      ...goal,
-    };
+    const updated = await walletApi.updateGoal(requireToken(), goalId, goal);
     setDataset((current) => ({
       ...current,
       goals: current.goals.map((currentGoal) =>
@@ -754,6 +755,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteGoal(goalId: string) {
+    await walletApi.deleteGoal(requireToken(), goalId);
     setDataset((current) => ({
       ...current,
       goals: current.goals.filter((goal) => goal.id !== goalId),
@@ -772,21 +774,39 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
-    const created = {
-      id: localId("goal-reservation"),
-      ...reservation,
-    };
+    const created = await walletApi.createGoalReservation(requireToken(), reservation);
     setDataset((current) => ({
       ...current,
       goalReservations: [created, ...current.goalReservations],
     }));
   }
 
+  async function deleteGoalReservation(reservationId: string) {
+    await walletApi.deleteGoalReservation(requireToken(), reservationId);
+    setDataset((current) => ({
+      ...current,
+      goalReservations: current.goalReservations.filter((item) => item.id !== reservationId),
+    }));
+  }
+
+  async function addBudget(budget: Omit<Budget, "id">) {
+    const created = await walletApi.createBudget(requireToken(), budget);
+    setDataset((current) => ({ ...current, budgets: [created, ...current.budgets] }));
+    return created.id;
+  }
+
+  async function updateBudget(budgetId: string, budget: Omit<Budget, "id">) {
+    const updated = await walletApi.updateBudget(requireToken(), budgetId, budget);
+    setDataset((current) => ({ ...current, budgets: current.budgets.map((item) => item.id === budgetId ? updated : item) }));
+  }
+
+  async function deleteBudget(budgetId: string) {
+    await walletApi.deleteBudget(requireToken(), budgetId);
+    setDataset((current) => ({ ...current, budgets: current.budgets.filter((item) => item.id !== budgetId) }));
+  }
+
   async function addInvestment(investment: Omit<Investment, "id">) {
-    const created = {
-      id: localId("investment"),
-      ...investment,
-    };
+    const created = await walletApi.createInvestment(requireToken(), investment);
     setDataset((current) => ({
       ...current,
       investments: [created, ...current.investments],
@@ -798,10 +818,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     investmentId: string,
     investment: Omit<Investment, "id">,
   ) {
-    const updated = {
-      id: investmentId,
-      ...investment,
-    };
+    const updated = await walletApi.updateInvestment(requireToken(), investmentId, investment);
     setDataset((current) => ({
       ...current,
       investments: current.investments.map((currentInvestment) =>
@@ -811,12 +828,29 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function deleteInvestment(investmentId: string) {
+    await walletApi.deleteInvestment(requireToken(), investmentId);
     setDataset((current) => ({
       ...current,
       investments: current.investments.filter(
         (investment) => investment.id !== investmentId,
       ),
     }));
+  }
+
+  async function addInstallmentPlan(plan: Omit<InstallmentPlan, "id">) {
+    const created = await walletApi.createInstallmentPlan(requireToken(), plan);
+    setDataset((current) => ({ ...current, installmentPlans: [created, ...current.installmentPlans] }));
+    return created.id;
+  }
+
+  async function updateInstallmentPlan(planId: string, plan: Omit<InstallmentPlan, "id">) {
+    const updated = await walletApi.updateInstallmentPlan(requireToken(), planId, plan);
+    setDataset((current) => ({ ...current, installmentPlans: current.installmentPlans.map((item) => item.id === planId ? updated : item) }));
+  }
+
+  async function deleteInstallmentPlan(planId: string) {
+    await walletApi.deleteInstallmentPlan(requireToken(), planId);
+    setDataset((current) => ({ ...current, installmentPlans: current.installmentPlans.filter((item) => item.id !== planId) }));
   }
 
   async function addDebt(debt: Omit<Debt, "id">) {
@@ -992,6 +1026,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         updateAccount,
         deleteAccount,
         addRecord,
+        importRecords,
         updateRecord,
         deleteRecord,
         addCategory,
@@ -1015,9 +1050,16 @@ export function WalletProvider({ children }: PropsWithChildren) {
         updateGoal,
         deleteGoal,
         addGoalReservation,
+        deleteGoalReservation,
+        addBudget,
+        updateBudget,
+        deleteBudget,
         addInvestment,
         updateInvestment,
         deleteInvestment,
+        addInstallmentPlan,
+        updateInstallmentPlan,
+        deleteInstallmentPlan,
         addDebt,
         updateDebt,
         deleteDebt,

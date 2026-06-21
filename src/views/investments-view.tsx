@@ -71,8 +71,7 @@ function buildInvestmentDrafts(investments: Investment[]): InvestmentDraft[] {
 
 export function InvestmentsView() {
   const navigate = useNavigate();
-  const { dataset, addInvestment, updateInvestment, deleteInvestment } =
-    useWallet();
+  const { dataset, addInvestment, updateInvestment, deleteInvestment, addInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
@@ -90,9 +89,23 @@ export function InvestmentsView() {
   const [isVisible, setIsVisible] = useState(true);
   const [note, setNote] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [installmentName, setInstallmentName] = useState("");
+  const [installmentAmount, setInstallmentAmount] = useState("");
+  const [installmentCount, setInstallmentCount] = useState("");
   const visibleInvestments = dataset.investments.filter(
     (investment) => investment.isVisible,
   );
+
+  async function handleAddInstallment(event: FormEvent) {
+    event.preventDefault();
+    const account = dataset.accounts.find((item) => item.isActive) ?? dataset.accounts[0];
+    const category = dataset.categories[0];
+    const totalAmount = Number(installmentAmount);
+    const installmentsTotal = Number(installmentCount);
+    if (!account || !category || !installmentName.trim() || totalAmount <= 0 || installmentsTotal <= 0) return;
+    await addInstallmentPlan({ name: installmentName.trim(), totalAmount, currency: account.currency, installmentsTotal, installmentsPaid: 0, accountId: account.id, categoryId: category.id });
+    setInstallmentName(""); setInstallmentAmount(""); setInstallmentCount("");
+  }
   const visibleInvestmentDrafts = investmentDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
@@ -670,6 +683,12 @@ export function InvestmentsView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <form className="grid gap-2 sm:grid-cols-[1fr_120px_100px_auto]" onSubmit={handleAddInstallment}>
+              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentName} onChange={(event) => setInstallmentName(event.target.value)} placeholder="Installment plan" />
+              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentAmount} onChange={(event) => setInstallmentAmount(event.target.value)} type="number" min="0.01" step="0.01" placeholder="Total" />
+              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentCount} onChange={(event) => setInstallmentCount(event.target.value)} type="number" min="1" step="1" placeholder="Count" />
+              <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
+            </form>
             {dataset.installmentPlans.map((plan) => {
               const percentage =
                 (plan.installmentsPaid / plan.installmentsTotal) * 100;
@@ -682,9 +701,13 @@ export function InvestmentsView() {
                     </p>
                   </div>
                   <Progress value={percentage} className="mt-3" />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Total {formatMoney(plan.totalAmount, plan.currency)}
-                  </p>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">Total {formatMoney(plan.totalAmount, plan.currency)}</p>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" disabled={plan.installmentsPaid >= plan.installmentsTotal} onClick={() => void updateInstallmentPlan(plan.id, { ...plan, installmentsPaid: plan.installmentsPaid + 1 })}>Mark paid</Button>
+                      <Button size="icon" variant="destructive" aria-label={`Delete ${plan.name}`} onClick={() => void deleteInstallmentPlan(plan.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
                 </div>
               );
             })}

@@ -23,6 +23,18 @@ import {
   mailIngestionSchema,
   recordFiltersSchema,
   walletBootstrapSchema,
+  tagSchema,
+  tagPatchSchema,
+  goalSchema,
+  goalPatchSchema,
+  goalReservationSchema,
+  budgetSchema,
+  budgetPatchSchema,
+  investmentSchema,
+  investmentPatchSchema,
+  installmentPlanSchema,
+  installmentPlanPatchSchema,
+  recordImportSchema,
 } from "../shared/schemas.js";
 import {
   calculateCreditCardSummary,
@@ -77,6 +89,13 @@ import {
   upsertSettings,
   patchSettings,
   payCreditCardStatement,
+  listTags, createTag, updateTag, deleteTag,
+  listGoals, createGoal, updateGoal, deleteGoal,
+  listGoalReservations, createGoalReservation, deleteGoalReservation,
+  listBudgets, createBudget, updateBudget, deleteBudget,
+  listInvestments, createInvestment, updateInvestment, deleteInvestment,
+  listInstallmentPlans, createInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan,
+  createRecordsBulk,
 } from "../server/db/wallet-repository.js";
 
 // Single router Serverless Function. Vercel's Hobby plan caps a deployment at
@@ -209,6 +228,12 @@ async function handleRecords(
     return;
   }
   sendData(res, { deleted: true });
+}
+
+async function handleRecordImport(req: VercelRequest, res: VercelResponse) {
+  if (!guardApi(req, res, ["POST"])) return;
+  const input = validateBody(req, recordImportSchema);
+  sendData(res, await createRecordsBulk(input.records), 201);
 }
 
 async function handleCards(
@@ -482,6 +507,99 @@ async function handleRecurringDebts(
   sendData(res, { deleted: true });
 }
 
+async function handleTags(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createTag(validateBody(req, tagSchema)), 201);
+    else sendData(res, await listTags());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const result = await updateTag(id, validateBody(req, tagPatchSchema));
+    if (!result) sendError(res, 404, "NOT_FOUND", "Tag not found"); else sendData(res, result);
+  } else if (!(await deleteTag(id))) sendError(res, 404, "NOT_FOUND", "Tag not found");
+  else sendData(res, { deleted: true });
+}
+
+async function handleGoals(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createGoal(validateBody(req, goalSchema)), 201);
+    else sendData(res, await listGoals());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const result = await updateGoal(id, validateBody(req, goalPatchSchema));
+    if (!result) sendError(res, 404, "NOT_FOUND", "Goal not found"); else sendData(res, result);
+  } else if (!(await deleteGoal(id))) sendError(res, 404, "NOT_FOUND", "Goal not found");
+  else sendData(res, { deleted: true });
+}
+
+async function handleGoalReservations(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createGoalReservation(validateBody(req, goalReservationSchema)), 201);
+    else sendData(res, await listGoalReservations());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["DELETE"])) return;
+  if (!(await deleteGoalReservation(id))) sendError(res, 404, "NOT_FOUND", "Reservation not found");
+  else sendData(res, { deleted: true });
+}
+
+async function handleBudgets(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createBudget(validateBody(req, budgetSchema)), 201);
+    else sendData(res, await listBudgets());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const result = await updateBudget(id, validateBody(req, budgetPatchSchema));
+    if (!result) sendError(res, 404, "NOT_FOUND", "Budget not found"); else sendData(res, result);
+  } else if (!(await deleteBudget(id))) sendError(res, 404, "NOT_FOUND", "Budget not found");
+  else sendData(res, { deleted: true });
+}
+
+async function handleInvestments(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createInvestment(validateBody(req, investmentSchema)), 201);
+    else sendData(res, await listInvestments());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const result = await updateInvestment(id, validateBody(req, investmentPatchSchema));
+    if (!result) sendError(res, 404, "NOT_FOUND", "Investment not found"); else sendData(res, result);
+  } else if (!(await deleteInvestment(id))) sendError(res, 404, "NOT_FOUND", "Investment not found");
+  else sendData(res, { deleted: true });
+}
+
+async function handleInstallmentPlans(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req, res, ["GET", "POST"])) return;
+    if (req.method === "POST") sendData(res, await createInstallmentPlan(validateBody(req, installmentPlanSchema)), 201);
+    else sendData(res, await listInstallmentPlans());
+    return;
+  }
+  id = validatePathId(id);
+  if (!guardApi(req, res, ["PATCH", "DELETE"])) return;
+  if (req.method === "PATCH") {
+    const result = await updateInstallmentPlan(id, validateBody(req, installmentPlanPatchSchema));
+    if (!result) sendError(res, 404, "NOT_FOUND", "Installment plan not found"); else sendData(res, result);
+  } else if (!(await deleteInstallmentPlan(id))) sendError(res, 404, "NOT_FOUND", "Installment plan not found");
+  else sendData(res, { deleted: true });
+}
+
 async function handleAuth(
   req: VercelRequest,
   res: VercelResponse,
@@ -593,6 +711,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await handleCategories(req, res, segments[1]);
         return;
       case "records":
+        if (segments.length === 2 && segments[1] === "import") { await handleRecordImport(req, res); return; }
         if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleRecords(req, res, segments[1]);
         return;
@@ -605,6 +724,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case "recurring-debts":
         if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
         await handleRecurringDebts(req, res, segments[1]);
+        return;
+      case "tags":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleTags(req, res, segments[1]);
+        return;
+      case "goals":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleGoals(req, res, segments[1]);
+        return;
+      case "goal-reservations":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleGoalReservations(req, res, segments[1]);
+        return;
+      case "budgets":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleBudgets(req, res, segments[1]);
+        return;
+      case "investments":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleInvestments(req, res, segments[1]);
+        return;
+      case "installment-plans":
+        if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
+        await handleInstallmentPlans(req, res, segments[1]);
         return;
       default:
         sendError(res, 404, "NOT_FOUND", "Not found");
