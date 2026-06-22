@@ -27,6 +27,7 @@ import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
   buildExpenseComparisonSeries,
+  buildExpenseSequenceComparisonSeries,
   calculateBudgetProgress,
   calculateBudgetProgressForDateRange,
   calculateCategoryExpenses,
@@ -132,6 +133,7 @@ export function AnalyticsView() {
     analyticsDataset,
     comparisonPeriods,
   );
+  const expenseSequenceTrend = buildExpenseSequenceComparisonSeries(analyticsDataset, comparisonPeriods);
   const projection = calculateEndOfMonthProjection(
     analyticsDataset,
     summary.dailyAverageExpense,
@@ -335,6 +337,24 @@ export function AnalyticsView() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader><CardTitle>Cumulative spend by expense</CardTitle></CardHeader>
+        <CardContent className="h-80 min-w-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={expenseSequenceTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="expense" tickLine={false} axisLine={false} />
+              <YAxis width={88} tickLine={false} axisLine={false} tickFormatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+              <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+              <Legend />
+              <Line type="monotone" dataKey="current" name="Current period" stroke="#EF4444" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="previous" name="Previous period" stroke="#F59E0B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="previousPrevious" name="Two periods ago" stroke="#94A3B8" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>

@@ -902,6 +902,29 @@ export function buildExpenseComparisonSeries(
   }));
 }
 
+export function buildExpenseSequenceComparisonSeries(
+  dataset: WalletDataset,
+  ranges: DateRange[],
+) {
+  const [twoPeriodsAgo, previous, current] = ranges.map((range) => {
+    let cumulative = 0;
+    return recordsForDateRange(dataset.records, range)
+      .filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled")
+      .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
+      .map((record) => {
+        cumulative += toPrimaryCurrency(record.amount, record.exchangeRateToPrimary);
+        return cumulative;
+      });
+  });
+  const maxExpenses = Math.max(twoPeriodsAgo.length, previous.length, current.length);
+  return Array.from({ length: maxExpenses }, (_, index) => ({
+    expense: `Expense ${index + 1}`,
+    previousPrevious: twoPeriodsAgo[index] ?? null,
+    previous: previous[index] ?? null,
+    current: current[index] ?? null,
+  }));
+}
+
 export function calculateBudgetProgress(
   dataset: WalletDataset,
   month = monthKey(new Date()),

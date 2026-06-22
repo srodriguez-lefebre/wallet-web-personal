@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyDebtPayment,
   buildDueRecurringDebtInstances,
+  buildExpenseSequenceComparisonSeries,
   calculateAccountBalanceAtDate,
   calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
@@ -133,6 +134,16 @@ describe("wallet calculations", () => {
     const children = calculateCategoryExpenses(mockWalletData, "2026-06", "cat-groceries");
     expect(children.find((item) => item.id === "cat-groceries-supermarket")?.value).toBeGreaterThan(0);
     expect(children.every((item) => mockWalletData.categories.find((category) => category.id === item.id)?.parentId === "cat-groceries")).toBe(true);
+  });
+
+  it("builds cumulative expense comparisons by expense order", () => {
+    const series = buildExpenseSequenceComparisonSeries(mockWalletData, [
+      { from: "2026-04-01", to: "2026-04-30" },
+      { from: "2026-05-01", to: "2026-05-31" },
+      { from: "2026-06-01", to: "2026-06-30" },
+    ]);
+    expect(series[0]?.expense).toBe("Expense 1");
+    expect(Number(series.at(-1)?.current)).toBeGreaterThanOrEqual(Number(series[0]?.current));
   });
 
   it("calculates goal progress with reserved money and directly associated expenses", () => {
