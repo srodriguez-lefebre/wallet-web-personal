@@ -8,20 +8,15 @@ import {
   Flag,
   Home,
   LineChart,
-  Lock,
   Menu,
-  Moon,
   Plus,
   ReceiptText,
   Settings,
-  Sun,
   WalletCards,
   X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/providers/auth-provider";
-import { useTheme } from "@/providers/theme-provider";
 import { useWallet } from "@/providers/wallet-provider";
 import { cn } from "@/lib/utils";
 import { monthKey, recentMonthKeys } from "@shared/calculations";
@@ -41,8 +36,6 @@ const navItems = [
 
 export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
-  const { lock } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const {
     dataset,
     selectedMonth,
@@ -233,22 +226,11 @@ export function AppShell({ children }: PropsWithChildren) {
           <Button
             variant="outline"
             size="icon"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
+            onClick={() => navigate("/")}
+            aria-label="Go to home"
+            className="text-primary hover:text-primary"
           >
-            {theme === "dark" ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={lock}
-            aria-label="Lock app"
-          >
-            <Lock className="h-4 w-4" />
+            <WalletCards className="h-4 w-4" />
           </Button>
         </header>
 
