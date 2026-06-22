@@ -32,7 +32,9 @@ import {
   calculateBudgetProgressForDateRange,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
+  calculateEmergencyRunway,
   calculateMonthlySeries,
+  calculateSavingsRate,
   calculateSummary,
   calculateSummaryForDateRange,
   dateRangeForMonth,
@@ -134,6 +136,22 @@ export function AnalyticsView() {
     comparisonPeriods,
   );
   const expenseSequenceTrend = buildExpenseSequenceComparisonSeries(analyticsDataset, comparisonPeriods);
+  const savingsRate = calculateSavingsRate(summary.income, summary.expenses);
+  const previousSummary = calculateSummaryForDateRange(
+    analyticsDataset,
+    comparisonPeriods[1],
+  );
+  const previousSavingsRate = calculateSavingsRate(
+    previousSummary.income,
+    previousSummary.expenses,
+  );
+  const savingsRateChange = savingsRate - previousSavingsRate;
+  const emergencyRunway = calculateEmergencyRunway(
+    analyticsDataset,
+    selectedPeriodMode !== "month"
+      ? monthKey(selectedDateRange.to)
+      : selectedMonth,
+  );
   const projection = calculateEndOfMonthProjection(
     analyticsDataset,
     summary.dailyAverageExpense,
@@ -239,6 +257,52 @@ export function AnalyticsView() {
             )}
           </p>
         </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Savings rate</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-end justify-between gap-3">
+              <p className={savingsRate >= 0 ? "text-3xl font-semibold text-emerald-600" : "text-3xl font-semibold text-red-600"}>
+                {savingsRate.toFixed(1)}%
+              </p>
+              <Badge variant={savingsRateChange >= 0 ? "success" : "danger"}>
+                {savingsRateChange >= 0 ? "+" : ""}{savingsRateChange.toFixed(1)} pp vs previous
+              </Badge>
+            </div>
+            <Progress
+              value={Math.max(0, Math.min(100, savingsRate))}
+              indicatorClassName="bg-emerald-500"
+            />
+            <p className="text-sm text-muted-foreground">
+              Share of income left after expenses in the selected period.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Emergency runway</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-end justify-between gap-3">
+              <p className="text-3xl font-semibold text-sky-700 dark:text-sky-300">
+                {emergencyRunway.months.toFixed(1)} months
+              </p>
+              <Badge variant="info">6-month reference</Badge>
+            </div>
+            <Progress
+              value={Math.min(100, (emergencyRunway.months / 6) * 100)}
+              indicatorClassName="bg-sky-500"
+            />
+            <p className="text-sm text-muted-foreground">
+              Free balance divided by the average expenses of the previous three months.
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_1fr]">

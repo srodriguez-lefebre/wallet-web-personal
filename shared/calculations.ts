@@ -197,6 +197,45 @@ export function calculateAccountBalances(
   });
 }
 
+export function calculateSavingsRate(income: number, expenses: number) {
+  if (income <= 0) return 0;
+  return ((income - expenses) / income) * 100;
+}
+
+export function calculateEmergencyRunway(
+  dataset: WalletDataset,
+  referenceMonth: string,
+  averagingMonths = 3,
+) {
+  const expenseMonths = relativeMonthKeys(
+    referenceMonth,
+    averagingMonths + 1,
+  ).slice(0, averagingMonths);
+  const averageMonthlyExpenses =
+    expenseMonths.reduce(
+      (total, month) => total + calculateSummary(dataset, month).expenses,
+      0,
+    ) / averagingMonths;
+  const freeBalance = calculateAccountBalances(dataset)
+    .filter(({ account }) => account.isActive && account.isVisible)
+    .reduce(
+      (total, item) =>
+        total +
+        convertAccountBalanceToPrimary(item.account, item.freeBalance, dataset),
+      0,
+    );
+
+  return {
+    averageMonthlyExpenses,
+    freeBalance,
+    months:
+      averageMonthlyExpenses > 0
+        ? Math.max(0, freeBalance) / averageMonthlyExpenses
+        : 0,
+    expenseMonths,
+  };
+}
+
 export function calculateAccountBalanceAtMonthEnd(
   dataset: WalletDataset,
   accountId: string,

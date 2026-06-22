@@ -11,8 +11,10 @@ import {
   calculateCategoryExpensesForDateRange,
   calculateCreditCardSummary,
   calculateCreditCardCategoryUsage,
+  calculateEmergencyRunway,
   creditCardStatementStatusAfterPaymentChange,
   calculateGoalProgress,
+  calculateSavingsRate,
   calculateVisibleDebtSummary,
   calculateSummary,
   calculateSummaryForDateRange,
@@ -37,6 +39,17 @@ describe("wallet calculations", () => {
   it("formats money with up to two decimal places", () => {
     expect(formatMoney(1234.567, "UYU")).toBe("$\u00a01.234,57");
     expect(formatMoney(1234, "UYU")).toBe("$\u00a01.234");
+  });
+
+  it("calculates the savings rate and emergency runway from free balance", () => {
+    expect(calculateSavingsRate(10_000, 7_500)).toBe(25);
+    expect(calculateSavingsRate(0, 7_500)).toBe(0);
+
+    const runway = calculateEmergencyRunway(mockWalletData, "2026-06");
+
+    expect(runway.expenseMonths).toEqual(["2026-03", "2026-04", "2026-05"]);
+    expect(runway.freeBalance).toBeGreaterThan(0);
+    expect(runway.months).toBe(0);
   });
 
   it("calculates account balances from initial balances and records", () => {
