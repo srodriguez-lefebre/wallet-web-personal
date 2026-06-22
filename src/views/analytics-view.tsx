@@ -2,15 +2,19 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { X } from "lucide-react";
+import { ArrowLeft, X } from "lucide-react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +55,7 @@ function isAccountRecord(record: WalletRecord, accountId: string) {
 }
 
 export function AnalyticsView() {
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>();
   const navigate = useNavigate();
   const {
     dataset,
@@ -91,8 +96,18 @@ export function AnalyticsView() {
       ? calculateCategoryExpensesForDateRange(
           analyticsDataset,
           selectedDateRange,
+          selectedCategoryId,
         )
-      : calculateCategoryExpenses(analyticsDataset, selectedMonth);
+      : calculateCategoryExpenses(analyticsDataset, selectedMonth, selectedCategoryId);
+  const selectedCategory = selectedCategoryId
+    ? dataset.categories.find((category) => category.id === selectedCategoryId)
+    : undefined;
+
+  function drillCategory(categoryId: string) {
+    if (dataset.categories.some((category) => category.parentId === categoryId)) {
+      setSelectedCategoryId(categoryId);
+    }
+  }
   const budgets =
     selectedPeriodMode !== "month"
       ? calculateBudgetProgressForDateRange(analyticsDataset, selectedDateRange)
@@ -324,9 +339,22 @@ export function AnalyticsView() {
       <div className="mt-4 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Category report</CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>{selectedCategory ? `${selectedCategory.name} breakdown` : "Expenses by category"}</CardTitle>
+              {selectedCategory ? <Button variant="outline" size="sm" onClick={() => setSelectedCategoryId(selectedCategory.parentId)}><ArrowLeft className="h-4 w-4" />Back</Button> : null}
+            </div>
           </CardHeader>
           <CardContent>
+            <div className="mb-4 h-64 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={categories} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+                    {categories.map((category) => <Cell key={category.id} fill={category.color} className="cursor-pointer outline-none" onClick={() => drillCategory(category.id)} />)}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
             <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
               <button
                 type="button"
@@ -373,9 +401,7 @@ export function AnalyticsView() {
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() =>
-                    goToRecords({ type: "expense", categoryId: category.id })
-                  }
+                  onClick={() => drillCategory(category.id)}
                   className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">

@@ -758,33 +758,36 @@ function calculateSummaryFromRecords(
 export function calculateCategoryExpenses(
   dataset: WalletDataset,
   month = monthKey(new Date()),
+  parentId?: string,
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
     (record) =>
       record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
-  return calculateCategoryExpensesFromRecords(dataset, records);
+  return calculateCategoryExpensesFromRecords(dataset, records, parentId);
 }
 
 export function calculateCategoryExpensesForDateRange(
   dataset: WalletDataset,
   range: DateRange,
+  parentId?: string,
 ) {
   const records = recordsForDateRange(dataset.records, range).filter(
     (record) =>
       record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
-  return calculateCategoryExpensesFromRecords(dataset, records);
+  return calculateCategoryExpensesFromRecords(dataset, records, parentId);
 }
 
 function calculateCategoryExpensesFromRecords(
   dataset: WalletDataset,
   records: WalletRecord[],
+  parentId?: string,
 ) {
   return dataset.categories
-    .filter((category) => !category.parentId)
+    .filter((category) => parentId ? category.parentId === parentId : !category.parentId)
     .map((category) => {
       const value = records
         .filter(

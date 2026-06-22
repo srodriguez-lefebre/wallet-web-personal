@@ -129,6 +129,12 @@ describe("wallet calculations", () => {
     expect(categories[0]?.id).toBe("cat-housing");
   });
 
+  it("drills category expenses into direct children", () => {
+    const children = calculateCategoryExpenses(mockWalletData, "2026-06", "cat-groceries");
+    expect(children.find((item) => item.id === "cat-groceries-supermarket")?.value).toBeGreaterThan(0);
+    expect(children.every((item) => mockWalletData.categories.find((category) => category.id === item.id)?.parentId === "cat-groceries")).toBe(true);
+  });
+
   it("calculates goal progress with reserved money and directly associated expenses", () => {
     const goals = calculateGoalProgress(mockWalletData);
     const trip = goals.find((item) => item.goal.id === "goal-trip");
