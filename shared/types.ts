@@ -244,7 +244,6 @@ export interface MailIngestionResult {
   creditCardRecordId?: string;
   duplicateOfId?: string;
   warnings?: string[];
-  diagnostics?: string[];
 }
 
 export interface Investment {

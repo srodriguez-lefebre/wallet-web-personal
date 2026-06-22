@@ -28,7 +28,3 @@ Los 5xx conservan el thread pendiente; las respuestas de duplicado también son 
 Cada ejecución registra la cantidad de threads encontrados, los mensajes reconocidos o
 ignorados, el estado HTTP de la wallet y el resultado final de cada thread. Los logs nunca
 incluyen `WALLET_INGEST_TOKEN`.
-
-La respuesta del backend agrega diagnóstico sobre reglas locales de comercio, uso o fallo
-de OpenAI, categoría final, destino, conversiones, duplicados y efecto financiero. Apps
-Script imprime esas entradas con el prefijo `[wallet]`.

@@ -65,7 +65,6 @@ async function pruneExpiredMetadata(db: DbClient) {
 }
 
 async function resolveCategory(db: DbClient, merchantRaw: string) {
-  const diagnostics: string[] = [];
   const aliasRows = await db
     .select({
       normalizedAlias: merchantAliases.normalizedAlias,
@@ -83,20 +82,12 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
       ),
     );
   const local = pickLongestMerchantMatch(merchantRaw, aliasRows);
-  if (local) {
-    diagnostics.push(
-      `Merchant rule matched alias "${local.normalizedAlias}" as "${local.merchantName}".`,
-      "OpenAI was not called because a local merchant rule matched.",
-    );
+  if (local)
     return {
       categoryId: local.categoryId,
       merchantName: local.merchantName,
       source: "merchant_rule",
-      diagnostics,
     };
-  }
-
-  diagnostics.push("No local merchant rule matched.");
 
   const allCategories = await db.select().from(categories);
   const parentIds = new Set(
@@ -110,30 +101,16 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
       ? `${byId.get(item.parentId)?.name ?? ""} > ${item.name}`
       : item.name,
   }));
-  if (!process.env.OPENAI_API_KEY) {
-    diagnostics.push("OpenAI was not called because OPENAI_API_KEY is not configured.");
-  } else {
-    try {
-      diagnostics.push(`Calling OpenAI with ${options.length} allowed categories.`);
-      const inferred = await inferCategoryWithOpenAi(merchantRaw, options);
-      if (inferred) {
-        const selected = options.find((item) => item.id === inferred);
-        diagnostics.push(
-          `OpenAI selected category "${selected?.path ?? inferred}".`,
-        );
-        return {
-          categoryId: inferred,
-          merchantName: merchantRaw,
-          source: "openai",
-          diagnostics,
-        };
-      }
-      diagnostics.push("OpenAI returned no valid category.");
-    } catch (error) {
-      diagnostics.push(
-        `OpenAI failed: ${error instanceof Error ? error.message : "unknown error"}.`,
-      );
-    }
+  try {
+    const inferred = await inferCategoryWithOpenAi(merchantRaw, options);
+    if (inferred)
+      return {
+        categoryId: inferred,
+        merchantName: merchantRaw,
+        source: "openai",
+      };
+  } catch {
+    // Classification failure deliberately falls through to the protected category.
   }
   const fallback =
     allCategories.find((item) => item.systemKey === "unknown_expense") ??
@@ -143,12 +120,10 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
     allCategories.find((item) => item.name.toLowerCase() === "others");
   if (!fallback)
     throw new Error("Protected Unknown expense category is not configured");
-  diagnostics.push(`Fallback category "${fallback.name}" was selected.`);
   return {
     categoryId: fallback.id,
     merchantName: merchantRaw,
     source: "fallback",
-    diagnostics,
   };
 }
 
@@ -216,10 +191,6 @@ export async function processMailIngestion(
       status: "already_processed",
       recordId: existing?.recordId ?? undefined,
       creditCardRecordId: existing?.creditCardRecordId ?? undefined,
-      diagnostics: [
-        `Idempotency key was already processed with status "${existing?.status ?? "unknown"}".`,
-        "No new financial record was created.",
-      ],
     };
   }
 
@@ -234,10 +205,7 @@ export async function processMailIngestion(
           updatedAt: now,
         })
         .where(eq(ingestionEvents.id, eventId));
-      return {
-        status: "ignored",
-        diagnostics: ["Transaction amount is zero; the event was ignored."],
-      };
+      return { status: "ignored" };
     }
 
     const [account] = input.destination.accountId
@@ -283,21 +251,6 @@ export async function processMailIngestion(
     const accountWasInvalid = Boolean(input.destination.accountId && !account);
     const cardWasInvalid = Boolean(input.destination.creditCardId && !card);
     const category = await resolveCategory(db, input.transaction.merchantRaw);
-    const diagnostics = [
-      input.destination.accountId
-        ? account
-          ? `Account destination matched "${account.name}".`
-          : "Configured account destination was not found."
-        : "No account destination was requested.",
-      input.destination.creditCardId
-        ? card
-          ? `Card destination matched "${card.name}" ending in ${card.lastFour}.`
-          : "Configured card destination was not found."
-        : card
-          ? `Card matched by last four digits: "${card.name}" ending in ${card.lastFour}.`
-          : "No known card destination was resolved.",
-      ...category.diagnostics,
-    ];
     const canonicalMerchantNormalized = normalizeMerchantTerm(
       category.merchantName,
     );
@@ -337,15 +290,7 @@ export async function processMailIngestion(
           updatedAt: now,
         })
         .where(eq(ingestionEvents.id, eventId));
-      return {
-        status: "duplicate",
-        duplicateOfId: duplicate.id,
-        diagnostics: [
-          ...diagnostics,
-          "Cross-source duplicate matched inside the 10-minute window.",
-          "No new financial record was created.",
-        ],
-      };
+      return { status: "duplicate", duplicateOfId: duplicate.id };
     }
 
     const [settingsRow] = await db.select().from(settings).limit(1);
@@ -393,34 +338,6 @@ export async function processMailIngestion(
     const allowFinancialImpact = !accountWasInvalid && !unavailableConversion;
     const effectiveAccount = allowFinancialImpact ? account : undefined;
     const effectiveCard = allowFinancialImpact ? card : undefined;
-    [
-      { label: `${input.transaction.currency}/${primaryCurrency} primary`, value: primary },
-      account
-        ? { label: `${input.transaction.currency}/${account.currency} account`, value: accountConversion }
-        : undefined,
-      card
-        ? { label: `${input.transaction.currency}/${card.limitCurrency} card`, value: cardConversion }
-        : undefined,
-    ].filter(Boolean).forEach((item) => {
-      if (!item) return;
-      diagnostics.push(
-        item.value
-          ? `${item.label} conversion: rate ${item.value.frozen.rate.toFixed(6)} from ${item.value.frozen.source}.`
-          : `${item.label} conversion failed: no usable rate.`,
-      );
-    });
-    diagnostics.push(
-      requiresReview
-        ? "Result requires review."
-        : "Result was cleared automatically.",
-      effectiveAccount && effectiveCard
-        ? "Financial impact applied to both the account and card."
-        : effectiveCard
-          ? "Financial impact applied to the card only."
-          : effectiveAccount
-            ? "Financial impact applied to the account record only."
-            : "No account or card financial impact was applied.",
-    );
     const noteParts = [
       input.transaction.sourceLabel ||
         `Imported from ${input.transaction.source}`,
@@ -535,10 +452,6 @@ export async function processMailIngestion(
       recordId,
       creditCardRecordId: cardRecordId,
       warnings: warnings.length ? warnings : undefined,
-      diagnostics: [
-        ...diagnostics,
-        `Created wallet record: ${recordId ? "yes" : "no"}; card movement: ${cardRecordId ? "yes" : "no"}.`,
-      ],
     };
   } catch (error) {
     await db
