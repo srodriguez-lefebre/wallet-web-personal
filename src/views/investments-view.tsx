@@ -635,7 +635,7 @@ export function InvestmentsView() {
           </Card>
         ) : null}
 
-        <Card>
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <ReceiptText className="h-4 w-4" />
