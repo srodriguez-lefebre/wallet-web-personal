@@ -297,6 +297,7 @@ export function DashboardView() {
                         goToRecords({
                           type: "expense",
                           categoryId: category.id,
+                          accountId: dataset.settings.primaryAccountId,
                         })
                       }
                     />
@@ -312,7 +313,7 @@ export function DashboardView() {
                 key={category.id}
                 type="button"
                 onClick={() =>
-                  goToRecords({ type: "expense", categoryId: category.id })
+                  goToRecords({ type: "expense", categoryId: category.id, accountId: dataset.settings.primaryAccountId })
                 }
                 className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
               >
