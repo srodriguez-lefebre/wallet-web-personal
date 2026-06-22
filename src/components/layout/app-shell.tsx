@@ -35,7 +35,7 @@ const navItems = [
   { label: "Goals", href: "/goals", icon: Flag },
   { label: "Debts", href: "/debts", icon: Banknote },
   { label: "Investments", href: "/investments", icon: LineChart },
-  { label: "Imports", href: "/imports", icon: Download },
+  { label: "Data", href: "/data", icon: Download },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 

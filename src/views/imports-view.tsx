@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWallet } from "@/providers/wallet-provider";
+import { dateRangeForMonth, recordsForDateRange } from "@shared/calculations";
 import type { PaymentStatus, PaymentType, RecordType, WalletRecord } from "@shared/types";
 
 type CsvRow = Record<string, string>;
@@ -123,7 +124,13 @@ function findCategoryId(
 }
 
 export function ImportsView() {
-  const { dataset, importRecords } = useWallet();
+  const {
+    dataset,
+    importRecords,
+    selectedMonth,
+    selectedPeriodMode,
+    selectedDateRange,
+  } = useWallet();
   const [csv, setCsv] = useState(sampleCsv);
   const [accountId, setAccountId] = useState("");
   const [expenseCategoryId, setExpenseCategoryId] = useState("");
@@ -217,9 +224,15 @@ export function ImportsView() {
     downloadText(filename, [headers.join(","), ...lines].join("\n"));
   }
 
-  function exportCurrentMonth() {
-    const month = new Date().toISOString().slice(0, 7);
-    exportRecords(dataset.records.filter((record) => record.occurredAt.startsWith(month)), `wallet-report-${month}.csv`);
+  function exportSelectedPeriod() {
+    const range =
+      selectedPeriodMode === "month"
+        ? dateRangeForMonth(selectedMonth)
+        : selectedDateRange;
+    exportRecords(
+      recordsForDateRange(dataset.records, range),
+      `wallet-records-${range.from}-${range.to}.csv`,
+    );
   }
 
   async function loadCsvFile(file: File | undefined) {
@@ -259,16 +272,16 @@ export function ImportsView() {
   return (
     <div>
       <PageHeader
-        eyebrow="Imports"
-        title="Imports"
-        description="Paste CSV data, validate each row, and import valid records into your wallet."
+        eyebrow="Data"
+        title="Import / Export"
+        description="Import validated CSV records or export a backup and reports for the selected period."
       >
         <Button variant="outline" onClick={exportJson}>
           <Download className="h-4 w-4" />
           JSON backup
         </Button>
         <Button variant="outline" onClick={() => exportRecords()}><Download className="h-4 w-4" />Records CSV</Button>
-        <Button variant="outline" onClick={exportCurrentMonth}><Download className="h-4 w-4" />Monthly CSV</Button>
+        <Button variant="outline" onClick={exportSelectedPeriod}><Download className="h-4 w-4" />Selected period CSV</Button>
       </PageHeader>
 
       <form className="grid gap-4 xl:grid-cols-[420px_1fr]" onSubmit={handleImport}>

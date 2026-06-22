@@ -909,9 +909,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/imports")}
+              onClick={() => navigate("/data")}
             >
-              Imports
+              Data
               <Upload className="h-4 w-4" />
             </Button>
           </CardContent>

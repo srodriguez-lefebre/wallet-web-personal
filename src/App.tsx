@@ -40,7 +40,8 @@ function ProtectedApp() {
           <Route path="/debts" element={<DebtsView />} />
           <Route path="/investments" element={<InvestmentsView />} />
           <Route path="/investments/:investmentId" element={<InvestmentDetailView />} />
-          <Route path="/imports" element={<ImportsView />} />
+          <Route path="/data" element={<ImportsView />} />
+          <Route path="/imports" element={<Navigate to="/data" replace />} />
           <Route path="/settings" element={<SettingsView />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
