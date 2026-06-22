@@ -28,6 +28,7 @@ import {
   goalSchema,
   goalPatchSchema,
   goalReservationSchema,
+  goalReservationReleaseSchema,
   budgetSchema,
   budgetPatchSchema,
   investmentSchema,
@@ -91,7 +92,7 @@ import {
   payCreditCardStatement,
   listTags, createTag, updateTag, deleteTag,
   listGoals, createGoal, updateGoal, deleteGoal,
-  listGoalReservations, createGoalReservation, deleteGoalReservation,
+  listGoalReservations, createGoalReservation, deleteGoalReservation, releaseGoalReservation,
   listBudgets, createBudget, updateBudget, deleteBudget,
   listInvestments, createInvestment, updateInvestment, deleteInvestment,
   listInstallmentPlans, createInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan,
@@ -540,6 +541,11 @@ async function handleGoals(req: VercelRequest, res: VercelResponse, id?: string)
 }
 
 async function handleGoalReservations(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (id === "release") {
+    if (!guardApi(req, res, ["POST"])) return;
+    sendData(res, await releaseGoalReservation(validateBody(req, goalReservationReleaseSchema)), 201);
+    return;
+  }
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
     if (req.method === "POST") sendData(res, await createGoalReservation(validateBody(req, goalReservationSchema)), 201);

@@ -24,10 +24,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Progress } from "@/components/ui/progress";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
 import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
@@ -38,11 +37,14 @@ interface GoalDraft {
   currency: CurrencyCode;
   color: string;
   isVisible: boolean;
-  tagId: string;
   deadline: string;
   status: GoalStatus;
   accountId: string;
   note: string;
+  autoCaptureEnabled: boolean;
+  autoCaptureStart: string;
+  autoCaptureEnd: string;
+  autoReservationAccountId: string;
   isDeleted: boolean;
 }
 
@@ -61,11 +63,14 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
     currency: goal.currency,
     color: goal.color,
     isVisible: goal.isVisible,
-    tagId: goal.tagIds[0] ?? "",
     deadline: goal.deadline ?? "",
     status: goal.status,
     accountId: goal.accountId ?? "",
     note: goal.note ?? "",
+    autoCaptureEnabled: goal.autoCaptureEnabled ?? false,
+    autoCaptureStart: goal.autoCaptureStart ?? "",
+    autoCaptureEnd: goal.autoCaptureEnd ?? "",
+    autoReservationAccountId: goal.autoReservationAccountId ?? "",
     isDeleted: false,
   }));
 }
@@ -76,9 +81,9 @@ export function GoalsView() {
     dataset,
     addGoal,
     updateGoal,
+    updateRecord,
     deleteGoal,
     addGoalReservation,
-    setRecordFilters,
   } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const goals = calculateGoalProgress(dataset);
@@ -90,7 +95,6 @@ export function GoalsView() {
   const [targetAmount, setTargetAmount] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("UYU");
   const [color, setColor] = useState("#2563EB");
-  const [tagId, setTagId] = useState(dataset.tags[0]?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -151,7 +155,13 @@ export function GoalsView() {
   async function saveGoalEdits() {
     const activeDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
-      (draft) => !draft.name.trim() || Number(draft.targetAmount) <= 0,
+      (draft) =>
+        !draft.name.trim() ||
+        Number(draft.targetAmount) <= 0 ||
+        (draft.autoCaptureEnabled &&
+          (!draft.autoCaptureStart ||
+            !draft.autoCaptureEnd ||
+            draft.autoCaptureStart > draft.autoCaptureEnd)),
     );
 
     if (invalidDraft) {
@@ -161,11 +171,30 @@ export function GoalsView() {
       return;
     }
 
+    const historicalAssociations: Array<{ goalId: string; recordIds: string[] }> = [];
+    for (const draft of activeDrafts) {
+      if (!draft.autoCaptureEnabled || !draft.autoCaptureStart || draft.autoCaptureStart > new Date().toISOString().slice(0, 10)) continue;
+      const recordIds = dataset.records.filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled" && record.occurredAt.slice(0, 10) >= draft.autoCaptureStart && record.occurredAt.slice(0, 10) <= draft.autoCaptureEnd && !(record.goalIds ?? []).includes(draft.id)).map((record) => record.id);
+      if (recordIds.length && window.confirm(`Se encontraron ${recordIds.length} gastos históricos para ${draft.name}. ¿Querés asociarlos ahora?`)) historicalAssociations.push({ goalId: draft.id, recordIds });
+    }
+
     await Promise.all(
       goalDrafts
         .filter((draft) => draft.isDeleted)
         .map((draft) => deleteGoal(draft.id)),
     );
+
+    for (const group of historicalAssociations) {
+      for (const recordId of group.recordIds) {
+        const record = dataset.records.find((item) => item.id === recordId);
+        if (!record) continue;
+        await updateRecord(recordId, {
+          ...record,
+          goalIds: [...(record.goalIds ?? []), group.goalId],
+          goalAssociations: [...(record.goalAssociations ?? []), { goalId: group.goalId, assignmentSource: "date_rule", useReserved: false, reserveIncome: true }],
+        });
+      }
+    }
 
     await Promise.all(
       activeDrafts.map((draft) => {
@@ -181,8 +210,12 @@ export function GoalsView() {
           icon: currentGoal.icon,
           deadline: draft.deadline || undefined,
           status: draft.status,
-          tagIds: draft.tagId ? [draft.tagId] : [],
+          tagIds: [],
           accountId: draft.accountId || undefined,
+          autoCaptureEnabled: draft.autoCaptureEnabled,
+          autoCaptureStart: draft.autoCaptureEnabled ? draft.autoCaptureStart : undefined,
+          autoCaptureEnd: draft.autoCaptureEnabled ? draft.autoCaptureEnd : undefined,
+          autoReservationAccountId: draft.autoReservationAccountId || undefined,
           note: draft.note.trim() || undefined,
         });
       }),
@@ -212,8 +245,12 @@ export function GoalsView() {
       isVisible: true,
       deadline: deadline || undefined,
       status: "active",
-      tagIds: tagId ? [tagId] : [],
+      tagIds: [],
       accountId,
+      autoCaptureEnabled: false,
+      autoCaptureStart: undefined,
+      autoCaptureEnd: undefined,
+      autoReservationAccountId: accountId || undefined,
       note: undefined,
     });
 
@@ -229,6 +266,8 @@ export function GoalsView() {
     const account = dataset.accounts.find((item) => item.id === accountId);
     const numericAmount = Number(reserveAmount);
     if (!account || !goalId || numericAmount <= 0) return;
+    const balance = calculateAccountBalances(dataset).find((item) => item.account.id === accountId);
+    if (balance && numericAmount > balance.freeBalance && !window.confirm(`La reserva supera el saldo disponible (${formatMoney(balance.freeBalance, account.currency)}). ¿Continuar?`)) return;
 
     await addGoalReservation({
       goalId,
@@ -239,11 +278,6 @@ export function GoalsView() {
       note: "Reserva manual",
     });
     setReserveAmount("");
-  }
-
-  function openGoalRecords(tag?: string) {
-    setRecordFilters({ type: "expense", tagId: tag });
-    navigate("/records");
   }
 
   return (
@@ -344,21 +378,6 @@ export function GoalsView() {
                     </label>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Tag</span>
-                      <select
-                        value={tagId}
-                        onChange={(event) => setTagId(event.target.value)}
-                        className={inputClassName}
-                      >
-                        <option value="">No tag</option>
-                        {dataset.tags.map((tag) => (
-                          <option key={tag.id} value={tag.id}>
-                            {tag.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Color</span>
                       <input
@@ -533,25 +552,6 @@ export function GoalsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Linked tag</span>
-                        <select
-                          value={draft.tagId}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              tagId: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          <option value="">No tag</option>
-                          {dataset.tags.map((tag) => (
-                            <option key={tag.id} value={tag.id}>
-                              {tag.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block space-y-2">
                         <span className="text-sm font-medium">
                           Linked account
                         </span>
@@ -572,6 +572,27 @@ export function GoalsView() {
                           ))}
                         </select>
                       </label>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <label className="flex items-center justify-between gap-3">
+                        <span>
+                          <span className="block text-sm font-medium">Captura automática de gastos</span>
+                          <span className="block text-xs text-muted-foreground">Asocia gastos del rango y usa primero la reserva.</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 accent-primary"
+                          checked={draft.autoCaptureEnabled}
+                          onChange={(event) => updateGoalDraft(draft.id, { autoCaptureEnabled: event.target.checked })}
+                        />
+                      </label>
+                      {draft.autoCaptureEnabled ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <label className="space-y-2"><span className="text-sm font-medium">Desde</span><input type="date" className={inputClassName} value={draft.autoCaptureStart} onChange={(event) => updateGoalDraft(draft.id, { autoCaptureStart: event.target.value })} /></label>
+                          <label className="space-y-2"><span className="text-sm font-medium">Hasta</span><input type="date" className={inputClassName} value={draft.autoCaptureEnd} onChange={(event) => updateGoalDraft(draft.id, { autoCaptureEnd: event.target.value })} /></label>
+                          <label className="space-y-2"><span className="text-sm font-medium">Account de reserva</span><select className={inputClassName} value={draft.autoReservationAccountId} onChange={(event) => updateGoalDraft(draft.id, { autoReservationAccountId: event.target.value })}><option value="">Sin fallback</option>{dataset.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+                        </div>
+                      ) : null}
                     </div>
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Note</span>
@@ -642,10 +663,10 @@ export function GoalsView() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <Progress
-                    value={item.percentage}
-                    indicatorClassName="bg-sky-500"
-                  />
+                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-label={`${item.percentage.toFixed(1)}% committed`}>
+                    <span style={{ width: `${Math.min(100, (item.spent / item.goal.targetAmount) * 100)}%`, backgroundColor: item.goal.color }} />
+                    <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (item.spent / item.goal.targetAmount) * 100), (item.reserved / item.goal.targetAmount) * 100)}%` }} />
+                  </div>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-secondary p-3">
                       <p className="text-muted-foreground">Reserved</p>
@@ -661,24 +682,7 @@ export function GoalsView() {
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {item.goal.tagIds.map((currentTagId) => {
-                      const tag = dataset.tags.find(
-                        (candidate) => candidate.id === currentTagId,
-                      );
-                      return tag ? (
-                        <Badge
-                          key={tag.id}
-                          variant="info"
-                          className="transition hover:bg-sky-500/20"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            openGoalRecords(tag.id);
-                          }}
-                        >
-                          {tag.name}
-                        </Badge>
-                      ) : null;
-                    })}
+                    {item.goal.autoCaptureEnabled ? <Badge variant="info">Captura automática</Badge> : null}
                     {item.goal.deadline ? (
                       <Badge variant="muted">
                         <CalendarDays className="mr-1 h-3 w-3" />

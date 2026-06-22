@@ -833,27 +833,39 @@ export function isCategoryOrDescendant(
 
 export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
   return dataset.goals.map((goal) => {
+    const convert = (amount: number, currency: CurrencyCode, recordRate?: number) => {
+      if (currency === goal.currency) return amount;
+      const primary = dataset.settings.primaryCurrency;
+      const toPrimary = currency === primary
+        ? amount
+        : amount * (recordRate ?? dataset.exchangeRates.find((rate) => rate.fromCurrency === currency && rate.toCurrency === primary)?.rate ?? 1);
+      if (goal.currency === primary) return toPrimary;
+      const goalToPrimary = dataset.exchangeRates.find((rate) => rate.fromCurrency === goal.currency && rate.toCurrency === primary)?.rate ?? 1;
+      return toPrimary / goalToPrimary;
+    };
     const reserved = dataset.goalReservations
       .filter((reservation) => reservation.goalId === goal.id)
-      .reduce((total, reservation) => total + reservation.amount, 0);
+      .reduce((total, reservation) => total + convert(reservation.amount, reservation.currency), 0);
 
-    const spent = dataset.records
+    const netSpent = dataset.records
       .filter(
         (record) =>
-          record.type === "expense" &&
+          (record.type === "expense" || record.type === "income") &&
           record.paymentStatus !== "cancelled" &&
-          record.tagIds.some((tagId) => goal.tagIds.includes(tagId)),
+          (record.goalIds ?? []).includes(goal.id),
       )
       .reduce(
         (total, record) =>
-          total +
-          toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+          total + (record.type === "expense" ? 1 : -1) *
+          convert(record.amount, record.currency, record.exchangeRateToPrimary),
         0,
       );
+    const spent = Math.max(0, netSpent);
 
     const committed = reserved + spent;
     const remaining = Math.max(0, goal.targetAmount - committed);
-    const percentage = Math.min(100, (committed / goal.targetAmount) * 100);
+    const overTarget = Math.max(0, committed - goal.targetAmount);
+    const percentage = (committed / goal.targetAmount) * 100;
 
     return {
       goal,
@@ -861,6 +873,7 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
       spent,
       committed,
       remaining,
+      overTarget,
       percentage,
     };
   });

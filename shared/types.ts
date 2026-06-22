@@ -66,6 +66,13 @@ export interface Tag {
   isActive: boolean;
 }
 
+export interface RecordGoalAssociation {
+  goalId: string;
+  assignmentSource: "manual" | "date_rule";
+  useReserved: boolean;
+  reserveIncome: boolean;
+}
+
 export interface WalletRecord {
   id: string;
   type: RecordType;
@@ -78,6 +85,8 @@ export interface WalletRecord {
   categoryId?: string;
   counterpartyName?: string;
   tagIds: string[];
+  goalIds?: string[];
+  goalAssociations?: RecordGoalAssociation[];
   paymentType: PaymentType;
   paymentStatus: PaymentStatus;
   exchangeRateToPrimary: number;
@@ -195,8 +204,13 @@ export interface Goal {
   isVisible: boolean;
   deadline?: string;
   status: GoalStatus;
+  /** @deprecated Goals no longer calculate progress through tags. */
   tagIds: string[];
   accountId?: string;
+  autoCaptureEnabled?: boolean;
+  autoCaptureStart?: string;
+  autoCaptureEnd?: string;
+  autoReservationAccountId?: string;
   note?: string;
 }
 
@@ -208,6 +222,25 @@ export interface GoalReservation {
   currency: CurrencyCode;
   createdAt: string;
   note?: string;
+}
+
+export type GoalReservationMovementType =
+  | "reserve"
+  | "consume"
+  | "restore"
+  | "release";
+
+export interface GoalReservationMovement {
+  id: string;
+  goalId: string;
+  accountId: string;
+  type: GoalReservationMovementType;
+  amount: number;
+  currency: CurrencyCode;
+  recordId?: string;
+  reversesMovementId?: string;
+  note?: string;
+  createdAt: string;
 }
 
 export interface Budget {
@@ -337,6 +370,7 @@ export interface WalletDataset {
   creditCardPaymentAllocations: CreditCardPaymentAllocation[];
   goals: Goal[];
   goalReservations: GoalReservation[];
+  goalReservationMovements?: GoalReservationMovement[];
   budgets: Budget[];
   exchangeRates: ExchangeRate[];
   investments: Investment[];
@@ -364,6 +398,7 @@ export interface RecordFilters {
   creditCardId?: string;
   categoryId?: string;
   tagId?: string;
+  goalId?: string;
   search?: string;
   paymentStatus?: PaymentStatus | "all";
 }
@@ -382,6 +417,7 @@ export interface GoalProgress {
   spent: number;
   committed: number;
   remaining: number;
+  overTarget: number;
   percentage: number;
 }
 

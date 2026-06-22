@@ -36,7 +36,7 @@ Crear `.env.local` con:
 DATABASE_URL="postgresql://..."
 API_TOKEN="token-largo"
 SESSION_SECRET="secreto-independiente-para-firmar-sesiones"
-SESSION_TTL_SECONDS="43200"
+SESSION_TTL_SECONDS="1296000"
 INGEST_API_TOKEN="otro-token-largo"
 OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
 OPENAI_MODEL="gpt-5-nano"

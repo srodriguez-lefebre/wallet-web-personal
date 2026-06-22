@@ -439,7 +439,10 @@ export function CardsView() {
                     </div>
                   </div>
                 </div>
-                <Progress value={Math.min(100, summary.utilizationPercent)} />
+                <Progress
+                  value={Math.min(100, summary.utilizationPercent)}
+                  indicatorStyle={{ backgroundColor: summary.card.color }}
+                />
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Closes {summary.currentCycleEnd}</span>
                   <span>Due {summary.dueDate}</span>
@@ -453,6 +456,8 @@ export function CardsView() {
                 </div>
                 <div className="flex gap-2">
                   <Button
+                    className="border-transparent text-white hover:opacity-90"
+                    style={{ backgroundColor: summary.card.color }}
                     onClick={(event) => {
                       event.stopPropagation();
                       navigate(`/cards/${summary.card.id}`);

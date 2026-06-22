@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { sendError } from "./response.js";
 
-const DEFAULT_SESSION_TTL_SECONDS = 12 * 60 * 60;
+const DEFAULT_SESSION_TTL_SECONDS = 15 * 24 * 60 * 60;
 
 export function extractBearerToken(req: VercelRequest) {
   const header = req.headers.authorization;

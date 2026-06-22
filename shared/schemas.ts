@@ -2,6 +2,14 @@ import { z } from "zod";
 
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
 export const uuidSchema = z.string().uuid("Invalid UUID");
+const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
+
+export const recordGoalAssociationSchema = z.object({
+  goalId: uuidSchema,
+  assignmentSource: z.enum(["manual", "date_rule"]).default("manual"),
+  useReserved: z.boolean().default(true),
+  reserveIncome: z.boolean().default(true),
+});
 
 export const recordTypeSchema = z.enum(["expense", "income", "transfer"]);
 
@@ -68,7 +76,9 @@ export const recordSchema = z
     destinationAccountId: uuidSchema.optional(),
     categoryId: uuidSchema.optional(),
     counterpartyName: z.string().optional(),
-    tagIds: z.array(uuidSchema).default([]),
+    tagIds: z.array(uuidSchema).max(1).default([]),
+    goalIds: z.array(uuidSchema).default([]),
+    goalAssociations: z.array(recordGoalAssociationSchema).default([]),
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
     exchangeRateToPrimary: z.number().positive().default(1),
@@ -238,9 +248,19 @@ export const goalSchema = z.object({
   status: z
     .enum(["active", "completed", "paused", "cancelled"])
     .default("active"),
-  tagIds: z.array(uuidSchema).default([]),
   accountId: uuidSchema.optional(),
+  autoCaptureEnabled: z.boolean().default(false),
+  autoCaptureStart: calendarDateSchema.optional(),
+  autoCaptureEnd: calendarDateSchema.optional(),
+  autoReservationAccountId: uuidSchema.optional(),
   note: z.string().optional(),
+}).superRefine((value, context) => {
+  if (value.autoCaptureEnabled && (!value.autoCaptureStart || !value.autoCaptureEnd)) {
+    context.addIssue({ code: "custom", path: ["autoCaptureStart"], message: "Automatic capture requires a date range" });
+  }
+  if (value.autoCaptureStart && value.autoCaptureEnd && value.autoCaptureStart > value.autoCaptureEnd) {
+    context.addIssue({ code: "custom", path: ["autoCaptureEnd"], message: "End date must be on or after start date" });
+  }
 });
 
 export const goalReservationSchema = z.object({
@@ -249,6 +269,13 @@ export const goalReservationSchema = z.object({
   amount: z.number().positive(),
   currency: currencySchema,
   createdAt: z.string().datetime(),
+  note: z.string().optional(),
+});
+
+export const goalReservationReleaseSchema = z.object({
+  goalId: uuidSchema,
+  accountId: uuidSchema,
+  amount: z.number().positive(),
   note: z.string().optional(),
 });
 
@@ -399,7 +426,8 @@ export const recordPatchSchema = nonEmptyPatch({
   currency: currencySchema.optional(), accountId: uuidSchema.optional(),
   accountAmount: z.number().positive().optional(), creditCardId: uuidSchema.optional(),
   destinationAccountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.nullable().optional(),
-  counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).optional(),
+  counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).max(1).optional(),
+  goalIds: z.array(uuidSchema).optional(), goalAssociations: z.array(recordGoalAssociationSchema).optional(),
   paymentType: paymentTypeSchema.optional(), paymentStatus: paymentStatusSchema.optional(),
   exchangeRateToPrimary: z.number().positive().optional(), amountInLimitCurrency: z.number().positive().optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
@@ -447,7 +475,10 @@ export const goalPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(), targetAmount: z.number().positive().optional(), currency: currencySchema.optional(),
   color: z.string().min(1).optional(), icon: z.string().min(1).optional(), isVisible: z.boolean().optional(),
   deadline: z.string().nullable().optional(), status: z.enum(["active", "completed", "paused", "cancelled"]).optional(),
-  tagIds: z.array(uuidSchema).optional(), accountId: uuidSchema.nullable().optional(), note: z.string().nullable().optional(),
+  accountId: uuidSchema.nullable().optional(),
+  autoCaptureEnabled: z.boolean().optional(), autoCaptureStart: calendarDateSchema.nullable().optional(),
+  autoCaptureEnd: calendarDateSchema.nullable().optional(), autoReservationAccountId: uuidSchema.nullable().optional(),
+  note: z.string().nullable().optional(),
 });
 export const investmentPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(), type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
@@ -501,6 +532,7 @@ export const recordFiltersSchema = z.object({
   creditCardId: uuidSchema.optional(),
   categoryId: uuidSchema.optional(),
   tagId: uuidSchema.optional(),
+  goalId: uuidSchema.optional(),
   search: z.string().trim().min(1).max(100).optional(),
   paymentStatus: z.enum(["all", "cleared", "pending", "needs_review", "cancelled"]).optional(),
   from: dateOnlySchema.optional(),

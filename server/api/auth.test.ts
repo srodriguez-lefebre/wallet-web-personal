@@ -5,6 +5,7 @@ afterEach(() => {
   delete process.env.API_TOKEN;
   delete process.env.API_TOKEN_PREVIOUS;
   delete process.env.SESSION_SECRET;
+  delete process.env.SESSION_TTL_SECONDS;
 });
 
 describe("signed wallet sessions", () => {
@@ -22,6 +23,17 @@ describe("signed wallet sessions", () => {
     const session = createSessionToken(now);
     expect(isValidSessionToken(session.token, now)).toBe(true);
     expect(isValidSessionToken(`${session.token}x`, now)).toBe(false);
-    expect(isValidSessionToken(session.token, new Date("2026-06-21T12:00:00.000Z"))).toBe(false);
+    expect(
+      isValidSessionToken(
+        session.token,
+        new Date("2026-07-05T11:59:59.000Z"),
+      ),
+    ).toBe(true);
+    expect(
+      isValidSessionToken(
+        session.token,
+        new Date("2026-07-05T12:00:00.000Z"),
+      ),
+    ).toBe(false);
   });
 });

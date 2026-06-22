@@ -7,6 +7,7 @@ import type {
   Debt,
   Goal,
   GoalReservation,
+  GoalReservationMovement,
   Budget,
   Investment,
   InstallmentPlan,
@@ -329,6 +330,7 @@ export const updateGoal = (token: string, id: string, value: GoalPatch) => reque
 export const deleteGoal = (token: string, id: string) => requestApi<{ deleted: true }>(token, "goals.delete", `/api/goals/${id}`, { method: "DELETE" });
 export const createGoalReservation = (token: string, value: Omit<GoalReservation, "id">) => requestApi<GoalReservation>(token, "goalReservations.create", "/api/goal-reservations", { method: "POST", ...body(value) });
 export const deleteGoalReservation = (token: string, id: string) => requestApi<{ deleted: true }>(token, "goalReservations.delete", `/api/goal-reservations/${id}`, { method: "DELETE" });
+export const releaseGoalReservation = (token: string, value: { goalId: string; accountId: string; amount: number; note?: string }) => requestApi<GoalReservationMovement>(token, "goalReservations.release", "/api/goal-reservations/release", { method: "POST", ...body(value) });
 export const createBudget = (token: string, value: Omit<Budget, "id">) => requestApi<Budget>(token, "budgets.create", "/api/budgets", { method: "POST", ...body(value) });
 export const updateBudget = (token: string, id: string, value: BudgetPatch) => requestApi<Budget>(token, "budgets.patch", `/api/budgets/${id}`, { method: "PATCH", ...body(value) });
 export const deleteBudget = (token: string, id: string) => requestApi<{ deleted: true }>(token, "budgets.delete", `/api/budgets/${id}`, { method: "DELETE" });

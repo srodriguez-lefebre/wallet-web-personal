@@ -2850,6 +2850,80 @@ paths:
       tags:
         - goalReservations
       x-stability: stable
+  /api/goal-reservations/release:
+    post:
+      operationId: goalReservations.release
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                accountId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                amount:
+                  exclusiveMinimum: 0
+                  type: number
+                goalId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                note:
+                  type: string
+              required:
+                - goalId
+                - accountId
+                - amount
+              type: object
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 409
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Release part or all of a goal reservation
+      tags:
+        - goalReservations
+      x-stability: stable
   /api/goal-reservations/{id}:
     delete:
       operationId: goalReservations.delete
@@ -2955,6 +3029,19 @@ paths:
                   format: uuid
                   pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                   type: string
+                autoCaptureEnabled:
+                  default: false
+                  type: boolean
+                autoCaptureEnd:
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                  type: string
+                autoCaptureStart:
+                  pattern: ^\d{4}-\d{2}-\d{2}$
+                  type: string
+                autoReservationAccountId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
                 color:
                   minLength: 1
                   type: string
@@ -2987,13 +3074,6 @@ paths:
                     - paused
                     - cancelled
                   type: string
-                tagIds:
-                  default: []
-                  items:
-                    format: uuid
-                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-                    type: string
-                  type: array
                 targetAmount:
                   exclusiveMinimum: 0
                   type: number
@@ -3005,7 +3085,7 @@ paths:
                 - icon
                 - isVisible
                 - status
-                - tagIds
+                - autoCaptureEnabled
               type: object
         required: true
       responses:
@@ -3132,6 +3212,24 @@ paths:
                       pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                       type: string
                     - type: "null"
+                autoCaptureEnabled:
+                  type: boolean
+                autoCaptureEnd:
+                  anyOf:
+                    - pattern: ^\d{4}-\d{2}-\d{2}$
+                      type: string
+                    - type: "null"
+                autoCaptureStart:
+                  anyOf:
+                    - pattern: ^\d{4}-\d{2}-\d{2}$
+                      type: string
+                    - type: "null"
+                autoReservationAccountId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
                 color:
                   minLength: 1
                   type: string
@@ -3166,12 +3264,6 @@ paths:
                     - paused
                     - cancelled
                   type: string
-                tagIds:
-                  items:
-                    format: uuid
-                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
-                    type: string
-                  type: array
                 targetAmount:
                   exclusiveMinimum: 0
                   type: number
@@ -4112,6 +4204,13 @@ paths:
             pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
             type: string
         - in: query
+          name: goalId
+          required: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
           name: search
           required: false
           schema:
@@ -4250,6 +4349,41 @@ paths:
                   default: 1
                   exclusiveMinimum: 0
                   type: number
+                goalAssociations:
+                  default: []
+                  items:
+                    additionalProperties: false
+                    properties:
+                      assignmentSource:
+                        default: manual
+                        enum:
+                          - manual
+                          - date_rule
+                        type: string
+                      goalId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      reserveIncome:
+                        default: true
+                        type: boolean
+                      useReserved:
+                        default: true
+                        type: boolean
+                    required:
+                      - goalId
+                      - assignmentSource
+                      - useReserved
+                      - reserveIncome
+                    type: object
+                  type: array
+                goalIds:
+                  default: []
+                  items:
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                    type: string
+                  type: array
                 isFixed:
                   type: boolean
                 note:
@@ -4279,6 +4413,7 @@ paths:
                     format: uuid
                     pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                     type: string
+                  maxItems: 1
                   type: array
                 type:
                   enum:
@@ -4291,6 +4426,8 @@ paths:
                 - amount
                 - currency
                 - tagIds
+                - goalIds
+                - goalAssociations
                 - paymentType
                 - paymentStatus
                 - exchangeRateToPrimary
@@ -4408,6 +4545,41 @@ paths:
                         default: 1
                         exclusiveMinimum: 0
                         type: number
+                      goalAssociations:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            assignmentSource:
+                              default: manual
+                              enum:
+                                - manual
+                                - date_rule
+                              type: string
+                            goalId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            reserveIncome:
+                              default: true
+                              type: boolean
+                            useReserved:
+                              default: true
+                              type: boolean
+                          required:
+                            - goalId
+                            - assignmentSource
+                            - useReserved
+                            - reserveIncome
+                          type: object
+                        type: array
+                      goalIds:
+                        default: []
+                        items:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        type: array
                       isFixed:
                         type: boolean
                       note:
@@ -4437,6 +4609,7 @@ paths:
                           format: uuid
                           pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                           type: string
+                        maxItems: 1
                         type: array
                       type:
                         enum:
@@ -4449,6 +4622,8 @@ paths:
                       - amount
                       - currency
                       - tagIds
+                      - goalIds
+                      - goalAssociations
                       - paymentType
                       - paymentStatus
                       - exchangeRateToPrimary
@@ -4638,6 +4813,39 @@ paths:
                 exchangeRateToPrimary:
                   exclusiveMinimum: 0
                   type: number
+                goalAssociations:
+                  items:
+                    additionalProperties: false
+                    properties:
+                      assignmentSource:
+                        default: manual
+                        enum:
+                          - manual
+                          - date_rule
+                        type: string
+                      goalId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      reserveIncome:
+                        default: true
+                        type: boolean
+                      useReserved:
+                        default: true
+                        type: boolean
+                    required:
+                      - goalId
+                      - assignmentSource
+                      - useReserved
+                      - reserveIncome
+                    type: object
+                  type: array
+                goalIds:
+                  items:
+                    format: uuid
+                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                    type: string
+                  type: array
                 isFixed:
                   type: boolean
                 note:
@@ -4668,6 +4876,7 @@ paths:
                     format: uuid
                     pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                     type: string
+                  maxItems: 1
                   type: array
                 type:
                   enum:

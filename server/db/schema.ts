@@ -1,5 +1,6 @@
 import {
   boolean,
+  date,
   type AnyPgColumn,
   index,
   integer,
@@ -400,6 +401,12 @@ export const goals = pgTable("goals", {
   deadline: timestamp("deadline", { withTimezone: true }),
   status: goalStatusEnum("status").notNull().default("active"),
   accountId: uuid("account_id").references(() => accounts.id),
+  autoCaptureEnabled: boolean("auto_capture_enabled").notNull().default(false),
+  autoCaptureStart: date("auto_capture_start"),
+  autoCaptureEnd: date("auto_capture_end"),
+  autoReservationAccountId: uuid("auto_reservation_account_id").references(
+    () => accounts.id,
+  ),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
@@ -409,6 +416,64 @@ export const goals = pgTable("goals", {
     .defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+export const recordGoals = pgTable(
+  "record_goals",
+  {
+    recordId: uuid("record_id")
+      .notNull()
+      .references(() => records.id, { onDelete: "cascade" }),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id),
+    assignmentSource: text("assignment_source").notNull().default("manual"),
+    useReserved: boolean("use_reserved").notNull().default(true),
+    reserveIncome: boolean("reserve_income").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    recordGoalIdx: uniqueIndex("record_goals_record_goal_idx").on(
+      table.recordId,
+      table.goalId,
+    ),
+    goalIdx: index("record_goals_goal_idx").on(table.goalId),
+  }),
+);
+
+export const goalReservationMovements = pgTable(
+  "goal_reservation_movements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id),
+    type: text("type").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
+    currency: text("currency").notNull(),
+    recordId: uuid("record_id").references(() => records.id),
+    reversesMovementId: uuid("reverses_movement_id").references(
+      (): AnyPgColumn => goalReservationMovements.id,
+    ),
+    idempotencyKey: text("idempotency_key"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    goalIdx: index("goal_reservation_movements_goal_idx").on(table.goalId),
+    accountIdx: index("goal_reservation_movements_account_idx").on(table.accountId),
+    recordIdx: index("goal_reservation_movements_record_idx").on(table.recordId),
+    idempotencyIdx: uniqueIndex("goal_reservation_movements_idempotency_idx").on(
+      table.idempotencyKey,
+    ),
+  }),
+);
 
 export const goalTags = pgTable(
   "goal_tags",

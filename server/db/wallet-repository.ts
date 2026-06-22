@@ -12,13 +12,14 @@ import {
   creditCards,
   debts,
   exchangeRates,
-  goalReservations,
+  goalReservationMovements,
   goalTags,
   goals,
   installmentPlans,
   investments,
   merchants,
   records,
+  recordGoals,
   recordTags,
   recurringDebts,
   settings,
@@ -37,6 +38,8 @@ import type {
   ExchangeRate,
   Goal,
   GoalReservation,
+  GoalReservationMovement,
+  RecordGoalAssociation,
   InstallmentPlan,
   Investment,
   RecurringDebt,
@@ -88,7 +91,7 @@ type NewCreditCardRecord = Omit<
   CreditCardRecord,
   "id" | "creditCardId" | "walletRecordId" | "statementId"
 >;
-type NewGoal = Omit<Goal, "id">;
+type NewGoal = Omit<Goal, "id" | "tagIds">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
 type NewBudget = Omit<Budget, "id">;
 type NewInstallmentPlan = Omit<InstallmentPlan, "id">;
@@ -186,7 +189,9 @@ function mapTag(row: typeof tags.$inferSelect): Tag {
 function mapRecord(
   row: typeof records.$inferSelect,
   tagIdsByRecord: Record<string, string[]>,
+  goalAssociationsByRecord: Record<string, RecordGoalAssociation[]> = {},
 ): WalletRecord {
+  const goalAssociations = goalAssociationsByRecord[row.id] ?? [];
   return {
     id: row.id,
     type: row.type,
@@ -200,6 +205,8 @@ function mapRecord(
     categoryId: optional(row.categoryId),
     counterpartyName: optional(row.counterpartyName),
     tagIds: tagIdsByRecord[row.id] ?? [],
+    goalIds: goalAssociations.map((association) => association.goalId),
+    goalAssociations,
     paymentType: row.paymentType,
     paymentStatus: row.paymentStatus,
     exchangeRateToPrimary: asNumber(row.exchangeRateToPrimary),
@@ -307,7 +314,6 @@ function mapCreditCardPaymentAllocation(
 
 function mapGoal(
   row: typeof goals.$inferSelect,
-  tagIdsByGoal: Record<string, string[]>,
 ): Goal {
   return {
     id: row.id,
@@ -319,24 +325,65 @@ function mapGoal(
     isVisible: row.isVisible,
     deadline: asIso(row.deadline),
     status: row.status,
-    tagIds: tagIdsByGoal[row.id] ?? [],
+    tagIds: [],
     accountId: optional(row.accountId),
+    autoCaptureEnabled: row.autoCaptureEnabled,
+    autoCaptureStart: optional(row.autoCaptureStart),
+    autoCaptureEnd: optional(row.autoCaptureEnd),
+    autoReservationAccountId: optional(row.autoReservationAccountId),
     note: optional(row.note),
   };
 }
 
-function mapGoalReservation(
-  row: typeof goalReservations.$inferSelect,
-): GoalReservation {
+function mapGoalReservationMovement(
+  row: typeof goalReservationMovements.$inferSelect,
+): GoalReservationMovement {
   return {
     id: row.id,
     goalId: row.goalId,
     accountId: row.accountId,
+    type: row.type as GoalReservationMovement["type"],
     amount: asNumber(row.amount),
-    currency: row.currency as GoalReservation["currency"],
-    createdAt: asRequiredIso(row.createdAt),
+    currency: row.currency as GoalReservationMovement["currency"],
+    recordId: optional(row.recordId),
+    reversesMovementId: optional(row.reversesMovementId),
     note: optional(row.note),
+    createdAt: asRequiredIso(row.createdAt),
   };
+}
+
+function deriveGoalReservations(
+  movementRows: Array<typeof goalReservationMovements.$inferSelect>,
+): GoalReservation[] {
+  const balances = new Map<string, GoalReservation>();
+  for (const row of movementRows) {
+    const key = `${row.goalId}:${row.accountId}:${row.currency}`;
+    const current = balances.get(key) ?? {
+      id: row.id,
+      goalId: row.goalId,
+      accountId: row.accountId,
+      amount: 0,
+      currency: row.currency as GoalReservation["currency"],
+      createdAt: asRequiredIso(row.createdAt),
+      note: "Saldo reservado",
+    };
+    const direction = row.type === "reserve" || row.type === "restore" ? 1 : -1;
+    current.amount += direction * asNumber(row.amount);
+    balances.set(key, current);
+  }
+  return [...balances.values()].filter((reservation) => reservation.amount > 0.005);
+}
+
+function groupGoalAssociations(rows: Array<typeof recordGoals.$inferSelect>) {
+  return rows.reduce<Record<string, RecordGoalAssociation[]>>((groups, row) => {
+    groups[row.recordId] = [...(groups[row.recordId] ?? []), {
+      goalId: row.goalId,
+      assignmentSource: row.assignmentSource as RecordGoalAssociation["assignmentSource"],
+      useReserved: row.useReserved,
+      reserveIncome: row.reserveIncome,
+    }];
+    return groups;
+  }, {});
 }
 
 function mapBudget(row: typeof budgets.$inferSelect): Budget {
@@ -476,9 +523,9 @@ export async function getWalletDataset(
     creditCardAllocationRows,
     recordRows,
     recordTagRows,
+    recordGoalRows,
     goalRows,
-    goalTagRows,
-    goalReservationRows,
+    goalReservationMovementRows,
     budgetRows,
     exchangeRateRows,
     investmentRows,
@@ -515,12 +562,14 @@ export async function getWalletDataset(
     options.recordsOverride
       ? db.select().from(recordTags).where(sql`false`).limit(0)
       : db.select().from(recordTags),
+    options.recordsOverride
+      ? db.select().from(recordGoals).where(sql`false`).limit(0)
+      : db.select().from(recordGoals),
     db.select().from(goals).where(isNull(goals.deletedAt)),
-    db.select().from(goalTags),
     db
       .select()
-      .from(goalReservations)
-      .orderBy(desc(goalReservations.createdAt)),
+      .from(goalReservationMovements)
+      .orderBy(desc(goalReservationMovements.createdAt)),
     db.select().from(budgets),
     db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)),
     db.select().from(investments).orderBy(desc(investments.startedAt)),
@@ -530,7 +579,7 @@ export async function getWalletDataset(
   ]);
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
-  const tagIdsByGoal = groupIds(goalTagRows, "goalId", "tagId");
+  const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
 
   return {
     settings: mapSettings(settingsRows[0]),
@@ -544,9 +593,10 @@ export async function getWalletDataset(
     creditCardPaymentAllocations: creditCardAllocationRows.map(
       mapCreditCardPaymentAllocation,
     ),
-    records: options.recordsOverride ?? recordRows.map((record) => mapRecord(record, tagIdsByRecord)),
-    goals: goalRows.map((goal) => mapGoal(goal, tagIdsByGoal)),
-    goalReservations: goalReservationRows.map(mapGoalReservation),
+    records: options.recordsOverride ?? recordRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
+    goals: goalRows.map((goal) => mapGoal(goal)),
+    goalReservations: deriveGoalReservations(goalReservationMovementRows),
+    goalReservationMovements: goalReservationMovementRows.map(mapGoalReservationMovement),
     budgets: budgetRows.map(mapBudget),
     exchangeRates: exchangeRateRows.map(mapExchangeRate),
     investments: investmentRows.map(mapInvestment),
@@ -1376,6 +1426,7 @@ export async function listRecords(
     creditCardId?: string;
     categoryId?: string;
     tagId?: string;
+    goalId?: string;
     search?: string;
     paymentStatus?: string;
     from?: string;
@@ -1395,6 +1446,7 @@ export async function listRecords(
   if (filters.categoryId)
     clauses.push(eq(records.categoryId, filters.categoryId));
   if (filters.tagId) clauses.push(inArray(records.id, db.select({ id: recordTags.recordId }).from(recordTags).where(eq(recordTags.tagId, filters.tagId))));
+  if (filters.goalId) clauses.push(inArray(records.id, db.select({ id: recordGoals.recordId }).from(recordGoals).where(eq(recordGoals.goalId, filters.goalId))));
   if (filters.paymentStatus && filters.paymentStatus !== "all") clauses.push(eq(records.paymentStatus, filters.paymentStatus as WalletRecord["paymentStatus"]));
   if (filters.search) {
     const pattern = `%${filters.search.replace(/[%_]/g, "\\$&")}%`;
@@ -1427,11 +1479,15 @@ export async function listRecords(
   const recordTagRows = pageRows.length > 0
     ? await db.select().from(recordTags).where(inArray(recordTags.recordId, pageRows.map((row) => row.id)))
     : [];
+  const recordGoalRows = pageRows.length > 0
+    ? await db.select().from(recordGoals).where(inArray(recordGoals.recordId, pageRows.map((row) => row.id)))
+    : [];
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
+  const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
   const last = pageRows.at(-1);
 
   return {
-    items: pageRows.map((record) => mapRecord(record, tagIdsByRecord)),
+    items: pageRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
     hasMore,
     nextCursor: hasMore && last
       ? encodeRecordCursor({ occurredAt: last.occurredAt.toISOString(), id: last.id })
@@ -1439,8 +1495,121 @@ export async function listRecords(
   };
 }
 
+function requestedGoalAssociations(input: NewRecord): RecordGoalAssociation[] {
+  const explicit = input.goalAssociations ?? [];
+  if (explicit.length) return explicit;
+  return (input.goalIds ?? []).map((goalId) => ({
+    goalId,
+    assignmentSource: "manual" as const,
+    useReserved: true,
+    reserveIncome: true,
+  }));
+}
+
+async function resolveGoalAssociations(input: NewRecord, db: Db) {
+  const associations = new Map(
+    requestedGoalAssociations(input).map((association) => [association.goalId, association]),
+  );
+  if (associations.size) {
+    const selectedGoals = await db.select().from(goals).where(inArray(goals.id, [...associations.keys()]));
+    if (selectedGoals.length !== associations.size || selectedGoals.some((goal) => goal.deletedAt || goal.status !== "active")) {
+      throw validationError("New records can only be associated with active goals");
+    }
+  }
+  if (input.type === "expense") {
+    const date = input.occurredAt.slice(0, 10);
+    const automaticGoals = await db.select().from(goals).where(and(
+      isNull(goals.deletedAt),
+      eq(goals.status, "active"),
+      eq(goals.autoCaptureEnabled, true),
+      sql`${goals.autoCaptureStart} <= ${date}`,
+      sql`${goals.autoCaptureEnd} >= ${date}`,
+    ));
+    for (const goal of automaticGoals) {
+      if (!associations.has(goal.id)) associations.set(goal.id, {
+        goalId: goal.id,
+        assignmentSource: "date_rule",
+        useReserved: true,
+        reserveIncome: true,
+      });
+    }
+  }
+  return [...associations.values()];
+}
+
+async function buildRecordReservationMovements(
+  recordId: string,
+  input: NewRecord,
+  associations: RecordGoalAssociation[],
+  db: Db,
+) {
+  if (input.paymentStatus === "cancelled" || input.type === "transfer" || associations.length === 0) return [];
+  const goalRows = await db.select().from(goals).where(inArray(goals.id, associations.map((item) => item.goalId)));
+  const accountRows = await db.select().from(accounts);
+  const movementRows = await db.select().from(goalReservationMovements).where(
+    inArray(goalReservationMovements.goalId, associations.map((item) => item.goalId)),
+  );
+  const available = new Map<string, number>();
+  for (const movement of movementRows) {
+    if (movement.recordId === recordId) continue;
+    const key = `${movement.goalId}:${movement.accountId}`;
+    const direction = movement.type === "reserve" || movement.type === "restore" ? 1 : -1;
+    available.set(key, (available.get(key) ?? 0) + direction * asNumber(movement.amount));
+  }
+  const values: Array<typeof goalReservationMovements.$inferInsert> = [];
+  for (const association of associations) {
+    const goal = goalRows.find((item) => item.id === association.goalId);
+    if (!goal) continue;
+    const accountId = input.accountId ?? goal.autoReservationAccountId;
+    const account = accountRows.find((item) => item.id === accountId);
+    if (!accountId || !account) continue;
+    const recordAmount = input.accountId === accountId
+      ? (input.accountAmount ?? input.amount)
+      : input.currency === account.currency
+        ? input.amount
+        : input.amount * input.exchangeRateToPrimary;
+    if (input.type === "expense" && association.useReserved) {
+      const key = `${association.goalId}:${accountId}`;
+      const amount = Math.min(Math.max(0, available.get(key) ?? 0), recordAmount);
+      if (amount > 0) {
+        values.push({ goalId: association.goalId, accountId, type: "consume", amount: decimal(amount), currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:consume`, note: "Consumo de reserva por Record" });
+        available.set(key, (available.get(key) ?? 0) - amount);
+      }
+    }
+    if (input.type === "income" && association.reserveIncome) {
+      values.push({ goalId: association.goalId, accountId, type: "reserve", amount: decimal(recordAmount), currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:income-reserve`, note: "Ingreso vuelto a reservar" });
+    }
+  }
+  return values;
+}
+
+async function buildRecordMovementCompensations(recordId: string, db: Db) {
+  const rows = await db.select().from(goalReservationMovements).where(
+    eq(goalReservationMovements.recordId, recordId),
+  );
+  const net = new Map<string, { goalId: string; accountId: string; currency: string; amount: number }>();
+  for (const row of rows) {
+    const key = `${row.goalId}:${row.accountId}:${row.currency}`;
+    const current = net.get(key) ?? { goalId: row.goalId, accountId: row.accountId, currency: row.currency, amount: 0 };
+    const direction = row.type === "reserve" || row.type === "restore" ? 1 : -1;
+    current.amount += direction * asNumber(row.amount);
+    net.set(key, current);
+  }
+  return [...net.values()].filter((item) => Math.abs(item.amount) > 0.005).map((item) => ({
+    goalId: item.goalId,
+    accountId: item.accountId,
+    type: item.amount > 0 ? "release" : "restore",
+    amount: decimal(Math.abs(item.amount)),
+    currency: item.currency,
+    recordId,
+    idempotencyKey: `${recordId}:reconcile:${randomUUID()}`,
+    note: "Reconciliación de Record",
+  } satisfies typeof goalReservationMovements.$inferInsert));
+}
+
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
   const recordId = randomUUID();
+  const associations = await resolveGoalAssociations(input, db);
   const recordValues = {
     id: recordId,
     type: input.type,
@@ -1469,47 +1638,30 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
     isFixed: input.isFixed ?? false,
     debtId: input.debtId ?? null,
   };
-  if (input.creditCardId && input.categoryId) {
-    const recordInsert = db.insert(records).values(recordValues).returning();
-    const cardInsert = db.insert(creditCardRecords).values({
-        id: randomUUID(),
-        creditCardId: input.creditCardId,
-        walletRecordId: recordId,
-        kind: input.type === "income" ? "refund" : "purchase",
-        amount: decimal(input.amount),
-        currency: input.currency,
-        amountInLimitCurrency: decimal(
-          input.amountInLimitCurrency ?? input.amount,
-        ),
-        exchangeRateToLimitCurrency: decimal(
-          input.exchangeRateToLimitCurrency ?? 1,
-        ),
-        categoryId: input.categoryId,
-        counterpartyName: input.counterpartyName ?? null,
-        note: input.note ?? null,
-        accountId: input.accountId ?? null,
-        accountAmount: input.accountId
-          ? decimal(input.accountAmount ?? input.amount)
-          : null,
-        accountImpactAtCreation: Boolean(input.accountId),
-        occurredAt: new Date(input.occurredAt),
-      });
-    const [recordResult] = input.tagIds.length
-      ? await db.batch([recordInsert, cardInsert, db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId })))])
-      : await db.batch([recordInsert, cardInsert]);
-    const row = recordResult[0];
-    return mapRecord(row, { [row.id]: input.tagIds });
-  }
   const recordInsert = db.insert(records).values(recordValues).returning();
-  const [rows] = input.tagIds.length
-    ? await db.batch([recordInsert, db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId })))])
-    : await db.batch([recordInsert]);
+  const queries: unknown[] = [recordInsert];
+  if (input.creditCardId && input.categoryId) queries.push(db.insert(creditCardRecords).values({
+    id: randomUUID(), creditCardId: input.creditCardId, walletRecordId: recordId,
+    kind: input.type === "income" ? "refund" : "purchase", amount: decimal(input.amount),
+    currency: input.currency, amountInLimitCurrency: decimal(input.amountInLimitCurrency ?? input.amount),
+    exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency ?? 1),
+    categoryId: input.categoryId, counterpartyName: input.counterpartyName ?? null,
+    note: input.note ?? null, accountId: input.accountId ?? null,
+    accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
+    accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
+  }));
+  if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId }))));
+  if (associations.length) queries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId, ...association }))));
+  const movementValues = await buildRecordReservationMovements(recordId, input, associations, db);
+  if (movementValues.length) queries.push(db.insert(goalReservationMovements).values(movementValues));
+  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
   const row = rows[0];
-  return mapRecord(row, { [row.id]: input.tagIds });
+  return mapRecord(row, { [row.id]: input.tagIds }, { [row.id]: associations });
 }
 
 export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()) {
   const ids = inputs.map(() => randomUUID());
+  const associationsByInput = await Promise.all(inputs.map((input) => resolveGoalAssociations(input, db)));
   const queries: unknown[] = [];
   inputs.forEach((input, index) => {
     const id = ids[index];
@@ -1536,14 +1688,37 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
       accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
     }));
     if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId: id, tagId }))));
+    const associations = associationsByInput[index];
+    if (associations.length) queries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId: id, ...association }))));
   });
+  const movementsByInput = await Promise.all(inputs.map((input, index) => buildRecordReservationMovements(ids[index], input, associationsByInput[index], db)));
+  const existingMovementRows = await db.select().from(goalReservationMovements);
+  const runningBalances = new Map<string, number>();
+  for (const movement of existingMovementRows) {
+    const key = `${movement.goalId}:${movement.accountId}`;
+    const direction = movement.type === "reserve" || movement.type === "restore" ? 1 : -1;
+    runningBalances.set(key, (runningBalances.get(key) ?? 0) + direction * asNumber(movement.amount));
+  }
+  const movementValues = movementsByInput.flat().flatMap((movement) => {
+    const key = `${movement.goalId}:${movement.accountId}`;
+    if (movement.type === "consume") {
+      const amount = Math.min(asNumber(movement.amount), Math.max(0, runningBalances.get(key) ?? 0));
+      runningBalances.set(key, (runningBalances.get(key) ?? 0) - amount);
+      return amount > 0 ? [{ ...movement, amount: decimal(amount) }] : [];
+    }
+    if (movement.type === "reserve" || movement.type === "restore") runningBalances.set(key, (runningBalances.get(key) ?? 0) + asNumber(movement.amount));
+    return [movement];
+  });
+  if (movementValues.length) queries.push(db.insert(goalReservationMovements).values(movementValues));
   await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
-  const [rows, tagRows] = await db.batch([
+  const [rows, tagRows, goalRows] = await db.batch([
     db.select().from(records).where(inArray(records.id, ids)),
     db.select().from(recordTags).where(inArray(recordTags.recordId, ids)),
+    db.select().from(recordGoals).where(inArray(recordGoals.recordId, ids)),
   ]);
   const tagIdsByRecord = groupIds(tagRows, "recordId", "tagId");
-  const byId = new Map(rows.map((row) => [row.id, mapRecord(row, tagIdsByRecord)]));
+  const associationsByRecord = groupGoalAssociations(goalRows);
+  const byId = new Map(rows.map((row) => [row.id, mapRecord(row, tagIdsByRecord, associationsByRecord)]));
   return ids.map((id) => byId.get(id)).filter((record): record is WalletRecord => Boolean(record));
 }
 
@@ -1552,7 +1727,7 @@ export async function updateRecord(
   input: RecordPatch,
   db: Db = createDb(),
 ) {
-  const [[linked], [existingRecord], existingTagRows] = await Promise.all([
+  const [[linked], [existingRecord], existingTagRows, existingGoalRows] = await Promise.all([
     db
       .select()
       .from(creditCardRecords)
@@ -1560,9 +1735,14 @@ export async function updateRecord(
       .limit(1),
     db.select().from(records).where(eq(records.id, id)).limit(1),
     db.select().from(recordTags).where(eq(recordTags.recordId, id)),
+    db.select().from(recordGoals).where(eq(recordGoals.recordId, id)),
   ]);
   if (!existingRecord) return null;
-  const current = mapRecord(existingRecord, { [id]: existingTagRows.map((item) => item.tagId) });
+  const current = mapRecord(
+    existingRecord,
+    { [id]: existingTagRows.map((item) => item.tagId) },
+    { [id]: groupGoalAssociations(existingGoalRows)[id] ?? [] },
+  );
   const merged = recordSchema.parse({
     ...current,
     ...input,
@@ -1633,15 +1813,42 @@ export async function updateRecord(
     sideQueries.push(db.delete(recordTags).where(eq(recordTags.recordId, id)));
     if (merged.tagIds.length) sideQueries.push(db.insert(recordTags).values(merged.tagIds.map((tagId) => ({ recordId: id, tagId }))));
   }
+  const associations = merged.goalAssociations.length
+    ? merged.goalAssociations
+    : merged.goalIds.map((goalId) => ({ goalId, assignmentSource: "manual" as const, useReserved: true, reserveIncome: true }));
+  const existingGoalIds = new Set(existingGoalRows.map((row) => row.goalId));
+  const addedGoalIds = associations.map((association) => association.goalId).filter((goalId) => !existingGoalIds.has(goalId));
+  if (addedGoalIds.length) {
+    const addedGoals = await db.select().from(goals).where(inArray(goals.id, addedGoalIds));
+    if (addedGoals.length !== addedGoalIds.length || addedGoals.some((goal) => goal.deletedAt || goal.status !== "active")) throw validationError("New records can only be associated with active goals");
+  }
+  if (hasOwn(input, "goalIds") || hasOwn(input, "goalAssociations")) {
+    sideQueries.push(db.delete(recordGoals).where(eq(recordGoals.recordId, id)));
+    if (associations.length) sideQueries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId: id, ...association }))));
+  }
+  const reservationFingerprint = (record: NewRecord, items: RecordGoalAssociation[]) => JSON.stringify({
+    type: record.type, amount: record.amount, currency: record.currency,
+    accountId: record.accountId, accountAmount: record.accountAmount,
+    paymentStatus: record.paymentStatus,
+    associations: items.map((item) => ({ goalId: item.goalId, useReserved: item.useReserved, reserveIncome: item.reserveIncome })).sort((a, b) => a.goalId.localeCompare(b.goalId)),
+  });
+  const currentAssociations = groupGoalAssociations(existingGoalRows)[id] ?? [];
+  if (reservationFingerprint(current, currentAssociations) !== reservationFingerprint(merged, associations)) {
+    const compensations = await buildRecordMovementCompensations(id, db);
+    if (compensations.length) sideQueries.push(db.insert(goalReservationMovements).values(compensations));
+    const newMovements = await buildRecordReservationMovements(id, merged, associations, db);
+    if (newMovements.length) sideQueries.push(db.insert(goalReservationMovements).values(newMovements.map((movement) => ({ ...movement, idempotencyKey: `${movement.idempotencyKey}:${randomUUID()}` }))));
+  }
   const [rows] = sideQueries.length
     ? await db.batch([recordUpdate, ...sideQueries] as unknown as Parameters<Db["batch"]>[0])
     : await db.batch([recordUpdate]);
   const row = rows[0];
-  return mapRecord(row, { [id]: merged.tagIds });
+  return mapRecord(row, { [id]: merged.tagIds }, { [id]: associations });
 }
 
 export async function deleteRecord(id: string, db: Db = createDb()) {
   const now = new Date();
+  const compensations = await buildRecordMovementCompensations(id, db);
   const [recordResult] = await db.batch([
     db
       .update(records)
@@ -1652,6 +1859,7 @@ export async function deleteRecord(id: string, db: Db = createDb()) {
       .update(creditCardRecords)
       .set({ deletedAt: now, updatedAt: now })
       .where(eq(creditCardRecords.walletRecordId, id)),
+    ...(compensations.length ? [db.insert(goalReservationMovements).values(compensations)] : []),
   ]);
   const row = recordResult[0];
   return Boolean(row);
@@ -1659,15 +1867,25 @@ export async function deleteRecord(id: string, db: Db = createDb()) {
 
 export async function listGoals(db: Db = createDb()) {
   const rows = await db.select().from(goals).where(isNull(goals.deletedAt));
-  const goalTagRows = await db.select().from(goalTags);
-  const tagIdsByGoal = groupIds(goalTagRows, "goalId", "tagId");
-  return rows.map((goal) => mapGoal(goal, tagIdsByGoal));
+  return rows.map((goal) => mapGoal(goal));
+}
+
+async function assertNoAutoCaptureOverlap(input: NewGoal, excludedId: string | undefined, db: Db) {
+  if (input.status !== "active" || !input.autoCaptureEnabled || !input.autoCaptureStart || !input.autoCaptureEnd) return;
+  const clauses = [
+    isNull(goals.deletedAt), eq(goals.status, "active"), eq(goals.autoCaptureEnabled, true),
+    sql`${goals.autoCaptureStart} <= ${input.autoCaptureEnd}`,
+    sql`${goals.autoCaptureEnd} >= ${input.autoCaptureStart}`,
+  ];
+  if (excludedId) clauses.push(ne(goals.id, excludedId));
+  const [overlap] = await db.select({ id: goals.id }).from(goals).where(and(...clauses)).limit(1);
+  if (overlap) throw validationError("Automatic goal date ranges cannot overlap");
 }
 
 export async function createGoal(input: NewGoal, db: Db = createDb()) {
+  await assertNoAutoCaptureOverlap(input, undefined, db);
   const id = randomUUID();
-  const queries = [
-    db.insert(goals).values({
+  const [row] = await db.insert(goals).values({
       id,
       name: input.name,
       targetAmount: decimal(input.targetAmount),
@@ -1678,12 +1896,13 @@ export async function createGoal(input: NewGoal, db: Db = createDb()) {
       deadline: toDate(input.deadline),
       status: input.status,
       accountId: input.accountId ?? null,
+      autoCaptureEnabled: input.autoCaptureEnabled ?? false,
+      autoCaptureStart: input.autoCaptureStart ?? null,
+      autoCaptureEnd: input.autoCaptureEnd ?? null,
+      autoReservationAccountId: input.autoReservationAccountId ?? null,
       note: input.note ?? null,
-    }).returning(),
-  ];
-  if (input.tagIds.length) queries.push(db.insert(goalTags).values(input.tagIds.map((tagId) => ({ goalId: id, tagId }))) as never);
-  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
-  return mapGoal(rows[0], { [id]: input.tagIds });
+    }).returning();
+  return mapGoal(row);
 }
 
 export async function updateGoal(
@@ -1691,41 +1910,45 @@ export async function updateGoal(
   input: GoalPatch,
   db: Db = createDb(),
 ) {
-  const [[current], currentTagRows] = await db.batch([
+  const [[current]] = await db.batch([
     db.select().from(goals).where(and(eq(goals.id, id), isNull(goals.deletedAt))).limit(1),
-    db.select().from(goalTags).where(eq(goalTags.goalId, id)),
   ]);
   if (!current) return null;
-  const mapped = mapGoal(current, { [id]: currentTagRows.map((row) => row.tagId) });
+  const mapped = mapGoal(current);
   const merged = goalSchema.parse({
     ...mapped, ...input,
     deadline: input.deadline === null ? undefined : (input.deadline ?? mapped.deadline),
     accountId: input.accountId === null ? undefined : (input.accountId ?? mapped.accountId),
     note: input.note === null ? undefined : (input.note ?? mapped.note),
+    autoCaptureStart: input.autoCaptureStart === null ? undefined : (input.autoCaptureStart ?? mapped.autoCaptureStart),
+    autoCaptureEnd: input.autoCaptureEnd === null ? undefined : (input.autoCaptureEnd ?? mapped.autoCaptureEnd),
+    autoReservationAccountId: input.autoReservationAccountId === null ? undefined : (input.autoReservationAccountId ?? mapped.autoReservationAccountId),
   });
+  await assertNoAutoCaptureOverlap(merged, id, db);
   const update = db.update(goals).set({
     name: merged.name, targetAmount: decimal(merged.targetAmount), currency: merged.currency,
     color: merged.color, icon: merged.icon, isVisible: merged.isVisible,
     deadline: toDate(merged.deadline), status: merged.status, accountId: merged.accountId ?? null,
+    autoCaptureEnabled: merged.autoCaptureEnabled,
+    autoCaptureStart: merged.autoCaptureStart ?? null,
+    autoCaptureEnd: merged.autoCaptureEnd ?? null,
+    autoReservationAccountId: merged.autoReservationAccountId ?? null,
     note: merged.note ?? null, updatedAt: new Date(),
   }).where(eq(goals.id, id)).returning();
-  const queries = [update];
-  if (hasOwn(input, "tagIds")) {
-    queries.push(db.delete(goalTags).where(eq(goalTags.goalId, id)) as never);
-    if (merged.tagIds.length) queries.push(db.insert(goalTags).values(merged.tagIds.map((tagId) => ({ goalId: id, tagId }))) as never);
-  }
-  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
-  return mapGoal(rows[0], { [id]: merged.tagIds });
+  const [rows] = await db.batch([update]);
+  return mapGoal(rows[0]);
 }
 
 export async function deleteGoal(id: string, db: Db = createDb()) {
-  const results = await db.batch([
-    db.delete(goalTags).where(eq(goalTags.goalId, id)),
-    db.delete(goalReservations).where(eq(goalReservations.goalId, id)),
+  const movementRows = await db.select().from(goalReservationMovements).where(eq(goalReservationMovements.goalId, id));
+  const balances = deriveGoalReservations(movementRows);
+  const queries: unknown[] = [
     db.update(budgets).set({ goalId: null, updatedAt: new Date() }).where(eq(budgets.goalId, id)),
     db.update(goals).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(goals.id, id)).returning(),
-  ]);
-  const row = results[3][0];
+  ];
+  if (balances.length) queries.push(db.insert(goalReservationMovements).values(balances.map((balance) => ({ goalId: balance.goalId, accountId: balance.accountId, type: "release", amount: decimal(balance.amount), currency: balance.currency, note: "Liberación al archivar Goal" }))));
+  const results = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  const row = results[1][0];
   return Boolean(row);
 }
 
@@ -1734,26 +1957,48 @@ export async function createGoalReservation(
   db: Db = createDb(),
 ) {
   const [row] = await db
-    .insert(goalReservations)
+    .insert(goalReservationMovements)
     .values({
       goalId: input.goalId,
       accountId: input.accountId,
       amount: decimal(input.amount),
       currency: input.currency,
+      type: "reserve",
       createdAt: new Date(input.createdAt),
       note: input.note ?? null,
     })
     .returning();
-  return mapGoalReservation(row);
+  return {
+    id: row.id,
+    goalId: row.goalId,
+    accountId: row.accountId,
+    amount: asNumber(row.amount),
+    currency: row.currency as GoalReservation["currency"],
+    createdAt: asRequiredIso(row.createdAt),
+    note: optional(row.note),
+  };
 }
 
 export async function listGoalReservations(db: Db = createDb()) {
-  return (await db.select().from(goalReservations).orderBy(desc(goalReservations.createdAt))).map(mapGoalReservation);
+  return deriveGoalReservations(await db.select().from(goalReservationMovements).orderBy(desc(goalReservationMovements.createdAt)));
 }
 
 export async function deleteGoalReservation(id: string, db: Db = createDb()) {
-  const rows = await db.delete(goalReservations).where(eq(goalReservations.id, id)).returning();
-  return rows.length > 0;
+  const [movement] = await db.select().from(goalReservationMovements).where(eq(goalReservationMovements.id, id)).limit(1);
+  if (!movement) return false;
+  const balances = deriveGoalReservations(await db.select().from(goalReservationMovements).where(and(eq(goalReservationMovements.goalId, movement.goalId), eq(goalReservationMovements.accountId, movement.accountId))));
+  const balance = balances[0];
+  if (!balance) return false;
+  await db.insert(goalReservationMovements).values({ goalId: balance.goalId, accountId: balance.accountId, type: "release", amount: decimal(balance.amount), currency: balance.currency, note: "Liberación total" });
+  return true;
+}
+
+export async function releaseGoalReservation(input: { goalId: string; accountId: string; amount: number; note?: string }, db: Db = createDb()) {
+  const movements = await db.select().from(goalReservationMovements).where(and(eq(goalReservationMovements.goalId, input.goalId), eq(goalReservationMovements.accountId, input.accountId)));
+  const balance = deriveGoalReservations(movements)[0];
+  if (!balance || input.amount > balance.amount + 0.005) throw validationError("Release exceeds the reserved balance");
+  const [row] = await db.insert(goalReservationMovements).values({ goalId: input.goalId, accountId: input.accountId, type: "release", amount: decimal(input.amount), currency: balance.currency, note: input.note ?? "Liberación parcial" }).returning();
+  return mapGoalReservationMovement(row);
 }
 
 export async function listBudgets(db: Db = createDb()) {

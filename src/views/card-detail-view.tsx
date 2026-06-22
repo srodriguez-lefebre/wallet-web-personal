@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
+import { CategoryPicker } from "@/components/wallet/category-picker";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,11 +26,18 @@ import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
-import type { CreditCardRecord, CurrencyCode } from "@shared/types";
+import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
 const field =
   "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
 const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
+
+function formatCategoryName(categories: Category[], category: Category) {
+  const parent = category.parentId
+    ? categories.find((candidate) => candidate.id === category.parentId)
+    : undefined;
+  return parent ? `${parent.name} / ${category.name}` : category.name;
+}
 
 export function CardDetailView() {
   const { cardId = "" } = useParams();
@@ -289,22 +297,18 @@ export function CardDetailView() {
                 onChange={(event) => setRate(event.target.value)}
               />
             </label>
-            <label className="space-y-2">
+            <div className="space-y-2">
               <span className="text-sm font-medium">Category</span>
-              <select
-                required
-                className={field}
+              <CategoryPicker
+                categories={dataset.categories}
                 value={categoryId}
-                onChange={(event) => setCategoryId(event.target.value)}
-              >
-                <option value="">Select</option>
-                {dataset.categories.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                onChange={setCategoryId}
+                inputClassName={field}
+                getLabel={(category) =>
+                  formatCategoryName(dataset.categories, category)
+                }
+              />
+            </div>
             <label className="space-y-2">
               <span className="text-sm font-medium">Counterparty</span>
               <input

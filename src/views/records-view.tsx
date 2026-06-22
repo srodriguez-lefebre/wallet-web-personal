@@ -37,6 +37,7 @@ import type {
   PaymentStatus,
   PaymentType,
   RecordType,
+  RecordGoalAssociation,
   WalletDataset,
   WalletRecord,
 } from "@shared/types";
@@ -165,6 +166,7 @@ export function RecordsView() {
   const [accountAmount, setAccountAmount] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
+  const [goalAssociations, setGoalAssociations] = useState<RecordGoalAssociation[]>([]);
   const [counterpartyName, setCounterpartyName] = useState("");
   const [occurredAtLocal, setOccurredAtLocal] = useState(() =>
     toDateTimeLocal(new Date()),
@@ -283,6 +285,11 @@ export function RecordsView() {
           ? record.tagIds.includes(recordFilters.tagId)
           : true,
       )
+      .filter((record) =>
+        recordFilters.goalId
+          ? (record.goalIds ?? []).includes(recordFilters.goalId)
+          : true,
+      )
       .filter((record) => {
         const category = dataset.categories.find(
           (item) => item.id === record.categoryId,
@@ -338,6 +345,9 @@ export function RecordsView() {
     recordFilters.tagId
       ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
       : null,
+    recordFilters.goalId
+      ? dataset.goals.find((goal) => goal.id === recordFilters.goalId)?.name
+      : null,
     recordFilters.paymentStatus && recordFilters.paymentStatus !== "all"
       ? paymentStatusLabels[recordFilters.paymentStatus]
       : null,
@@ -367,6 +377,10 @@ export function RecordsView() {
     setAccountAmount("");
     setNote("");
     setTagId("");
+    const date = new Date().toISOString().slice(0, 10);
+    setGoalAssociations(dataset.goals.filter((goal) =>
+      goal.status === "active" && goal.autoCaptureEnabled && goal.autoCaptureStart && goal.autoCaptureEnd && goal.autoCaptureStart <= date && goal.autoCaptureEnd >= date
+    ).map((goal) => ({ goalId: goal.id, assignmentSource: "date_rule", useReserved: true, reserveIncome: true })));
     setCounterpartyName("");
     setOccurredAtLocal(toDateTimeLocal(new Date()));
     setPaymentType(
@@ -399,6 +413,7 @@ export function RecordsView() {
     setAccountAmount(String(record.accountAmount ?? record.amount));
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
+    setGoalAssociations(record.goalAssociations ?? (record.goalIds ?? []).map((goalId) => ({ goalId, assignmentSource: "manual", useReserved: true, reserveIncome: true })));
     setCounterpartyName(record.counterpartyName ?? "");
     setOccurredAtLocal(toDateTimeLocal(record.occurredAt));
     setPaymentType(record.paymentType);
@@ -436,6 +451,8 @@ export function RecordsView() {
       categoryId: type === "transfer" ? undefined : categoryId,
       counterpartyName: counterpartyName.trim() || undefined,
       tagIds: tagId ? [tagId] : [],
+      goalIds: goalAssociations.map((association) => association.goalId),
+      goalAssociations,
       paymentType,
       paymentStatus,
       exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
@@ -538,6 +555,7 @@ export function RecordsView() {
                         item === "transfer" ? "transfer" : "debit",
                       );
                       setCreditCardId("");
+                      if (item === "transfer") setGoalAssociations([]);
                       if (!accountId) setAccountId(defaultAccountId(dataset));
                     }}
                     className={typeButtonClassName(item, type)}
@@ -547,6 +565,25 @@ export function RecordsView() {
                 ),
               )}
             </div>
+
+            {type !== "transfer" ? (
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Goals</span>
+                <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
+                  {dataset.goals.filter((goal) => goal.status === "active" || goalAssociations.some((association) => association.goalId === goal.id)).map((goal) => {
+                    const association = goalAssociations.find((item) => item.goalId === goal.id);
+                    return <button key={goal.id} type="button" onClick={() => setGoalAssociations((current) => association ? current.filter((item) => item.goalId !== goal.id) : [...current, { goalId: goal.id, assignmentSource: "manual", useReserved: !editingId, reserveIncome: true }])} className={association ? "rounded-md border px-2 py-1 text-xs font-medium text-white" : "rounded-md border px-2 py-1 text-xs text-muted-foreground"} style={association ? { backgroundColor: goal.color, borderColor: goal.color } : undefined}>{goal.name}{association?.assignmentSource === "date_rule" ? " · automático" : ""}</button>;
+                  })}
+                  {dataset.goals.length === 0 ? <span className="text-xs text-muted-foreground">No active goals</span> : null}
+                </div>
+                {goalAssociations.map((association) => {
+                  const goal = dataset.goals.find((item) => item.id === association.goalId);
+                  if (!goal) return null;
+                  const key = type === "income" ? "reserveIncome" : "useReserved";
+                  return <label key={goal.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={association[key]} onChange={(event) => setGoalAssociations((current) => current.map((item) => item.goalId === goal.id ? { ...item, [key]: event.target.checked } : item))} />{type === "income" ? "Volver a reservar este ingreso" : "Usar fondos reservados"} · {goal.name}</label>;
+                })}
+              </div>
+            ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">

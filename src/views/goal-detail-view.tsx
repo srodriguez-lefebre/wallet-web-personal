@@ -1,11 +1,11 @@
 ﻿import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Trash2 } from "lucide-react";
+import { useState } from "react";
+import { differenceInCalendarDays } from "date-fns";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
@@ -15,7 +15,8 @@ import { goalStatusLabels } from "@shared/constants";
 export function GoalDetailView() {
   const { goalId } = useParams();
   const navigate = useNavigate();
-  const { dataset, setRecordFilters, deleteGoalReservation } = useWallet();
+  const { dataset, setRecordFilters, releaseGoalReservation } = useWallet();
+  const [releaseAmounts, setReleaseAmounts] = useState<Record<string, string>>({});
   const { toast, runAction } = useActionToast();
   const progress = calculateGoalProgress(dataset).find(
     (item) => item.goal.id === goalId,
@@ -36,7 +37,7 @@ export function GoalDetailView() {
   const goalProgress = progress;
   const linkedRecords = dataset.records
     .filter((record) =>
-      record.tagIds.some((tagId) => goalProgress.goal.tagIds.includes(tagId)),
+      (record.goalIds ?? []).includes(goalProgress.goal.id),
     )
     .sort(
       (a, b) =>
@@ -45,11 +46,14 @@ export function GoalDetailView() {
   const reservations = dataset.goalReservations.filter(
     (reservation) => reservation.goalId === goalProgress.goal.id,
   );
+  const deadlineDays = goalProgress.goal.deadline
+    ? differenceInCalendarDays(new Date(goalProgress.goal.deadline), new Date())
+    : null;
 
   function openRecords() {
     setRecordFilters({
       type: "expense",
-      tagId: goalProgress.goal.tagIds[0],
+      goalId: goalProgress.goal.id,
     });
     navigate("/records");
   }
@@ -60,7 +64,7 @@ export function GoalDetailView() {
       <PageHeader
         eyebrow="Goal detail"
         title={goalProgress.goal.name}
-        description="Goal detail, reserved money, and records linked by tags."
+        description="Goal detail, reserved money, and directly linked records."
       >
         <Button variant="outline" onClick={() => navigate("/goals")}>
           <ArrowLeft className="h-4 w-4" />
@@ -97,7 +101,10 @@ export function GoalDetailView() {
               </div>
             </CardHeader>
             <CardContent>
-              <Progress value={goalProgress.percentage} indicatorClassName="bg-sky-500" />
+              <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+                <span style={{ width: `${Math.min(100, (goalProgress.spent / goalProgress.goal.targetAmount) * 100)}%`, backgroundColor: goalProgress.goal.color }} />
+                <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (goalProgress.spent / goalProgress.goal.targetAmount) * 100), (goalProgress.reserved / goalProgress.goal.targetAmount) * 100)}%` }} />
+              </div>
               <div className="mt-4 grid gap-3 sm:grid-cols-4">
                 <div className="rounded-md bg-secondary p-3">
                   <p className="text-sm text-muted-foreground">Reserved</p>
@@ -125,18 +132,12 @@ export function GoalDetailView() {
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap gap-2">
-                {goalProgress.goal.tagIds.map((tagId) => {
-                  const tag = dataset.tags.find((candidate) => candidate.id === tagId);
-                  return tag ? (
-                    <Badge key={tag.id} variant="info">
-                      {tag.name}
-                    </Badge>
-                  ) : null;
-                })}
+                {goalProgress.overTarget > 0 ? <Badge variant="warning">Excedido {formatMoney(goalProgress.overTarget, goalProgress.goal.currency)}</Badge> : null}
                 {goalProgress.goal.deadline ? (
                   <Badge variant="muted">
                     <CalendarDays className="mr-1 h-3 w-3" />
                     {goalProgress.goal.deadline}
+                    {deadlineDays !== null ? ` · ${deadlineDays >= 0 ? `Faltan ${deadlineDays} días` : `Finalizó hace ${Math.abs(deadlineDays)} días`}` : ""}
                   </Badge>
                 ) : null}
               </div>
@@ -221,23 +222,23 @@ export function GoalDetailView() {
                         <p className="font-semibold">
                           {formatMoney(reservation.amount, reservation.currency)}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Release reservation"
-                          onClick={() =>
-                            void runAction(
-                              () => deleteGoalReservation(reservation.id),
-                              {
-                                processing: "Releasing reservation...",
-                                success: "Reservation released",
-                                error: "Could not release reservation",
-                              },
-                            ).catch(() => undefined)
-                          }
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <input
+                          aria-label="Amount to release"
+                          className="h-9 w-28 rounded-md border bg-background px-2 text-sm"
+                          type="number"
+                          min="0.01"
+                          max={reservation.amount}
+                          step="0.01"
+                          value={releaseAmounts[reservation.id] ?? String(reservation.amount)}
+                          onChange={(event) => setReleaseAmounts((current) => ({ ...current, [reservation.id]: event.target.value }))}
+                        />
+                        <Button variant="outline" onClick={() => {
+                          const amount = Number(releaseAmounts[reservation.id] ?? reservation.amount);
+                          if (amount <= 0 || amount > reservation.amount) return;
+                          void runAction(() => releaseGoalReservation({ goalId: reservation.goalId, accountId: reservation.accountId, amount, note: "Liberación desde Goal" }), {
+                            processing: "Releasing reservation...", success: "Reservation released", error: "Could not release reservation",
+                          }).catch(() => undefined);
+                        }}>Liberar</Button>
                       </div>
                     </div>
                   </div>

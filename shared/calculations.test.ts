@@ -129,13 +129,28 @@ describe("wallet calculations", () => {
     expect(categories[0]?.id).toBe("cat-housing");
   });
 
-  it("calculates goal progress with reserved money and tagged expenses", () => {
+  it("calculates goal progress with reserved money and directly associated expenses", () => {
     const goals = calculateGoalProgress(mockWalletData);
     const trip = goals.find((item) => item.goal.id === "goal-trip");
 
     expect(trip?.reserved).toBe(15000);
     expect(trip?.spent).toBe(9200);
     expect(trip?.committed).toBe(24200);
+  });
+
+  it("subtracts associated income from goal spending without going below zero", () => {
+    const data = structuredClone(mockWalletData);
+    data.records.push({
+      ...data.records.find((record) => record.id === "rec-trip-flight")!,
+      id: "refund-trip",
+      type: "income",
+      amount: 2000,
+      goalIds: ["goal-trip"],
+      goalAssociations: [{ goalId: "goal-trip", assignmentSource: "manual", useReserved: false, reserveIncome: true }],
+    });
+    expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(7200);
+    data.records.at(-1)!.amount = 20000;
+    expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(0);
   });
 
   it("calculates budget status", () => {

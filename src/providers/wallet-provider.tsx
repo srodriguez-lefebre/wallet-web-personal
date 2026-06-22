@@ -101,6 +101,7 @@ interface WalletContextValue {
     reservation: Omit<GoalReservation, "id">,
   ) => Promise<void>;
   deleteGoalReservation: (reservationId: string) => Promise<void>;
+  releaseGoalReservation: (value: { goalId: string; accountId: string; amount: number; note?: string }) => Promise<void>;
   addBudget: (budget: Omit<Budget, "id">) => Promise<string>;
   updateBudget: (budgetId: string, budget: Omit<Budget, "id">) => Promise<void>;
   deleteBudget: (budgetId: string) => Promise<void>;
@@ -788,19 +789,18 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
-    const created = await walletApi.createGoalReservation(requireToken(), reservation);
-    setDataset((current) => ({
-      ...current,
-      goalReservations: [created, ...current.goalReservations],
-    }));
+    await walletApi.createGoalReservation(requireToken(), reservation);
+    await reloadWallet();
   }
 
   async function deleteGoalReservation(reservationId: string) {
     await walletApi.deleteGoalReservation(requireToken(), reservationId);
-    setDataset((current) => ({
-      ...current,
-      goalReservations: current.goalReservations.filter((item) => item.id !== reservationId),
-    }));
+    await reloadWallet();
+  }
+
+  async function releaseGoalReservation(value: { goalId: string; accountId: string; amount: number; note?: string }) {
+    await walletApi.releaseGoalReservation(requireToken(), value);
+    await reloadWallet();
   }
 
   async function addBudget(budget: Omit<Budget, "id">) {
@@ -1066,6 +1066,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         deleteGoal,
         addGoalReservation,
         deleteGoalReservation,
+        releaseGoalReservation,
         addBudget,
         updateBudget,
         deleteBudget,
