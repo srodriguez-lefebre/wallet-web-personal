@@ -1,7 +1,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { CreditCard as CreditCardIcon, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,11 @@ import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateCreditCardCategoryUsage,
   calculateCreditCardSummaries,
+  buildExpenseComparisonSeries,
+  dateRangeForMonth,
   formatMoney,
+  relativeDateRanges,
+  relativeMonthKeys,
 } from "@shared/calculations";
 import type { CreditCard, CurrencyCode } from "@shared/types";
 
@@ -70,7 +74,7 @@ function draftFromCard(card: CreditCard): CardDraft {
 
 export function CardsView() {
   const navigate = useNavigate();
-  const { dataset, addCreditCard, updateCreditCard, deleteCreditCard } =
+  const { dataset, selectedMonth, selectedPeriodMode, selectedDateRange, addCreditCard, updateCreditCard, deleteCreditCard } =
     useWallet();
   const [draft, setDraft] = useState<CardDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -86,6 +90,13 @@ export function CardsView() {
       })),
     [dataset],
   );
+  const comparisonPeriods = selectedPeriodMode === "custom"
+    ? relativeDateRanges(selectedDateRange, 3)
+    : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
+  const expenseTrend = buildExpenseComparisonSeries({
+    ...dataset,
+    records: dataset.records.filter((record) => Boolean(record.creditCardId)),
+  }, comparisonPeriods);
 
   function setField<K extends keyof CardDraft>(key: K, value: CardDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -302,6 +313,24 @@ export function CardsView() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Card className="mb-4">
+        <CardHeader><CardTitle>Expense trend by period</CardTitle></CardHeader>
+        <CardContent className="h-72 min-w-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={expenseTrend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis dataKey="day" tickLine={false} axisLine={false} />
+              <YAxis width={88} tickLine={false} axisLine={false} tickFormatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+              <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+              <Legend />
+              <Line type="monotone" dataKey="current" name="Current period" stroke="#EF4444" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="previous" name="Previous period" stroke="#F59E0B" strokeWidth={2} dot={false} />
+              <Line type="monotone" dataKey="previousPrevious" name="Two periods ago" stroke="#94A3B8" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {

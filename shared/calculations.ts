@@ -879,6 +879,26 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
   });
 }
 
+export function buildExpenseComparisonSeries(
+  dataset: WalletDataset,
+  ranges: DateRange[],
+) {
+  const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
+    dateKeysForRange(range).map((date) =>
+      recordsForDateRange(dataset.records, { from: range.from, to: date })
+        .filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled")
+        .reduce((total, record) => total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary), 0),
+    ),
+  );
+  const maxDays = Math.max(twoPeriodsAgo?.length ?? 0, previous?.length ?? 0, current?.length ?? 0);
+  return Array.from({ length: maxDays }, (_, index) => ({
+    day: `Day ${index + 1}`,
+    previousPrevious: twoPeriodsAgo?.[index] ?? null,
+    previous: previous?.[index] ?? null,
+    current: current?.[index] ?? null,
+  }));
+}
+
 export function calculateBudgetProgress(
   dataset: WalletDataset,
   month = monthKey(new Date()),

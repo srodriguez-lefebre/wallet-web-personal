@@ -22,6 +22,7 @@ import { CategoryIcon } from "@/components/wallet/category-icon";
 import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
+  buildExpenseComparisonSeries,
   calculateBudgetProgress,
   calculateBudgetProgressForDateRange,
   calculateCategoryExpenses,
@@ -29,22 +30,19 @@ import {
   calculateMonthlySeries,
   calculateSummary,
   calculateSummaryForDateRange,
-  dateKeysForRange,
   dateRangeForMonth,
   formatMoney,
   monthKey,
   recentMonthKeys,
-  recordsForDateRange,
   relativeDateRanges,
   relativeMonthKeys,
-  toPrimaryCurrency,
 } from "@shared/calculations";
 import {
   buildSavingsRecommendations,
   calculateAllowedDailySpend,
   calculateEndOfMonthProjection,
 } from "@shared/simulations";
-import type { DateRange, WalletDataset, WalletRecord } from "@shared/types";
+import type { WalletRecord } from "@shared/types";
 
 function isAccountRecord(record: WalletRecord, accountId: string) {
   return (
@@ -488,42 +486,4 @@ export function AnalyticsView() {
       </div>
     </div>
   );
-}
-
-function buildExpenseComparisonSeries(
-  dataset: WalletDataset,
-  ranges: DateRange[],
-) {
-  const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
-    dateKeysForRange(range).map((date) => {
-      const records = recordsForDateRange(dataset.records, {
-        from: range.from,
-        to: date,
-      });
-
-      return records
-        .filter(
-          (record) =>
-            record.type === "expense" && record.paymentStatus !== "cancelled",
-        )
-        .reduce(
-          (total, record) =>
-            total +
-            toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
-          0,
-        );
-    }),
-  );
-  const maxDays = Math.max(
-    twoPeriodsAgo?.length ?? 0,
-    previous?.length ?? 0,
-    current?.length ?? 0,
-  );
-
-  return Array.from({ length: maxDays }, (_, index) => ({
-    day: `Day ${index + 1}`,
-    previousPrevious: twoPeriodsAgo?.[index] ?? null,
-    previous: previous?.[index] ?? null,
-    current: current?.[index] ?? null,
-  }));
 }
