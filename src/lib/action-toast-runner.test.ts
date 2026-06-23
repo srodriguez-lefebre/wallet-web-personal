@@ -32,7 +32,7 @@ describe("createActionToastRunner", () => {
     first.resolve("first");
     await firstAction;
 
-    expect(states.at(-1)).toEqual({
+    expect(states[states.length - 1]).toEqual({
       status: "processing",
       message: "Deleting record...",
     });
@@ -40,7 +40,7 @@ describe("createActionToastRunner", () => {
     second.resolve("second");
     await secondAction;
 
-    expect(states.at(-1)).toEqual({
+    expect(states[states.length - 1]).toEqual({
       status: "success",
       message: "Record deleted",
     });

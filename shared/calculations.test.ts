@@ -157,7 +157,7 @@ describe("wallet calculations", () => {
       { from: "2026-06-01", to: "2026-06-30" },
     ]);
     expect(series[0]?.expense).toBe("Expense 1");
-    expect(Number(series.at(-1)?.current)).toBeGreaterThanOrEqual(Number(series[0]?.current));
+    expect(Number(series[series.length - 1]?.current)).toBeGreaterThanOrEqual(Number(series[0]?.current));
   });
 
   it("calculates goal progress with reserved money and directly associated expenses", () => {
@@ -200,7 +200,7 @@ describe("wallet calculations", () => {
       goalAssociations: [{ goalId: "goal-trip", assignmentSource: "manual", useReserved: false, reserveIncome: true }],
     });
     expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(7200);
-    data.records.at(-1)!.amount = 20000;
+    data.records[data.records.length - 1]!.amount = 20000;
     expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(0);
   });
 

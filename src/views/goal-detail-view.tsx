@@ -155,6 +155,10 @@ export function GoalDetailView() {
                 </p>
               ) : (
                 linkedRecords.map((record) => {
+                  const association = (record.goalAssociations ?? []).find(
+                    (item) => item.goalId === goalProgress.goal.id,
+                  );
+                  const goalAmount = association?.allocatedAmount ?? record.amount;
                   const category = dataset.categories.find(
                     (item) => item.id === record.categoryId,
                   );
@@ -182,7 +186,7 @@ export function GoalDetailView() {
                         }
                       >
                         {record.type === "expense" ? "-" : "+"}
-                        {formatMoney(record.amount, record.currency)}
+                        {formatMoney(goalAmount, record.currency)}
                       </p>
                     </button>
                   );

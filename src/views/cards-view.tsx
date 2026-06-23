@@ -90,13 +90,31 @@ export function CardsView() {
       })),
     [dataset],
   );
-  const comparisonPeriods = selectedPeriodMode === "custom"
-    ? relativeDateRanges(selectedDateRange, 3)
-    : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
-  const expenseTrend = buildExpenseComparisonSeries({
-    ...dataset,
-    records: dataset.records.filter((record) => Boolean(record.creditCardId)),
-  }, comparisonPeriods);
+  const comparisonPeriods = useMemo(
+    () =>
+      selectedPeriodMode === "custom"
+        ? relativeDateRanges(selectedDateRange, 3)
+        : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth),
+    [selectedDateRange, selectedMonth, selectedPeriodMode],
+  );
+  const expenseTrendsByCard = useMemo(
+    () =>
+      new Map(
+        dataset.creditCards.map((card) => [
+          card.id,
+          buildExpenseComparisonSeries(
+            {
+              ...dataset,
+              records: dataset.records.filter(
+                (record) => record.creditCardId === card.id,
+              ),
+            },
+            comparisonPeriods,
+          ),
+        ]),
+      ),
+    [comparisonPeriods, dataset],
+  );
 
   function setField<K extends keyof CardDraft>(key: K, value: CardDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -314,26 +332,9 @@ export function CardsView() {
         </DialogContent>
       </Dialog>
 
-      <Card className="mb-4">
-        <CardHeader><CardTitle>Expense trend by period</CardTitle></CardHeader>
-        <CardContent className="h-72 min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={expenseTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis dataKey="day" tickLine={false} axisLine={false} />
-              <YAxis width={88} tickLine={false} axisLine={false} tickFormatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
-              <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
-              <Legend />
-              <Line type="monotone" dataKey="current" name="Current period" stroke="#EF4444" strokeWidth={3} dot={false} />
-              <Line type="monotone" dataKey="previous" name="Previous period" stroke="#F59E0B" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="previousPrevious" name="Two periods ago" stroke="#94A3B8" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {
+          const expenseTrend = expenseTrendsByCard.get(summary.card.id) ?? [];
           const chartData = [
             ...categoryUsage.map((category) => ({
               ...category,
@@ -521,6 +522,71 @@ export function CardsView() {
                       Archive
                     </Button>
                   ) : null}
+                </div>
+                <div className="rounded-md border bg-card/60 p-3">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">
+                      Expense trend by period
+                    </p>
+                    <Badge variant="muted">
+                      {dataset.settings.primaryCurrency}
+                    </Badge>
+                  </div>
+                  <div className="h-56 min-w-0">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={expenseTrend}>
+                        <CartesianGrid
+                          strokeDasharray="3 3"
+                          stroke="hsl(var(--border))"
+                        />
+                        <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                        <YAxis
+                          width={80}
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value) =>
+                            formatMoney(
+                              Number(value),
+                              dataset.settings.primaryCurrency,
+                            )
+                          }
+                        />
+                        <Tooltip
+                          formatter={(value) =>
+                            formatMoney(
+                              Number(value),
+                              dataset.settings.primaryCurrency,
+                            )
+                          }
+                        />
+                        <Legend />
+                        <Line
+                          type="monotone"
+                          dataKey="current"
+                          name="Current period"
+                          stroke={summary.card.color}
+                          strokeWidth={3}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="previous"
+                          name="Previous period"
+                          stroke="#F59E0B"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="previousPrevious"
+                          name="Two periods ago"
+                          stroke="#94A3B8"
+                          strokeWidth={2}
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
                 </div>
               </CardContent>
             </Card>

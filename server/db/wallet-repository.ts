@@ -1485,7 +1485,7 @@ export async function listRecords(
     : [];
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
   const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
-  const last = pageRows.at(-1);
+  const last = pageRows.length ? pageRows[pageRows.length - 1] : undefined;
 
   return {
     items: pageRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
