@@ -36,6 +36,60 @@ function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 86_400_000);
 }
 
+const genericMerchantCategoryRules = [
+  {
+    aliases: ["FRUTERIA", "VERDULERIA", "VERDULERIA Y FRUTERIA"],
+    categoryNames: ["Fruits, vegetables and healthy", "Greengrocer"],
+  },
+  {
+    aliases: ["PANADERIA"],
+    categoryNames: ["Bakery"],
+  },
+  {
+    aliases: ["CARNICERIA"],
+    categoryNames: ["Meat, fish and eggs", "Butcher"],
+  },
+  {
+    aliases: ["FARMACIA"],
+    categoryNames: ["Drug-store, chemist", "Medical services"],
+  },
+  {
+    aliases: ["SUPERMERCADO"],
+    categoryNames: ["Supermarket"],
+  },
+  {
+    aliases: ["PIZZERIA", "CAFETERIA", "RESTAURANTE"],
+    categoryNames: ["Restaurant, fast-food", "Restaurants"],
+  },
+  {
+    aliases: ["ESTACION DE SERVICIO"],
+    categoryNames: ["Service station"],
+  },
+] as const;
+
+function pickGenericMerchantCategory(
+  merchantRaw: string,
+  categoryRows: Array<typeof categories.$inferSelect>,
+) {
+  const categoryByName = new Map(
+    categoryRows.map((category) => [category.name.toLowerCase(), category]),
+  );
+  const candidates = genericMerchantCategoryRules.flatMap((rule, ruleIndex) => {
+    const category = rule.categoryNames
+      .map((name) => categoryByName.get(name.toLowerCase()))
+      .find(Boolean);
+    if (!category) return [];
+    return rule.aliases.map((alias) => ({
+      normalizedAlias: normalizeMerchantTerm(alias),
+      priority: genericMerchantCategoryRules.length - ruleIndex,
+      categoryId: category.id,
+      merchantName: merchantRaw,
+    }));
+  });
+
+  return pickLongestMerchantMatch(merchantRaw, candidates);
+}
+
 function sanitizedPayload(input: MailIngestionInput) {
   return {
     integration: input.integration,
@@ -90,6 +144,14 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
     };
 
   const allCategories = await db.select().from(categories);
+  const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
+  if (generic)
+    return {
+      categoryId: generic.categoryId,
+      merchantName: generic.merchantName,
+      source: "generic_rule",
+    };
+
   const parentIds = new Set(
     allCategories.map((item) => item.parentId).filter(Boolean),
   );

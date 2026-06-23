@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   cardLastFour,
+  merchantTokenSequenceMatch,
   normalizeMerchantTerm,
   pickLongestMerchantMatch,
 } from "./normalization.js";
 
 describe("merchant normalization", () => {
   it("normalizes accents and punctuation", () => {
-    expect(normalizeMerchantTerm("  Géant—Pocitos  ")).toBe("GEANT POCITOS");
+    expect(normalizeMerchantTerm("  G\u00e9ant\u2014Pocitos  ")).toBe("GEANT POCITOS");
   });
 
   it("prefers the longest matching term and then priority", () => {
@@ -16,6 +17,13 @@ describe("merchant normalization", () => {
       { normalizedAlias: "PUMA ENERGY", priority: 0 },
     ]);
     expect(match?.normalizedAlias).toBe("PUMA ENERGY");
+  });
+
+  it("matches aliases as full token sequences instead of inner substrings", () => {
+    expect(merchantTokenSequenceMatch("FRUTERIA OLIMAR MONTE", "UTE")).toBe(false);
+    expect(merchantTokenSequenceMatch("PAGO UTE MONTEVIDEO", "UTE")).toBe(true);
+    expect(merchantTokenSequenceMatch("MERPAGO*VIKEI 59829", "MERPAGO")).toBe(true);
+    expect(merchantTokenSequenceMatch("COMPRA MERCADO PAGO", "MERCADO PAGO")).toBe(true);
   });
 
   it("extracts the last four digits", () => {
