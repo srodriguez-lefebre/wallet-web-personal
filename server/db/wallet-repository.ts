@@ -381,6 +381,7 @@ function groupGoalAssociations(rows: Array<typeof recordGoals.$inferSelect>) {
       assignmentSource: row.assignmentSource as RecordGoalAssociation["assignmentSource"],
       useReserved: row.useReserved,
       reserveIncome: row.reserveIncome,
+      allocatedAmount: row.allocatedAmount === null ? undefined : asNumber(row.allocatedAmount),
     }];
     return groups;
   }, {});
@@ -1506,10 +1507,28 @@ function requestedGoalAssociations(input: NewRecord): RecordGoalAssociation[] {
   }));
 }
 
+function recordGoalValues(recordId: string, associations: RecordGoalAssociation[]) {
+  return associations.map((association) => ({
+    recordId,
+    goalId: association.goalId,
+    assignmentSource: association.assignmentSource,
+    useReserved: association.useReserved,
+    reserveIncome: association.reserveIncome,
+    allocatedAmount: association.allocatedAmount === undefined
+      ? null
+      : decimal(association.allocatedAmount),
+  }));
+}
+
 async function resolveGoalAssociations(input: NewRecord, db: Db) {
   const associations = new Map(
     requestedGoalAssociations(input).map((association) => [association.goalId, association]),
   );
+  for (const association of associations.values()) {
+    if (association.allocatedAmount !== undefined && association.allocatedAmount > input.amount) {
+      throw validationError("Goal allocation cannot exceed the record amount");
+    }
+  }
   if (associations.size) {
     const selectedGoals = await db.select().from(goals).where(inArray(goals.id, [...associations.keys()]));
     if (selectedGoals.length !== associations.size || selectedGoals.some((goal) => goal.deletedAt || goal.status !== "active")) {
@@ -1563,11 +1582,15 @@ async function buildRecordReservationMovements(
     const accountId = input.accountId ?? goal.autoReservationAccountId;
     const account = accountRows.find((item) => item.id === accountId);
     if (!accountId || !account) continue;
-    const recordAmount = input.accountId === accountId
+    const fullRecordAmount = input.accountId === accountId
       ? (input.accountAmount ?? input.amount)
       : input.currency === account.currency
         ? input.amount
         : input.amount * input.exchangeRateToPrimary;
+    const allocationRatio = association.allocatedAmount === undefined
+      ? 1
+      : Math.min(1, association.allocatedAmount / input.amount);
+    const recordAmount = fullRecordAmount * allocationRatio;
     if (input.type === "expense" && association.useReserved) {
       const key = `${association.goalId}:${accountId}`;
       const amount = Math.min(Math.max(0, available.get(key) ?? 0), recordAmount);
@@ -1651,7 +1674,7 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
     accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
   }));
   if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId }))));
-  if (associations.length) queries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId, ...association }))));
+  if (associations.length) queries.push(db.insert(recordGoals).values(recordGoalValues(recordId, associations)));
   const movementValues = await buildRecordReservationMovements(recordId, input, associations, db);
   if (movementValues.length) queries.push(db.insert(goalReservationMovements).values(movementValues));
   const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
@@ -1689,7 +1712,7 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
     }));
     if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId: id, tagId }))));
     const associations = associationsByInput[index];
-    if (associations.length) queries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId: id, ...association }))));
+    if (associations.length) queries.push(db.insert(recordGoals).values(recordGoalValues(id, associations)));
   });
   const movementsByInput = await Promise.all(inputs.map((input, index) => buildRecordReservationMovements(ids[index], input, associationsByInput[index], db)));
   const existingMovementRows = await db.select().from(goalReservationMovements);
@@ -1824,13 +1847,13 @@ export async function updateRecord(
   }
   if (hasOwn(input, "goalIds") || hasOwn(input, "goalAssociations")) {
     sideQueries.push(db.delete(recordGoals).where(eq(recordGoals.recordId, id)));
-    if (associations.length) sideQueries.push(db.insert(recordGoals).values(associations.map((association) => ({ recordId: id, ...association }))));
+    if (associations.length) sideQueries.push(db.insert(recordGoals).values(recordGoalValues(id, associations)));
   }
   const reservationFingerprint = (record: NewRecord, items: RecordGoalAssociation[]) => JSON.stringify({
     type: record.type, amount: record.amount, currency: record.currency,
     accountId: record.accountId, accountAmount: record.accountAmount,
     paymentStatus: record.paymentStatus,
-    associations: items.map((item) => ({ goalId: item.goalId, useReserved: item.useReserved, reserveIncome: item.reserveIncome })).sort((a, b) => a.goalId.localeCompare(b.goalId)),
+    associations: items.map((item) => ({ goalId: item.goalId, useReserved: item.useReserved, reserveIncome: item.reserveIncome, allocatedAmount: item.allocatedAmount })).sort((a, b) => a.goalId.localeCompare(b.goalId)),
   });
   const currentAssociations = groupGoalAssociations(existingGoalRows)[id] ?? [];
   if (reservationFingerprint(current, currentAssociations) !== reservationFingerprint(merged, associations)) {

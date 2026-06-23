@@ -71,6 +71,7 @@ export interface RecordGoalAssociation {
   assignmentSource: "manual" | "date_rule";
   useReserved: boolean;
   reserveIncome: boolean;
+  allocatedAmount?: number;
 }
 
 export interface WalletRecord {
@@ -406,7 +407,9 @@ export interface RecordFilters {
 export interface AccountBalance {
   account: Account;
   balance: number;
+  totalBalance: number;
   balanceInPrimary: number;
+  totalBalanceInPrimary: number;
   reserved: number;
   freeBalance: number;
 }

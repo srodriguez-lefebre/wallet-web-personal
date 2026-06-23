@@ -429,6 +429,7 @@ export const recordGoals = pgTable(
     assignmentSource: text("assignment_source").notNull().default("manual"),
     useReserved: boolean("use_reserved").notNull().default(true),
     reserveIncome: boolean("reserve_income").notNull().default(true),
+    allocatedAmount: numeric("allocated_amount", { precision: 14, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
@@ -185,10 +185,31 @@ export function RecordsView() {
     : undefined;
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
+  const numericAmount = Number(amount);
+  const hasInvalidGoalAllocation = goalAssociations.some(
+    (association) =>
+      association.allocatedAmount !== undefined &&
+      (!Number.isFinite(association.allocatedAmount) ||
+        association.allocatedAmount <= 0 ||
+        association.allocatedAmount > numericAmount),
+  );
   const canSubmit =
-    Number(amount) > 0 &&
+    numericAmount > 0 &&
     Boolean(accountId) &&
-    (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId));
+    (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId)) &&
+    !hasInvalidGoalAllocation;
+  function updateGoalAssociation(
+    goalId: string,
+    patch: Partial<RecordGoalAssociation>,
+  ) {
+    setGoalAssociations((current) =>
+      current.map((association) =>
+        association.goalId === goalId
+          ? { ...association, ...patch }
+          : association,
+      ),
+    );
+  }
   useEffect(() => {
     if (
       !newRecordRequestId ||
@@ -430,6 +451,7 @@ export function RecordsView() {
   function buildRecord(): Omit<WalletRecord, "id"> | null {
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) return null;
+    if (hasInvalidGoalAllocation) return null;
 
     const account = dataset.accounts.find((item) => item.id === accountId);
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
@@ -538,7 +560,7 @@ export function RecordsView() {
               {editingId ? "Edit record" : "New record"}
             </DialogTitle>
             <DialogDescription>
-              Adjust type, amount, account, category, tags, and payment status.
+              Adjust type, amount, account, category, goals, and payment status.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -566,24 +588,6 @@ export function RecordsView() {
               )}
             </div>
 
-            {type !== "transfer" ? (
-              <div className="space-y-2">
-                <span className="text-sm font-medium">Goals</span>
-                <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
-                  {dataset.goals.filter((goal) => goal.status === "active" || goalAssociations.some((association) => association.goalId === goal.id)).map((goal) => {
-                    const association = goalAssociations.find((item) => item.goalId === goal.id);
-                    return <button key={goal.id} type="button" onClick={() => setGoalAssociations((current) => association ? current.filter((item) => item.goalId !== goal.id) : [...current, { goalId: goal.id, assignmentSource: "manual", useReserved: !editingId, reserveIncome: true }])} className={association ? "rounded-md border px-2 py-1 text-xs font-medium text-white" : "rounded-md border px-2 py-1 text-xs text-muted-foreground"} style={association ? { backgroundColor: goal.color, borderColor: goal.color } : undefined}>{goal.name}{association?.assignmentSource === "date_rule" ? " · automático" : ""}</button>;
-                  })}
-                  {dataset.goals.length === 0 ? <span className="text-xs text-muted-foreground">No active goals</span> : null}
-                </div>
-                {goalAssociations.map((association) => {
-                  const goal = dataset.goals.find((item) => item.id === association.goalId);
-                  if (!goal) return null;
-                  const key = type === "income" ? "reserveIncome" : "useReserved";
-                  return <label key={goal.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={association[key]} onChange={(event) => setGoalAssociations((current) => current.map((item) => item.goalId === goal.id ? { ...item, [key]: event.target.checked } : item))} />{type === "income" ? "Volver a reservar este ingreso" : "Usar fondos reservados"} · {goal.name}</label>;
-                })}
-              </div>
-            ) : null}
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
@@ -672,50 +676,137 @@ export function RecordsView() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="block space-y-2">
-                <span className="text-sm font-medium">Tag</span>
-                <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
-                  <button
-                    type="button"
-                    onClick={() => setTagId("")}
-                    className={
-                      tagId
-                        ? "rounded-md border px-2 py-1 text-xs text-muted-foreground transition hover:bg-secondary"
-                        : "rounded-md border border-primary bg-primary px-2 py-1 text-xs text-primary-foreground"
-                    }
-                  >
-                    No tag
-                  </button>
-                  {dataset.tags.map((tag) => {
-                    const isSelected = tag.id === tagId;
+              {type !== "transfer" ? (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Goals</span>
+                  <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
+                    {dataset.goals
+                      .filter(
+                        (goal) =>
+                          goal.status === "active" ||
+                          goalAssociations.some(
+                            (association) => association.goalId === goal.id,
+                          ),
+                      )
+                      .map((goal) => {
+                        const association = goalAssociations.find(
+                          (item) => item.goalId === goal.id,
+                        );
+
+                        return (
+                          <button
+                            key={goal.id}
+                            type="button"
+                            onClick={() =>
+                              setGoalAssociations((current) =>
+                                association
+                                  ? current.filter(
+                                      (item) => item.goalId !== goal.id,
+                                    )
+                                  : [
+                                      ...current,
+                                      {
+                                        goalId: goal.id,
+                                        assignmentSource: "manual",
+                                        useReserved: !editingId,
+                                        reserveIncome: true,
+                                      },
+                                    ],
+                              )
+                            }
+                            className={
+                              association
+                                ? "rounded-md border px-2 py-1 text-xs font-medium text-white"
+                                : "rounded-md border px-2 py-1 text-xs text-muted-foreground"
+                            }
+                            style={
+                              association
+                                ? {
+                                    backgroundColor: goal.color,
+                                    borderColor: goal.color,
+                                  }
+                                : undefined
+                            }
+                          >
+                            {goal.name}
+                            {association?.assignmentSource === "date_rule"
+                              ? " · automático"
+                              : ""}
+                          </button>
+                        );
+                      })}
+                    {dataset.goals.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        No active goals
+                      </span>
+                    ) : null}
+                  </div>
+                  {goalAssociations.map((association) => {
+                    const goal = dataset.goals.find(
+                      (item) => item.id === association.goalId,
+                    );
+                    if (!goal) return null;
+                    const key = type === "income" ? "reserveIncome" : "useReserved";
 
                     return (
-                      <button
-                        key={tag.id}
-                        type="button"
-                        onClick={() => setTagId(tag.id)}
-                        className={
-                          isSelected
-                            ? "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-medium text-foreground"
-                            : "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground transition hover:bg-secondary"
-                        }
-                        style={{
-                          borderColor: tag.color,
-                          backgroundColor: isSelected
-                            ? `${tag.color}22`
-                            : undefined,
-                        }}
-                      >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                        {tag.name}
-                      </button>
+                      <div key={goal.id} className="space-y-2 rounded-md border p-2">
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={association[key]}
+                            onChange={(event) =>
+                              updateGoalAssociation(goal.id, {
+                                [key]: event.target.checked,
+                              })
+                            }
+                          />
+                          {type === "income"
+                            ? "Volver a reservar este ingreso"
+                            : "Usar fondos reservados"}{" "}
+                          · {goal.name}
+                        </label>
+                        <label className="block space-y-1 text-xs text-muted-foreground">
+                          <span>Monto para este objetivo</span>
+                          <input
+                            value={association.allocatedAmount ?? ""}
+                            onChange={(event) => {
+                              const value = limitDecimalPlaces(
+                                event.target.value,
+                              );
+                              updateGoalAssociation(goal.id, {
+                                allocatedAmount: value
+                                  ? Number(value)
+                                  : undefined,
+                              });
+                            }}
+                            className={fieldClassName}
+                            type="number"
+                            min="0"
+                            max={amount || undefined}
+                            step="0.01"
+                            placeholder={
+                              amount
+                                ? `Todo el record (${formatMoney(
+                                    numericAmount,
+                                    currency,
+                                  )})`
+                                : "Todo el record"
+                            }
+                          />
+                          {association.allocatedAmount !== undefined &&
+                          association.allocatedAmount > numericAmount ? (
+                            <span className="text-red-600">
+                              No puede superar el monto del record.
+                            </span>
+                          ) : null}
+                        </label>
+                      </div>
                     );
                   })}
                 </div>
-              </label>
+              ) : (
+                <div />
+              )}
 
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Counterparty</span>
@@ -764,7 +855,7 @@ export function RecordsView() {
                     .filter((card) => card.isActive)
                     .map((card) => (
                       <option key={card.id} value={`card:${card.id}`}>
-                        Credit •••• {card.lastFour} — {card.name}
+                        Credit â€¢â€¢â€¢â€¢ {card.lastFour} â€” {card.name}
                       </option>
                     ))}
                   <option value="transfer">{paymentTypeLabels.transfer}</option>
@@ -906,7 +997,7 @@ export function RecordsView() {
               <option value="">Cards</option>
               {dataset.creditCards.map((card) => (
                 <option key={card.id} value={card.id}>
-                  {card.name} •••• {card.lastFour}
+                  {card.name} â€¢â€¢â€¢â€¢ {card.lastFour}
                 </option>
               ))}
             </select>
@@ -1036,12 +1127,12 @@ export function RecordsView() {
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {creditCard
-                              ? `${creditCard.name} •••• ${creditCard.lastFour}`
+                              ? `${creditCard.name} â€¢â€¢â€¢â€¢ ${creditCard.lastFour}`
                               : account?.name}
                             {record.counterpartyName
-                              ? ` · ${record.counterpartyName}`
-                              : " · No counterparty"}
-                            {record.note ? ` · ${record.note}` : " · No note"}
+                              ? ` Â· ${record.counterpartyName}`
+                              : " Â· No counterparty"}
+                            {record.note ? ` Â· ${record.note}` : " Â· No note"}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1">
                             {tags.map((tag) =>

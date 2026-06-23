@@ -99,6 +99,13 @@
       "when": 1782150009457,
       "tag": "0013_chunky_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782185754473,
+      "tag": "0014_rare_sabra",
+      "breakpoints": true
     }
   ]
 }

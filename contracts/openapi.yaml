@@ -4354,6 +4354,9 @@ paths:
                   items:
                     additionalProperties: false
                     properties:
+                      allocatedAmount:
+                        exclusiveMinimum: 0
+                        type: number
                       assignmentSource:
                         default: manual
                         enum:
@@ -4550,6 +4553,9 @@ paths:
                         items:
                           additionalProperties: false
                           properties:
+                            allocatedAmount:
+                              exclusiveMinimum: 0
+                              type: number
                             assignmentSource:
                               default: manual
                               enum:
@@ -4817,6 +4823,9 @@ paths:
                   items:
                     additionalProperties: false
                     properties:
+                      allocatedAmount:
+                        exclusiveMinimum: 0
+                        type: number
                       assignmentSource:
                         default: manual
                         enum:

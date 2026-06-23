@@ -1,0 +1,1 @@
+ALTER TABLE "record_goals" ADD COLUMN "allocated_amount" numeric(14, 2);

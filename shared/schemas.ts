@@ -9,6 +9,7 @@ export const recordGoalAssociationSchema = z.object({
   assignmentSource: z.enum(["manual", "date_rule"]).default("manual"),
   useReserved: z.boolean().default(true),
   reserveIncome: z.boolean().default(true),
+  allocatedAmount: z.number().positive().optional(),
 });
 
 export const recordTypeSchema = z.enum(["expense", "income", "transfer"]);

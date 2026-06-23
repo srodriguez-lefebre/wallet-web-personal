@@ -167,7 +167,7 @@ export function calculateAccountBalances(
       return total + (movement.kind === "refund" ? movement.accountAmount : -movement.accountAmount);
     }, recordBalance);
 
-    const balance = dataset.creditCardPayments.reduce((total, payment) => {
+    const totalBalance = dataset.creditCardPayments.reduce((total, payment) => {
       if (
         payment.accountId !== account.id ||
         payment.accountAmount === undefined
@@ -180,19 +180,27 @@ export function calculateAccountBalances(
     const reserved = dataset.goalReservations
       .filter((reservation) => reservation.accountId === account.id)
       .reduce((total, reservation) => total + reservation.amount, 0);
+    const freeBalance = totalBalance - reserved;
 
     const balanceInPrimary = convertAccountBalanceToPrimary(
       account,
-      balance,
+      freeBalance,
+      dataset,
+    );
+    const totalBalanceInPrimary = convertAccountBalanceToPrimary(
+      account,
+      totalBalance,
       dataset,
     );
 
     return {
       account,
-      balance,
+      balance: freeBalance,
+      totalBalance,
       balanceInPrimary,
+      totalBalanceInPrimary,
       reserved,
-      freeBalance: balance - reserved,
+      freeBalance,
     };
   });
 }
@@ -897,9 +905,14 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
           (record.goalIds ?? []).includes(goal.id),
       )
       .reduce(
-        (total, record) =>
-          total + (record.type === "expense" ? 1 : -1) *
-          convert(record.amount, record.currency, record.exchangeRateToPrimary),
+        (total, record) => {
+          const association = (record.goalAssociations ?? []).find(
+            (item) => item.goalId === goal.id,
+          );
+          const amount = association?.allocatedAmount ?? record.amount;
+          return total + (record.type === "expense" ? 1 : -1) *
+            convert(amount, record.currency, record.exchangeRateToPrimary);
+        },
         0,
       );
     const spent = Math.max(0, netSpent);

@@ -587,7 +587,7 @@ export function AccountsView() {
               Loading complete history to calculate current balances...
             </p>
           ) : null}
-          {visibleBalances.map(({ account, balance, freeBalance, reserved }) => {
+          {visibleBalances.map(({ account, balance, totalBalance, reserved }) => {
             const isPrimary = dataset.settings.primaryAccountId === account.id;
 
             return (
@@ -633,9 +633,9 @@ export function AccountsView() {
                   </p>
                   <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Free</p>
+                      <p className="text-muted-foreground">Total</p>
                       <p className="font-medium">
-                        {formatMoney(freeBalance, account.currency)}
+                        {formatMoney(totalBalance, account.currency)}
                       </p>
                     </div>
                     <div className="rounded-md bg-secondary p-3">

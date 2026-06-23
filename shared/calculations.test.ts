@@ -57,7 +57,8 @@ describe("wallet calculations", () => {
     const bank = balances.find((item) => item.account.id === "acc-bank");
     const hidden = balances.find((item) => item.account.id === "acc-hidden");
 
-    expect(bank?.balance).toBe(104913);
+    expect(bank?.balance).toBe(89913);
+    expect(bank?.totalBalance).toBe(104913);
     expect(hidden?.balance).toBe(36000);
   });
 
@@ -166,6 +167,26 @@ describe("wallet calculations", () => {
     expect(trip?.reserved).toBe(15000);
     expect(trip?.spent).toBe(9200);
     expect(trip?.committed).toBe(24200);
+  });
+
+  it("counts only the allocated record amount toward a goal when provided", () => {
+    const data = structuredClone(mockWalletData);
+    const flight = data.records.find((record) => record.id === "rec-trip-flight")!;
+    flight.goalAssociations = [
+      {
+        goalId: "goal-trip",
+        assignmentSource: "manual",
+        useReserved: true,
+        reserveIncome: true,
+        allocatedAmount: 3000,
+      },
+    ];
+    const trip = calculateGoalProgress(data).find(
+      (item) => item.goal.id === "goal-trip",
+    );
+
+    expect(trip?.spent).toBe(3000);
+    expect(trip?.committed).toBe(18000);
   });
 
   it("subtracts associated income from goal spending without going below zero", () => {

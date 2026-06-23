@@ -26,7 +26,6 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useActionToast } from "@/lib/use-action-toast";
@@ -168,7 +167,7 @@ export function DashboardView() {
             !isAllHistoryComplete
               ? "Calculating the current balance"
               : primaryBalance
-              ? `Primary account: ${primaryBalance.account.name}`
+              ? `Available in ${primaryBalance.account.name}`
               : "Primary account"
           }
           icon={<WalletCards className="h-4 w-4" />}
@@ -344,7 +343,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="space-y-3">
             {visibleBalances.map(
-              ({ account, balance, freeBalance, reserved }) => (
+              ({ account, balance, totalBalance, reserved }) => (
                 <div
                   key={account.id}
                   role="button"
@@ -368,7 +367,7 @@ export function DashboardView() {
                     <div>
                       <p className="font-medium">{account.name}</p>
                       <p className="text-xs text-muted-foreground">
-                        Free {formatMoney(freeBalance, account.currency)}
+                        Total {formatMoney(totalBalance, account.currency)}
                         {reserved > 0
                           ? ` · Reserved ${formatMoney(reserved, account.currency)}`
                           : ""}
@@ -428,11 +427,33 @@ export function DashboardView() {
                           </p>
                         </div>
                       </div>
-                      <Progress
-                        value={item.percentage}
-                        className="mt-3"
-                        indicatorClassName="bg-sky-500"
-                      />
+                      <div
+                        className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted"
+                        aria-label={`${item.percentage.toFixed(1)}% committed`}
+                      >
+                        <span
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              (item.spent / item.goal.targetAmount) * 100,
+                            )}%`,
+                            backgroundColor: item.goal.color,
+                          }}
+                        />
+                        <span
+                          className="bg-emerald-400"
+                          style={{
+                            width: `${Math.min(
+                              Math.max(
+                                0,
+                                100 -
+                                  (item.spent / item.goal.targetAmount) * 100,
+                              ),
+                              (item.reserved / item.goal.targetAmount) * 100,
+                            )}%`,
+                          }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -48,9 +48,9 @@ export function AccountStateSummary({ balance }: AccountStateSummaryProps) {
             </p>
           </div>
           <div className="rounded-md border bg-card px-3 py-2">
-            <p className="text-muted-foreground">Free</p>
+            <p className="text-muted-foreground">Total</p>
             <p className="text-lg font-semibold">
-              {formatMoney(balance.freeBalance, account.currency)}
+              {formatMoney(balance.totalBalance, account.currency)}
             </p>
           </div>
           <div className="rounded-md border bg-card px-3 py-2">
