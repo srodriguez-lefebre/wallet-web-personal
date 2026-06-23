@@ -68,7 +68,7 @@ describe("wallet calculations", () => {
     ).toBe(92400);
     expect(
       calculateAccountBalanceAtMonthEnd(mockWalletData, "acc-bank", "2026-06"),
-    ).toBe(104913);
+    ).toBe(89913);
     expect(
       calculateAccountBalanceAtMonthEnd(
         mockWalletData,
@@ -81,10 +81,10 @@ describe("wallet calculations", () => {
   it("calculates account balance at the end of a selected day", () => {
     expect(
       calculateAccountBalanceAtDate(mockWalletData, "acc-bank", "2026-06-06"),
-    ).toBe(116913);
+    ).toBe(101913);
     expect(
       calculateAccountBalanceAtDate(mockWalletData, "acc-bank", "2026-06-07"),
-    ).toBe(104913);
+    ).toBe(89913);
   });
 
   it("builds a chronological window ending at the selected month", () => {

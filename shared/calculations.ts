@@ -303,7 +303,7 @@ function calculateAccountBalanceAtCutoff(
     return total + (movement.kind === "refund" ? movement.accountAmount : -movement.accountAmount);
   }, recordBalance);
 
-  return dataset.creditCardPayments.reduce((total, payment) => {
+  const totalBalance = dataset.creditCardPayments.reduce((total, payment) => {
     if (
       payment.accountId !== account.id ||
       payment.accountAmount === undefined
@@ -313,6 +313,23 @@ function calculateAccountBalanceAtCutoff(
     if (isAfter(parseISO(payment.occurredAt), cutoff)) return total;
     return total - payment.accountAmount;
   }, directCardBalance);
+
+  const movements = dataset.goalReservationMovements ?? [];
+  const reservedAtCutoff = movements.length
+    ? movements.reduce((total, movement) => {
+        if (movement.accountId !== account.id) return total;
+        if (isAfter(parseISO(movement.createdAt), cutoff)) return total;
+        const direction =
+          movement.type === "reserve" || movement.type === "restore" ? 1 : -1;
+        return total + direction * movement.amount;
+      }, 0)
+    : dataset.goalReservations.reduce((total, reservation) => {
+        if (reservation.accountId !== account.id) return total;
+        if (isAfter(parseISO(reservation.createdAt), cutoff)) return total;
+        return total + reservation.amount;
+      }, 0);
+
+  return totalBalance - reservedAtCutoff;
 }
 
 function cardCycleDate(year: number, month: number, day: number) {
