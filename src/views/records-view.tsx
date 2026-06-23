@@ -855,7 +855,7 @@ export function RecordsView() {
                     .filter((card) => card.isActive)
                     .map((card) => (
                       <option key={card.id} value={`card:${card.id}`}>
-                        Credit â€¢â€¢â€¢â€¢ {card.lastFour} â€” {card.name}
+                        Credit **** {card.lastFour} - {card.name}
                       </option>
                     ))}
                   <option value="transfer">{paymentTypeLabels.transfer}</option>
@@ -997,7 +997,7 @@ export function RecordsView() {
               <option value="">Cards</option>
               {dataset.creditCards.map((card) => (
                 <option key={card.id} value={card.id}>
-                  {card.name} â€¢â€¢â€¢â€¢ {card.lastFour}
+                  {card.name} **** {card.lastFour}
                 </option>
               ))}
             </select>
@@ -1127,12 +1127,12 @@ export function RecordsView() {
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
                             {creditCard
-                              ? `${creditCard.name} â€¢â€¢â€¢â€¢ ${creditCard.lastFour}`
+                              ? `${creditCard.name} **** ${creditCard.lastFour}`
                               : account?.name}
                             {record.counterpartyName
-                              ? ` Â· ${record.counterpartyName}`
-                              : " Â· No counterparty"}
-                            {record.note ? ` Â· ${record.note}` : " Â· No note"}
+                              ? ` - ${record.counterpartyName}`
+                              : " - No counterparty"}
+                            {record.note ? ` - ${record.note}` : " - No note"}
                           </p>
                           <div className="mt-2 flex flex-wrap gap-1">
                             {tags.map((tag) =>
