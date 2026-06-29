@@ -9,6 +9,44 @@ import {
 import { createSession } from "@/services/auth-service";
 
 const tokenKey = "wallet-session-token";
+const expiresAtKey = "wallet-session-expires-at";
+const legacyTokenKey = "wallet-api-token";
+
+function clearStoredSession() {
+  window.localStorage.removeItem(tokenKey);
+  window.localStorage.removeItem(expiresAtKey);
+  window.sessionStorage.removeItem(tokenKey);
+}
+
+function getTokenExpiration(token: string) {
+  try {
+    const [payload] = token.split(".");
+    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedPayload = normalizedPayload.padEnd(Math.ceil(normalizedPayload.length / 4) * 4, "=");
+    const parsed = JSON.parse(window.atob(paddedPayload)) as { exp?: number };
+    return typeof parsed.exp === "number" ? new Date(parsed.exp * 1000).toISOString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredSession() {
+  if (typeof window === "undefined") return null;
+
+  const token = window.localStorage.getItem(tokenKey) ?? window.sessionStorage.getItem(tokenKey);
+  const expiresAt = window.localStorage.getItem(expiresAtKey) ?? (token ? getTokenExpiration(token) : null);
+  const expiresAtTime = expiresAt ? Date.parse(expiresAt) : Number.NaN;
+
+  if (!token || !expiresAt || !Number.isFinite(expiresAtTime) || expiresAtTime <= Date.now()) {
+    clearStoredSession();
+    return null;
+  }
+
+  window.localStorage.setItem(tokenKey, token);
+  window.localStorage.setItem(expiresAtKey, expiresAt);
+  window.sessionStorage.removeItem(tokenKey);
+  return token;
+}
 
 interface AuthContextValue {
   isUnlocked: boolean;
@@ -20,9 +58,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [token, setToken] = useState(() =>
-    typeof window === "undefined" ? null : window.sessionStorage.getItem(tokenKey),
-  );
+  const [token, setToken] = useState(readStoredSession);
 
   async function unlock(nextToken: string) {
     const cleanToken = nextToken.trim();
@@ -30,18 +66,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     const session = await createSession(cleanToken);
     if (!session) return false;
-    window.sessionStorage.setItem(tokenKey, session.token);
+    window.localStorage.setItem(tokenKey, session.token);
+    window.localStorage.setItem(expiresAtKey, session.expiresAt);
+    window.sessionStorage.removeItem(tokenKey);
     setToken(session.token);
     return true;
   }
 
   function lock() {
-    window.sessionStorage.removeItem(tokenKey);
+    clearStoredSession();
     setToken(null);
   }
 
   useEffect(() => {
-    window.localStorage.removeItem("wallet-api-token");
+    window.localStorage.removeItem(legacyTokenKey);
     const handleUnauthorized = () => lock();
     window.addEventListener("wallet:unauthorized", handleUnauthorized);
     return () => window.removeEventListener("wallet:unauthorized", handleUnauthorized);
