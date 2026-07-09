@@ -25,7 +25,11 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
+import {
+  calculateCreditCardStatementBalance,
+  calculateCreditCardSummary,
+  formatMoney,
+} from "@shared/calculations";
 import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
 const field =
@@ -66,6 +70,13 @@ export function CardDetailView() {
     (item) => item.creditCardId === cardId,
   );
   const payableStatement = statements.find((item) => item.status !== "paid");
+  const payableStatementBalance = useMemo(
+    () =>
+      payableStatement
+        ? calculateCreditCardStatementBalance(dataset, payableStatement)
+        : null,
+    [dataset, payableStatement],
+  );
   const [showMovement, setShowMovement] = useState(false);
   const [editingMovementId, setEditingMovementId] = useState<string | null>(
     null,
@@ -228,6 +239,19 @@ export function CardDetailView() {
     );
     setPaymentAmount("");
     setPaymentAccountAmount("");
+  }
+
+  function fillFullPaymentAmount() {
+    if (!payableStatementBalance) return;
+    const amount = Number(
+      payableStatementBalance.dueAmountInLimitCurrency.toFixed(2),
+    );
+    const value = String(amount);
+    setPaymentAmount(value);
+    const account = dataset.accounts.find((item) => item.id === paymentAccountId);
+    if (account?.currency === card!.limitCurrency) {
+      setPaymentAccountAmount(value);
+    }
   }
 
   return (
@@ -421,6 +445,41 @@ export function CardDetailView() {
             <Badge variant={summary.status === "ok" ? "success" : "danger"}>
               {payableStatement?.status ?? summary.status.replace("_", " ")}
             </Badge>
+            {payableStatement && payableStatementBalance ? (
+              <>
+                <div>
+                  <p className="text-2xl font-semibold">
+                    {formatMoney(
+                      payableStatementBalance.dueAmountInLimitCurrency,
+                      card.limitCurrency,
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">Amount due</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Total{" "}
+                  {formatMoney(
+                    payableStatementBalance.totalAmountInLimitCurrency,
+                    card.limitCurrency,
+                  )}
+                  {payableStatementBalance.paidAmountInLimitCurrency > 0
+                    ? ` · paid ${formatMoney(
+                        payableStatementBalance.paidAmountInLimitCurrency,
+                        card.limitCurrency,
+                      )}`
+                    : ""}
+                </p>
+                {payableStatementBalance.currencyBreakdown.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {payableStatementBalance.currencyBreakdown.map((item) => (
+                      <Badge key={item.currency} variant="muted">
+                        {formatMoney(item.amount, item.currency)}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
             <p className="text-sm text-muted-foreground">
               {payableStatement
                 ? `Due ${payableStatement.dueAt.slice(0, 10)}`
@@ -440,14 +499,27 @@ export function CardDetailView() {
               className="grid gap-4 md:grid-cols-4"
               onSubmit={submitPayment}
             >
-              <input
-                className={field}
-                type="number"
-                step="0.01"
-                placeholder={`Amount in ${card.limitCurrency}`}
-                value={paymentAmount}
-                onChange={(event) => setPaymentAmount(event.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  className={field}
+                  type="number"
+                  step="0.01"
+                  placeholder={`Amount in ${card.limitCurrency}`}
+                  value={paymentAmount}
+                  onChange={(event) => setPaymentAmount(event.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={fillFullPaymentAmount}
+                  disabled={
+                    !payableStatementBalance ||
+                    payableStatementBalance.dueAmountInLimitCurrency <= 0
+                  }
+                >
+                  Full
+                </Button>
+              </div>
               <select
                 className={field}
                 value={paymentAccountId}

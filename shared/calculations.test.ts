@@ -11,6 +11,7 @@ import {
   calculateCategoryExpensesForDateRange,
   calculateCreditCardSummary,
   calculateCreditCardCategoryUsage,
+  calculateCreditCardStatementBalance,
   calculateEmergencyRunway,
   creditCardStatementStatusAfterPaymentChange,
   calculateGoalProgress,
@@ -618,6 +619,92 @@ describe("wallet calculations", () => {
     expect(dataset.records.some((record) => record.id === "direct")).toBe(false);
     expect(calculateCreditCardSummary(dataset, card, new Date("2026-06-12T12:00:00.000Z")).usedLimit).toBe(1_500);
     expect(calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")!.balance).toBe(baseline - 1_500);
+  });
+
+  it("calculates the pending balance for a closed credit-card statement", () => {
+    const statement = {
+      id: "statement-june",
+      creditCardId: "card-owned-ledger",
+      cycleStart: "2026-06-04T00:00:00.000Z",
+      cycleEnd: "2026-07-03T23:59:59.999Z",
+      dueAt: "2026-07-12T23:59:59.999Z",
+      status: "partial" as const,
+      closedAt: "2026-07-03T23:59:59.999Z",
+    };
+    const dataset = {
+      ...mockWalletData,
+      creditCardRecords: [
+        {
+          id: "purchase-uyu",
+          creditCardId: statement.creditCardId,
+          statementId: statement.id,
+          kind: "purchase" as const,
+          amount: 1000,
+          currency: "UYU" as const,
+          amountInLimitCurrency: 1000,
+          exchangeRateToLimitCurrency: 1,
+          categoryId: "cat-shopping",
+          accountImpactAtCreation: false,
+          occurredAt: "2026-06-10T12:00:00.000Z",
+        },
+        {
+          id: "purchase-usd",
+          creditCardId: statement.creditCardId,
+          statementId: statement.id,
+          kind: "purchase" as const,
+          amount: 20,
+          currency: "USD" as const,
+          amountInLimitCurrency: 800,
+          exchangeRateToLimitCurrency: 40,
+          categoryId: "cat-shopping",
+          accountImpactAtCreation: false,
+          occurredAt: "2026-06-12T12:00:00.000Z",
+        },
+        {
+          id: "refund-uyu",
+          creditCardId: statement.creditCardId,
+          originalRecordId: "purchase-uyu",
+          kind: "refund" as const,
+          amount: 100,
+          currency: "UYU" as const,
+          amountInLimitCurrency: 100,
+          exchangeRateToLimitCurrency: 1,
+          categoryId: "cat-shopping",
+          accountImpactAtCreation: false,
+          occurredAt: "2026-06-13T12:00:00.000Z",
+        },
+      ],
+      creditCardPayments: [
+        {
+          id: "payment-1",
+          creditCardId: statement.creditCardId,
+          statementId: statement.id,
+          amount: 500,
+          currency: "UYU" as const,
+          amountInLimitCurrency: 500,
+          occurredAt: "2026-07-05T12:00:00.000Z",
+        },
+      ],
+      creditCardPaymentAllocations: [
+        {
+          id: "allocation-1",
+          paymentId: "payment-1",
+          creditCardRecordId: "purchase-uyu",
+          amount: 500,
+          amountInLimitCurrency: 500,
+        },
+      ],
+    };
+
+    expect(calculateCreditCardStatementBalance(dataset, statement)).toEqual({
+      totalAmountInLimitCurrency: 1700,
+      paidAmountInLimitCurrency: 500,
+      dueAmountInLimitCurrency: 1200,
+      currencyBreakdown: [
+        { currency: "USD", amount: 20 },
+        { currency: "UYU", amount: 400 },
+      ],
+    });
   });
 });
 

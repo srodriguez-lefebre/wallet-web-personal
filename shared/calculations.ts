@@ -20,6 +20,7 @@ import type {
   CreditCard,
   CreditCardCategoryUsage,
   CreditCardCurrencyAmount,
+  CreditCardStatement,
   CreditCardSummary,
   CurrencyCode,
   DateRange,
@@ -496,6 +497,93 @@ export function calculateCreditCardSummaries(
   return dataset.creditCards.map((card) =>
     calculateCreditCardSummary(dataset, card, asOf),
   );
+}
+
+export function calculateCreditCardStatementBalance(
+  dataset: WalletDataset,
+  statement: CreditCardStatement,
+) {
+  const purchases = dataset.creditCardRecords.filter(
+    (record) =>
+      record.creditCardId === statement.creditCardId &&
+      record.statementId === statement.id &&
+      record.kind === "purchase",
+  );
+  const purchaseIds = new Set(purchases.map((record) => record.id));
+  const refunds = dataset.creditCardRecords.filter(
+    (record) =>
+      record.creditCardId === statement.creditCardId &&
+      record.kind === "refund" &&
+      record.originalRecordId &&
+      purchaseIds.has(record.originalRecordId),
+  );
+  const statementPayments = dataset.creditCardPayments.filter(
+    (payment) =>
+      payment.creditCardId === statement.creditCardId &&
+      payment.statementId === statement.id,
+  );
+  const statementPaymentIds = new Set(
+    statementPayments.map((payment) => payment.id),
+  );
+  const allocations = dataset.creditCardPaymentAllocations.filter(
+    (allocation) =>
+      statementPaymentIds.has(allocation.paymentId) &&
+      purchaseIds.has(allocation.creditCardRecordId),
+  );
+  const refundsByPurchase = new Map<string, CreditCardCurrencyAmount[]>();
+  refunds.forEach((refund) => {
+    const id = refund.originalRecordId;
+    if (!id) return;
+    refundsByPurchase.set(id, [
+      ...(refundsByPurchase.get(id) ?? []),
+      { currency: refund.currency, amount: refund.amount },
+    ]);
+  });
+  const allocationsByPurchase = new Map<string, number>();
+  allocations.forEach((allocation) => {
+    allocationsByPurchase.set(
+      allocation.creditCardRecordId,
+      (allocationsByPurchase.get(allocation.creditCardRecordId) ?? 0) +
+        allocation.amount,
+    );
+  });
+
+  const purchaseTotal = purchases.reduce(
+    (total, record) => total + record.amountInLimitCurrency,
+    0,
+  );
+  const refundTotal = refunds.reduce(
+    (total, record) => total + record.amountInLimitCurrency,
+    0,
+  );
+  const paidAmountInLimitCurrency = statementPayments.reduce(
+    (total, payment) => total + payment.amountInLimitCurrency,
+    0,
+  );
+  const totalAmountInLimitCurrency = Math.max(0, purchaseTotal - refundTotal);
+
+  const currencyBreakdown = aggregateCurrencyAmounts(
+    purchases.map((purchase) => {
+      const refunded = (refundsByPurchase.get(purchase.id) ?? [])
+        .filter((refund) => refund.currency === purchase.currency)
+        .reduce((total, refund) => total + refund.amount, 0);
+      const allocated = allocationsByPurchase.get(purchase.id) ?? 0;
+      return {
+        currency: purchase.currency,
+        amount: purchase.amount - refunded - allocated,
+      };
+    }),
+  );
+
+  return {
+    totalAmountInLimitCurrency,
+    paidAmountInLimitCurrency,
+    dueAmountInLimitCurrency: Math.max(
+      0,
+      totalAmountInLimitCurrency - paidAmountInLimitCurrency,
+    ),
+    currencyBreakdown,
+  };
 }
 
 export function calculateCreditCardCategoryUsage(
