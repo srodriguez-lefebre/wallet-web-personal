@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import { Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
+import * as Select from "@radix-ui/react-select";
+import { Check, ChevronDown, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,79 @@ function sortCategoriesForSelect(categories: Category[]) {
     if (a.parentId && !b.parentId) return 1;
     return a.name.localeCompare(b.name);
   });
+}
+
+function CategoryFilterSelect({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: Category[];
+  value?: string;
+  onChange: (categoryId: string | undefined) => void;
+}) {
+  const selectedCategory = categories.find((category) => category.id === value);
+
+  return (
+    <Select.Root
+      value={value ?? "all"}
+      onValueChange={(categoryId) =>
+        onChange(categoryId === "all" ? undefined : categoryId)
+      }
+    >
+      <Select.Trigger
+        className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+        aria-label="Category"
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          {selectedCategory ? (
+            <CategoryIcon
+              icon={selectedCategory.icon}
+              color={selectedCategory.color}
+              size="sm"
+            />
+          ) : null}
+          <Select.Value placeholder="Categories" />
+        </span>
+        <Select.Icon>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </Select.Icon>
+      </Select.Trigger>
+      <Select.Portal>
+        <Select.Content
+          position="popper"
+          className="z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+        >
+          <Select.Viewport className="p-1">
+            <Select.Item
+              value="all"
+              className="relative flex cursor-pointer select-none items-center rounded-sm py-2 pl-8 pr-3 text-sm outline-none data-[highlighted]:bg-secondary"
+            >
+              <Select.ItemText>Categories</Select.ItemText>
+              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                <Check className="h-4 w-4" />
+              </Select.ItemIndicator>
+            </Select.Item>
+            {categories.map((category) => (
+              <Select.Item
+                key={category.id}
+                value={category.id}
+                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm py-2 pl-8 pr-3 text-sm outline-none data-[highlighted]:bg-secondary"
+              >
+                <CategoryIcon icon={category.icon} color={category.color} size="sm" />
+                <Select.ItemText>
+                  {formatCategoryName(categories, category)}
+                </Select.ItemText>
+                <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
+                  <Check className="h-4 w-4" />
+                </Select.ItemIndicator>
+              </Select.Item>
+            ))}
+          </Select.Viewport>
+        </Select.Content>
+      </Select.Portal>
+    </Select.Root>
+  );
 }
 
 function defaultAccountId(dataset: WalletDataset) {
@@ -1001,31 +1075,11 @@ export function RecordsView() {
                 </option>
               ))}
             </select>
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <CategoryPicker
-                  categories={categories}
-                  value={recordFilters.categoryId ?? ""}
-                  onChange={(categoryId) => setRecordFilters({ categoryId })}
-                  inputClassName={fieldClassName}
-                  getLabel={(category) =>
-                    formatCategoryName(dataset.categories, category)
-                  }
-                />
-              </div>
-              {recordFilters.categoryId ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  title="Clear category filter"
-                  aria-label="Clear category filter"
-                  onClick={() => setRecordFilters({ categoryId: undefined })}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              ) : null}
-            </div>
+            <CategoryFilterSelect
+              categories={categories}
+              value={recordFilters.categoryId}
+              onChange={(categoryId) => setRecordFilters({ categoryId })}
+            />
             <Button
               className="w-full"
               variant="outline"
