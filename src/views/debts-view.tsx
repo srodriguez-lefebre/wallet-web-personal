@@ -595,6 +595,7 @@ export function DebtsView() {
                   <p className="mt-1 text-sm text-muted-foreground">
                     {debt.counterpartyName} · {category?.name ?? "Category"} ·{" "}
                     {account?.name ?? "No account"}
+                    {debt.note ? ` · ${debt.note}` : ""}
                   </p>
                 </div>
 
@@ -850,6 +851,7 @@ export function DebtsView() {
                           {recurringDebt.counterpartyName} ·{" "}
                           {category?.name ?? "Category"} ·{" "}
                           {account?.name ?? "No account"}
+                          {recurringDebt.note ? ` · ${recurringDebt.note}` : ""}
                         </p>
                       </div>
                       <div className="flex items-center justify-between gap-2 lg:justify-end">

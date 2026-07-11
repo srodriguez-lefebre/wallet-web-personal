@@ -32,6 +32,8 @@ import {
   calculateBudgetProgressForDateRange,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
+  calculateCategoryIncome,
+  calculateCategoryIncomeForDateRange,
   calculateEmergencyRunway,
   calculateMonthlySeries,
   calculateSavingsRate,
@@ -58,7 +60,8 @@ function isAccountRecord(record: WalletRecord, accountId: string) {
 }
 
 export function AnalyticsView() {
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | undefined>();
+  const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState<string | undefined>();
+  const [selectedIncomeCategoryId, setSelectedIncomeCategoryId] = useState<string | undefined>();
   const navigate = useNavigate();
   const {
     dataset,
@@ -94,21 +97,38 @@ export function AnalyticsView() {
     selectedPeriodMode !== "month"
       ? calculateSummaryForDateRange(analyticsDataset, selectedDateRange)
       : calculateSummary(analyticsDataset, selectedMonth);
-  const categories =
+  const expenseCategories =
     selectedPeriodMode !== "month"
       ? calculateCategoryExpensesForDateRange(
           analyticsDataset,
           selectedDateRange,
-          selectedCategoryId,
+          selectedExpenseCategoryId,
         )
-      : calculateCategoryExpenses(analyticsDataset, selectedMonth, selectedCategoryId);
-  const selectedCategory = selectedCategoryId
-    ? dataset.categories.find((category) => category.id === selectedCategoryId)
+      : calculateCategoryExpenses(analyticsDataset, selectedMonth, selectedExpenseCategoryId);
+  const incomeCategories =
+    selectedPeriodMode !== "month"
+      ? calculateCategoryIncomeForDateRange(
+          analyticsDataset,
+          selectedDateRange,
+          selectedIncomeCategoryId,
+        )
+      : calculateCategoryIncome(analyticsDataset, selectedMonth, selectedIncomeCategoryId);
+  const selectedExpenseCategory = selectedExpenseCategoryId
+    ? dataset.categories.find((category) => category.id === selectedExpenseCategoryId)
+    : undefined;
+  const selectedIncomeCategory = selectedIncomeCategoryId
+    ? dataset.categories.find((category) => category.id === selectedIncomeCategoryId)
     : undefined;
 
-  function drillCategory(categoryId: string) {
+  function drillExpenseCategory(categoryId: string) {
     if (dataset.categories.some((category) => category.parentId === categoryId)) {
-      setSelectedCategoryId(categoryId);
+      setSelectedExpenseCategoryId(categoryId);
+    }
+  }
+
+  function drillIncomeCategory(categoryId: string) {
+    if (dataset.categories.some((category) => category.parentId === categoryId)) {
+      setSelectedIncomeCategoryId(categoryId);
     }
   }
   const budgets =
@@ -424,16 +444,16 @@ export function AnalyticsView() {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
-              <CardTitle>{selectedCategory ? `${selectedCategory.name} breakdown` : "Expenses by category"}</CardTitle>
-              {selectedCategory ? <Button variant="outline" size="sm" onClick={() => setSelectedCategoryId(selectedCategory.parentId)}><ArrowLeft className="h-4 w-4" />Back</Button> : null}
+              <CardTitle>{selectedExpenseCategory ? `${selectedExpenseCategory.name} breakdown` : "Expenses by category"}</CardTitle>
+              {selectedExpenseCategory ? <Button variant="outline" size="sm" onClick={() => setSelectedExpenseCategoryId(selectedExpenseCategory.parentId)}><ArrowLeft className="h-4 w-4" />Back</Button> : null}
             </div>
           </CardHeader>
           <CardContent>
             <div className="mb-4 h-64 min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={categories} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
-                    {categories.map((category) => <Cell key={category.id} fill={category.color} className="cursor-pointer outline-none" onClick={() => drillCategory(category.id)} />)}
+                  <Pie data={expenseCategories} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+                    {expenseCategories.map((category) => <Cell key={category.id} fill={category.color} className="cursor-pointer outline-none" onClick={() => drillExpenseCategory(category.id)} />)}
                   </Pie>
                   <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
                 </PieChart>
@@ -481,11 +501,11 @@ export function AnalyticsView() {
               </button>
             </div>
             <div className="space-y-2">
-              {categories.map((category) => (
+              {expenseCategories.map((category) => (
                 <button
                   key={category.id}
                   type="button"
-                  onClick={() => drillCategory(category.id)}
+                  onClick={() => drillExpenseCategory(category.id)}
                   className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
@@ -509,6 +529,49 @@ export function AnalyticsView() {
         </Card>
 
         <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle>{selectedIncomeCategory ? `${selectedIncomeCategory.name} breakdown` : "Income by category"}</CardTitle>
+              {selectedIncomeCategory ? <Button variant="outline" size="sm" onClick={() => setSelectedIncomeCategoryId(selectedIncomeCategory.parentId)}><ArrowLeft className="h-4 w-4" />Back</Button> : null}
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 h-64 min-w-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={incomeCategories} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
+                    {incomeCategories.map((category) => <Cell key={category.id} fill={category.color} className="cursor-pointer outline-none" onClick={() => drillIncomeCategory(category.id)} />)}
+                  </Pie>
+                  <Tooltip formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="space-y-2">
+              {incomeCategories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => drillIncomeCategory(category.id)}
+                  className="flex w-full items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
+                >
+                  <div className="flex items-center gap-3">
+                    <CategoryIcon
+                      icon={category.icon}
+                      color={category.color}
+                      size="sm"
+                    />
+                    <p className="font-medium">{category.name}</p>
+                  </div>
+                  <p className="font-semibold">
+                    {formatMoney(category.value, dataset.settings.primaryCurrency)}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-2">
           <CardHeader>
             <CardTitle>Budgets</CardTitle>
           </CardHeader>

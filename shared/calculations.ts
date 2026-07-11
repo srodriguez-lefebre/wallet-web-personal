@@ -917,7 +917,7 @@ export function calculateCategoryExpenses(
       record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
-  return calculateCategoryExpensesFromRecords(dataset, records, parentId);
+  return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
 }
 
 export function calculateCategoryExpensesForDateRange(
@@ -930,10 +930,36 @@ export function calculateCategoryExpensesForDateRange(
       record.type === "expense" && record.paymentStatus !== "cancelled",
   );
 
-  return calculateCategoryExpensesFromRecords(dataset, records, parentId);
+  return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
 }
 
-function calculateCategoryExpensesFromRecords(
+export function calculateCategoryIncome(
+  dataset: WalletDataset,
+  month = monthKey(new Date()),
+  parentId?: string,
+) {
+  const records = recordsForMonth(dataset.records, month).filter(
+    (record) =>
+      record.type === "income" && record.paymentStatus !== "cancelled",
+  );
+
+  return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
+}
+
+export function calculateCategoryIncomeForDateRange(
+  dataset: WalletDataset,
+  range: DateRange,
+  parentId?: string,
+) {
+  const records = recordsForDateRange(dataset.records, range).filter(
+    (record) =>
+      record.type === "income" && record.paymentStatus !== "cancelled",
+  );
+
+  return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
+}
+
+function calculateCategoryBreakdownFromRecords(
   dataset: WalletDataset,
   records: WalletRecord[],
   parentId?: string,

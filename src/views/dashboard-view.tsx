@@ -510,6 +510,7 @@ export function DashboardView() {
                             <p className="text-xs text-muted-foreground">
                               {debtDirectionLabels[debt.direction]} -{" "}
                               {debt.counterpartyName}
+                              {debt.note ? ` - ${debt.note}` : ""}
                             </p>
                           </div>
                         </div>

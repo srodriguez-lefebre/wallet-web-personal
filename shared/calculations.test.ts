@@ -7,6 +7,8 @@ import {
   calculateAccountBalanceAtMonthEnd,
   calculateAccountBalances,
   calculateBudgetProgress,
+  calculateCategoryIncome,
+  calculateCategoryIncomeForDateRange,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
   calculateCreditCardSummary,
@@ -149,6 +151,27 @@ describe("wallet calculations", () => {
     const children = calculateCategoryExpenses(mockWalletData, "2026-06", "cat-groceries");
     expect(children.find((item) => item.id === "cat-groceries-supermarket")?.value).toBeGreaterThan(0);
     expect(children.every((item) => mockWalletData.categories.find((category) => category.id === item.id)?.parentId === "cat-groceries")).toBe(true);
+  });
+
+  it("groups income by category without cancelled records", () => {
+    const dataset = structuredClone(mockWalletData);
+    dataset.records.push({
+      ...dataset.records.find((record) => record.id === "rec-income-1")!,
+      id: "rec-income-cancelled",
+      amount: 5_000,
+      paymentStatus: "cancelled",
+    });
+
+    const categories = calculateCategoryIncome(dataset, "2026-06");
+    const children = calculateCategoryIncome(dataset, "2026-06", "cat-income");
+    const rangeCategories = calculateCategoryIncomeForDateRange(dataset, {
+      from: "2026-06-01",
+      to: "2026-06-07",
+    });
+
+    expect(categories.find((item) => item.id === "cat-income")?.value).toBe(55_557);
+    expect(children.find((item) => item.id === "cat-freelance")?.value).toBe(12_544);
+    expect(rangeCategories.find((item) => item.id === "cat-income")?.value).toBe(43_013);
   });
 
   it("builds cumulative expense comparisons by expense order", () => {

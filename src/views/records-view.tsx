@@ -1001,22 +1001,31 @@ export function RecordsView() {
                 </option>
               ))}
             </select>
-            <select
-              value={recordFilters.categoryId ?? ""}
-              onChange={(event) =>
-                setRecordFilters({
-                  categoryId: event.target.value || undefined,
-                })
-              }
-              className={fieldClassName}
-            >
-              <option value="">Categories</option>
-              {sortCategoriesForSelect(dataset.categories).map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.parentId ? `-- ${category.name}` : category.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <CategoryPicker
+                  categories={categories}
+                  value={recordFilters.categoryId ?? ""}
+                  onChange={(categoryId) => setRecordFilters({ categoryId })}
+                  inputClassName={fieldClassName}
+                  getLabel={(category) =>
+                    formatCategoryName(dataset.categories, category)
+                  }
+                />
+              </div>
+              {recordFilters.categoryId ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Clear category filter"
+                  aria-label="Clear category filter"
+                  onClick={() => setRecordFilters({ categoryId: undefined })}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              ) : null}
+            </div>
             <Button
               className="w-full"
               variant="outline"
