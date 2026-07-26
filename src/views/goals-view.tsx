@@ -24,6 +24,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
@@ -201,23 +202,10 @@ export function GoalsView() {
         const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
         if (!currentGoal) return Promise.resolve();
 
-        return updateGoal(draft.id, {
-          name: draft.name.trim(),
-          targetAmount: Number(draft.targetAmount),
-          currency: draft.currency,
-          color: draft.color,
-          isVisible: draft.isVisible,
-          icon: currentGoal.icon,
-          deadline: draft.deadline || undefined,
-          status: draft.status,
-          tagIds: [],
-          accountId: draft.accountId || undefined,
-          autoCaptureEnabled: draft.autoCaptureEnabled,
-          autoCaptureStart: draft.autoCaptureEnabled ? draft.autoCaptureStart : undefined,
-          autoCaptureEnd: draft.autoCaptureEnabled ? draft.autoCaptureEnd : undefined,
-          autoReservationAccountId: draft.autoReservationAccountId || undefined,
-          note: draft.note.trim() || undefined,
-        });
+        return updateGoal(
+          draft.id,
+          buildGoalUpdatePayload(draft, currentGoal.icon),
+        );
       }),
     );
 

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import * as walletApi from "@/services/wallet-api";
+import type { GoalPatch } from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -95,7 +96,7 @@ interface WalletContextValue {
   updateTag: (tagId: string, tag: Omit<Tag, "id">) => Promise<void>;
   deleteTag: (tagId: string) => Promise<void>;
   addGoal: (goal: Omit<Goal, "id">) => Promise<string>;
-  updateGoal: (goalId: string, goal: Omit<Goal, "id">) => Promise<void>;
+  updateGoal: (goalId: string, goal: GoalPatch) => Promise<void>;
   deleteGoal: (goalId: string) => Promise<void>;
   addGoalReservation: (
     reservation: Omit<GoalReservation, "id">,
@@ -759,7 +760,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return created.id;
   }
 
-  async function updateGoal(goalId: string, goal: Omit<Goal, "id">) {
+  async function updateGoal(goalId: string, goal: GoalPatch) {
     const updated = await walletApi.updateGoal(requireToken(), goalId, goal);
     setDataset((current) => ({
       ...current,
