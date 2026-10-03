@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
@@ -329,7 +328,6 @@ function defaultRecordAccountId(dataset: WalletDataset) {
 }
 
 export function WalletProvider({ children }: PropsWithChildren) {
-  const mounted=useRef(true);
   const { token, lock } = useAuth();
   const { setTheme } = useTheme();
   const [initialCache] = useState(() => readCachedDataset(token));
@@ -392,7 +390,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [sync] = useState(
     () =>
       new WalletSync<WalletDataset>((next) => {
-        if(!mounted.current)return;
         setDataset(next);
         setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
@@ -412,7 +409,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const isSelectedRangeComplete = isAllHistoryComplete;
 
   useEffect(() => {
-    mounted.current=true;
+    sync.activate();
     let cancelled = false;
     // Bootstrap generates due recurring debts, then obtain the canonical complete
     // snapshot. One epoch owns both reads so edits invalidate the entire load.
@@ -439,9 +436,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
         }
       });
     return () => {
-      mounted.current=false;
       cancelled = true;
-      sync.invalidate();
+      sync.deactivate();
     };
   }, [sync, token]);
 

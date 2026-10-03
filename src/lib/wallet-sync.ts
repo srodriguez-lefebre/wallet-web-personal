@@ -1,5 +1,6 @@
 /** One owner for asynchronous snapshots. Never merge an older page into newer edits. */
 export class WalletSync<T> {
+  private active = true;
   private epoch = 0;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private readonly publish: (value: T) => void) {}
@@ -8,15 +9,19 @@ export class WalletSync<T> {
     this.epoch += 1;
   }
 
+  activate() { this.active = true; }
+
+  deactivate() { this.active = false; this.invalidate(); }
+
   async read(load: () => Promise<T>): Promise<T | undefined> {
     const epoch = ++this.epoch;
     try {
       const result = await load();
-      if (epoch !== this.epoch) return undefined;
+      if (epoch !== this.epoch || !this.active) return undefined;
       this.publish(result);
       return result;
     } catch (error) {
-      if (epoch !== this.epoch) return undefined;
+      if (epoch !== this.epoch || !this.active) return undefined;
       throw error;
     }
   }
