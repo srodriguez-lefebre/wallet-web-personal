@@ -6382,7 +6382,7 @@ paths:
                             - ARS
                           type: string
                         currentValue:
-                          exclusiveMinimum: 0
+                          minimum: 0
                           type: number
                         id:
                           format: uuid
@@ -6469,7 +6469,7 @@ paths:
                     - ARS
                   type: string
                 currentValue:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 isVisible:
                   default: true
@@ -6527,7 +6527,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       id:
                         format: uuid
@@ -6697,7 +6697,7 @@ paths:
                     - ARS
                   type: string
                 currentValue:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 isVisible:
                   type: boolean
@@ -6748,7 +6748,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       id:
                         format: uuid
@@ -10364,7 +10364,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             id:
                               format: uuid
@@ -11838,7 +11838,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             deletedAt:
                               anyOf:
@@ -13216,7 +13216,7 @@ paths:
                                     - ARS
                                   type: string
                                 currentValue:
-                                  exclusiveMinimum: 0
+                                  minimum: 0
                                   type: number
                                 id:
                                   format: uuid
@@ -14803,7 +14803,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       deletedAt:
                         anyOf:
@@ -16127,7 +16127,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             id:
                               format: uuid

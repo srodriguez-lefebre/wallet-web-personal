@@ -13,7 +13,7 @@ import * as walletApi from "@/services/wallet-api";
 import { WalletSync } from "@/lib/wallet-sync";
 import { importRecordBatches } from "@/lib/record-import";
 import { useTheme } from "@/providers/theme-provider";
-import type { GoalPatch, RecordPatch, SettingsPatch } from "@shared/schemas";
+import type { GoalPatch, InvestmentPatch, RecordPatch, SettingsPatch } from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -139,7 +139,7 @@ interface WalletContextValue {
   addInvestment: (investment: Omit<Investment, "id">) => Promise<string>;
   updateInvestment: (
     investmentId: string,
-    investment: Omit<Investment, "id">,
+    investment: InvestmentPatch,
   ) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
   addInstallmentPlan: (plan: Omit<InstallmentPlan, "id">) => Promise<string>;
@@ -612,7 +612,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       await mutate(() => walletApi.createInvestment(requireToken(), value))
     ).id;
   }
-  async function updateInvestment(id: string, value: Omit<Investment, "id">) {
+  async function updateInvestment(id: string, value: InvestmentPatch) {
     await mutate(() => walletApi.updateInvestment(requireToken(), id, value));
   }
   async function deleteInvestment(id: string) {

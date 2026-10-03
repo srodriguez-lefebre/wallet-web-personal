@@ -1,7 +1,6 @@
 ﻿import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
-import { differenceInCalendarDays } from "date-fns";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
+import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
+import { calculateGoalFundingPlan } from "@shared/planning";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
 
@@ -46,9 +47,7 @@ export function GoalDetailView() {
   const reservations = dataset.goalReservations.filter(
     (reservation) => reservation.goalId === goalProgress.goal.id,
   );
-  const deadlineDays = goalProgress.goal.deadline
-    ? differenceInCalendarDays(new Date(goalProgress.goal.deadline), new Date())
-    : null;
+  const deadlineDays = calculateGoalFundingPlan(goalProgress).daysRemaining;
 
   function openRecords() {
     setRecordFilters({
@@ -133,6 +132,7 @@ export function GoalDetailView() {
                 </div>
               </div>
               </>}
+              <GoalFundingPlan progress={goalProgress} />
               <div className="mt-4 flex flex-wrap gap-2">
                 {goalProgress.overTarget > 0 ? <Badge variant="warning">Excedido {formatMoney(goalProgress.overTarget, goalProgress.goal.currency)}</Badge> : null}
                 {goalProgress.goal.deadline ? (

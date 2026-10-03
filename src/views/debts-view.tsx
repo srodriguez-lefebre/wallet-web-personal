@@ -36,6 +36,7 @@ import {
   isOpenDebt,
 } from "@shared/calculations";
 import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
+import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
 import type {
   CurrencyCode,
   Debt,
@@ -175,32 +176,20 @@ function debtProgress(debt: Debt) {
   return ((debt.originalAmount - debt.pendingAmount) / debt.originalAmount) * 100;
 }
 
-function dueVariant(dueAt?: string) {
-  if (!dueAt) return "muted";
-
-  const today = new Date(`${todayDate()}T12:00:00.000Z`);
-  const dueDate = new Date(dueAt);
-  const days = Math.ceil(
-    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  if (days < 0) return "danger";
-  if (days <= 7) return "info";
+function dueVariant(debt: Debt) {
+  const state = debtDueState(debt);
+  if (state.kind === "overdue") return "danger";
+  if (state.kind === "today" || (state.kind === "upcoming" && state.days! <= 7)) return "info";
   return "muted";
 }
 
-function dueLabel(dueAt?: string) {
-  if (!dueAt) return "No due date";
-
-  const today = new Date(`${todayDate()}T12:00:00.000Z`);
-  const dueDate = new Date(dueAt);
-  const days = Math.ceil(
-    (dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-  );
-
-  if (days < 0) return `Overdue ${Math.abs(days)}d`;
-  if (days === 0) return "Due today";
-  return `Due in ${days}d`;
+function dueLabel(debt: Debt) {
+  const state = debtDueState(debt);
+  if (state.kind === "settled") return "Settled";
+  if (state.kind === "undated") return "No due date";
+  if (state.kind === "overdue") return `Overdue ${Math.abs(state.days!)}d`;
+  if (state.kind === "today") return "Due today";
+  return `Due in ${state.days}d`;
 }
 
 function defaultAccountId(dataset: { accounts: Array<{ id: string; isActive: boolean; isVisible: boolean }>; settings: { primaryAccountId?: string } }) {
@@ -295,15 +284,15 @@ export function DebtsView() {
   const [paymentNote, setPaymentNote] = useState("");
   const [saveAccountToDebt, setSaveAccountToDebt] = useState(true);
   const { toast, runAction } = useActionToast();
+  const [dueWindow, setDueWindow] = useState<DebtDueWindow>("all");
   const openDebts = useMemo(
-    () =>
-      dataset.debts
-        .filter(isOpenDebt)
-        .sort((a, b) => (a.dueAt ?? "").localeCompare(b.dueAt ?? "")),
+    () => selectDebtsByDueDate(dataset.debts),
     [dataset.debts],
   );
+  const filteredOpenDebts = selectDebtsByDueDate(openDebts, { window: dueWindow });
   const closedDebts = dataset.debts.filter((debt) => !isOpenDebt(debt));
   const summary = calculateVisibleDebtSummary(dataset);
+  const hasKnownSummary = summary.openCount === 0 || summary.amountPendingCount < summary.openCount;
   const activePaymentDebt = dataset.debts.find(
     (debt) => debt.id === paymentDebtId,
   );
@@ -598,8 +587,8 @@ export function DebtsView() {
                     >
                       {debtDirectionLabels[debt.direction]}
                     </Badge>
-                    <Badge variant={dueVariant(debt.dueAt)}>
-                      {dueLabel(debt.dueAt)}
+                    <Badge variant={dueVariant(debt)}>
+                      {dueLabel(debt)}
                     </Badge>
                     <Badge variant={debt.isVisible ? "info" : "muted"}>
                       {debt.isVisible ? "Home" : "Hidden"}
@@ -748,7 +737,7 @@ export function DebtsView() {
               To collect
             </p>
             <p className="mt-2 text-2xl font-semibold text-emerald-600">
-              {formatMoney(summary.toCollect, dataset.settings.primaryCurrency)}
+              {hasKnownSummary ? formatMoney(summary.toCollect, dataset.settings.primaryCurrency) : "Amount pending"}
             </p>
           </CardContent>
         </Card>
@@ -758,7 +747,7 @@ export function DebtsView() {
               To pay
             </p>
             <p className="mt-2 text-2xl font-semibold text-red-600">
-              {formatMoney(summary.toPay, dataset.settings.primaryCurrency)}
+              {hasKnownSummary ? formatMoney(summary.toPay, dataset.settings.primaryCurrency) : "Amount pending"}
             </p>
           </CardContent>
         </Card>
@@ -774,7 +763,7 @@ export function DebtsView() {
                   : "mt-2 text-2xl font-semibold text-red-600"
               }
             >
-              {formatMoney(summary.net, dataset.settings.primaryCurrency)}
+              {hasKnownSummary ? formatMoney(summary.net, dataset.settings.primaryCurrency) : "Amount pending"}
             </p>
           </CardContent>
         </Card>
@@ -793,6 +782,7 @@ export function DebtsView() {
         </Card>
       </div>
 
+      {summary.amountPendingCount > 0 ? <p className="mt-2 text-xs text-muted-foreground">Totals include known amounts only. {summary.amountPendingCount} debts need an amount or exchange rate.</p> : null}
       <div className="mt-5 flex flex-wrap gap-2 border-b">
         {(
           [
@@ -817,7 +807,13 @@ export function DebtsView() {
       </div>
 
       <div className="mt-5">
-        {tab === "open" ? renderDebtList(openDebts) : null}
+        {tab === "open" ? <>
+          <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter debts by due date">
+            {([["all", "All dates"], ["overdue", "Overdue"], ["next7", "Next 7 days"], ["next30", "Next 30 days"]] as const).map(([value, label]) =>
+              <Button key={value} size="sm" variant={dueWindow === value ? "default" : "outline"} aria-pressed={dueWindow === value} onClick={() => setDueWindow(value)}>{label}</Button>)}
+          </div>
+          {renderDebtList(filteredOpenDebts)}
+        </> : null}
         {tab === "closed" ? renderDebtList(closedDebts) : null}
         {tab === "recurring" ? (
           <Card>

@@ -302,7 +302,7 @@ export const investmentSchema = z.object({
   name: z.string().min(1),
   type: z.enum(["stock", "fund", "crypto", "deposit", "other"]),
   amountInvested: z.number().positive(),
-  currentValue: z.number().positive(),
+  currentValue: z.number().nonnegative(),
   currency: currencySchema,
   isVisible: z.boolean().default(true),
   startedAt: z.string().datetime().or(z.string().date()),
@@ -503,7 +503,7 @@ export const goalPatchSchema = nonEmptyPatch({
 });
 export const investmentPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(), type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
-  amountInvested: z.number().positive().optional(), currentValue: z.number().positive().optional(), currency: currencySchema.optional(),
+  amountInvested: z.number().positive().optional(), currentValue: z.number().nonnegative().optional(), currency: currencySchema.optional(),
   isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
 });
 export const budgetPatchSchema = nonEmptyPatch({

@@ -1,4 +1,4 @@
-﻿import { FormEvent, useState } from "react";
+﻿import { FormEvent, useRef, useState } from "react";
 import {
   Edit3,
   Eye,
@@ -23,10 +23,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { ActionToast } from "@/components/ui/action-toast";
+import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { formatMoney } from "@shared/calculations";
 import { investmentTypeLabels } from "@shared/constants";
+import { summarizeInvestmentsByCurrency } from "@shared/planning";
 import type { CurrencyCode, Investment } from "@shared/types";
 
 interface InvestmentDraft {
@@ -70,8 +73,19 @@ function buildInvestmentDrafts(investments: Investment[]): InvestmentDraft[] {
 
 export function InvestmentsView() {
   const navigate = useNavigate();
-  const { dataset, addInvestment, updateInvestment, deleteInvestment, addInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan } = useWallet();
+  const {
+    dataset,
+    addInvestment,
+    updateInvestment,
+    deleteInvestment,
+    addInstallmentPlan,
+    updateInstallmentPlan,
+    deleteInstallmentPlan,
+  } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
+  const { toast, runAction } = useActionToast();
+  const [isSaving, setIsSaving] = useState(false);
+  const saving = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
   const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(
@@ -92,18 +106,37 @@ export function InvestmentsView() {
   const [installmentAmount, setInstallmentAmount] = useState("");
   const [installmentCount, setInstallmentCount] = useState("");
   const visibleInvestments = dataset.investments.filter(
-    (investment) => investment.isVisible,
+    (investment) => showHidden || investment.isVisible,
   );
+  const portfolio = summarizeInvestmentsByCurrency(visibleInvestments);
 
   async function handleAddInstallment(event: FormEvent) {
     event.preventDefault();
-    const account = dataset.accounts.find((item) => item.isActive) ?? dataset.accounts[0];
+    const account =
+      dataset.accounts.find((item) => item.isActive) ?? dataset.accounts[0];
     const category = dataset.categories[0];
     const totalAmount = Number(installmentAmount);
     const installmentsTotal = Number(installmentCount);
-    if (!account || !category || !installmentName.trim() || totalAmount <= 0 || installmentsTotal <= 0) return;
-    await addInstallmentPlan({ name: installmentName.trim(), totalAmount, currency: account.currency, installmentsTotal, installmentsPaid: 0, accountId: account.id, categoryId: category.id });
-    setInstallmentName(""); setInstallmentAmount(""); setInstallmentCount("");
+    if (
+      !account ||
+      !category ||
+      !installmentName.trim() ||
+      totalAmount <= 0 ||
+      installmentsTotal <= 0
+    )
+      return;
+    await addInstallmentPlan({
+      name: installmentName.trim(),
+      totalAmount,
+      currency: account.currency,
+      installmentsTotal,
+      installmentsPaid: 0,
+      accountId: account.id,
+      categoryId: category.id,
+    });
+    setInstallmentName("");
+    setInstallmentAmount("");
+    setInstallmentCount("");
   }
   const visibleInvestmentDrafts = investmentDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
@@ -160,12 +193,16 @@ export function InvestmentsView() {
   }
 
   async function saveInvestmentEdits() {
+    if (saving.current) return;
     const activeDrafts = investmentDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
       (draft) =>
         !draft.name.trim() ||
         Number(draft.amountInvested) <= 0 ||
-        Number(draft.currentValue) <= 0,
+        !draft.currentValue.trim() ||
+        !Number.isFinite(Number(draft.amountInvested)) ||
+        !Number.isFinite(Number(draft.currentValue)) ||
+        Number(draft.currentValue) < 0,
     );
 
     if (invalidDraft) {
@@ -175,61 +212,113 @@ export function InvestmentsView() {
       return;
     }
 
-    await Promise.all(
-      investmentDrafts
-        .filter((draft) => draft.isDeleted)
-        .map((draft) => deleteInvestment(draft.id)),
-    );
+    saving.current = true;
+    setIsSaving(true);
+    try {
+      await runAction(
+        async () => {
+          await Promise.all(
+            investmentDrafts
+              .filter((draft) => draft.isDeleted)
+              .map((draft) => deleteInvestment(draft.id)),
+          );
 
-    await Promise.all(
-      activeDrafts.map((draft) =>
-        updateInvestment(draft.id, {
-          name: draft.name.trim(),
-          type: draft.type,
-          amountInvested: Number(draft.amountInvested),
-          currentValue: Number(draft.currentValue),
-          currency: draft.currency,
-          startedAt: draft.startedAt,
-          isVisible: draft.isVisible,
-          note: draft.note.trim() || undefined,
-        }),
-      ),
-    );
-
-    setShowHidden(false);
-    setEditError("");
-    setIsEditing(false);
+          await Promise.all(
+            activeDrafts.map((draft) =>
+              updateInvestment(draft.id, {
+                name: draft.name.trim(),
+                type: draft.type,
+                amountInvested: Number(draft.amountInvested),
+                currentValue: Number(draft.currentValue),
+                currency: draft.currency,
+                startedAt: draft.startedAt,
+                isVisible: draft.isVisible,
+                note: draft.note.trim() || undefined,
+              }),
+            ),
+          );
+        },
+        {
+          processing: "Saving investments...",
+          success: "Investments saved",
+          error: "Could not save investments",
+        },
+      );
+      setShowHidden(false);
+      setEditError("");
+      setIsEditing(false);
+    } catch (error) {
+      setEditError(
+        error instanceof Error ? error.message : "Could not save investments.",
+      );
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
+    }
   }
 
   async function handleCreateInvestment(event: FormEvent) {
     event.preventDefault();
+    if (saving.current) return;
     const invested = Number(amountInvested);
     const current = Number(currentValue || amountInvested);
-    if (!name.trim() || invested <= 0 || current <= 0) return;
+    if (
+      !name.trim() ||
+      !Number.isFinite(invested) ||
+      !Number.isFinite(current) ||
+      invested <= 0 ||
+      current < 0
+    ) {
+      setEditError(
+        "Enter a name, positive acquisition cost, and current value of zero or more.",
+      );
+      return;
+    }
 
-    const id = await addInvestment({
-      name: name.trim(),
-      type,
-      amountInvested: invested,
-      currentValue: current,
-      currency,
-      startedAt,
-      isVisible,
-      note: note || undefined,
-    });
+    saving.current = true;
+    setIsSaving(true);
+    setEditError("");
+    try {
+      const id = await runAction(
+        () =>
+          addInvestment({
+            name: name.trim(),
+            type,
+            amountInvested: invested,
+            currentValue: current,
+            currency,
+            startedAt,
+            isVisible,
+            note: note || undefined,
+          }),
+        {
+          processing: "Creating investment...",
+          success: "Investment created",
+          error: "Could not create investment",
+        },
+      );
 
-    setName("");
-    setAmountInvested("");
-    setCurrentValue("");
-    setStartedAt(new Date().toISOString().slice(0, 10));
-    setIsVisible(true);
-    setNote("");
-    setIsCreateOpen(false);
-    navigate(`/investments/${id}`);
+      setName("");
+      setAmountInvested("");
+      setCurrentValue("");
+      setStartedAt(new Date().toISOString().slice(0, 10));
+      setIsVisible(true);
+      setNote("");
+      setIsCreateOpen(false);
+      navigate(`/investments/${id}`);
+    } catch (error) {
+      setEditError(
+        error instanceof Error ? error.message : "Could not create investment.",
+      );
+    } finally {
+      saving.current = false;
+      setIsSaving(false);
+    }
   }
 
   return (
     <div>
+      <ActionToast toast={toast} />
       <PageHeader
         eyebrow="Investments"
         title="Investments"
@@ -253,11 +342,15 @@ export function InvestmentsView() {
                 <Eye className="h-5 w-5" />
               )}
             </Button>
-            <Button variant="outline" onClick={cancelEditingInvestments}>
+            <Button
+              variant="outline"
+              disabled={isSaving}
+              onClick={cancelEditingInvestments}
+            >
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button onClick={saveInvestmentEdits}>
+            <Button disabled={isSaving} onClick={saveInvestmentEdits}>
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -273,7 +366,31 @@ export function InvestmentsView() {
             >
               <Edit3 className="h-5 w-5" />
             </Button>
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+            <Button
+              size="icon"
+              variant="outline"
+              aria-label={
+                showHidden
+                  ? "Hide hidden investments"
+                  : "Show hidden investments"
+              }
+              onClick={() => setShowHidden((current) => !current)}
+            >
+              {showHidden ? (
+                <EyeOff className="h-5 w-5" />
+              ) : (
+                <Eye className="h-5 w-5" />
+              )}
+            </Button>
+            <Dialog
+              open={isCreateOpen}
+              onOpenChange={(open) => {
+                if (!saving.current) {
+                  setEditError("");
+                  setIsCreateOpen(open);
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <Button size="icon" aria-label="New investment">
                   <Plus className="h-5 w-5" />
@@ -352,13 +469,12 @@ export function InvestmentsView() {
                       <input
                         value={currentValue}
                         onChange={(event) =>
-                          setCurrentValue(
-                            limitDecimalPlaces(event.target.value),
-                          )
+                          setCurrentValue(event.target.value)
                         }
                         type="number"
                         className={inputClassName}
                         placeholder="Opcional"
+                        min="0"
                         step="0.01"
                       />
                     </label>
@@ -396,7 +512,12 @@ export function InvestmentsView() {
                       placeholder="Optional context"
                     />
                   </label>
-                  <Button className="w-full" type="submit">
+                  {editError ? (
+                    <p role="alert" className="text-sm text-destructive">
+                      {editError}
+                    </p>
+                  ) : null}
+                  <Button className="w-full" type="submit" disabled={isSaving}>
                     <Plus className="h-4 w-4" />
                     Crear y abrir detalle
                   </Button>
@@ -407,6 +528,53 @@ export function InvestmentsView() {
         )}
       </PageHeader>
 
+      {!isEditing && portfolio.length > 0 ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {portfolio.map((summary) => (
+            <Card
+              key={summary.currency}
+              aria-label={`${summary.currency} portfolio summary`}
+            >
+              <CardHeader>
+                <CardTitle>{summary.currency} portfolio</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {summary.count} investments ·{" "}
+                  {showHidden ? "including hidden" : "visible only"}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <div className="flex justify-between gap-2">
+                  <span>Invested</span>
+                  <span className="font-semibold">
+                    {formatMoney(summary.invested, summary.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>Current value</span>
+                  <span className="font-semibold">
+                    {formatMoney(summary.currentValue, summary.currency)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span>Result</span>
+                  <span
+                    className={
+                      summary.gain >= 0
+                        ? "font-semibold text-emerald-600"
+                        : "font-semibold text-red-600"
+                    }
+                  >
+                    {formatMoney(summary.gain, summary.currency)}
+                    {summary.returnPercentage === null
+                      ? " · Unavailable"
+                      : ` · ${summary.returnPercentage.toFixed(2)}%`}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      ) : null}
       <div className="grid gap-4 xl:grid-cols-3">
         {shouldShowInvestmentsPanel ? (
           <Card className={isEditing ? "xl:col-span-2" : undefined}>
@@ -540,11 +708,10 @@ export function InvestmentsView() {
                           </span>
                           <input
                             value={draft.currentValue}
+                            min="0"
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
-                                currentValue: limitDecimalPlaces(
-                                  event.target.value,
-                                ),
+                                currentValue: event.target.value,
                               })
                             }
                             type="number"
@@ -587,7 +754,10 @@ export function InvestmentsView() {
                   const gain =
                     investment.currentValue - investment.amountInvested;
                   const percentage =
-                    (investment.currentValue / investment.amountInvested) * 100;
+                    investment.amountInvested > 0
+                      ? (investment.currentValue / investment.amountInvested) *
+                        100
+                      : 0;
                   return (
                     <button
                       key={investment.id}
@@ -643,11 +813,38 @@ export function InvestmentsView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <form className="grid gap-2 sm:grid-cols-[1fr_120px_100px_auto]" onSubmit={handleAddInstallment}>
-              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentName} onChange={(event) => setInstallmentName(event.target.value)} placeholder="Installment plan" />
-              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentAmount} onChange={(event) => setInstallmentAmount(event.target.value)} type="number" min="0.01" step="0.01" placeholder="Total" />
-              <input className="h-10 rounded-md border bg-background px-3 text-sm" value={installmentCount} onChange={(event) => setInstallmentCount(event.target.value)} type="number" min="1" step="1" placeholder="Count" />
-              <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
+            <form
+              className="grid gap-2 sm:grid-cols-[1fr_120px_100px_auto]"
+              onSubmit={handleAddInstallment}
+            >
+              <input
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={installmentName}
+                onChange={(event) => setInstallmentName(event.target.value)}
+                placeholder="Installment plan"
+              />
+              <input
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={installmentAmount}
+                onChange={(event) => setInstallmentAmount(event.target.value)}
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Total"
+              />
+              <input
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+                value={installmentCount}
+                onChange={(event) => setInstallmentCount(event.target.value)}
+                type="number"
+                min="1"
+                step="1"
+                placeholder="Count"
+              />
+              <Button type="submit">
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
             </form>
             {dataset.installmentPlans.map((plan) => {
               const percentage =
@@ -662,10 +859,33 @@ export function InvestmentsView() {
                   </div>
                   <Progress value={percentage} className="mt-3" />
                   <div className="mt-2 flex items-center justify-between gap-2">
-                    <p className="text-xs text-muted-foreground">Total {formatMoney(plan.totalAmount, plan.currency)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Total {formatMoney(plan.totalAmount, plan.currency)}
+                    </p>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" disabled={plan.installmentsPaid >= plan.installmentsTotal} onClick={() => void updateInstallmentPlan(plan.id, { ...plan, installmentsPaid: plan.installmentsPaid + 1 })}>Mark paid</Button>
-                      <Button size="icon" variant="destructive" aria-label={`Delete ${plan.name}`} onClick={() => void deleteInstallmentPlan(plan.id)}><Trash2 className="h-4 w-4" /></Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          plan.installmentsPaid >= plan.installmentsTotal
+                        }
+                        onClick={() =>
+                          void updateInstallmentPlan(plan.id, {
+                            ...plan,
+                            installmentsPaid: plan.installmentsPaid + 1,
+                          })
+                        }
+                      >
+                        Mark paid
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        aria-label={`Delete ${plan.name}`}
+                        onClick={() => void deleteInstallmentPlan(plan.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </div>

@@ -23,6 +23,18 @@ const bootstrap = {
   generatedDebts: [],
   serverDate: "2026-10-03",
 };
+
+test("investment valuation sends a partial patch and reloads canonical cost and start date", async () => {
+  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  const investment = context.dataset.investments[0];
+  const reloaded = structuredClone(mockWalletData);
+  reloaded.investments.find((item) => item.id === investment.id)!.currentValue = 0;
+  vi.mocked(api.updateInvestment).mockResolvedValue({ ...investment, currentValue: 0 });
+  vi.mocked(api.getWallet).mockResolvedValue(reloaded);
+  await act(async () => { await context.updateInvestment(investment.id, { currentValue: 0 }); });
+  expect(api.updateInvestment).toHaveBeenCalledExactlyOnceWith("test-session", investment.id, { currentValue: 0 });
+  expect(context.dataset.investments.find((item) => item.id === investment.id)).toMatchObject({ currentValue: 0, amountInvested: investment.amountInvested, startedAt: investment.startedAt, currency: investment.currency });
+});
 beforeEach(() => {
   vi.clearAllMocks();
   auth.token = "test-session";

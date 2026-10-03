@@ -2462,19 +2462,17 @@ export async function updateInvestment(
     ...mapped, ...input,
     note: input.note === null ? undefined : (input.note ?? mapped.note),
   });
+  const values: Partial<typeof investments.$inferInsert> = { updatedAt: new Date() };
+  for (const key of ["name", "type", "currency", "isVisible"] as const) {
+    if (hasOwn(input, key)) Object.assign(values, { [key]: merged[key] });
+  }
+  if (hasOwn(input, "amountInvested")) values.amountInvested = decimal(merged.amountInvested);
+  if (hasOwn(input, "currentValue")) values.currentValue = decimal(merged.currentValue);
+  if (hasOwn(input, "startedAt")) values.startedAt = new Date(merged.startedAt);
+  if (hasOwn(input, "note")) values.note = merged.note ?? null;
   const [row] = await db
     .update(investments)
-    .set({
-      name: merged.name,
-      type: merged.type,
-      amountInvested: decimal(merged.amountInvested),
-      currentValue: decimal(merged.currentValue),
-      currency: merged.currency,
-      isVisible: merged.isVisible,
-      startedAt: new Date(merged.startedAt),
-      note: merged.note ?? null,
-      updatedAt: new Date(),
-    })
+    .set(values)
     .where(eq(investments.id, id))
     .returning();
   return row ? mapInvestment(row) : null;
