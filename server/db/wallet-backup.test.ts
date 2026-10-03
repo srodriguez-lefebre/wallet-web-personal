@@ -17,6 +17,7 @@ import {
 } from "./wallet-repository.js";
 import { recordSchema, walletBackupSchema } from "../../shared/schemas.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
+import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
 
 const pg = new PGlite();
 const accountId = "00000000-0000-4000-8000-000000000001";
@@ -90,6 +91,24 @@ async function archiveHistory() {
   await deleteGoal(goalId);
   return record;
 }
+
+test("complete backups preserve mail retry identities and duplicate lineage after restoration",async()=>{
+  const record=await createRecord(recordSchema.parse({type:"expense",amount:40,currency:"UYU",accountId,categoryId,paymentType:"debit",paymentStatus:"cleared",occurredAt:date}));
+  const eventId="00000000-0000-4000-8000-000000000011",duplicateId="00000000-0000-4000-8000-000000000012";
+  await pg.query("INSERT INTO ingestion_events(id,idempotency_key,source,status,action,record_id) VALUES($1,'backup-mail','test','completed','created',$2)",[eventId,record.id]);
+  await pg.query("INSERT INTO ingestion_events(id,idempotency_key,source,status,action,duplicate_of_id) VALUES($1,'backup-duplicate','test','completed','duplicate',$2)",[duplicateId,eventId]);
+  const backup=walletBackupSchema.parse(await getWalletBackup());
+  expect(backup.ingestionEvents).toHaveLength(2);
+  await pg.exec("DELETE FROM ingestion_events");
+  await restoreWalletBackup(backup);
+  const input={idempotencyKey:"backup-mail",integration:{name:"gmail_apps_script" as const,version:"test"},email:{provider:"gmail" as const,messageId:"test",threadId:"test",subject:"Test",from:"test@example.com",date},transaction:{source:"test",sourceLabel:"test",occurredAt:date,amount:40,currency:"UYU" as const,merchantRaw:"Test",cardAlias:"",cardBrand:"",cardNumber:"",paymentType:"credit_card" as const},destination:{}};
+  expect((await processMailIngestion(input)).status).toBe("already_processed");
+  expect((await getWalletDataset()).records).toHaveLength(1);
+  expect((await getWalletBackup()).ingestionEvents?.find(event=>event.id===duplicateId)?.duplicateOfId).toBe(eventId);
+  const legacy={...backup};delete legacy.ingestionEvents;
+  await restoreWalletBackup(legacy);
+  expect((await processMailIngestion(input)).status).toBe("already_processed");
+});
 
 test("backup retains archived goals and every ledger reference without exposing them in normal wallet state", async () => {
   const record = await archiveHistory();

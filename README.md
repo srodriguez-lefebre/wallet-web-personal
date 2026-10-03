@@ -181,7 +181,11 @@ el número confirmado y se recarga antes de reintentar. Una respuesta perdida
 puede requerir reconciliar el último lote.
 
 La exportación JSON obtiene un snapshot consistente con las entidades archivadas,
-sus vínculos y el historial de reservas. La restauración JSON valida el
+sus vínculos, el historial de reservas, las reglas de comercios y las claves de
+procesamiento de correos para conservar la protección contra reintentos. Los
+respaldos antiguos conservan las reglas actuales cuando sus categorías pueden
+remapearse sin ambigüedad; una incompatibilidad rechaza el reemplazo completo.
+La restauración JSON valida el
 archivo, muestra sus cantidades y exige confirmar el reemplazo de los datos.
 Un respaldo de la wallet no incluye credenciales ni configuración externa.
 
@@ -191,6 +195,11 @@ cuenta, la moneda original y el importe recibido en una transferencia se guardan
 por separado. Una cotización ausente exige revisión o entrada explícita; no se
 supone equivalencia entre monedas. La moneda principal queda protegida cuando
 existe historial financiero para evitar reinterpretar importes congelados.
+La moneda de las cuentas y del límite de las tarjetas también queda protegida
+cuando hay saldo inicial o actividad. Los registros `needs_review` no afectan
+los saldos, las reservas ni los informes hasta validarse. Los pagos de deuda se
+crean con la acción de pago; CSV no puede insertar nuevos pagos vinculados sin
+conciliar la deuda. Para restaurar ese historial se usa el respaldo JSON completo.
 
 Las pruebas de integración ejecutan las migraciones en bases temporales locales.
 Las pruebas de concurrencia usan PostgreSQL con conexiones independientes mediante

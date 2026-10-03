@@ -19,6 +19,7 @@ import {
   investments,
   merchants,
   merchantAliases,
+  ingestionEvents,
   records,
   recordGoals,
   recordTags,
@@ -543,6 +544,7 @@ export async function getWalletDataset(
     installmentPlanRows,
     merchantRows,
     merchantAliasRows,
+    ingestionRows,
   ] = await db.batch([
     db.execute(sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`),
     db.select().from(settings).limit(1),
@@ -591,6 +593,7 @@ export async function getWalletDataset(
     db.select().from(installmentPlans),
     db.select().from(merchants).where(options.includeArchived ? undefined : sql`false`),
     db.select().from(merchantAliases).where(options.includeArchived ? undefined : sql`false`),
+    db.select().from(ingestionEvents).where(options.includeArchived ? undefined : sql`false`),
   ]);
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
@@ -608,6 +611,13 @@ export async function getWalletDataset(
     ...(options.includeArchived ? {
       merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,isActive:row.isActive},row)),
       merchantAliases: merchantAliasRows.map(row=>withMetadata({id:row.id,merchantId:row.merchantId,alias:row.alias,normalizedAlias:row.normalizedAlias},row)),
+      ingestionEvents:ingestionRows.map(row=>({
+        id:row.id,idempotencyKey:row.idempotencyKey,source:row.source,status:row.status,action:optional(row.action),
+        fingerprint:optional(row.fingerprint),targetKey:optional(row.targetKey),merchantNormalized:optional(row.merchantNormalized),
+        amount:row.amount===null?undefined:asNumber(row.amount),currency:optional(row.currency) as WalletRecord["currency"]|undefined,
+        occurredAt:asIso(row.occurredAt),recordId:optional(row.recordId),creditCardRecordId:optional(row.creditCardRecordId),
+        duplicateOfId:optional(row.duplicateOfId),completedAt:asIso(row.completedAt),createdAt:asRequiredIso(row.createdAt),updatedAt:asRequiredIso(row.updatedAt),
+      })),
     } : {}),
     settings: withMetadata(mapSettings(settingsRows[0]), settingsRows[0]),
     accounts: accountRows.map((row) => withMetadata(mapAccount(row), row)),

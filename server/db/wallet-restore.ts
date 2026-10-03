@@ -12,6 +12,7 @@ const collections: Array<[string, Table, string?]> = [
   ["records",schema.records],["creditCardRecords",schema.creditCardRecords,"originalRecordId"],["creditCardPayments",schema.creditCardPayments],
   ["creditCardPaymentAllocations",schema.creditCardPaymentAllocations],["goalReservationMovements",schema.goalReservationMovements,"reversesMovementId"],
   ["budgets",schema.budgets],["exchangeRates",schema.exchangeRates],["investments",schema.investments],["installmentPlans",schema.installmentPlans],
+  ["ingestionEvents",schema.ingestionEvents,"duplicateOfId"],
 ];
 
 /** Explicitly replaces a complete backup in one Neon transaction. No individual write can escape rollback. */
@@ -33,9 +34,17 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
     });
     snapshot.merchantAliases=currentAliases;
   }
-  const tables = [schema.ingestionEvents,schema.recordTags,schema.recordGoals,schema.goalTags,schema.settings,schema.goalReservations,...collections.map(([,table])=>table)];
+  if(dataset.ingestionEvents===undefined){
+    const existing=await db.select().from(schema.ingestionEvents);
+    const recordIds=new Set(dataset.records.map(record=>record.id)),cardIds=new Set(dataset.creditCardRecords.map(record=>record.id));
+    let retained=existing.filter(event=>(!event.recordId||recordIds.has(event.recordId))&&(!event.creditCardRecordId||cardIds.has(event.creditCardRecordId)));
+    let previousCount:number;
+    do {previousCount=retained.length;const retainedIds=new Set(retained.map(event=>event.id));retained=retained.filter(event=>!event.duplicateOfId||retainedIds.has(event.duplicateOfId));}while(retained.length!==previousCount);
+    snapshot.ingestionEvents=retained;
+  }
+  const tables = [schema.recordTags,schema.recordGoals,schema.goalTags,schema.settings,schema.goalReservations,...collections.map(([,table])=>table)];
   const queries: unknown[] = [db.execute(sql`LOCK TABLE ${sql.join(tables.map(table=>sql.identifier(getTableName(table))),sql`, `)} IN ACCESS EXCLUSIVE MODE`)];
-  for (const table of tables.slice(0,6)) queries.push(db.execute(sql`DELETE FROM ${table}`));
+  for (const table of tables.slice(0,5)) queries.push(db.execute(sql`DELETE FROM ${table}`));
   for (const [,table] of [...collections].reverse()) queries.push(db.execute(sql`DELETE FROM ${table}`));
   const insert = (table:Table,row:Record<string,unknown>,defer?:string) => {
     const columns=getTableColumns(table);

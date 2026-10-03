@@ -625,6 +625,7 @@ export const walletDatasetSchema = z.object({
 const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
 const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
 export const walletBackupSchema = walletDatasetSchema.extend({
+  ingestionEvents:z.array(z.object({...id,idempotencyKey:z.string().min(1),source:z.string(),status:z.string(),action:z.string().optional(),fingerprint:z.string().optional(),targetKey:z.string().optional(),merchantNormalized:z.string().optional(),amount:z.number().nonnegative().optional(),currency:currencySchema.optional(),occurredAt:z.string().datetime().optional(),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),completedAt:z.string().datetime().optional(),createdAt:z.string().datetime(),updatedAt:z.string().datetime()})).optional(),
   merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),isActive:z.boolean()})).optional(),
   merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
   settings:settingsSchema.extend({...backupMetadata,id:uuidSchema.optional()}),
@@ -662,5 +663,10 @@ export const walletBackupSchema = walletDatasetSchema.extend({
   if ((dataset.merchants === undefined) !== (dataset.merchantAliases === undefined)) ctx.addIssue({code:"custom",path:["merchants"],message:"Backup must include both merchant collections"});
   dataset.merchants?.forEach((merchant,index)=>reference("categories",merchant.categoryId,["merchants",index,"categoryId"]));
   dataset.merchantAliases?.forEach((alias,index)=>reference("merchants",alias.merchantId,["merchantAliases",index,"merchantId"]));
+  dataset.ingestionEvents?.forEach((event,index)=>{
+    reference("records",event.recordId,["ingestionEvents",index,"recordId"]);
+    reference("creditCardRecords",event.creditCardRecordId,["ingestionEvents",index,"creditCardRecordId"]);
+    reference("ingestionEvents",event.duplicateOfId,["ingestionEvents",index,"duplicateOfId"]);
+  });
 });
 
