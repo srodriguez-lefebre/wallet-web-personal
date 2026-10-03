@@ -513,10 +513,11 @@ function mapSettings(
 
 export async function getWalletDataset(
   db: Db = createDb(),
-  options: { recordsOverride?: WalletRecord[] } = {},
+  options: { recordsOverride?: WalletRecord[]; includeArchived?: boolean } = {},
 ): Promise<WalletDataset> {
-  await ensureCreditCardStatements(db);
+  if (!options.includeArchived) await ensureCreditCardStatements(db);
   const [
+    ,
     settingsRows,
     accountRows,
     categoryRows,
@@ -539,9 +540,10 @@ export async function getWalletDataset(
     recurringDebtRows,
     installmentPlanRows,
   ] = await db.batch([
+    db.execute(sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`),
     db.select().from(settings).limit(1),
-    db.select().from(accounts).where(isNull(accounts.deletedAt)),
-    db.select().from(categories).where(isNull(categories.deletedAt)),
+    db.select().from(accounts).where(options.includeArchived ? undefined : isNull(accounts.deletedAt)),
+    db.select().from(categories).where(options.includeArchived ? undefined : isNull(categories.deletedAt)),
     db.select().from(tags),
     db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
     db
@@ -551,7 +553,7 @@ export async function getWalletDataset(
     db
       .select()
       .from(creditCardRecords)
-      .where(isNull(creditCardRecords.deletedAt))
+      .where(options.includeArchived ? undefined : isNull(creditCardRecords.deletedAt))
       .orderBy(desc(creditCardRecords.occurredAt)),
     db
       .select()
@@ -563,7 +565,7 @@ export async function getWalletDataset(
       : db
           .select()
           .from(records)
-          .where(isNull(records.deletedAt))
+          .where(options.includeArchived ? undefined : isNull(records.deletedAt))
           .orderBy(desc(records.occurredAt), desc(records.id)),
     options.recordsOverride
       ? db.select().from(recordTags).where(sql`false`).limit(0)
@@ -571,7 +573,7 @@ export async function getWalletDataset(
     options.recordsOverride
       ? db.select().from(recordGoals).where(sql`false`).limit(0)
       : db.select().from(recordGoals),
-    db.select().from(goals).where(isNull(goals.deletedAt)),
+    db.select().from(goals).where(options.includeArchived ? undefined : isNull(goals.deletedAt)),
     db.select().from(goalTags),
     db
       .select()
@@ -587,30 +589,41 @@ export async function getWalletDataset(
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
   const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
+  const withMetadata = <T>(mapped: T, row: Record<string, unknown> | undefined): T => {
+    if (!options.includeArchived || !row) return mapped;
+    const keys = new Set(["deletedAt", "createdAt", "updatedAt", "idempotencyKey", "requestHash"]);
+    const metadata = Object.fromEntries(Object.entries(row)
+      .filter(([key, value]) => keys.has(key) && value !== null && value !== undefined)
+      .map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
+    return { ...mapped, ...metadata };
+  };
 
   return {
-    settings: mapSettings(settingsRows[0]),
-    accounts: accountRows.map(mapAccount),
-    categories: categoryRows.map(mapCategory),
-    tags: tagRows.map(mapTag),
-    creditCards: creditCardRows.map(mapCreditCard),
-    creditCardRecords: creditCardRecordRows.map(mapCreditCardRecord),
-    creditCardStatements: creditCardStatementRows.map(mapCreditCardStatement),
-    creditCardPayments: creditCardPaymentRows.map(mapCreditCardPayment),
-    creditCardPaymentAllocations: creditCardAllocationRows.map(
-      mapCreditCardPaymentAllocation,
-    ),
-    records: options.recordsOverride ?? recordRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
-    goals: goalRows.map((goal) => mapGoal(goal, goalTagRows.filter((link) => link.goalId === goal.id).map((link) => link.tagId))),
+    settings: withMetadata(mapSettings(settingsRows[0]), settingsRows[0]),
+    accounts: accountRows.map((row) => withMetadata(mapAccount(row), row)),
+    categories: categoryRows.map((row) => withMetadata(mapCategory(row), row)),
+    tags: tagRows.map((row) => withMetadata(mapTag(row), row)),
+    creditCards: creditCardRows.map((row) => withMetadata(mapCreditCard(row), row)),
+    creditCardRecords: creditCardRecordRows.map((row) => withMetadata(mapCreditCardRecord(row), row)),
+    creditCardStatements: creditCardStatementRows.map((row) => withMetadata(mapCreditCardStatement(row), row)),
+    creditCardPayments: creditCardPaymentRows.map((row) => withMetadata(mapCreditCardPayment(row), row)),
+    creditCardPaymentAllocations: creditCardAllocationRows.map((row) => withMetadata(mapCreditCardPaymentAllocation(row), row)),
+    records: options.recordsOverride ?? recordRows.map((record) => withMetadata(mapRecord(record, tagIdsByRecord, goalAssociationsByRecord), record)),
+    goals: goalRows.map((goal) => withMetadata(mapGoal(goal, goalTagRows.filter((link) => link.goalId === goal.id).map((link) => link.tagId)), goal)),
     goalReservations: deriveGoalReservations(goalReservationMovementRows),
-    goalReservationMovements: goalReservationMovementRows.map(mapGoalReservationMovement),
-    budgets: budgetRows.map(mapBudget),
-    exchangeRates: exchangeRateRows.map(mapExchangeRate),
-    investments: investmentRows.map(mapInvestment),
-    debts: debtRows.map(mapDebt),
-    recurringDebts: recurringDebtRows.map(mapRecurringDebt),
-    installmentPlans: installmentPlanRows.map(mapInstallmentPlan),
+    goalReservationMovements: goalReservationMovementRows.map((row) => withMetadata(mapGoalReservationMovement(row), row)),
+    budgets: budgetRows.map((row) => withMetadata(mapBudget(row), row)),
+    exchangeRates: exchangeRateRows.map((row) => withMetadata(mapExchangeRate(row), row)),
+    investments: investmentRows.map((row) => withMetadata(mapInvestment(row), row)),
+    debts: debtRows.map((row) => withMetadata(mapDebt(row), row)),
+    recurringDebts: recurringDebtRows.map((row) => withMetadata(mapRecurringDebt(row), row)),
+    installmentPlans: installmentPlanRows.map((row) => withMetadata(mapInstallmentPlan(row), row)),
   };
+}
+
+/** Complete, consistent financial history for backup; archived rows stay hidden in ordinary wallet reads. */
+export async function getWalletBackup(db: Db = createDb()): Promise<WalletDataset> {
+  return getWalletDataset(db, { includeArchived: true });
 }
 
 export async function bootstrapWallet(
