@@ -42,6 +42,17 @@ test("bad credentials and nested invalid IDs return envelopes instead of routing
   const wrong=await fetch(url+"/api/auth/unlock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:"wrong"})});expect(wrong.status).toBe(401);
   const nested=await request("/api/records/invalid","PATCH",{note:"Test"});expect(nested.response.status).toBe(400);expect(nested.payload.data).toBeNull();
 });
+
+test("account activity includes transfers received as well as transfers sent",async()=>{
+  const destinationId=randomUUID();
+  await fixture.pool.query("INSERT INTO accounts(id,name,type,currency,initial_balance,color,icon) VALUES($1,'Destination','bank','UYU',0,'blue','bank')",[destinationId]);
+  const transfer=await request("/api/records","POST",{type:"transfer",amount:25,currency:"UYU",accountId,destinationAccountId:destinationId,paymentType:"transfer",paymentStatus:"cleared",exchangeRateToPrimary:1,occurredAt:"2026-02-02T12:00:00Z",tagIds:[]});
+  expect(transfer.response.status).toBe(201);
+  const received=await request(`/api/records?accountId=${destinationId}`);
+  expect(received.payload.data.items).toEqual([expect.objectContaining({id:transfer.payload.data.id,destinationAccountId:destinationId})]);
+  const sent=await request(`/api/records?accountId=${accountId}`);
+  expect(sent.payload.data.items).toContainEqual(expect.objectContaining({id:transfer.payload.data.id}));
+});
 test("confirmed backup restore persists associations and rolls back every write on failure",async()=>{
   const before=await getWalletDataset();expect(walletBackupSchema.safeParse(before).success).toBe(true);
   const restored=await request("/api/wallet/restore","POST",before);expect(restored.response.status).toBe(200);

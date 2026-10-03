@@ -1508,7 +1508,7 @@ export async function listRecords(
   if (filters.type && filters.type !== "all") {
     clauses.push(eq(records.type, filters.type as WalletRecord["type"]));
   }
-  if (filters.accountId) clauses.push(eq(records.accountId, filters.accountId));
+  if (filters.accountId) clauses.push(or(eq(records.accountId, filters.accountId),eq(records.destinationAccountId,filters.accountId))!);
   if (filters.creditCardId)
     clauses.push(eq(records.creditCardId, filters.creditCardId));
   if (filters.categoryId)
