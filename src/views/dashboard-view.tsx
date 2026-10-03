@@ -344,9 +344,9 @@ export function DashboardView() {
                     accountId: dataset.settings.primaryAccountId,
                   })
                 }
-                className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
+                className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
               >
-                <span className="flex items-center gap-2">
+                <span className="flex min-w-0 items-center gap-2 break-words">
                   <CategoryIcon
                     icon={category.icon}
                     color={category.color}
