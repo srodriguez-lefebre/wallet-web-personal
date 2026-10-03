@@ -5,8 +5,10 @@ import {
   paymentTypeSchema,
   recordTypeSchema,
   recordGoalAssociationSchema,
+  recordSchema,
   uuidSchema,
 } from "../../shared/schemas";
+import { recordFingerprint } from "../../shared/record-identity";
 import { findExchangeRate } from "../../shared/money";
 import type { WalletDataset, WalletRecord } from "../../shared/types";
 
@@ -123,21 +125,6 @@ function positive(
     throw new Error(`${label} must be a positive finite number.`);
   return number;
 }
-export function recordFingerprint(r: ImportRecord) {
-  return JSON.stringify([
-    r.type,
-    r.currency,
-    r.amount,
-    r.accountId ?? "",
-    r.destinationAccountId ?? "",
-    r.creditCardId ?? "",
-    r.occurredAt.slice(0, 10),
-    (r.counterpartyName ?? "").trim().toLowerCase(),
-    r.paymentStatus,
-    r.debtId ?? "",
-  ]);
-}
-
 export function prepareCsvRecords(
   csv: string,
   dataset: WalletDataset,
@@ -301,11 +288,15 @@ export function prepareCsvRecords(
             amountInDestination ?? Math.round(amount * rate! * 100) / 100,
         });
       }
-      const fingerprint = recordFingerprint(record);
+      // Invalid rows must not reserve a duplicate identity for later valid rows.
+      const validated = recordSchema.parse(record);
+      const fingerprint = recordFingerprint(validated);
       if (seen.has(fingerprint))
         throw new Error("Possible duplicate in wallet or CSV.");
       seen.add(fingerprint);
-      return { rowNumber: index + 2, record };
+      // Preview and the API share the final contract, including cross-field
+      // card constraints and references represented by UUIDs.
+      return { rowNumber: index + 2, record: validated };
     } catch (error) {
       return {
         rowNumber: index + 2,

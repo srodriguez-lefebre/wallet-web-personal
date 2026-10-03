@@ -138,7 +138,6 @@ export function SettingsView() {
 
   async function saveRecordDefaults() {
     await updateWalletSettings({
-      ...dataset.settings,
       primaryCurrency,
       defaultAccountId: defaultAccountId || null,
       ...paymentDefaults(defaultPaymentMethod),

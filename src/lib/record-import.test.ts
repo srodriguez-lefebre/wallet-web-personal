@@ -5,7 +5,26 @@ import {
   prepareCsvRecords,
   importRecordBatches,
 } from "./record-import";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData as originalMockData } from "../../shared/mock-data";
+// Match the public API's UUID contract, including every fixture reference.
+const replacements = new Map<string, string>();
+let idNumber = 10;
+const mockWalletData: typeof originalMockData = JSON.parse(
+  JSON.stringify(originalMockData),
+  (_key, value) => {
+    if (
+      typeof value !== "string" ||
+      !/^(acc|cat|tag|rec|goal|debt|budget|inv|rate|plan|rdebt)-/.test(value)
+    )
+      return value;
+    if (!replacements.has(value))
+      replacements.set(
+        value,
+        `00000000-0000-4000-8000-${String(idNumber++).padStart(12, "0")}`,
+      );
+    return replacements.get(value);
+  },
+);
 
 test("quoted CSV preserves newlines, quotes, commas, CRLF and BOM", () => {
   expect(
@@ -145,4 +164,72 @@ test("partial failure states the confirmed imported count", async () => {
       return rows.map((r, i) => ({ ...r, id: String(i) }));
     }),
   ).rejects.toThrow(/200.*201/);
+});
+
+test("different timestamps on the same day remain distinct purchases", async () => {
+  const first = {
+    ...mockWalletData.records[0],
+    occurredAt: "2026-01-01T10:00:00Z",
+    counterpartyName: "Coffee",
+  };
+  const second = { ...first, occurredAt: "2026-01-01T14:00:00Z" };
+  expect(
+    await importRecordBatches([first, second], [], async (rows) =>
+      rows.map((row, i) => ({ ...row, id: String(i) })),
+    ),
+  ).toBe(2);
+});
+
+test("CSV preview rejects a card payload that cannot pass the shared API schema", () => {
+  const cardId = "00000000-0000-4000-8000-000000009999";
+  const dataset = {
+    ...mockWalletData,
+    records: [],
+    creditCards: [
+      {
+        id: cardId,
+        name: "Test",
+        issuer: "Test",
+        lastFour: "1234",
+        creditLimit: 1000,
+        limitCurrency: "UYU" as const,
+        closingDay: 20,
+        dueDay: 25,
+        color: "blue",
+        icon: "card",
+        isActive: true,
+      },
+    ],
+  };
+  const csv = `date,type,amount,currency,creditCardId,paymentType\n2026-01-01,expense,10,UYU,${cardId},debit`;
+  const result = prepareCsvRecords(
+    csv,
+    dataset,
+    dataset.accounts[0].id,
+    dataset.categories[0].id,
+    dataset.categories[0].id,
+  );
+  expect(result[0].error).toBeTruthy();
+  expect(result[0].record).toBeUndefined();
+});
+
+test("a rejected row does not mark a later valid row as already imported", () => {
+  const dataset = { ...mockWalletData, records: [] };
+  const valid = { ...mockWalletData.records[0], tagIds: [] };
+  const invalid = {
+    ...valid,
+    tagIds: [
+      "00000000-0000-4000-8000-000000008881",
+      "00000000-0000-4000-8000-000000008882",
+    ],
+  };
+  const result = prepareCsvRecords(
+    recordsCsv([invalid, valid]),
+    dataset,
+    dataset.accounts[0].id,
+    dataset.categories[0].id,
+    dataset.categories[0].id,
+  );
+  expect(result[0].error).toBeTruthy();
+  expect(result[1].error).toBeUndefined();
 });
