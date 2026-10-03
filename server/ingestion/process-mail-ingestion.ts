@@ -328,35 +328,38 @@ export async function processMailIngestion(
     ].join("|");
     const duplicateWindowStart = new Date(occurredAt.getTime() - 10 * 60_000);
     const duplicateWindowEnd = new Date(occurredAt.getTime() + 10 * 60_000);
-    const [duplicate] = await db
+    const duplicateWhere = and(
+      eq(ingestionEvents.fingerprint, fingerprint),
+      ne(ingestionEvents.source, input.transaction.source),
+      eq(ingestionEvents.status, "completed"),
+      gte(ingestionEvents.occurredAt, duplicateWindowStart),
+      lte(ingestionEvents.occurredAt, duplicateWindowEnd),
+    );
+    const findDuplicate = () => db
       .select()
       .from(ingestionEvents)
-      .where(
-        and(
-          eq(ingestionEvents.fingerprint, fingerprint),
-          ne(ingestionEvents.source, input.transaction.source),
-          eq(ingestionEvents.status, "completed"),
-          gte(ingestionEvents.occurredAt, duplicateWindowStart),
-          lte(ingestionEvents.occurredAt, duplicateWindowEnd),
-        ),
-      )
+      .where(duplicateWhere)
       .limit(1);
-    if (duplicate) {
-      await db
+    const completeDuplicate = async (duplicateId: string): Promise<MailIngestionResult> => {
+      const completed = await db
         .update(ingestionEvents)
         .set({
           status: "completed",
           action: "duplicate",
-          duplicateOfId: duplicate.id,
+          duplicateOfId: duplicateId,
           fingerprint,
           targetKey,
           merchantNormalized: canonicalMerchantNormalized,
           completedAt: now,
           updatedAt: now,
         })
-        .where(eq(ingestionEvents.id, eventId));
-      return { status: "duplicate", duplicateOfId: duplicate.id };
-    }
+        .where(and(eq(ingestionEvents.id, eventId), eq(ingestionEvents.status, "processing")))
+        .returning({ id: ingestionEvents.id });
+      if (!completed.length) throw new IngestionInProgressError("Ingestion claim expired");
+      return { status: "duplicate", duplicateOfId: duplicateId };
+    };
+    const [duplicate] = await findDuplicate();
+    if (duplicate) return await completeDuplicate(duplicate.id);
 
     const [settingsRow] = await db.select().from(settings).limit(1);
     const primaryCurrency = (settingsRow?.primaryCurrency ??
@@ -518,7 +521,23 @@ export async function processMailIngestion(
     const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
     const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
     const cardLocks=effectiveCard?[db.update(creditCards).set({updatedAt:new Date()}).where(eq(creditCards.id,effectiveCard.id))]:[];
-    await db.batch([...cardLocks,claimLock,claimGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+    // Serialize matching cross-source notifications before rechecking the window.
+    // Separate statements let READ COMMITTED see the prior worker's commit after
+    // the advisory lock wait; no financial query runs if the guard finds a match.
+    const fingerprintLock = db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${fingerprint}, 0))`);
+    const duplicateGuard = db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
+      SELECT 1 FROM ${ingestionEvents} WHERE ${duplicateWhere}
+    ) THEN 0 ELSE 1 END AS unique_notification`);
+    try {
+      await db.batch([fingerprintLock,...cardLocks,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+    } catch (error) {
+      const failure = error as { code?: string; cause?: { code?: string } };
+      if (failure.code === "22012" || failure.cause?.code === "22012") {
+        const [concurrentDuplicate] = await findDuplicate();
+        if (concurrentDuplicate) return await completeDuplicate(concurrentDuplicate.id);
+      }
+      throw error;
+    }
     return {
       status: requiresReview ? "needs_review" : "created",
       recordId,
