@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 import type { MailIngestionInput } from "../../shared/schemas.js";
@@ -220,6 +220,8 @@ export async function processMailIngestion(
   const merchantNormalized = normalizeMerchantTerm(
     input.transaction.merchantRaw,
   );
+  // An abandoned worker may be retried after its lease; its old event ID cannot write again.
+  await db.delete(ingestionEvents).where(and(eq(ingestionEvents.idempotencyKey,input.idempotencyKey),eq(ingestionEvents.status,"processing"),lt(ingestionEvents.updatedAt,new Date(now.getTime()-5*60_000))));
   const [claimed] = await db
     .insert(ingestionEvents)
     .values({
@@ -397,7 +399,7 @@ export async function processMailIngestion(
       !primary || (account && !accountConversion) || (card && !cardConversion);
     const requiresReview =
       accountWasInvalid || cardWasInvalid || !card || unavailableConversion;
-    const allowFinancialImpact = !accountWasInvalid && !unavailableConversion;
+    const allowFinancialImpact = !accountWasInvalid && !unavailableConversion && Boolean(card);
     const effectiveAccount = allowFinancialImpact ? account : undefined;
     const effectiveCard = allowFinancialImpact ? card : undefined;
     const noteParts = [
@@ -504,11 +506,9 @@ export async function processMailIngestion(
         updatedAt: now,
       })
       .where(eq(ingestionEvents.id, eventId));
-    if (recordInsert && cardInsert)
-      await db.batch([recordInsert, cardInsert, eventUpdate]);
-    else if (recordInsert) await db.batch([recordInsert, eventUpdate]);
-    else if (cardInsert) await db.batch([cardInsert, eventUpdate]);
-    else await eventUpdate;
+    const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
+    const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
+    await db.batch([claimLock,claimGuard,...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
     return {
       status: requiresReview ? "needs_review" : "created",
       recordId,

@@ -1,4 +1,4 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useRef } from "react";
 import {
   Banknote,
   CheckCircle2,
@@ -82,24 +82,24 @@ const textareaClassName =
   "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  const now=new Date();
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
 }
 
 function toDateInput(value?: string) {
-  return value ? value.slice(0, 10) : "";
+  if(!value)return "";
+  if(value.length===10)return value;
+  const date=new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
 }
 
 function dateToIso(value: string) {
   const [year, month, day] = value.split("-").map(Number);
-  const now = new Date();
   return new Date(
     year,
     month - 1,
     day,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds(),
+    12, 0, 0, 0,
   ).toISOString();
 }
 
@@ -289,6 +289,9 @@ export function DebtsView() {
       defaultRecurringForm("", defaultAccountId(dataset)),
     );
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentAccountAmount,setPaymentAccountAmount] = useState("");
+  const paymentRequests=useRef(new Map<string,string>());
+  function paymentKey(debtId:string,value:unknown){const fingerprint=JSON.stringify([debtId,value]);let key=paymentRequests.current.get(fingerprint);if(!key){key=crypto.randomUUID();paymentRequests.current.set(fingerprint,key);}return key;}
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentDate, setPaymentDate] = useState(todayDate());
   const [paymentNote, setPaymentNote] = useState("");
@@ -344,6 +347,7 @@ export function DebtsView() {
     );
     setPaymentAccountId(debt.accountId ?? defaultAccountId(dataset));
     setPaymentDate(todayDate());
+    setPaymentAccountAmount("");
     setPaymentNote("");
     setSaveAccountToDebt(!debt.accountId);
     setFormError("");
@@ -504,10 +508,12 @@ export function DebtsView() {
       () =>
         recordDebtPayment(activePaymentDebt.id, {
           amount,
+          accountAmount: paymentAccountAmount ? Number(paymentAccountAmount) : undefined,
           accountId: paymentAccountId,
           occurredAt: dateToIso(paymentDate),
           note: paymentNote.trim() || undefined,
           saveAccountToDebt,
+          idempotencyKey: paymentKey(activePaymentDebt.id,[amount,paymentAccountAmount,paymentAccountId,paymentDate,paymentNote,saveAccountToDebt]),
         }),
       {
         processing:
@@ -538,6 +544,7 @@ export function DebtsView() {
               ? `Full debt received: ${debt.name}`
               : `Full debt paid: ${debt.name}`,
           saveAccountToDebt: true,
+          idempotencyKey: paymentKey(debt.id,[debt.pendingAmount,debt.accountId,todayDate(),"settle"]),
         }),
       {
         processing:
@@ -1371,6 +1378,7 @@ export function DebtsView() {
                 className={inputClassName}
               />
             </label>
+            {activePaymentDebt && dataset.accounts.find(account=>account.id===paymentAccountId)?.currency !== activePaymentDebt.currency && <label className="space-y-1 text-sm"><span>Importe en cuenta ({dataset.accounts.find(account=>account.id===paymentAccountId)?.currency})</span><input value={paymentAccountAmount} onChange={event=>setPaymentAccountAmount(limitDecimalPlaces(event.target.value))} className={inputClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
             <label className="space-y-1 text-sm">
               <span>Note</span>
               <textarea

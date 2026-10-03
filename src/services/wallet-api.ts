@@ -68,6 +68,10 @@ export function getWallet(token: string) {
   return requestApi<WalletDataset>(token, "wallet.get", "/api/wallet");
 }
 
+export function restoreWallet(token: string, dataset: WalletDataset) {
+  return requestApi<WalletDataset>(token, "wallet.restore", "/api/wallet/restore", {method:"POST",...body(dataset)});
+}
+
 export function bootstrapWallet(token: string, recordsLimit = 200) {
   return requestApi<WalletBootstrap>(token, "wallet.bootstrap", "/api/wallet/bootstrap", {
     method: "POST",
@@ -254,6 +258,7 @@ export function recordDebtPayment(
   debtId: string,
   payment: {
     amount: number;
+    accountAmount?: number;
     accountId: string;
     occurredAt: string;
     note?: string;

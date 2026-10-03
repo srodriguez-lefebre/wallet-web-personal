@@ -83,6 +83,7 @@ export interface WalletRecord {
   accountAmount?: number;
   creditCardId?: string;
   destinationAccountId?: string;
+  destinationAmount?: number;
   categoryId?: string;
   counterpartyName?: string;
   tagIds: string[];

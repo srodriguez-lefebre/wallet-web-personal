@@ -43,5 +43,7 @@ export function translateDatabaseError(error: unknown, operation: "write" | "del
       : referenceNotFoundError();
   }
   if (details.code === "22P02") return validationError("Invalid identifier");
+  if (details.code === "23514") return validationError("La operación no respeta las monedas o los importes del historial financiero");
+  if (details.code === "22012") return conflictError("The financial mutation exceeds the available balance or its processing claim has expired");
   return null;
 }

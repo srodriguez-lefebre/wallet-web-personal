@@ -20,6 +20,7 @@ import {
 import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
+import { findExchangeRate } from "@shared/money";
 import {
   calculateAccountBalances,
   formatMoney,
@@ -238,6 +239,9 @@ export function RecordsView() {
   const [categoryId, setCategoryId] = useState("");
   const [amount, setAmount] = useState("");
   const [accountAmount, setAccountAmount] = useState("");
+  const [destinationAmount,setDestinationAmount] = useState("");
+  const [primaryRate,setPrimaryRate] = useState("");
+  const [moneyError,setMoneyError] = useState("");
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
   const [goalAssociations, setGoalAssociations] = useState<RecordGoalAssociation[]>([]);
@@ -301,7 +305,7 @@ export function RecordsView() {
       setType("expense");
       const defaultCard = dataset.creditCards.find(
         (card) =>
-          card.id === dataset.settings.defaultCreditCardId && card.isActive,
+          dataset.settings.defaultPaymentType === "credit" && card.id === dataset.settings.defaultCreditCardId && card.isActive,
       );
       const nextCard = requestedCard ?? defaultCard;
       setAccountId(nextAccountId);
@@ -319,6 +323,7 @@ export function RecordsView() {
       setCategoryId("");
       setAmount("");
       setAccountAmount("");
+      setDestinationAmount(""); setPrimaryRate(""); setMoneyError("");
       setNote("");
       setTagId("");
       setCounterpartyName("");
@@ -456,7 +461,7 @@ export function RecordsView() {
     setAccountId(nextAccountId);
     const defaultCard = dataset.creditCards.find(
       (card) =>
-        card.id === dataset.settings.defaultCreditCardId && card.isActive,
+        dataset.settings.defaultPaymentType === "credit" && card.id === dataset.settings.defaultCreditCardId && card.isActive,
     );
     setCreditCardId(nextType === "transfer" ? "" : (defaultCard?.id ?? ""));
     setCurrency(
@@ -470,6 +475,7 @@ export function RecordsView() {
     setCategoryId("");
     setAmount("");
     setAccountAmount("");
+    setDestinationAmount(""); setPrimaryRate(""); setMoneyError("");
     setNote("");
     setTagId("");
     const date = new Date().toISOString().slice(0, 10);
@@ -506,6 +512,8 @@ export function RecordsView() {
     setCategoryId(record.categoryId ?? "");
     setAmount(String(record.amount));
     setAccountAmount(String(record.accountAmount ?? record.amount));
+    setDestinationAmount(record.destinationAmount === undefined ? "" : String(record.destinationAmount));
+    setPrimaryRate(String(record.exchangeRateToPrimary)); setMoneyError("");
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
     setGoalAssociations(record.goalAssociations ?? (record.goalIds ?? []).map((goalId) => ({ goalId, assignmentSource: "manual", useReserved: true, reserveIncome: true })));
@@ -530,20 +538,23 @@ export function RecordsView() {
     const account = dataset.accounts.find((item) => item.id === accountId);
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
     const limitRate = Number(exchangeRateToLimitCurrency) || 1;
+    const date=dateTimeLocalToIso(occurredAtLocal);
+    const frozenPrimaryRate=Number(primaryRate)||findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,date);
+    const sourceRate=account?findExchangeRate(dataset.exchangeRates,currency,account.currency,date):1;
+    const destination=dataset.accounts.find(item=>item.id===destinationAccountId);
+    const destinationRate=destination?findExchangeRate(dataset.exchangeRates,currency,destination.currency,date):1;
+    if(!frozenPrimaryRate || (account&&sourceRate===null&&!Number(accountAmount)) || (type==="transfer"&&destinationRate===null&&!Number(destinationAmount))){setMoneyError("Ingresá los importes convertidos y una cotización válida para las monedas elegidas.");return null;}
 
     return {
       type,
       amount: numericAmount,
-      currency: creditCardId
-        ? currency
-        : ((account?.currency ?? currency) as CurrencyCode),
-      accountId,
-      accountAmount: creditCardId
-        ? Number(accountAmount) || numericAmount * limitRate
-        : undefined,
+      currency,
+      accountId: accountId || undefined,
+      accountAmount: account ? Number(accountAmount) || numericAmount * sourceRate! : undefined,
       creditCardId: creditCardId || undefined,
       destinationAccountId:
         type === "transfer" ? destinationAccountId : undefined,
+      destinationAmount: type === "transfer" ? Number(destinationAmount) || numericAmount * destinationRate! : undefined,
       categoryId: type === "transfer" ? undefined : categoryId,
       counterpartyName: counterpartyName.trim() || undefined,
       tagIds: tagId ? [tagId] : [],
@@ -551,10 +562,10 @@ export function RecordsView() {
       goalAssociations,
       paymentType,
       paymentStatus,
-      exchangeRateToPrimary: account?.currency === "USD" ? 39.2 : 1,
+      exchangeRateToPrimary: frozenPrimaryRate,
       amountInLimitCurrency: card ? numericAmount * limitRate : undefined,
       exchangeRateToLimitCurrency: card ? limitRate : undefined,
-      occurredAt: dateTimeLocalToIso(occurredAtLocal),
+      occurredAt: date,
       note: note || undefined,
     };
   }
@@ -638,6 +649,20 @@ export function RecordsView() {
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
+            {moneyError && <p role="alert" className="text-sm text-red-500">{moneyError}</p>}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-sm">Moneda del movimiento
+                <select value={currency} onChange={event=>{setCurrency(event.target.value as CurrencyCode);setPrimaryRate("");setAccountAmount("");setDestinationAmount("");}} className={fieldClassName}>
+                  {["UYU","USD","EUR","BRL","ARS"].map(value=><option key={value}>{value}</option>)}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">Cotización a {dataset.settings.primaryCurrency}
+                <input value={primaryRate} onChange={event=>setPrimaryRate(event.target.value)} placeholder={String(findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,dateTimeLocalToIso(occurredAtLocal))??"Ingresá cotización")} className={fieldClassName} inputMode="decimal" />
+              </label>
+              {accountId && dataset.accounts.find(item=>item.id===accountId)?.currency !== currency && <label className="space-y-1 text-sm">Importe en cuenta ({dataset.accounts.find(item=>item.id===accountId)?.currency})<input value={accountAmount} onChange={event=>setAccountAmount(limitDecimalPlaces(event.target.value))} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {type==="transfer" && <label className="space-y-1 text-sm">Importe recibido ({dataset.accounts.find(item=>item.id===destinationAccountId)?.currency})<input value={destinationAmount} onChange={event=>setDestinationAmount(limitDecimalPlaces(event.target.value))} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {creditCardId && <label className="space-y-1 text-sm">Cotización a moneda del límite<input value={exchangeRateToLimitCurrency} onChange={event=>setExchangeRateToLimitCurrency(event.target.value)} className={fieldClassName} inputMode="decimal" /></label>}
+            </div>
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
               {(["expense", "income", "transfer"] as RecordType[]).map(
                 (item) => (

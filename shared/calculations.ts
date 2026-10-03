@@ -31,6 +31,7 @@ import type {
   WalletDataset,
   WalletRecord,
 } from "./types.js";
+import { findExchangeRate } from "./money.js";
 
 export function toPrimaryCurrency(amount: number, recordRate = 1) {
   return amount * recordRate;
@@ -155,9 +156,9 @@ export function calculateAccountBalances(
       }
 
       if (record.type === "transfer") {
-        if (record.accountId === account.id) return total - record.amount;
+        if (record.accountId === account.id) return total - (record.accountAmount ?? record.amount);
         if (record.destinationAccountId === account.id)
-          return total + record.amount;
+          return total + (record.destinationAmount ?? record.amount);
       }
 
       return total;
@@ -290,9 +291,9 @@ function calculateAccountBalanceAtCutoff(
     }
 
     if (record.type === "transfer") {
-      if (record.accountId === account.id) return total - record.amount;
+      if (record.accountId === account.id) return total - (record.accountAmount ?? record.amount);
       if (record.destinationAccountId === account.id)
-        return total + record.amount;
+        return total + (record.destinationAmount ?? record.amount);
     }
 
     return total;
@@ -682,13 +683,8 @@ function convertAccountBalanceToPrimary(
 ) {
   if (account.currency === dataset.settings.primaryCurrency) return balance;
 
-  const rate = dataset.exchangeRates.find(
-    (item) =>
-      item.fromCurrency === account.currency &&
-      item.toCurrency === dataset.settings.primaryCurrency,
-  );
-
-  return balance * (rate?.rate ?? 1);
+  const rate = findExchangeRate(dataset.exchangeRates, account.currency, dataset.settings.primaryCurrency);
+  return rate === null ? Number.NaN : balance * rate;
 }
 
 export function calculateVisibleBalance(dataset: WalletDataset) {
@@ -711,7 +707,8 @@ export function calculateVisibleDebtSummary(
     .filter((debt) => debt.isVisible && isOpenDebt(debt))
     .reduce<VisibleDebtSummary>(
       (summary, debt) => {
-        const pendingAmount = debt.pendingAmount;
+        const rate = findExchangeRate(dataset.exchangeRates, debt.currency, dataset.settings.primaryCurrency);
+        const pendingAmount = debt.pendingAmount === undefined || rate === null ? undefined : debt.pendingAmount * rate;
 
         if (pendingAmount === undefined) {
           return {

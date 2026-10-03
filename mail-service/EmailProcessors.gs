@@ -66,10 +66,19 @@ function trimTrailingFormatAsterisk(value) {
 }
 
 function parseAmount(raw) {
-  let value = raw.trim();
-  if (value.includes(',') && value.includes('.')) value = value.replace(/\./g, '').replace(',', '.');
-  else if (value.includes(',')) value = value.replace(',', '.');
+  let value = raw.trim().replace(/\s/g, '');
+  const comma = value.lastIndexOf(','), dot = value.lastIndexOf('.');
+  if (comma >= 0 && dot >= 0) {
+    const decimal = comma > dot ? ',' : '.';
+    value = value.replace(decimal === ',' ? /\./g : /,/g, '').replace(decimal, '.');
+  } else if (comma >= 0 || dot >= 0) {
+    const separator = comma >= 0 ? ',' : '.';
+    const parts = value.split(separator);
+    // Bank amounts have at most two decimal places; a group of three is thousands.
+    if (parts.length > 2 && !/^\d{1,3}([.,]\d{3})+$/.test(value)) throw new Error(`Importe inválido: ${raw}`);
+    value = parts.length > 2 || parts[1].length === 3 ? parts.join('') : parts.join('.');
+  }
   const number = Number(value);
-  if (isNaN(number)) throw new Error(`No pude convertir el importe: ${raw}`);
+  if (!Number.isFinite(number) || number < 0) throw new Error(`No pude convertir el importe: ${raw}`);
   return number;
 }

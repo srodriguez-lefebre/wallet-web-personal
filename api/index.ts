@@ -36,6 +36,7 @@ import {
   installmentPlanSchema,
   installmentPlanPatchSchema,
   recordImportSchema,
+  walletBackupSchema,
 } from "../shared/schemas.js";
 import {
   calculateCreditCardSummary,
@@ -98,6 +99,7 @@ import {
   listInstallmentPlans, createInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan,
   createRecordsBulk,
 } from "../server/db/wallet-repository.js";
+import { restoreWalletBackup } from "../server/db/wallet-restore.js";
 
 // Single router Serverless Function. Vercel's Hobby plan caps a deployment at
 // 12 functions, so vercel.json rewrites every `/api/*` request here and the
@@ -655,6 +657,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sendData(res, { ok: true, service: "wallet-web-personal" });
         return;
       case "wallet":
+        if (segments.length === 2 && segments[1] === "restore") {
+          if (!guardApi(req,res,["POST"])) return;
+          sendData(res,await restoreWalletBackup(validateBody(req,walletBackupSchema)));
+          return;
+        }
         if (segments.length === 2 && segments[1] === "bootstrap") {
           if (!guardApi(req, res, ["POST"])) return;
           const startedAt = performance.now();

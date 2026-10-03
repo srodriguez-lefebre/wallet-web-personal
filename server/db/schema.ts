@@ -183,6 +183,7 @@ export const records = pgTable(
     currency: text("currency").notNull(),
     accountId: uuid("account_id").references(() => accounts.id),
     accountAmount: numeric("account_amount", { precision: 14, scale: 2 }),
+    destinationAmount: numeric("destination_amount", { precision: 14, scale: 2 }),
     creditCardId: uuid("credit_card_id").references(() => creditCards.id),
     destinationAccountId: uuid("destination_account_id").references(
       () => accounts.id,

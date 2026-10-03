@@ -79,6 +79,7 @@ import {
 import { conflictError, validationError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
 import { creditCardStatementStatusAfterPaymentChange } from "../../shared/calculations.js";
+import { findExchangeRate } from "../../shared/money.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -202,6 +203,7 @@ function mapRecord(
       row.accountAmount === null ? undefined : asNumber(row.accountAmount),
     creditCardId: optional(row.creditCardId),
     destinationAccountId: optional(row.destinationAccountId),
+    destinationAmount: row.destinationAmount === null ? undefined : asNumber(row.destinationAmount),
     categoryId: optional(row.categoryId),
     counterpartyName: optional(row.counterpartyName),
     tagIds: tagIdsByRecord[row.id] ?? [],
@@ -1643,6 +1645,7 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
       input.accountAmount === undefined ? null : decimal(input.accountAmount),
     creditCardId: input.creditCardId ?? null,
     destinationAccountId: input.destinationAccountId ?? null,
+    destinationAmount: input.destinationAmount === undefined ? null : decimal(input.destinationAmount),
     categoryId: input.categoryId ?? null,
     counterpartyName: input.counterpartyName ?? null,
     paymentType: input.paymentType,
@@ -1693,6 +1696,7 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
       accountId: input.accountId ?? null,
       accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
       creditCardId: input.creditCardId ?? null, destinationAccountId: input.destinationAccountId ?? null,
+      destinationAmount: input.destinationAmount === undefined ? null : decimal(input.destinationAmount),
       categoryId: input.categoryId ?? null, counterpartyName: input.counterpartyName ?? null,
       paymentType: input.paymentType, paymentStatus: input.paymentStatus,
       exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
@@ -1790,6 +1794,7 @@ export async function updateRecord(
   if (hasOwn(input, "accountAmount")) recordValues.accountAmount = merged.accountAmount === undefined ? null : decimal(merged.accountAmount);
   if (hasOwn(input, "creditCardId")) recordValues.creditCardId = merged.creditCardId ?? null;
   if (hasOwn(input, "destinationAccountId")) recordValues.destinationAccountId = merged.destinationAccountId ?? null;
+  if (hasOwn(input, "destinationAmount")) recordValues.destinationAmount = merged.destinationAmount === undefined ? null : decimal(merged.destinationAmount);
   if (hasOwn(input, "categoryId")) recordValues.categoryId = merged.categoryId ?? null;
   if (hasOwn(input, "counterpartyName")) recordValues.counterpartyName = merged.counterpartyName ?? null;
   if (hasOwn(input, "paymentType")) recordValues.paymentType = merged.paymentType;
@@ -2272,12 +2277,12 @@ export async function generateDueRecurringDebts(
       const recurringMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
       const dueAt = recurringDueAt(year, month, Number(rule.dayOfMonth));
       const key = `${rule.id}:${recurringMonth}`;
-      if (dueAt <= currentDate && !existing.has(key)) {
+      if (dueAt >= rule.startedAt && dueAt <= currentDate && !existing.has(key)) {
         due.push({
           name: `${rule.name} - ${recurringMonth}`,
           direction: rule.direction as Debt["direction"],
-          originalAmount: asNumber(rule.amount),
-          pendingAmount: asNumber(rule.amount),
+          originalAmount: rule.amount === null ? undefined : asNumber(rule.amount),
+          pendingAmount: rule.amount === null ? undefined : asNumber(rule.amount),
           currency: rule.currency as Debt["currency"],
           counterpartyName: rule.counterpartyName,
           accountId: optional(rule.accountId),
@@ -2415,6 +2420,7 @@ export async function deleteRecurringDebt(id: string, db: Db = createDb()) {
 
 interface DebtPaymentInput {
   amount: number;
+  accountAmount?: number;
   accountId: string;
   occurredAt: string;
   note?: string;
@@ -2429,7 +2435,7 @@ export async function recordDebtPayment(
 ) {
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const requestHash = createHash("sha256").update(JSON.stringify({
-    debtId: id, amount: input.amount, accountId: input.accountId,
+    debtId: id, amount: input.amount, accountId: input.accountId, accountAmount: input.accountAmount ?? null,
     occurredAt: input.occurredAt, note: input.note ?? null,
     saveAccountToDebt: Boolean(input.saveAccountToDebt),
   })).digest("hex");
@@ -2439,6 +2445,20 @@ export async function recordDebtPayment(
     const [debtRow] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
     return debtRow ? { debt: mapDebt(debtRow), record: mapRecord(existing, { [existing.id]: [] }) } : null;
   }
+  const [[debtRow], [accountRow], rateRows, [settingsRow]] = await Promise.all([
+    db.select().from(debts).where(eq(debts.id, id)).limit(1),
+    db.select().from(accounts).where(and(eq(accounts.id, input.accountId), isNull(accounts.deletedAt), eq(accounts.isActive, true))).limit(1),
+    db.select().from(exchangeRates),
+    db.select().from(settings).limit(1),
+  ]);
+  if (!debtRow) return null;
+  if (!accountRow) throw validationError("Select an active payment account");
+  const rates = rateRows.map(mapExchangeRate);
+  const currency = debtRow.currency as WalletRecord["currency"];
+  const accountRate = findExchangeRate(rates, currency, accountRow.currency as WalletRecord["currency"], input.occurredAt);
+  const primaryRate = findExchangeRate(rates, currency, (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"], input.occurredAt);
+  if (primaryRate === null || (accountRate === null && input.accountAmount === undefined)) throw validationError("A historical exchange rate or explicit account amount is required");
+  const accountAmount = input.accountAmount ?? input.amount * accountRate!;
   const recordId = randomUUID();
   try {
     await db.execute(sql`
@@ -2454,14 +2474,14 @@ export async function recordDebtPayment(
         RETURNING *
       )
       INSERT INTO ${records} (
-        id, type, amount, currency, account_id, category_id, counterparty_name,
+        id, type, amount, currency, account_id, account_amount, category_id, counterparty_name,
         payment_type, payment_status, exchange_rate_to_primary, occurred_at, note,
         is_fixed, debt_id, idempotency_key, request_hash
       )
       SELECT ${recordId}::uuid,
         CASE WHEN direction = 'receivable' THEN 'income'::record_type ELSE 'expense'::record_type END,
-        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, category_id, counterparty_name,
-        'transfer'::payment_type, 'cleared'::payment_status, 1, ${new Date(input.occurredAt)},
+        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, ${decimal(accountAmount)}::numeric, category_id, counterparty_name,
+        'transfer'::payment_type, 'cleared'::payment_status, ${decimal(primaryRate)}, ${new Date(input.occurredAt)},
         COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
       FROM updated_debt
     `);
@@ -2489,6 +2509,10 @@ export async function upsertSettings(
   db: Db = createDb(),
 ) {
   const existing = await db.select().from(settings).limit(1);
+  if (existing[0] && input.primaryCurrency !== existing[0].primaryCurrency) {
+    const [history] = await db.select({ id: records.id }).from(records).limit(1);
+    if (history) throw validationError("La moneda principal no puede cambiar mientras exista historial financiero. Exportá tus datos antes de crear una billetera con otra moneda.");
+  }
   const values = {
     primaryCurrency: input.primaryCurrency,
     primaryAccountId: input.primaryAccountId ?? null,
@@ -2497,9 +2521,7 @@ export async function upsertSettings(
     locale: input.locale,
     includeHiddenAccountsInReports: input.includeHiddenAccountsInReports,
     defaultAccountId: input.defaultAccountId ?? null,
-    defaultPaymentType: input.defaultCreditCardId
-      ? "credit"
-      : input.defaultPaymentType,
+    defaultPaymentType: input.defaultPaymentType,
     defaultCreditCardId: input.defaultCreditCardId ?? null,
     defaultPaymentStatus: input.defaultPaymentStatus,
     updatedAt: new Date(),

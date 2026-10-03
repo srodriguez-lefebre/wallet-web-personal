@@ -55,7 +55,7 @@ test("a failed send preserves pending labels and the same key for retry", () => 
   expect(retried.threads[0].labels).toEqual(["Wallet/Procesado"]);
 });
 
-test("unsupported and older-than-30-day mail remains pending without ingestion", () => {
+test("unsupported mail stays pending while old pending mail is recovered", () => {
   const ignored = structuredClone(input);
   ignored.threads.push({
     id: "old",
@@ -65,14 +65,27 @@ test("unsupported and older-than-30-day mail remains pending without ingestion",
     ],
   });
   ignored.threads[0].messages[0].body = "not a consumption";
-  const result = runMailAutomation(ignored, () => {
-    throw new Error("Should not send");
-  });
-  expect(result.deliveries).toHaveLength(0);
+  const result = runMailAutomation(ignored, () => ({status:201,body:"{}"}));
+  expect(result.deliveries).toHaveLength(1);
   expect(result.threads.map((thread) => thread.labels)).toEqual([
     ["Wallet/Pendiente"],
-    ["Wallet/Pendiente"],
+    ["Wallet/Procesado"],
   ]);
+});
+
+test.each(["1.234,56","1,234.56","1234.56","1234,56","1.234","1,234"])("parses bank amount %s without losing thousands",(raw)=>{
+  const mail=structuredClone(input);
+  mail.threads[0].messages[0].body=`Importe: ${raw} UYU\nComercio: TEST MARKET\nVISA nro. ****1234`;
+  let amount=0;
+  runMailAutomation(mail,(_url,options)=>{amount=JSON.parse(String(options.payload)).transaction.amount;return {status:201,body:"{}"};});
+  expect(amount).toBe(raw==="1.234"||raw==="1,234"?1234:1234.56);
+});
+test("a parser error leaves that message pending and does not abort other messages",()=>{
+  const mail=structuredClone(input);
+  mail.threads[0].messages.unshift({...mail.threads[0].messages[0],id:"bad",body:"Importe: 1,23,45 UYU\nComercio: TEST MARKET\nVISA nro. ****1234"});
+  const result=runMailAutomation(mail,()=>({status:201,body:"{}"}));
+  expect(result.deliveries).toHaveLength(1);
+  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
 });
 
 test("a partial failure leaves the entire thread pending", () => {
