@@ -20,13 +20,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { CategoryPicker } from "@/components/wallet/category-picker";
-import { RecordTemplateLibrary } from "@/components/wallet/record-template-library";
 import { normalizeGlobalSearch } from "@/lib/global-search";
-import {
-  prepareTemplateDraft,
-  templateReplacementPatch,
-  sameTemplateDetails,
-} from "@/lib/record-templates";
+import { prepareTemplateDraft } from "@/lib/record-templates";
 import {
   Dialog,
   DialogContent,
@@ -63,7 +58,6 @@ import type {
   RecordGoalAssociation,
   WalletDataset,
   WalletRecord,
-  RecordTemplate,
 } from "@shared/types";
 
 function formatCategoryName(categories: Category[], category: Category) {
@@ -243,31 +237,22 @@ export function RecordsView() {
     updateRecord,
     deleteRecord,
     newRecordRequestId,
+    newRecordTemplateId,
     consumeNewRecordRequest,
     recordsPage,
     isLoadingMoreRecords,
     isSelectedRangeComplete,
     isAllHistoryComplete,
     loadMoreRecords,
-    addRecordTemplate,
-    updateRecordTemplate,
     getCompleteDataset,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(
-    null,
-  );
-  const [templateName, setTemplateName] = useState("");
-  const [templateError, setTemplateError] = useState("");
   const [templateNotice, setTemplateNotice] = useState("");
-  const [savingTemplate, setSavingTemplate] = useState(false);
   const [recordCreateUncertain, setRecordCreateUncertain] = useState(false);
   const recordCreateNeedsReview = useRef(false);
   const templateDraftRevision = useRef(0);
-  const templateSubmission = useRef(false),
-    templateSaveFailed = useRef(false);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(defaultAccountId(dataset));
   const [creditCardId, setCreditCardId] = useState(
@@ -355,11 +340,7 @@ export function RecordsView() {
 
     queueMicrotask(() => {
       templateDraftRevision.current += 1;
-      setEditingTemplateId(null);
-      setTemplateName("");
-      setTemplateError("");
       setTemplateNotice("");
-      templateSaveFailed.current = false;
       recordCreateNeedsReview.current = false;
       setRecordCreateUncertain(false);
       openedNewRecordRef.current = newRecordRequestId;
@@ -401,6 +382,38 @@ export function RecordsView() {
       setOccurredAtLocal(toDateTimeLocal(new Date()));
       setPaymentType(nextCard ? "credit" : dataset.settings.defaultPaymentType);
       setPaymentStatus(dataset.settings.defaultPaymentStatus);
+      setGoalAssociations([]);
+      if (newRecordTemplateId) {
+        const template = dataset.recordTemplates?.find(
+          (item) => item.id === newRecordTemplateId,
+        );
+        if (template) {
+          const { value, limitRate, problems } = prepareTemplateDraft(
+            template,
+            dataset,
+          );
+          setType(value.type);
+          setAmount(String(value.amount));
+          setCurrency(value.currency);
+          setAccountId(value.accountId ?? "");
+          setCreditCardId(value.creditCardId ?? "");
+          setDestinationAccountId(value.destinationAccountId ?? "");
+          setCategoryId(value.categoryId ?? "");
+          setTagId(value.tagId ?? "");
+          setCounterpartyName(value.counterpartyName ?? "");
+          setNote(value.note ?? "");
+          setPaymentType(value.paymentType);
+          setExchangeRateToLimitCurrency(limitRate);
+          setTemplateNotice(
+            problems.length
+              ? problems.join(" ")
+              : "Borrador desde plantilla. Revisá la fecha y las conversiones antes de confirmar.",
+          );
+        } else
+          setTemplateNotice(
+            "La plantilla ya no está disponible. Podés completar un movimiento nuevo.",
+          );
+      }
       setIsRecordDialogOpen(true);
       consumeNewRecordRequest();
     });
@@ -408,6 +421,7 @@ export function RecordsView() {
     consumeNewRecordRequest,
     dataset,
     newRecordRequestId,
+    newRecordTemplateId,
     recordFilters.creditCardId,
   ]);
 
@@ -528,11 +542,7 @@ export function RecordsView() {
   function resetForm(nextType: RecordType = "expense") {
     templateDraftRevision.current += 1;
     conversionBasis.current = {};
-    setEditingTemplateId(null);
-    setTemplateName("");
-    setTemplateError("");
     setTemplateNotice("");
-    templateSaveFailed.current = false;
     recordCreateNeedsReview.current = false;
     setRecordCreateUncertain(false);
     const nextAccountId = defaultAccountId(dataset);
@@ -602,11 +612,7 @@ export function RecordsView() {
 
   function loadRecord(record: WalletRecord) {
     templateDraftRevision.current += 1;
-    setEditingTemplateId(null);
-    setTemplateName("");
-    setTemplateError("");
     setTemplateNotice("");
-    templateSaveFailed.current = false;
     setEditingId(record.id);
     recordCreateNeedsReview.current = false;
     setRecordCreateUncertain(false);
@@ -721,115 +727,6 @@ export function RecordsView() {
     clearRecordFilters();
     setAllPeriod();
     setRecordFilters({ paymentStatus: "needs_review" });
-  }
-
-  function openTemplate(template: RecordTemplate, edit = false) {
-    resetForm(template.type);
-    const { value, limitRate, problems } = prepareTemplateDraft(
-      template,
-      dataset,
-    );
-    setEditingTemplateId(edit ? template.id : null);
-    setTemplateName(template.name);
-    setType(value.type);
-    setAmount(String(value.amount));
-    setCurrency(value.currency);
-    setAccountId(value.accountId ?? "");
-    setCreditCardId(value.creditCardId ?? "");
-    setDestinationAccountId(value.destinationAccountId ?? "");
-    setCategoryId(value.categoryId ?? "");
-    setTagId(value.tagId ?? "");
-    setCounterpartyName(value.counterpartyName ?? "");
-    setNote(value.note ?? "");
-    setPaymentType(value.paymentType);
-    setExchangeRateToLimitCurrency(limitRate);
-    setTemplateNotice(
-      problems.length
-        ? problems.join(" ")
-        : edit
-          ? "Editing a reusable template. Saving will not create a movement."
-          : "New draft from template. Check today's conversions before confirming.",
-    );
-    setIsRecordDialogOpen(true);
-  }
-
-  async function saveTemplate() {
-    if (templateSubmission.current || recordSubmission.current) return;
-    setTemplateError("");
-    const name = templateName.trim();
-    if (
-      !name ||
-      name.length > 80 ||
-      !Number.isFinite(numericAmount) ||
-      numericAmount <= 0
-    ) {
-      setTemplateError(
-        "Enter a template name (up to 80 characters) and a positive amount.",
-      );
-      return;
-    }
-    const value: Omit<RecordTemplate, "id"> = {
-      name,
-      type,
-      amount: numericAmount,
-      currency,
-      accountId: accountId || undefined,
-      creditCardId: type === "expense" ? creditCardId || undefined : undefined,
-      destinationAccountId:
-        type === "transfer" ? destinationAccountId || undefined : undefined,
-      categoryId: type === "transfer" ? undefined : categoryId || undefined,
-      tagId: tagId || undefined,
-      counterpartyName: counterpartyName.trim() || undefined,
-      note: note.trim() || undefined,
-      paymentType: type === "transfer" ? "transfer" : paymentType,
-    };
-    const revision = templateDraftRevision.current;
-    templateSubmission.current = true;
-    setSavingTemplate(true);
-    try {
-      await runAction(
-        async () => {
-          if (templateSaveFailed.current) {
-            const fresh = await getCompleteDataset();
-            const reconciled = (fresh.recordTemplates ?? []).find((item) =>
-              editingTemplateId
-                ? item.id === editingTemplateId
-                : item.name.trim().toLowerCase() === name.toLowerCase(),
-            );
-            if (reconciled && sameTemplateDetails(reconciled, value)) return;
-          }
-          if (editingTemplateId)
-            await updateRecordTemplate(
-              editingTemplateId,
-              templateReplacementPatch(value),
-            );
-          else await addRecordTemplate(value);
-        },
-        {
-          processing: "Saving template...",
-          success: "Template saved",
-          error: "Could not save template",
-        },
-      );
-      if (revision !== templateDraftRevision.current) return;
-      templateSaveFailed.current = false;
-      if (editingTemplateId) closeRecordDialog();
-      else
-        setTemplateNotice(
-          "Template saved. No movement was created; confirm the draft separately if needed.",
-        );
-    } catch (error) {
-      if (revision !== templateDraftRevision.current) return;
-      templateSaveFailed.current = true;
-      setTemplateError(
-        error instanceof Error
-          ? error.message
-          : "Could not save the template. Retry to check its current state.",
-      );
-    } finally {
-      templateSubmission.current = false;
-      setSavingTemplate(false);
-    }
   }
 
   function closeRecordDialog() {
@@ -967,11 +864,6 @@ export function RecordsView() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (editingTemplateId) {
-      await saveTemplate();
-      return;
-    }
-    if (templateSubmission.current) return;
     if (recordSubmission.current) return;
     if (!editingId && recordCreateNeedsReview.current) return;
     if (creditCardId && type !== "expense" && !editingLinkedRefund) {
@@ -1089,11 +981,6 @@ export function RecordsView() {
         </Button>
       </PageHeader>
 
-      <RecordTemplateLibrary
-        onUse={(template) => openTemplate(template)}
-        onEdit={(template) => openTemplate(template, true)}
-      />
-
       {selectedPeriodMode === "all" &&
         recordFilters.paymentStatus === "needs_review" && (
           <p className="mb-4 text-sm text-muted-foreground" role="status">
@@ -1121,16 +1008,10 @@ export function RecordsView() {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              {editingTemplateId
-                ? "Edit template"
-                : editingId
-                  ? "Edit record"
-                  : "New record"}
+              {editingId ? "Edit record" : "New record"}
             </DialogTitle>
             <DialogDescription>
-              {editingTemplateId
-                ? "Edit reusable details. Dates and exchange rates are chosen when you use the template."
-                : "Adjust type, amount, account, category, goals, and payment status."}
+              Adjust type, amount, account, category, goals, and payment status.
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
@@ -1155,42 +1036,6 @@ export function RecordsView() {
                 {templateNotice}
               </p>
             )}
-            {!editingLinkedRefund &&
-              !dataset.records.find((record) => record.id === editingId)
-                ?.debtId && (
-                <div className="rounded-md border p-3 space-y-2">
-                  <label className="block space-y-1">
-                    <span className="text-sm font-medium">Template name</span>
-                    <input
-                      value={templateName}
-                      maxLength={80}
-                      onChange={(event) => setTemplateName(event.target.value)}
-                      className={fieldClassName}
-                      placeholder="e.g. Monthly rent"
-                      aria-label="Template name"
-                    />
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Stores reusable details without dates, conversions or
-                    financial history.
-                  </p>
-                  {!editingTemplateId && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={savingTemplate}
-                      onClick={() => void saveTemplate()}
-                    >
-                      Save as template
-                    </Button>
-                  )}
-                  {templateError && (
-                    <p role="alert" className="text-sm text-destructive">
-                      {templateError}
-                    </p>
-                  )}
-                </div>
-              )}
             {editingLinkedRefund && (
               <p className="text-sm text-muted-foreground">
                 Bank-linked card refund amounts and payment details are managed
@@ -1219,7 +1064,7 @@ export function RecordsView() {
                   ))}
                 </select>
               </label>
-              {!editingTemplateId && (
+              {
                 <label className="space-y-1 text-sm">
                   Cotización a {dataset.settings.primaryCurrency}
                   <input
@@ -1238,9 +1083,8 @@ export function RecordsView() {
                     inputMode="decimal"
                   />
                 </label>
-              )}
-              {!editingTemplateId &&
-                accountId &&
+              }
+              {accountId &&
                 dataset.accounts.find((item) => item.id === accountId)
                   ?.currency !== currency && (
                   <label className="space-y-1 text-sm">
@@ -1267,7 +1111,7 @@ export function RecordsView() {
                     />
                   </label>
                 )}
-              {!editingTemplateId && type === "transfer" && (
+              {type === "transfer" && (
                 <label className="space-y-1 text-sm">
                   Importe recibido (
                   {
@@ -1293,7 +1137,7 @@ export function RecordsView() {
                   />
                 </label>
               )}
-              {!editingTemplateId && creditCardId && (
+              {creditCardId && (
                 <label className="space-y-1 text-sm">
                   Cotización a moneda del límite
                   <input
@@ -1369,7 +1213,7 @@ export function RecordsView() {
                 />
               </label>
 
-              {!editingTemplateId && (
+              {
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Date and time</span>
                   <input
@@ -1380,7 +1224,7 @@ export function RecordsView() {
                     type="datetime-local"
                   />
                 </label>
-              )}
+              }
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1469,7 +1313,7 @@ export function RecordsView() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              {!editingTemplateId && type !== "transfer" ? (
+              {type !== "transfer" ? (
                 <div className="space-y-2">
                   <span className="text-sm font-medium">Goals</span>
                   <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
@@ -1665,7 +1509,7 @@ export function RecordsView() {
                 </select>
               </label>
 
-              {!editingTemplateId && (
+              {
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Status</span>
                   <select
@@ -1690,7 +1534,7 @@ export function RecordsView() {
                     </option>
                   </select>
                 </label>
-              )}
+              }
             </div>
 
             <label className="block space-y-2">
@@ -1737,28 +1581,14 @@ export function RecordsView() {
               )}
               <Button
                 type="submit"
-                disabled={
-                  savingTemplate ||
-                  (!editingTemplateId && !editingId && recordCreateUncertain) ||
-                  (editingTemplateId
-                    ? !templateName.trim() ||
-                      !Number.isFinite(numericAmount) ||
-                      numericAmount <= 0
-                    : !canSubmit)
-                }
+                disabled={!canSubmit || (!editingId && recordCreateUncertain)}
               >
                 {editingId ? (
                   <Save className="h-4 w-4" />
                 ) : (
                   <Plus className="h-4 w-4" />
                 )}
-                {savingTemplate
-                  ? "Saving template..."
-                  : editingTemplateId
-                    ? "Save template changes"
-                    : editingId
-                      ? "Save changes"
-                      : "Add"}
+                {editingId ? "Save changes" : "Add"}
               </Button>
             </div>
           </form>

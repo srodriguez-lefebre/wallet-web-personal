@@ -28,6 +28,19 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+test("settings provide the template management section", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let tree!: ReturnType<typeof create>;
+  await act(async () => {
+    tree = create(<SettingsView />);
+  });
+  try {
+    expect(JSON.stringify(tree.toJSON())).toContain("Gestión de plantillas");
+  } finally {
+    await act(async () => tree.unmount());
+  }
+});
+
 test("failed tag creation preserves the draft and handles the rejected request", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   addTag.mockRejectedValue(new Error("offline"));

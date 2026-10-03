@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { PrivacySettings } from "@/components/wallet/privacy-settings";
+import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
 import { categoryIconOptions } from "@/components/wallet/category-icons";
 import {
   Dialog,
@@ -1122,6 +1123,7 @@ export function SettingsView() {
           </CardContent>
         </Card>
       </div>
+      <RecordTemplateManager />
     </div>
   );
 }

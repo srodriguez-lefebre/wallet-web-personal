@@ -11,9 +11,10 @@ cada mutación; una falla de recarga se informa sin presentar datos viejos como
 una operación completamente actualizada.
 
 Las plantillas reutilizables de movimientos también se guardan en PostgreSQL,
-se incluyen en el respaldo y se administran desde Movimientos. Guardar una
+se incluyen en el respaldo y se administran desde Configuración → Gestión de
+plantillas. Guardar una
 plantilla conserva importe, moneda, destinos, categoría, una etiqueta y notas.
-Usarla abre un borrador con fecha y conversiones actuales; el movimiento requiere
+Usarla abre un borrador en Movimientos con fecha y conversiones actuales; el movimiento requiere
 confirmación. Los destinos archivados exigen elegir un reemplazo. Si una creación
 financiera falla con resultado incierto, se bloquea el reintento desde ese borrador
 y se exige recargar y revisar los movimientos.
