@@ -274,9 +274,10 @@ export function RecordsView() {
         association.allocatedAmount <= 0 ||
         association.allocatedAmount > numericAmount),
   );
+  const editingLinkedRefund = dataset.creditCardRecords.find(record => record.walletRecordId === editingId && record.kind === "refund");
   const canSubmit =
     numericAmount > 0 &&
-    Boolean(accountId) &&
+    Boolean(accountId || (type === "expense" && creditCardId)) &&
     (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId)) &&
     !hasInvalidGoalAllocation;
   function updateGoalAssociation(
@@ -468,8 +469,9 @@ export function RecordsView() {
       (card) =>
         dataset.settings.defaultPaymentType === "credit" && card.id === dataset.settings.defaultCreditCardId && card.isActive,
     );
-    setCreditCardId(nextType === "transfer" ? "" : (defaultCard?.id ?? ""));
+    setCreditCardId(nextType === "expense" ? (defaultCard?.id ?? "") : "");
     setCurrency(
+      (nextType === "expense" ? defaultCard?.limitCurrency : undefined) ??
       dataset.accounts.find((account) => account.id === nextAccountId)
         ?.currency ?? "UYU",
     );
@@ -492,7 +494,7 @@ export function RecordsView() {
     setPaymentType(
       nextType === "transfer"
         ? "transfer"
-        : defaultCard
+        : nextType === "expense" && defaultCard
           ? "credit"
           : dataset.settings.defaultPaymentType,
     );
@@ -556,12 +558,12 @@ export function RecordsView() {
     const account = dataset.accounts.find((item) => item.id === accountId);
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
     const limitRate = Number(exchangeRateToLimitCurrency);
-    const date=dateTimeLocalToIso(occurredAtLocal);
+    const original=editingId?dataset.records.find(record=>record.id===editingId):undefined;
+    const date=original && toDateTimeLocal(original.occurredAt)===occurredAtLocal ? original.occurredAt : dateTimeLocalToIso(occurredAtLocal);
     const frozenPrimaryRate=Number(primaryRate)||findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,date);
     const sourceRate=account?findExchangeRate(dataset.exchangeRates,currency,account.currency,date):1;
     const destination=dataset.accounts.find(item=>item.id===destinationAccountId);
     const destinationRate=destination?findExchangeRate(dataset.exchangeRates,currency,destination.currency,date):1;
-    const original=editingId?dataset.records.find(record=>record.id===editingId):undefined;
     const unchangedAmount=original?.amount===numericAmount&&original.currency===currency;
     const sourceAmount=account?recordAccountAmount(numericAmount,currency,account.currency,accountAmount,sourceRate,unchangedAmount&&original?.accountId===accountId):undefined;
     const targetAmount=type==="transfer"&&destination?recordAccountAmount(numericAmount,currency,destination.currency,destinationAmount,destinationRate,unchangedAmount&&original?.destinationAccountId===destinationAccountId):undefined;
@@ -585,7 +587,7 @@ export function RecordsView() {
       paymentType,
       paymentStatus,
       exchangeRateToPrimary: frozenPrimaryRate,
-      amountInLimitCurrency: card ? numericAmount * limitRate : undefined,
+      amountInLimitCurrency: card ? unchangedAmount && original?.creditCardId === creditCardId && original.exchangeRateToLimitCurrency === limitRate ? original.amountInLimitCurrency : numericAmount * limitRate : undefined,
       exchangeRateToLimitCurrency: card ? limitRate : undefined,
       occurredAt: date,
       note: note || undefined,
@@ -595,19 +597,26 @@ export function RecordsView() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if(recordSubmission.current)return;
-    const nextRecord = buildRecord();
-    if (!nextRecord) return;
+    if (creditCardId && type !== "expense" && !editingLinkedRefund) {
+      setMoneyError("Use Cards to refund a purchase. Income and transfers cannot select a credit card.");
+      return;
+    }
+    const nextRecord = editingLinkedRefund ? null : buildRecord();
+    if (!nextRecord && !editingLinkedRefund) return;
     recordSubmission.current=true;
 
     try {
       if (editingId) {
-        await runAction(() => updateRecord(editingId, nextRecord), {
+        await runAction(() => updateRecord(editingId, editingLinkedRefund ? {
+          categoryId, counterpartyName: counterpartyName.trim() || null, note: note || null,
+          tagIds: tagId ? [tagId] : [], goalIds: goalAssociations.map(item => item.goalId), goalAssociations,
+        } : { ...nextRecord!, creditCardId: creditCardId || null }), {
           processing: "Saving record...",
           success: "Record saved",
           error: "Could not save record",
         });
       } else {
-        await runAction(() => addRecord(nextRecord), {
+        await runAction(() => addRecord(nextRecord!), {
           processing: "Creating record...",
           success: "Record created",
           error: "Could not create record",
@@ -675,25 +684,27 @@ export function RecordsView() {
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
+            {editingLinkedRefund && <p className="text-sm text-muted-foreground">Bank-linked card refund amounts and payment details are managed in Cards. You can edit its category, counterparty, goals, tags and note here.</p>}
             {moneyError && <p role="alert" className="text-sm text-red-500">{moneyError}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">Moneda del movimiento
-                <select value={currency} onChange={event=>changeCurrency(event.target.value as CurrencyCode)} className={fieldClassName}>
+                <select disabled={Boolean(editingLinkedRefund)} value={currency} onChange={event=>changeCurrency(event.target.value as CurrencyCode)} className={fieldClassName}>
                   {["UYU","USD","EUR","BRL","ARS"].map(value=><option key={value}>{value}</option>)}
                 </select>
               </label>
               <label className="space-y-1 text-sm">Cotización a {dataset.settings.primaryCurrency}
-                <input value={primaryRate} onChange={event=>setPrimaryRate(event.target.value)} placeholder={String(findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,dateTimeLocalToIso(occurredAtLocal))??"Ingresá cotización")} className={fieldClassName} inputMode="decimal" />
+                <input disabled={Boolean(editingLinkedRefund)} value={primaryRate} onChange={event=>setPrimaryRate(event.target.value)} placeholder={String(findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,dateTimeLocalToIso(occurredAtLocal))??"Ingresá cotización")} className={fieldClassName} inputMode="decimal" />
               </label>
-              {accountId && dataset.accounts.find(item=>item.id===accountId)?.currency !== currency && <label className="space-y-1 text-sm">Importe en cuenta ({dataset.accounts.find(item=>item.id===accountId)?.currency})<input value={accountAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setAccountAmount(next);conversionBasis.current.source=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
-              {type==="transfer" && <label className="space-y-1 text-sm">Importe recibido ({dataset.accounts.find(item=>item.id===destinationAccountId)?.currency})<input value={destinationAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setDestinationAmount(next);conversionBasis.current.destination=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
-              {creditCardId && <label className="space-y-1 text-sm">Cotización a moneda del límite<input value={exchangeRateToLimitCurrency} onChange={event=>setExchangeRateToLimitCurrency(event.target.value)} className={fieldClassName} inputMode="decimal" /></label>}
+              {accountId && dataset.accounts.find(item=>item.id===accountId)?.currency !== currency && <label className="space-y-1 text-sm">Importe en cuenta ({dataset.accounts.find(item=>item.id===accountId)?.currency})<input disabled={Boolean(editingLinkedRefund)} value={accountAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setAccountAmount(next);conversionBasis.current.source=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {type==="transfer" && <label className="space-y-1 text-sm">Importe recibido ({dataset.accounts.find(item=>item.id===destinationAccountId)?.currency})<input disabled={Boolean(editingLinkedRefund)} value={destinationAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setDestinationAmount(next);conversionBasis.current.destination=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {creditCardId && <label className="space-y-1 text-sm">Cotización a moneda del límite<input disabled={Boolean(editingLinkedRefund)} value={exchangeRateToLimitCurrency} onChange={event=>setExchangeRateToLimitCurrency(event.target.value)} className={fieldClassName} inputMode="decimal" /></label>}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
               {(["expense", "income", "transfer"] as RecordType[]).map(
                 (item) => (
                   <button
                     key={item}
+                    disabled={Boolean(editingLinkedRefund)}
                     type="button"
                     onClick={() => {
                       setType(item);
@@ -718,6 +729,7 @@ export function RecordsView() {
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Amount</span>
                 <input
+                  disabled={Boolean(editingLinkedRefund)}
                   value={amount}
                   onChange={(event) => {
                     const next=limitDecimalPlaces(event.target.value);
@@ -738,6 +750,7 @@ export function RecordsView() {
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Date and time</span>
                 <input
+                  disabled={Boolean(editingLinkedRefund)}
                   value={occurredAtLocal}
                   onChange={(event) => setOccurredAtLocal(event.target.value)}
                   className={fieldClassName}
@@ -748,8 +761,9 @@ export function RecordsView() {
 
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm font-medium">Account</span>
+                <span className="text-sm font-medium">{type === "expense" && creditCardId ? "Account (optional for card purchases)" : "Account"}</span>
                 <select
+                  disabled={Boolean(editingLinkedRefund)}
                   value={accountId}
                   onChange={(event) => {
                     const nextId=event.target.value;setAccountId(nextId);setAccountAmount("");conversionBasis.current.source=undefined;
@@ -757,6 +771,7 @@ export function RecordsView() {
                   }}
                   className={fieldClassName}
                 >
+                  {type === "expense" && creditCardId && <option value="">Card only</option>}
                   {dataset.accounts
                     .filter((account) => account.isActive && account.isVisible)
                     .map((account) => (
@@ -772,6 +787,7 @@ export function RecordsView() {
                     Destination account
                   </span>
                   <select
+                  disabled={Boolean(editingLinkedRefund)}
                     value={destinationAccountId}
                     onChange={(event) => {setDestinationAccountId(event.target.value);setDestinationAmount("");conversionBasis.current.destination=undefined;}}
                     className={fieldClassName}
@@ -954,6 +970,7 @@ export function RecordsView() {
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Payment type</span>
                 <select
+                  disabled={Boolean(editingLinkedRefund)}
                   value={creditCardId ? `card:${creditCardId}` : paymentType}
                   onChange={(event) => {
                     const value = event.target.value;
@@ -983,7 +1000,7 @@ export function RecordsView() {
                   <option value="cash">{paymentTypeLabels.cash}</option>
                   <option value="debit">{paymentTypeLabels.debit}</option>
                   {dataset.creditCards
-                    .filter((card) => card.isActive)
+                    .filter((card) => (type === "expense" && card.isActive) || (editingLinkedRefund && card.id === creditCardId))
                     .map((card) => (
                       <option key={card.id} value={`card:${card.id}`}>
                         Credit **** {card.lastFour} - {card.name}
@@ -997,6 +1014,7 @@ export function RecordsView() {
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Status</span>
                 <select
+                  disabled={Boolean(editingLinkedRefund)}
                   value={paymentStatus}
                   onChange={(event) =>
                     setPaymentStatus(event.target.value as PaymentStatus)
@@ -1030,6 +1048,7 @@ export function RecordsView() {
                 <Button
                   type="button"
                   variant="destructive"
+                  disabled={Boolean(editingLinkedRefund)}
                   onClick={handleDeleteEditingRecord}
                 >
                   <Trash2 className="h-4 w-4" />

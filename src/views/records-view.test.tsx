@@ -1,45 +1,99 @@
-import { act, create } from "react-test-renderer";
+import type { ReactNode } from "react";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { PropsWithChildren } from "react";
 import { mockWalletData } from "../../shared/mock-data";
+import type { WalletDataset } from "../../shared/types";
 import { RecordsView } from "./records-view";
 
-const state=vi.hoisted(()=>({dataset:undefined as unknown, update:vi.fn()}));
-vi.mock("@/providers/wallet-provider",()=>({useWallet:()=>({dataset:state.dataset,selectedMonth:"2026-02",selectedPeriodMode:"month",selectedDateRange:{from:"2026-02-01",to:"2026-02-28"},recordFilters:{},setRecordFilters:vi.fn(),clearRecordFilters:vi.fn(),addRecord:vi.fn(),updateRecord:state.update,deleteRecord:vi.fn(),newRecordRequestId:0,consumeNewRecordRequest:vi.fn(),recordsPage:{hasMore:false},isLoadingMoreRecords:false,isSelectedRangeComplete:true,loadMoreRecords:vi.fn()})}));
-vi.mock("@/lib/use-action-toast",()=>({useActionToast:()=>({toast:null,runAction:(action:()=>Promise<unknown>)=>action()})}));
-vi.mock("@/components/wallet/category-picker",()=>({CategoryPicker:()=>null}));
-vi.mock("@/components/ui/dialog",()=>{
-  const Part=({children}:PropsWithChildren)=><div>{children}</div>;
-  return {Dialog:({open,children}:PropsWithChildren<{open:boolean}>)=>open?<div>{children}</div>:null,DialogContent:Part,DialogDescription:Part,DialogHeader:Part,DialogTitle:Part};
+const update = vi.hoisted(() => vi.fn());
+let dataset: WalletDataset;
+vi.mock("@/providers/wallet-provider", () => ({
+  useWallet: () => ({ dataset, selectedMonth: "2020-06", selectedPeriodMode: "month", selectedDateRange: { from: "2020-06-01", to: "2020-06-30" }, recordFilters: {}, setRecordFilters: vi.fn(), clearRecordFilters: vi.fn(), addRecord: vi.fn(), updateRecord: update, deleteRecord: vi.fn(), newRecordRequestId: 0, consumeNewRecordRequest: vi.fn(), recordsPage: {}, isSelectedRangeComplete: true, loadMoreRecords: vi.fn() }),
+}));
+vi.mock("@/lib/use-action-toast", () => ({ useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }) }));
+vi.mock("@/components/ui/dialog", () => {
+  const part = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  return { Dialog: ({ open, children }: { open: boolean; children: ReactNode }) => open ? <>{children}</> : null, DialogContent: part, DialogHeader: part, DialogTitle: part, DialogDescription: part };
 });
-vi.mock("@radix-ui/react-select",()=>{
-  const Part=({children}:PropsWithChildren)=><div>{children}</div>;
-  return Object.fromEntries(["Root","Trigger","Value","Icon","Portal","Content","Viewport","Item","ItemText","ItemIndicator"].map(name=>[name,Part]));
+vi.mock("@radix-ui/react-select", () => {
+  const part = ({ children }: { children?: ReactNode }) => <>{children}</>;
+  return Object.fromEntries(["Root", "Trigger", "Value", "Portal", "Content", "Viewport", "Item", "ItemText", "ItemIndicator", "Icon", "ScrollUpButton", "ScrollDownButton"].map(name => [name, part]));
+});
+let tree: ReactTestRenderer | undefined;
+const preciseDate = "2020-06-01T12:34:56.789Z";
+beforeEach(() => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.clearAllMocks();
+  update.mockResolvedValue(undefined);
+  dataset = structuredClone(mockWalletData);
+  dataset.goals = [];
+  dataset.creditCards = [{ id: "test-card", name: "Card", issuer: "Issuer", lastFour: "1234", creditLimit: 1000, limitCurrency: "UYU", closingDay: 20, dueDay: 5, color: "blue", icon: "card", isActive: true }];
+  dataset.records = [{ id: "wallet-record", type: "expense", amount: 100, currency: "UYU", accountId: dataset.accounts[0].id, accountAmount: 100, categoryId: dataset.categories[0].id, creditCardId: "test-card", tagIds: [], goalIds: [], goalAssociations: [], paymentType: "credit", paymentStatus: "cleared", exchangeRateToPrimary: 1, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, occurredAt: preciseDate }];
+});
+afterEach(async () => {
+  if (tree) await act(async () => tree?.unmount());
+  tree = undefined;
+  vi.unstubAllGlobals();
+});
+async function openRecord() {
+  await act(async () => { tree = create(<RecordsView />); });
+  await act(async () => tree!.root.findAllByProps({ role: "button" })[0].props.onClick());
+}
+
+test("removing a card sends JSON null and preserves an unchanged precise timestamp", async () => {
+  await openRecord();
+  const paymentType = tree!.root.findAllByType("select").find(select => select.props.value === "card:test-card")!;
+  await act(async () => paymentType.props.onChange({ target: { value: "debit" } }));
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(update).toHaveBeenCalledTimes(1);
+  expect(update.mock.calls[0][1]).toMatchObject({ creditCardId: null, occurredAt: preciseDate });
 });
 
-let tree:ReturnType<typeof create>|undefined;
-beforeEach(()=>{vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);state.update.mockResolvedValue(undefined);});
-afterEach(async()=>{if(tree)await act(async()=>tree!.unmount());tree=undefined;vi.unstubAllGlobals();vi.clearAllMocks();});
-async function edit(amount:number,accountAmount:number){
-  const dataset=structuredClone(mockWalletData),account=dataset.accounts[0];
-  account.currency="UYU";
-  dataset.settings.primaryCurrency="UYU";
-  dataset.records=[{...dataset.records[0],id:"editing-test",type:"expense",currency:"USD",accountId:account.id,amount,accountAmount,creditCardId:undefined,exchangeRateToPrimary:41,occurredAt:"2026-02-01T12:00:00Z",goalIds:[],goalAssociations:[],tagIds:[],paymentType:"debit",paymentStatus:"cleared"}];
-  dataset.exchangeRates=[{id:"test-rate",fromCurrency:"USD",toCurrency:"UYU",rate:40,date:"2026-01-01T12:00:00Z"}];
-  state.dataset=dataset;
-  await act(async()=>{tree=create(<RecordsView/>);});
-  await act(async()=>{tree!.root.findByProps({role:"button",tabIndex:0}).props.onClick();});
-}
-async function changeAmount(value:string){
-  await act(async()=>{tree!.root.findAllByType("input").find(input=>input.props.type==="number"&&input.props.placeholder==="0")!.props.onChange({target:{value}});});
-}
-async function submit(){await act(async()=>{await tree!.root.findByType("form").props.onSubmit({preventDefault:vi.fn()});});return state.update.mock.calls[0][1];}
-
-test("clearing then retyping an edited amount retains its original bank conversion",async()=>{
-  await edit(100,4100);await changeAmount("");await changeAmount("200");
-  expect((await submit()).accountAmount).toBe(8200);
+test("bank-refund editing locks financial inputs and submits only metadata", async () => {
+  dataset.records[0] = { ...dataset.records[0], type: "income", amount: 40, accountAmount: 40, amountInLimitCurrency: 100 };
+  dataset.creditCardRecords = [{ id: "refund", creditCardId: "test-card", walletRecordId: "wallet-record", originalRecordId: "original", kind: "refund", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId: dataset.categories[0].id, accountId: dataset.accounts[0].id, accountAmount: 40, accountImpactAtCreation: true, occurredAt: preciseDate }];
+  await openRecord();
+  expect(tree!.root.findAllByType("input").find(input => input.props.type === "number")!.props.disabled).toBe(true);
+  await act(async () => tree!.root.findByProps({ placeholder: "Optional description" }).props.onChange({ target: { value: "Confirmed" } }));
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  const payload = update.mock.calls[0][1];
+  expect(payload.note).toBe("Confirmed");
+  for (const key of ["amount", "currency", "accountId", "accountAmount", "creditCardId", "paymentStatus", "occurredAt", "amountInLimitCurrency"]) expect(payload).not.toHaveProperty(key);
 });
-test("changing the amount away and back does not accumulate bank rounding",async()=>{
-  await edit(3,1);await changeAmount("2");await changeAmount("3");
-  expect((await submit()).accountAmount).toBe(1);
+
+test("new income and transfers cannot select a credit card", async () => {
+  await act(async () => { tree = create(<RecordsView />); });
+  const newButton = tree!.root.findAllByType("button").find(button => button.children.includes("New"))!;
+  await act(async () => newButton.props.onClick());
+  for (const label of ["Income", "Transfer"]) {
+    const typeButton = tree!.root.findAllByType("button").find(button => button.children.includes(label))!;
+    await act(async () => typeButton.props.onClick());
+    expect(tree!.root.findAllByType("option").filter(option => String(option.props.value).startsWith("card:"))).toHaveLength(0);
+  }
+});
+
+
+test("a default foreign credit card starts in its limit currency rather than the bank currency", async () => {
+  dataset.settings.defaultPaymentType = "credit";
+  dataset.settings.defaultCreditCardId = "test-card";
+  dataset.creditCards[0].limitCurrency = "USD";
+  dataset.accounts[0].currency = "UYU";
+  dataset.settings.primaryAccountId = dataset.accounts[0].id;
+  await act(async () => { tree = create(<RecordsView />); });
+  await act(async () => tree!.root.findAllByType("button").find(button => button.children.includes("New"))!.props.onClick());
+  const currency = tree!.root.findAllByType("select").find(select => select.findAllByType("option").some(option => option.children.includes("BRL")))!;
+  expect(currency.props.value).toBe("USD");
+});
+
+test("an unknown-bank purchase can be resolved as card-only without a bank account", async () => {
+  dataset.records[0] = { ...dataset.records[0], accountId: undefined, accountAmount: undefined, creditCardId: undefined, amountInLimitCurrency: undefined, exchangeRateToLimitCurrency: undefined, paymentStatus: "needs_review" };
+  await openRecord();
+  const paymentType = tree!.root.findAllByType("select").find(select => select.findAllByType("option").some(option => option.props.value === "card:test-card"))!;
+  await act(async () => paymentType.props.onChange({ target: { value: "card:test-card" } }));
+  const status = tree!.root.findAllByType("select").find(select => select.props.value === "needs_review")!;
+  await act(async () => status.props.onChange({ target: { value: "cleared" } }));
+  expect(tree!.root.findAllByType("button").find(button => button.props.type === "submit")!.props.disabled).toBe(false);
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  expect(update.mock.calls[0][1]).toMatchObject({ creditCardId: "test-card", paymentStatus: "cleared" });
+  expect(update.mock.calls[0][1].accountId).toBeUndefined();
 });

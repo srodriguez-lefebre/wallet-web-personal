@@ -13,7 +13,7 @@ import * as walletApi from "@/services/wallet-api";
 import { WalletSync } from "@/lib/wallet-sync";
 import { importRecordBatches } from "@/lib/record-import";
 import { useTheme } from "@/providers/theme-provider";
-import type { GoalPatch, SettingsPatch } from "@shared/schemas";
+import type { GoalPatch, RecordPatch, SettingsPatch } from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -68,7 +68,7 @@ interface WalletContextValue {
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
   updateRecord: (
     recordId: string,
-    record: Omit<WalletRecord, "id">,
+    record: RecordPatch,
   ) => Promise<void>;
   deleteRecord: (recordId: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<string>;
@@ -666,7 +666,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function addRecord(record: Omit<WalletRecord, "id">) {
     await mutate(() => walletApi.createRecord(requireToken(), record));
   }
-  async function updateRecord(id: string, record: Omit<WalletRecord, "id">) {
+  async function updateRecord(id: string, record: RecordPatch) {
     await mutate(() => walletApi.updateRecord(requireToken(), id, record));
   }
   async function deleteRecord(id: string) {

@@ -21,6 +21,7 @@ import {
   createCreditCardRecord,
   ensureCreditCardStatements,
   getWalletDataset,
+  getWalletBackup,
   listCreditCardStatements,
   payCreditCardStatement,
   updateCreditCardRecord,
@@ -38,6 +39,9 @@ import {
   calculateAccountBalances,
   calculateAccountBalanceAtDate,
 } from "../../shared/calculations.js";
+
+import { restoreWalletBackup } from "./wallet-restore.js";
+import { recordPatchSchema } from "../../shared/schemas.js";
 
 const pg = new PGlite();
 const cardId = randomUUID();
@@ -536,8 +540,8 @@ test("linked purchase edits enforce refund amount and currency constraints", asy
   await expect(updateRecord(wallet.id, { amount: 50, amountInLimitCurrency: 50, accountAmount: 50 })).rejects.toThrow();
   await expect(updateRecord(wallet.id, { currency: "USD", amount: 100, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1 })).rejects.toThrow();
   await expect(updateRecord(wallet.id, { amount: 100, amountInLimitCurrency: 50, exchangeRateToLimitCurrency: 0.5 })).rejects.toThrow();
-  await updateRecord(wallet.id, { amount: 120, amountInLimitCurrency: 120, accountAmount: 120 });
-  expect((await getWalletDataset()).creditCardRecords.find(row => row.id === original.id)?.amount).toBe(120);
+  await updateRecord(wallet.id, { note: "Purchase verified" });
+  expect((await getWalletDataset()).creditCardRecords.find(row => row.id === original.id)?.amount).toBe(100);
 });
 
 test.each(["cancelled", "needs_review"] as const)("%s creates no active linked card liability through single or bulk creation", async status => {
@@ -557,4 +561,91 @@ test("an unencumbered linked purchase can be cancelled, reviewed, and restored",
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
   await updateRecord(wallet.id, { paymentStatus: "cleared" });
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(1);
+});
+
+
+test.each(["income", "transfer"] as const)("generic %s cannot bypass the Cards refund action", async type => {
+  const destinationAccountId = randomUUID();
+  await createDb().insert(accounts).values({ id: destinationAccountId, name: "Other bank", type: "bank", currency: "UYU", initialBalance: "10000", color: "blue", icon: "bank" });
+  const invalid = { ...linkedPurchaseInput(), type, destinationAccountId: type === "transfer" ? destinationAccountId : undefined };
+  await expect(createRecord(invalid)).rejects.toThrow(/Cards.*refund/i);
+  await expect(createRecordsBulk([linkedPurchaseInput(), invalid])).rejects.toThrow(/Cards.*refund/i);
+  const after = await getWalletDataset();
+  expect(after.records).toHaveLength(0);
+  expect(after.creditCardRecords).toHaveLength(0);
+});
+
+test("JSON null detaches an unencumbered purchase from its card", async () => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  const patch = recordPatchSchema.parse(JSON.parse('{"creditCardId":null,"paymentType":"debit"}'));
+  await updateRecord(wallet.id, patch);
+  const after = await getWalletDataset();
+  expect(after.records.find(row => row.id === wallet.id)?.creditCardId).toBeUndefined();
+  expect(after.creditCardRecords).toHaveLength(0);
+});
+
+test("legacy income with a card association remains restorable through JSON backup", async () => {
+  const walletId = randomUUID();
+  const movementId = randomUUID();
+  await createDb().insert(records).values({ id: walletId, type: "income", amount: "20", currency: "UYU", accountId, creditCardId: cardId, categoryId, paymentType: "credit", paymentStatus: "cleared", exchangeRateToPrimary: "1", amountInLimitCurrency: "20", exchangeRateToLimitCurrency: "1", occurredAt: new Date("2020-06-01T12:00:00.000Z") });
+  await createDb().insert(creditCardRecords).values({ id: movementId, walletRecordId: walletId, creditCardId: cardId, kind: "refund", amount: "20", currency: "UYU", categoryId, amountInLimitCurrency: "20", exchangeRateToLimitCurrency: "1", accountImpactAtCreation: false, occurredAt: new Date("2020-06-01T12:00:00.000Z") });
+  await restoreWalletBackup(await getWalletBackup());
+  const after = await getWalletDataset();
+  expect(after.records.find(row => row.id === walletId)?.type).toBe("income");
+  expect(after.creditCardRecords.find(row => row.id === movementId)?.kind).toBe("refund");
+});
+
+
+test("linked refund bank history rejects generic financial changes but permits notes", async () => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  const original = (await getWalletDataset()).creditCardRecords.find(row => row.walletRecordId === wallet.id)!;
+  const returned = await refund(original.id, 20);
+  const otherCardId = randomUUID();
+  await createDb().insert(creditCards).values({ ...card, id: otherCardId, creditLimit: "10000" });
+  for (const patch of [
+    { amount: 200, accountAmount: 200, amountInLimitCurrency: 200 },
+    { paymentStatus: "cancelled" as const }, { paymentStatus: "needs_review" as const },
+    { creditCardId: null }, { creditCardId: otherCardId }, { type: "expense" as const },
+  ]) await expect(updateRecord(returned.walletRecordId!, patch)).rejects.toThrow();
+  await expect(deleteRecord(returned.walletRecordId!)).rejects.toThrow();
+  await updateRecord(returned.walletRecordId!, { note: "Confirmed refund" });
+  const after = await getWalletDataset();
+  expect(after.creditCardRecords.find(row => row.id === returned.id)).toMatchObject({ originalRecordId: original.id, kind: "refund", amount: 20, note: "Confirmed refund" });
+  expect(after.records.find(row => row.id === returned.walletRecordId)).toMatchObject({ amount: 20, paymentStatus: "cleared" });
+});
+
+test("foreign linked refund metadata keeps card-native and bank amounts distinct", async () => {
+  const wallet = await createRecord({ ...linkedPurchaseInput(), amount: 100, currency: "USD", accountAmount: 4000, amountInLimitCurrency: 4000, exchangeRateToLimitCurrency: 40, exchangeRateToPrimary: 40 });
+  const original = (await getWalletDataset()).creditCardRecords.find(row => row.walletRecordId === wallet.id)!;
+  const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 20, currency: "USD", amountInLimitCurrency: 800, exchangeRateToLimitCurrency: 40, categoryId, accountImpactAtCreation: false, occurredAt: new Date().toISOString() });
+  await updateRecord(returned.walletRecordId!, { note: "Verified foreign refund" });
+  const after = await getWalletDataset();
+  expect(after.creditCardRecords.find(row => row.id === returned.id)).toMatchObject({ originalRecordId: original.id, amount: 20, currency: "USD", accountAmount: 800, note: "Verified foreign refund" });
+  expect(after.records.find(row => row.id === returned.walletRecordId)).toMatchObject({ amount: 800, currency: "UYU" });
+});
+
+
+test("generic card purchase creation checks native-to-limit conversion atomically", async () => {
+  const invalid = { ...linkedPurchaseInput(), amountInLimitCurrency: 1 };
+  await expect(createRecord(invalid)).rejects.toThrow();
+  await expect(createRecordsBulk([linkedPurchaseInput(), invalid])).rejects.toThrow();
+  const after = await getWalletDataset();
+  expect(after.records).toHaveLength(0);
+  expect(after.creditCardRecords).toHaveLength(0);
+});
+
+test.each(["refund", "payment"] as const)("a purchase bank source remains durable after %s", async dependency => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  const dataset = await getWalletDataset();
+  const original = dataset.creditCardRecords.find(row => row.walletRecordId === wallet.id)!;
+  if (dependency === "refund") await refund(original.id, 20);
+  else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(20));
+  await expect(updateRecord(wallet.id, { accountAmount: 10 })).rejects.toThrow();
+  await expect(updateCreditCardRecord(cardId, original.id, { accountAmount: 10 })).resolves.toBeNull();
+  const direct = await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-02T12:00:00.000Z" });
+  if (dependency === "refund") await refund(direct.id, 20);
+  else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(100));
+  await expect(updateCreditCardRecord(cardId, direct.id, { accountAmount: 10 })).rejects.toThrow();
+  await expect(updateCreditCardRecord(cardId, direct.id, { accountImpactAtCreation: false })).rejects.toThrow();
+  expect((await getWalletDataset()).creditCardRecords.find(row => row.id === original.id)?.accountAmount).toBe(100);
 });

@@ -5,7 +5,7 @@ import {
   paymentTypeSchema,
   recordTypeSchema,
   recordGoalAssociationSchema,
-  recordSchema,
+  recordCreateSchema,
   uuidSchema,
 } from "../../shared/schemas";
 import { recordFingerprint } from "../../shared/record-identity";
@@ -289,7 +289,7 @@ export function prepareCsvRecords(
         });
       }
       // Invalid rows must not reserve a duplicate identity for later valid rows.
-      const validated = recordSchema.parse(record);
+      const validated = recordCreateSchema.parse(record);
       const fingerprint = recordFingerprint(validated);
       if (seen.has(fingerprint))
         throw new Error("Possible duplicate in wallet or CSV.");

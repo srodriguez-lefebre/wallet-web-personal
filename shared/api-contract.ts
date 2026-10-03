@@ -4,7 +4,7 @@ import {
   creditCardPatchSchema, creditCardPaymentSchema, creditCardRecordPatchSchema,
   creditCardRecordSchema, creditCardSchema, debtPatchSchema, debtPaymentSchema,
   debtSchema, mailIngestionSchema, recordFiltersSchema, recordPatchSchema,
-  recordSchema, recurringDebtPatchSchema, recurringDebtSchema, settingsPatchSchema,
+  recordCreateSchema, recurringDebtPatchSchema, recurringDebtSchema, settingsPatchSchema,
   settingsSchema, unlockSchema, uuidSchema, walletBootstrapSchema,
   tagSchema, tagPatchSchema, goalSchema, goalPatchSchema, goalReservationSchema, goalReservationReleaseSchema,
   budgetSchema, budgetPatchSchema, investmentSchema, investmentPatchSchema,
@@ -95,7 +95,7 @@ export const apiOperations = [
   op({ operationId: "categories.delete", method: "DELETE", path: "/api/categories/{id}", auth: "session", stability: "stable", params: idParams, successStatus: 200, errors: [400, 401, 404, 409, 500], summary: "Archive a category tree and reassign references" }),
 
   op({ operationId: "records.list", method: "GET", path: "/api/records", auth: "session", stability: "stable", query: recordFiltersSchema, successStatus: 200, errors: [400, 401, 500], summary: "List a keyset-paginated record page" }),
-  op({ operationId: "records.create", method: "POST", path: "/api/records", auth: "session", stability: "stable", body: recordSchema, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Create a wallet record" }),
+  op({ operationId: "records.create", method: "POST", path: "/api/records", auth: "session", stability: "stable", body: recordCreateSchema, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Create a wallet record" }),
   op({ operationId: "records.patch", method: "PATCH", path: "/api/records/{id}", auth: "session", stability: "stable", params: idParams, body: recordPatchSchema, successStatus: 200, errors: [400, 401, 404, 409, 422, 500], summary: "Update a wallet record" }),
   op({ operationId: "records.delete", method: "DELETE", path: "/api/records/{id}", auth: "session", stability: "stable", params: idParams, successStatus: 200, errors: [400, 401, 404, 500], summary: "Soft-delete a record" }),
   op({ operationId: "records.import", method: "POST", path: "/api/records/import", auth: "session", stability: "stable", body: recordImportSchema, successStatus: 201, errors: [400, 401, 409, 422, 500], summary: "Atomically import up to 200 validated records" }),

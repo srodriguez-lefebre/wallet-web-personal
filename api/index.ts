@@ -13,7 +13,7 @@ import {
   debtPaymentSchema,
   debtSchema,
   debtPatchSchema,
-  recordSchema,
+  recordCreateSchema,
   recordPatchSchema,
   recurringDebtSchema,
   recurringDebtPatchSchema,
@@ -208,7 +208,7 @@ async function handleRecords(
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
     if (req.method === "POST") {
-      sendData(res, await createRecord(validateBody(req, recordSchema)), 201);
+      sendData(res, await createRecord(validateBody(req, recordCreateSchema)), 201);
       return;
     }
     sendData(res, await listRecords(validateQuery(req, recordFiltersSchema)));

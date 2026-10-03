@@ -169,6 +169,15 @@ export const recordSchema = z
     }
   });
 
+// Creation is narrower than durable history: refunds require their original
+// purchase and are created by the dedicated Cards action.
+export const recordCreateSchema = recordSchema.superRefine((value, context) => {
+  if (value.creditCardId && value.type !== "expense") context.addIssue({
+    code: "custom", path: ["creditCardId"],
+    message: "Use the Cards refund action for a credit-card refund; transfers cannot use a card.",
+  });
+});
+
 export const creditCardSchema = z.object({
   name: z.string().min(1),
   issuer: z.string().min(1),
@@ -435,7 +444,7 @@ export const categoryPatchSchema = nonEmptyPatch({
 export const recordPatchSchema = nonEmptyPatch({
   type: recordTypeSchema.optional(), amount: z.number().positive().optional(),
   currency: currencySchema.optional(), accountId: uuidSchema.optional(),
-  accountAmount: z.number().positive().optional(), creditCardId: uuidSchema.optional(),
+  accountAmount: z.number().positive().optional(), creditCardId: uuidSchema.nullable().optional(),
   destinationAccountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.nullable().optional(),
   destinationAmount: z.number().positive().optional(),
   counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).max(1).optional(),
@@ -563,7 +572,7 @@ export const walletBootstrapSchema = z.object({
 }).strict();
 
 export const recordImportSchema = z.object({
-  records: z.array(recordSchema).min(1).max(200),
+  records: z.array(recordCreateSchema).min(1).max(200),
 }).strict();
 
 const optionalUuidSchema = uuidSchema.optional();

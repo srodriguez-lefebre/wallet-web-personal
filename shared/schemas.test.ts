@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { creditCardPaymentSchema, creditCardRecordSchema, recordFiltersSchema, recordSchema } from "./schemas";
+import { creditCardPaymentSchema, creditCardRecordSchema, recordFiltersSchema, recordSchema, recordCreateSchema, recordPatchSchema } from "./schemas";
 
 const categoryId = "00000000-0000-4000-8000-000000000001";
 const cardId = "00000000-0000-4000-8000-000000000002";
@@ -109,5 +109,21 @@ describe("record filters", () => {
   it("rejects invalid or reversed date ranges", () => {
     expect(recordFiltersSchema.safeParse({ from: "2026-02-30" }).success).toBe(false);
     expect(recordFiltersSchema.safeParse({ from: "2026-06-20", to: "2026-06-01" }).success).toBe(false);
+  });
+});
+
+
+describe("new credit-card record contracts", () => {
+  const cardRecord = { ...baseRecord, accountId, creditCardId: cardId, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1 };
+  it("rejects new card refunds while preserving the historical record schema", () => {
+    const historical = { ...cardRecord, type: "income" as const };
+    expect(recordSchema.safeParse(historical).success).toBe(true);
+    expect(recordCreateSchema.safeParse(historical).success).toBe(false);
+    expect(recordCreateSchema.safeParse({ ...cardRecord, type: "transfer", destinationAccountId: categoryId }).success).toBe(false);
+    expect(recordCreateSchema.safeParse(cardRecord).success).toBe(true);
+  });
+  it("accepts a JSON null card association for PATCH but not creation", () => {
+    expect(recordPatchSchema.parse({ creditCardId: null })).toEqual({ creditCardId: null });
+    expect(recordSchema.safeParse({ ...cardRecord, creditCardId: null }).success).toBe(false);
   });
 });

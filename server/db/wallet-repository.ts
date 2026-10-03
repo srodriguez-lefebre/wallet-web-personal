@@ -783,6 +783,14 @@ function creditCardRecordGuard(db: Db, creditCardId: string, input: NewCreditCar
     SELECT 1 / CASE WHEN (
       ${input.kind} = 'purchase' AND ${input.originalRecordId ?? null}::uuid IS NULL
       AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) = round(${decimal(input.amount)}::numeric * ${decimal(input.exchangeRateToLimitCurrency)}::numeric, 2)
+      AND NOT EXISTS (
+        SELECT 1 FROM credit_card_records p WHERE p.id = ${recordId ?? null}::uuid
+          AND (EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id))
+          AND (p.account_id IS DISTINCT FROM ${input.accountId ?? null}::uuid
+            OR p.account_amount IS DISTINCT FROM ${input.accountAmount === undefined ? null : decimal(input.accountAmount)}::numeric
+            OR p.account_impact_at_creation IS DISTINCT FROM ${input.accountImpactAtCreation})
+      )
       AND NOT EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = ${recordId ?? null}::uuid AND r.deleted_at IS NULL
         AND (r.currency <> ${input.currency} OR r.exchange_rate_to_limit_currency <> ${decimal(input.exchangeRateToLimitCurrency)}::numeric))
       AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) >= coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r
@@ -1776,7 +1784,30 @@ async function buildRecordMovementCompensations(recordId: string, db: Db) {
   };
 }
 
+function assertGenericCardRecord(input: NewRecord) {
+  if (input.creditCardId && input.type !== "expense") throw validationError("Use the Cards refund action for a credit-card refund; transfers cannot use a card.");
+}
+
+function genericCardPurchaseGuard(input: NewRecord, db: Db) {
+  return creditCardRecordGuard(db, input.creditCardId!, {
+    kind: "purchase", amount: input.amount, currency: input.currency,
+    amountInLimitCurrency: input.amountInLimitCurrency ?? input.amount,
+    exchangeRateToLimitCurrency: input.exchangeRateToLimitCurrency ?? 1,
+    categoryId: input.categoryId!, accountId: input.accountId,
+    accountAmount: input.accountId ? input.accountAmount ?? input.amount : undefined,
+    accountImpactAtCreation: Boolean(input.accountId), occurredAt: input.occurredAt,
+  });
+}
+
+function assertLinkedRefundMetadata(current: WalletRecord, merged: NewRecord) {
+  for (const key of ["type", "amount", "currency", "accountId", "accountAmount", "creditCardId", "destinationAccountId", "destinationAmount",
+    "paymentType", "paymentStatus", "exchangeRateToPrimary", "amountInLimitCurrency", "exchangeRateToLimitCurrency", "occurredAt", "debtId"] as const) {
+    if (current[key] !== merged[key]) throw validationError("Bank-linked card refund financial history cannot be changed here. Use the Cards refund workflow.");
+  }
+}
+
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
+  assertGenericCardRecord(input);
   if (input.debtId) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
   const recordId = randomUUID();
   const goalWrites = await prepareRecordGoalWrites(recordId, input, db);
@@ -1826,19 +1857,24 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
   if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId }))));
   queries.push(...goalWrites.queries);
   const locks = [...recordCardLockQueries([input.creditCardId], db), ...goalWrites.lockQueries];
-  const results = await db.batch([...locks, ...queries] as unknown as Parameters<Db["batch"]>[0]);
-  const rows = results[locks.length];
+  const guards = input.creditCardId && input.categoryId ? [genericCardPurchaseGuard(input, db)] : [];
+  let results;
+  try { results = await db.batch([...locks, ...guards, ...queries] as unknown as Parameters<Db["batch"]>[0]); }
+  catch (error) { cardMutationError(error); }
+  const rows = results[locks.length + guards.length];
   const row = rows[0];
   return mapRecord(row, { [row.id]: input.tagIds }, { [row.id]: associations });
 }
 
 export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb(), importIds?: string[]) {
+  inputs.forEach(assertGenericCardRecord);
   if (inputs.some((input) => input.debtId)) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
   const ids = importIds ?? inputs.map(() => randomUUID());
   const associationsByInput = await Promise.all(inputs.map((input) => resolveGoalAssociations(input, db)));
   const queries: unknown[] = [];
   inputs.forEach((input, index) => {
     const id = ids[index];
+    if (input.creditCardId && input.categoryId) queries.push(genericCardPurchaseGuard(input, db));
     queries.push(db.insert(records).values({
       id, type: input.type, amount: decimal(input.amount), currency: input.currency,
       accountId: input.accountId ?? null,
@@ -1869,11 +1905,11 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
   });
   const movementsByInput = await Promise.all(inputs.map((input, index) => buildRecordReservationMovements(ids[index], input, associationsByInput[index], db)));
   queries.push(...recordReservationWriteQueries(movementsByInput.flat(), db));
-  await db.batch([
+  try { await db.batch([
     ...recordCardLockQueries(inputs.map((input) => input.creditCardId), db),
     ...goalReservationLockQueries(associationsByInput.flat().map((item) => item.goalId), db),
     ...queries,
-  ] as unknown as Parameters<Db["batch"]>[0]);
+  ] as unknown as Parameters<Db["batch"]>[0]); } catch (error) { cardMutationError(error); }
   const [rows, tagRows, goalRows] = await db.batch([
     db.select().from(records).where(inArray(records.id, ids)),
     db.select().from(recordTags).where(inArray(recordTags.recordId, ids)),
@@ -1979,6 +2015,7 @@ export async function updateRecord(
   const merged = recordSchema.parse({
     ...current,
     ...input,
+    creditCardId: hasOwn(input, "creditCardId") ? input.creditCardId ?? undefined : current.creditCardId,
     goalAssociations: hasOwn(input, "goalAssociations") ? input.goalAssociations : hasOwn(input, "goalIds") ? [] : current.goalAssociations,
     destinationAccountId: input.destinationAccountId === null ? undefined : (input.destinationAccountId ?? current.destinationAccountId),
     categoryId: input.categoryId === null ? undefined : (input.categoryId ?? current.categoryId),
@@ -1986,6 +2023,9 @@ export async function updateRecord(
     note: input.note === null ? undefined : (input.note ?? current.note),
     debtId: input.debtId === null ? undefined : (input.debtId ?? current.debtId),
   });
+  if (linked?.kind === "refund") assertLinkedRefundMetadata(current, merged);
+  if (merged.creditCardId && merged.type !== "expense"
+    && (merged.type !== current.type || merged.creditCardId !== current.creditCardId)) assertGenericCardRecord(merged);
   const resolveAsCardOnly = Boolean(
     existingRecord.paymentStatus === "needs_review" &&
     !existingRecord.accountId &&
@@ -2020,12 +2060,20 @@ export async function updateRecord(
     .where(eq(records.id, id))
     .returning();
   const sideQueries = [];
-  if (merged.creditCardId && merged.categoryId) {
+  if (linked?.kind === "refund") {
+    // Wallet refund currency/amount describe the bank credit. The card movement
+    // retains the original purchase currency, amount, bank destination and link.
+    sideQueries.push(db.update(creditCardRecords).set({
+      categoryId: merged.categoryId ?? linked.categoryId,
+      counterpartyName: merged.counterpartyName ?? null, note: merged.note ?? null,
+      updatedAt: new Date(),
+    }).where(eq(creditCardRecords.id, linked.id)));
+  } else if (merged.creditCardId && merged.categoryId && merged.type === "expense") {
     const values = {
       creditCardId: merged.creditCardId,
       walletRecordId: resolveAsCardOnly ? null : id,
       statementId: hasOwn(input, "occurredAt") || hasOwn(input, "creditCardId") ? null : linked?.statementId ?? null,
-      kind: merged.type === "income" ? "refund" : "purchase",
+      kind: "purchase",
       amount: decimal(merged.amount), currency: merged.currency,
       amountInLimitCurrency: decimal(merged.amountInLimitCurrency ?? merged.amount),
       exchangeRateToLimitCurrency: decimal(merged.exchangeRateToLimitCurrency ?? 1),
@@ -2088,6 +2136,7 @@ export async function updateRecord(
   const guards = [
     recordFinancialSnapshotGuard(db, existingRecord, linked),
     ...(!keepsPurchase && linked ? [recordCardDependencyGuard(db, id)] : []),
+    ...(linked?.kind === "refund" && linked.originalRecordId ? [creditCardRecordGuard(db, linked.creditCardId, mapCreditCardRecord(linked), linked.id)] : []),
     ...(keepsPurchase ? [creditCardRecordGuard(db, merged.creditCardId!, {
       kind: "purchase", amount: merged.amount, currency: merged.currency,
       amountInLimitCurrency: merged.amountInLimitCurrency ?? merged.amount,
@@ -2114,6 +2163,7 @@ export async function deleteRecord(id: string, db: Db = createDb()) {
     db.select().from(creditCardRecords).where(eq(creditCardRecords.walletRecordId, id)),
   ]);
   if (!recordRows[0]) return false;
+  if (linkedRows.some(row => row.kind === "refund")) throw validationError("Bank-linked card refund financial history cannot be deleted here. Use the Cards refund workflow.");
   const locks = [
     ...recordCardLockQueries([...recordRows, ...linkedRows].map((row) => row.creditCardId), db),
     db.execute(sql`select id from records where id = ${id}::uuid for update`),
