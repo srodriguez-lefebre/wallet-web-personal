@@ -30,6 +30,8 @@ export class WalletSync<T> {
     });
   }
 
+  snapshot(load:()=>Promise<T>):Promise<T>{return this.enqueue(load);}
+
   mutate<R>(write: () => Promise<R>, reload: () => Promise<T>): Promise<R> {
     this.invalidate();
     return this.enqueue(async () => {

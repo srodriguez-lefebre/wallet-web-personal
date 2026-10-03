@@ -242,6 +242,7 @@ export function RecordsView() {
   const [destinationAmount,setDestinationAmount] = useState("");
   const [primaryRate,setPrimaryRate] = useState("");
   const [moneyError,setMoneyError] = useState("");
+  const recordSubmission = useRef(false);
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
   const [goalAssociations, setGoalAssociations] = useState<RecordGoalAssociation[]>([]);
@@ -572,8 +573,10 @@ export function RecordsView() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if(recordSubmission.current)return;
     const nextRecord = buildRecord();
     if (!nextRecord) return;
+    recordSubmission.current=true;
 
     try {
       if (editingId) {
@@ -591,6 +594,8 @@ export function RecordsView() {
       }
     } catch {
       return;
+    } finally {
+      recordSubmission.current=false;
     }
 
     closeRecordDialog();
@@ -720,7 +725,10 @@ export function RecordsView() {
                 <span className="text-sm font-medium">Account</span>
                 <select
                   value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
+                  onChange={(event) => {
+                    const nextId=event.target.value;setAccountId(nextId);setAccountAmount("");
+                    if(!editingId&&!creditCardId){const next=dataset.accounts.find(item=>item.id===nextId);if(next)setCurrency(next.currency);setPrimaryRate("");}
+                  }}
                   className={fieldClassName}
                 >
                   {dataset.accounts

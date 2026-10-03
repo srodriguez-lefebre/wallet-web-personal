@@ -179,6 +179,7 @@ interface WalletContextValue {
   isAllHistoryComplete: boolean;
   loadMoreRecords: () => Promise<void>;
   getCompleteDataset: () => Promise<WalletDataset>;
+  getBackupDataset: () => Promise<WalletDataset>;
   restoreBackup: (backup: WalletDataset) => Promise<void>;
 }
 
@@ -462,6 +463,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
       setIsLoading(false);
       setPendingReads((count) => Math.max(0, count - 1));
     }
+  }
+  async function getBackupDataset(){
+    setPendingReads(count=>count+1);
+    try{return await sync.snapshot(()=>walletApi.getWalletBackup(requireToken()));}
+    finally{setPendingReads(count=>Math.max(0,count-1));}
   }
 
   async function reloadWallet() {
@@ -874,6 +880,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         isAllHistoryComplete,
         loadMoreRecords,
         getCompleteDataset,
+        getBackupDataset,
         restoreBackup,
       }}
     >

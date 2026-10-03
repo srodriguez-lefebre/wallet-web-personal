@@ -1677,8 +1677,8 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
   return mapRecord(row, { [row.id]: input.tagIds }, { [row.id]: associations });
 }
 
-export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()) {
-  const ids = inputs.map(() => randomUUID());
+export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb(), importIds?: string[]) {
+  const ids = importIds ?? inputs.map(() => randomUUID());
   const associationsByInput = await Promise.all(inputs.map((input) => resolveGoalAssociations(input, db)));
   const queries: unknown[] = [];
   inputs.forEach((input, index) => {
@@ -1810,7 +1810,7 @@ export async function updateRecord(
       accountImpactAtCreation: Boolean(merged.accountId),
       occurredAt: new Date(merged.occurredAt),
       updatedAt: new Date(),
-      deletedAt: null,
+      deletedAt: merged.paymentStatus === "cancelled" ? new Date() : null,
     };
     sideQueries.push(linked
       ? db.update(creditCardRecords).set(values).where(eq(creditCardRecords.id, linked.id))
@@ -2472,7 +2472,9 @@ export async function recordDebtPayment(
   const accountRate = findExchangeRate(rates, currency, accountRow.currency as WalletRecord["currency"], input.occurredAt);
   const primaryRate = findExchangeRate(rates, currency, (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"], input.occurredAt);
   if (primaryRate === null || (accountRate === null && input.accountAmount === undefined)) throw validationError("A historical exchange rate or explicit account amount is required");
-  const accountAmount = input.accountAmount ?? input.amount * accountRate!;
+  const accountAmount = input.accountAmount === undefined
+    ? sql`round(${decimal(input.amount)}::numeric * ${String(accountRate)}::numeric, 2)`
+    : sql`${decimal(input.accountAmount)}::numeric`;
   const recordId = randomUUID();
   try {
     await db.execute(sql`
@@ -2494,7 +2496,7 @@ export async function recordDebtPayment(
       )
       SELECT ${recordId}::uuid,
         CASE WHEN direction = 'receivable' THEN 'income'::record_type ELSE 'expense'::record_type END,
-        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, ${decimal(accountAmount)}::numeric, category_id, counterparty_name,
+        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, ${accountAmount}, category_id, counterparty_name,
         'transfer'::payment_type, 'cleared'::payment_status, ${decimal(primaryRate)}, ${new Date(input.occurredAt)},
         COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
       FROM updated_debt

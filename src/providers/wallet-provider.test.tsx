@@ -167,3 +167,15 @@ test("cached bootstrap failure remains visible and storage quota does not break 
   });
   expect(context.isAllHistoryComplete).toBe(true);
 });
+
+test("a complete backup can include archived history without publishing it into the active wallet",async()=>{
+  await act(async()=>{tree=create(<WalletProvider><Consumer /></WalletProvider>);});
+  const activeCount=context.dataset.records.length;
+  const backup=structuredClone(mockWalletData);
+  backup.records.push({...backup.records[0],id:"archived-history"});
+  vi.mocked(api.getWalletBackup).mockResolvedValue(backup);
+  let exported:typeof backup|undefined;
+  await act(async()=>{exported=await context.getBackupDataset();});
+  expect(exported!.records.length).toBe(activeCount+1);
+  expect(context.dataset.records.length).toBe(activeCount);
+});

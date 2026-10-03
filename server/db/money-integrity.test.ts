@@ -3,6 +3,7 @@ import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.
 import { createDebt, recordDebtPayment, updateRecord, deleteRecord, getWalletDataset, createRecord, generateDueRecurringDebts, upsertSettings } from "./wallet-repository.js";
 import { calculateAccountBalances, calculateVisibleDebtSummary } from "../../shared/calculations.js";
 import { randomUUID } from "node:crypto";
+import { importWalletRecords } from "./record-import.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(), dollarAccount = randomUUID(), categoryId = randomUUID();
@@ -68,4 +69,11 @@ test("unknown recurring amounts stay unknown and cycles do not precede rule star
   expect(generated).toHaveLength(1);
   expect(generated[0].pendingAmount).toBeUndefined();
   expect(generated[0].status).toBe("active");
+});
+test("overlapping imports across independent connections do not duplicate records or lose unique rows",async()=>{
+  const input={type:"expense" as const,amount:25,currency:"UYU" as const,accountId,categoryId,tagIds:[],paymentType:"debit" as const,paymentStatus:"cleared" as const,exchangeRateToPrimary:1,occurredAt:"2026-02-01T09:00:00Z"};
+  const later={...input,occurredAt:"2026-02-01T16:00:00Z"};
+  await Promise.all([importWalletRecords([input,later]),importWalletRecords([input,input])]);
+  expect((await getWalletDataset()).records).toHaveLength(2);
+  expect(await importWalletRecords([input,later])).toHaveLength(0);
 });

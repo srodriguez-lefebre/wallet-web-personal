@@ -27,6 +27,7 @@ export function ImportsView() {
     dataset,
     importRecords,
     getCompleteDataset,
+    getBackupDataset,
     restoreBackup,
     selectedDateRange,
     selectedPeriodMode,
@@ -98,7 +99,7 @@ export function ImportsView() {
 
   async function exportData(format: "json" | "csv" | "period") {
     await action(async () => {
-      const complete = await getCompleteDataset();
+      const complete = format==="json" ? await getBackupDataset() : await getCompleteDataset();
       if (format === "json")
         downloadText(
           "wallet-backup.json",
@@ -348,8 +349,8 @@ export function ImportsView() {
           {backup ? (
             <>
               <p>
-                {backup.accounts.length} accounts � {backup.records.length}{" "}
-                records � {backup.creditCardRecords.length} card records �{" "}
+                {backup.accounts.length} accounts · {backup.records.length}{" "}
+                records · {backup.creditCardRecords.length} card records ·{" "}
                 {backup.goals.length} goals
               </p>
               <label className="flex gap-2">

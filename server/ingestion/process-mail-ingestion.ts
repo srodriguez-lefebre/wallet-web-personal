@@ -14,6 +14,7 @@ import {
   records,
   settings,
 } from "../db/schema.js";
+import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
 import { inferCategoryWithOpenAi } from "./openai-category.js";
 import {
@@ -440,6 +441,14 @@ export async function processMailIngestion(
     const recordId =
       effectiveAccount || !effectiveCard ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
+    const goalWrites=recordId?await prepareRecordGoalWrites(recordId,{
+      type:"expense",amount:input.transaction.amount,currency:input.transaction.currency,
+      accountId:effectiveAccount?.id,accountAmount:effectiveAccount?accountConversion?.amount:undefined,
+      creditCardId:effectiveCard?.id,categoryId:category.categoryId,counterpartyName:category.merchantName,
+      paymentType:effectiveCard?"credit":"cash",paymentStatus:requiresReview?"needs_review":"cleared",
+      exchangeRateToPrimary:primary?.frozen.rate??1,occurredAt:occurredAt.toISOString(),tagIds:[],
+      amountInLimitCurrency:effectiveCard?cardConversion?.amount:undefined,exchangeRateToLimitCurrency:effectiveCard?cardConversion?.frozen.rate:undefined,
+    },db):null;
     const recordInsert = recordId
       ? db.insert(records).values({
           id: recordId,
@@ -508,7 +517,8 @@ export async function processMailIngestion(
       .where(eq(ingestionEvents.id, eventId));
     const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
     const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
-    await db.batch([claimLock,claimGuard,...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+    const cardLocks=effectiveCard?[db.update(creditCards).set({updatedAt:new Date()}).where(eq(creditCards.id,effectiveCard.id))]:[];
+    await db.batch([...cardLocks,claimLock,claimGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
     return {
       status: requiresReview ? "needs_review" : "created",
       recordId,

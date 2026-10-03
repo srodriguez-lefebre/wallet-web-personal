@@ -71,6 +71,7 @@ import {
   deleteRecurringDebt,
   getSettings,
   getWalletDataset,
+  getWalletBackup,
   bootstrapWallet,
   generateDueRecurringDebts,
   listAccounts,
@@ -97,9 +98,9 @@ import {
   listBudgets, createBudget, updateBudget, deleteBudget,
   listInvestments, createInvestment, updateInvestment, deleteInvestment,
   listInstallmentPlans, createInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan,
-  createRecordsBulk,
 } from "../server/db/wallet-repository.js";
 import { restoreWalletBackup } from "../server/db/wallet-restore.js";
+import { importWalletRecords } from "../server/db/record-import.js";
 
 // Single router Serverless Function. Vercel's Hobby plan caps a deployment at
 // 12 functions, so vercel.json rewrites every `/api/*` request here and the
@@ -236,7 +237,7 @@ async function handleRecords(
 async function handleRecordImport(req: VercelRequest, res: VercelResponse) {
   if (!guardApi(req, res, ["POST"])) return;
   const input = validateBody(req, recordImportSchema);
-  sendData(res, await createRecordsBulk(input.records), 201);
+  sendData(res, await importWalletRecords(input.records), 201);
 }
 
 async function handleCards(
@@ -657,6 +658,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sendData(res, { ok: true, service: "wallet-web-personal" });
         return;
       case "wallet":
+        if (segments.length===2 && segments[1]==="backup") {
+          if(!guardApi(req,res,["GET"]))return;
+          sendData(res,await getWalletBackup());return;
+        }
         if (segments.length === 2 && segments[1] === "restore") {
           if (!guardApi(req,res,["POST"])) return;
           sendData(res,await restoreWalletBackup(validateBody(req,walletBackupSchema)));

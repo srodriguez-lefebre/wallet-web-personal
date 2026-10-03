@@ -30,6 +30,7 @@ import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
+import { reportDataset } from "@/lib/preferences";
 import {
   calculateAccountBalanceAtDate,
   calculateAccountBalances,
@@ -60,10 +61,11 @@ export function DashboardView() {
     recordDebtPayment,
     isAllHistoryComplete,
   } = useWallet();
+  const reportingDataset=reportDataset(dataset);
   const summary =
     selectedPeriodMode !== "month"
-      ? calculateSummaryForDateRange(dataset, selectedDateRange)
-      : calculateSummary(dataset, selectedMonth);
+      ? calculateSummaryForDateRange(reportingDataset, selectedDateRange)
+      : calculateSummary(reportingDataset, selectedMonth);
   const accountBalances = isAllHistoryComplete
     ? calculateAccountBalances(dataset)
     : [];
@@ -76,8 +78,8 @@ export function DashboardView() {
     ) ?? visibleBalances[0];
   const categories =
     selectedPeriodMode !== "month"
-      ? calculateCategoryExpensesForDateRange(dataset, selectedDateRange)
-      : calculateCategoryExpenses(dataset, selectedMonth);
+      ? calculateCategoryExpensesForDateRange(reportingDataset, selectedDateRange)
+      : calculateCategoryExpenses(reportingDataset, selectedMonth);
   const visibleGoals = calculateGoalProgress(dataset).filter(
     (item) => item.goal.isVisible,
   );

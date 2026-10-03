@@ -1,4 +1,5 @@
 import { FormEvent, useMemo, useState, useRef } from "react";
+import { localDateInput,dateInputToIso } from "@/lib/date-input";
 import {
   Banknote,
   CheckCircle2,
@@ -82,25 +83,15 @@ const textareaClassName =
   "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 function todayDate() {
-  const now=new Date();
-  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  return localDateInput();
 }
 
 function toDateInput(value?: string) {
-  if(!value)return "";
-  if(value.length===10)return value;
-  const date=new Date(value);
-  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+  return value ? localDateInput(value) : "";
 }
 
 function dateToIso(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(
-    year,
-    month - 1,
-    day,
-    12, 0, 0, 0,
-  ).toISOString();
+  return dateInputToIso(value);
 }
 
 function defaultDebtForm(categoryId = "", accountId = ""): DebtFormState {

@@ -162,6 +162,7 @@ ingesta con token dedicado, las rutas requieren la sesión en
 | `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado |
 | `GET`  | `/api/records`          | pagina records por cursor y filtros             |
 | `GET`  | `/api/wallet`           | snapshot completo para sincronización y exportación |
+| `GET`  | `/api/wallet/backup`    | respaldo consistente, incluyendo historial archivado |
 | `POST` | `/api/records/import`   | hasta 200 records por transacción |
 | `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente |
 
@@ -179,9 +180,21 @@ cada lote es atómico, pero el archivo completo no lo es. Ante un error se muest
 el número confirmado y se recarga antes de reintentar. Una respuesta perdida
 puede requerir reconciliar el último lote.
 
-La exportación JSON espera el snapshot completo. La restauración JSON valida el
+La exportación JSON obtiene un snapshot consistente con las entidades archivadas,
+sus vínculos y el historial de reservas. La restauración JSON valida el
 archivo, muestra sus cantidades y exige confirmar el reemplazo de los datos.
 Un respaldo de la wallet no incluye credenciales ni configuración externa.
+
+Los pagos de deudas y tarjetas se aplican con transacciones e idempotencia:
+un reintento con la misma clave no vuelve a descontar dinero. Los importes de la
+cuenta, la moneda original y el importe recibido en una transferencia se guardan
+por separado. Una cotización ausente exige revisión o entrada explícita; no se
+supone equivalencia entre monedas. La moneda principal queda protegida cuando
+existe historial financiero para evitar reinterpretar importes congelados.
+
+Las pruebas de integración ejecutan las migraciones en bases temporales locales.
+Las pruebas de concurrencia usan PostgreSQL con conexiones independientes mediante
+`embedded-postgres`, sin conectarse a Neon ni leer credenciales de producción.
 
 Vercel despliega una sola Serverless Function: `vercel.json` reescribe todas las
 rutas `/api/*` al router consolidado de `api/index.ts`. La API es privada y

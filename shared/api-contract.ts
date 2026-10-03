@@ -50,6 +50,7 @@ function operationResponse(operationId:string):ZodType {
   if(operationId==="auth.unlock")return z.object({token:z.string(),expiresAt:z.string().datetime()});
   if(operationId==="health.get")return z.object({ok:z.literal(true),service:z.literal("wallet-web-personal")});
   if(operationId==="wallet.get"||operationId==="wallet.restore")return walletDatasetSchema;
+  if(operationId==="wallet.backup")return walletBackupSchema;
   if(operationId==="wallet.bootstrap")return z.object({dataset:walletDatasetSchema,recordsPage:pagination,generatedDebts:z.array(entities.debts),serverDate:z.string().date()});
   if(operationId.startsWith("settings."))return settingsSchema;
   if(operationId==="ingest.mailTransaction")return z.object({status:z.enum(["created","needs_review","already_processed","duplicate","ignored"]),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),warnings:z.array(z.string()).optional()});
@@ -72,6 +73,7 @@ function operationResponse(operationId:string):ZodType {
 const op = <T extends Omit<ApiOperation,"response">>(definition:T) => ({...definition,response:operationResponse(definition.operationId)});
 
 export const apiOperations = [
+  op({operationId:"wallet.backup",method:"GET",path:"/api/wallet/backup",auth:"session",stability:"stable",successStatus:200,errors:[401,500],summary:"Export a consistent complete snapshot including archived financial history"}),
   op({ operationId: "wallet.restore", method: "POST", path: "/api/wallet/restore", auth: "session", stability: "stable", body: walletBackupSchema, successStatus: 200, errors: [400,401,409,422,500], summary: "Atomically replace a complete wallet backup" }),
   op({ operationId: "auth.unlock", method: "POST", path: "/api/auth/unlock", auth: "none", stability: "stable", body: unlockSchema, successStatus: 200, errors: [400, 401, 429, 500], summary: "Unlock the wallet and issue a signed session" }),
   op({ operationId: "health.get", method: "GET", path: "/api/health", auth: "session", stability: "stable", successStatus: 200, errors: [401, 500], summary: "Authenticated service health" }),

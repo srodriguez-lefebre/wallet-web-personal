@@ -326,6 +326,7 @@ test("a bank refund uses the account-to-primary quote instead of an invented 1:1
     amount: "100",
     currency: "USD",
     accountId,
+    accountAmount: "4000",
     creditCardId: cardId,
     categoryId,
     paymentType: "credit",

@@ -42,6 +42,7 @@ export function formatMoney(
   currency: CurrencyCode,
   locale = "es-UY",
 ) {
+  if (!Number.isFinite(amount)) return "Sin cotización";
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,

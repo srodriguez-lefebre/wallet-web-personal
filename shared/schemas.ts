@@ -135,7 +135,7 @@ export const recordSchema = z
         message: "Exchange rate to the card limit currency is required",
       });
     }
-    if (value.type !== "transfer" && !value.categoryId) {
+    if (value.type !== "transfer" && !value.categoryId && value.paymentStatus !== "needs_review") {
       ctx.addIssue({
         code: "custom",
         path: ["categoryId"],
@@ -606,7 +606,8 @@ export type MailIngestionInput = z.infer<typeof mailIngestionSchema>;
 
 
 const id = { id: uuidSchema };
-export const walletRecordResponseSchema = recordSchema.safeExtend(id);
+// Read contracts preserve legacy history, including uncategorized records. Creation rules remain stricter.
+export const walletRecordResponseSchema = z.object({...recordSchema.shape,...id});
 export const cardStatementResponseSchema = z.object({ ...id, creditCardId: uuidSchema, cycleStart: z.string().datetime(), cycleEnd: z.string().datetime(), dueAt: z.string().datetime(), status: z.enum(["pending","partial","paid","overdue"]), closedAt:z.string().datetime(),paidAt:z.string().datetime().optional() });
 export const cardPaymentResponseSchema = creditCardPaymentSchema.safeExtend({ ...id, creditCardId: uuidSchema, statementId: uuidSchema.optional() });
 export const cardRecordResponseSchema = creditCardRecordSchema.safeExtend({ ...id, creditCardId:uuidSchema, walletRecordId:uuidSchema.optional(),statementId:uuidSchema.optional() });
@@ -621,7 +622,22 @@ export const walletDatasetSchema = z.object({
   goals:z.array(goalResponseSchema),goalReservations:z.array(goalReservationSchema.extend(id)),goalReservationMovements:z.array(reservationMovementResponseSchema).optional(),
   budgets:z.array(budgetSchema.extend(id)),exchangeRates:z.array(exchangeRateResponseSchema),investments:z.array(investmentSchema.extend(id)),debts:z.array(debtSchema.safeExtend(id)),recurringDebts:z.array(recurringDebtSchema.extend(id)),installmentPlans:z.array(installmentPlanSchema.extend(id)),
 });
-export const walletBackupSchema = walletDatasetSchema.superRefine((dataset,ctx)=>{
+const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
+const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
+export const walletBackupSchema = walletDatasetSchema.extend({
+  settings:settingsSchema.extend({...backupMetadata,id:uuidSchema.optional()}),
+  accounts:z.array(accountSchema.extend({...id,...backupMetadata})),categories:z.array(categorySchema.extend({...id,...backupMetadata,systemKey:z.string().optional()})),
+  tags:z.array(tagSchema.extend({...id,...backupMetadata})),
+  records:z.array(walletRecordResponseSchema.safeExtend({...backupMetadata,...backupRetryMetadata})),
+  goals:z.array(goalResponseSchema.safeExtend(backupMetadata)),creditCards:z.array(creditCardSchema.extend({...id,...backupMetadata})),
+  creditCardRecords:z.array(cardRecordResponseSchema.safeExtend(backupMetadata)),creditCardPayments:z.array(z.object({...cardPaymentResponseSchema.shape,...backupMetadata,...backupRetryMetadata})),
+  creditCardStatements:z.array(cardStatementResponseSchema.extend(backupMetadata)),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema.extend(backupMetadata)),
+  goalReservations:z.array(goalReservationSchema.extend({...id,...backupMetadata,createdAt:z.string().datetime()})),
+  goalReservationMovements:z.array(reservationMovementResponseSchema.extend({...backupMetadata,createdAt:z.string().datetime(),idempotencyKey:z.string().nullable().optional()})).optional(),
+  budgets:z.array(budgetSchema.extend({...id,...backupMetadata})),exchangeRates:z.array(exchangeRateResponseSchema.extend(backupMetadata)),
+  investments:z.array(investmentSchema.extend({...id,...backupMetadata})),debts:z.array(debtSchema.safeExtend({...id,...backupMetadata})),
+  recurringDebts:z.array(recurringDebtSchema.extend({...id,...backupMetadata})),installmentPlans:z.array(installmentPlanSchema.extend({...id,...backupMetadata})),
+}).superRefine((dataset,ctx)=>{
   const ids = new Map<string,Set<string>>();
   for (const [name,rows] of Object.entries(dataset)) {
     if (!Array.isArray(rows)) continue;

@@ -19,12 +19,12 @@ beforeAll(async()=>{
   await new Promise<void>(resolve=>server.listen(0,"127.0.0.1",resolve));
   const address=server.address(); if(!address||typeof address==="string")throw new Error("Missing port");url=`http://127.0.0.1:${address.port}`;
   const response=await fetch(`${url}/api/auth/unlock`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:"local-contract-test"})});
-  const payload=await response.json();expect(response.status).toBe(200);token=payload.data.token;
+  const payload=await response.json() as {data:{token:string}};expect(response.status).toBe(200);token=payload.data.token;
 },60_000);
 afterAll(async()=>{await new Promise<void>(resolve=>server?.close(()=>resolve()));await fixture?.close();delete process.env.API_TOKEN;delete process.env.SESSION_SECRET;});
 async function request(path:string,method="GET",input?:unknown){
   const response=await fetch(url+path,{method,headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:input===undefined?undefined:JSON.stringify(input)});
-  const payload=await response.json();
+  const payload=await response.json() as {data:Record<string,unknown>;error:unknown};
   if(response.ok){const operation=findApiOperation(method,path.split("?")[0]);expect(operation).toBeDefined();const parsed=operation!.response.safeParse(payload.data);expect(parsed.success,JSON.stringify(parsed.error?.issues)).toBe(true);expect(payload.error).toBeNull();}
   return {response,payload};
 }
