@@ -234,7 +234,8 @@ export function CardDetailView() {
       !payableStatement ||
       !payableStatementBalance ||
       payableStatementBalance.dueAmountInLimitCurrency <= 0 ||
-      Number(paymentAmount) <= 0
+      Number(paymentAmount) <= 0 ||
+      (paymentAccountId && !(Number(paymentAccountAmount) > 0))
     )
       return;
     const fingerprint = JSON.stringify([
@@ -495,6 +496,7 @@ export function CardDetailView() {
                     next.set("statementId", event.target.value);
                     setSearchParams(next);
                     setPaymentAmount("");
+                    setPaymentAccountAmount("");
                     paymentRequest.current = null;
                   }}
                 >
@@ -650,7 +652,16 @@ export function CardDetailView() {
               ) : (
                 <div />
               )}
-              <Button type="submit" disabled={toast?.status === "processing"}>
+              <Button
+                type="submit"
+                disabled={
+                  toast?.status === "processing" ||
+                  !(Number(paymentAmount) > 0) ||
+                  Boolean(
+                    paymentAccountId && !(Number(paymentAccountAmount) > 0),
+                  )
+                }
+              >
                 Pay
               </Button>
             </form>

@@ -143,6 +143,21 @@ test("changing a statement updates the query selection and clears the previous p
     .findAllByType("input")
     .find((input) => input.props.placeholder === "Amount in USD")!;
   await act(async () => amount.props.onChange({ target: { value: "50" } }));
+  const bank = tree!.root
+    .findAllByType("select")
+    .find((select) =>
+      select
+        .findAllByType("option")
+        .some((option) => option.children.includes("External payment")),
+    )!;
+  await act(async () =>
+    bank.props.onChange({ target: { value: dataset.accounts[0].id } }),
+  );
+  await act(async () =>
+    tree!.root
+      .findByProps({ placeholder: "Amount debited" })
+      .props.onChange({ target: { value: "2000" } }),
+  );
   await act(async () =>
     tree!.root
       .findByProps({ "aria-label": "Select statement" })
@@ -157,6 +172,18 @@ test("changing a statement updates the query selection and clears the previous p
       .find((input) => input.props.placeholder === "Amount in USD")!.props
       .value,
   ).toBe("");
+  expect(
+    tree!.root.findByProps({ placeholder: "Amount debited" }).props.value,
+  ).toBe("");
+  await act(async () =>
+    tree!.root
+      .findByProps({ placeholder: "Amount in USD" })
+      .props.onChange({ target: { value: "10" } }),
+  );
+  await act(async () =>
+    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
+  );
+  expect(payment).not.toHaveBeenCalled();
 });
 test("limit alert is absent below eighty and visible at eighty and one hundred", async () => {
   await act(async () => {
