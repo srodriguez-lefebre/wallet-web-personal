@@ -3,6 +3,7 @@ import type { WalletRecord } from "../../shared/types.js";
 import { recordFingerprint } from "../../shared/record-identity.js";
 import { createDb,type DbClient } from "./client.js";
 import { createRecordsBulk,getWalletDataset } from "./wallet-repository.js";
+import { records } from "./schema.js";
 
 function importId(fingerprint:string){
   const bytes=createHash("sha256").update(`wallet-import-v1:${fingerprint}`).digest().subarray(0,16);
@@ -17,8 +18,12 @@ function isUniqueConflict(error:unknown){
 /** Durable identities serialize competing copies; failed batches leave no orphan side effects. */
 export async function importWalletRecords(inputs:Omit<WalletRecord,"id">[],db:DbClient=createDb()){
   for(let attempt=0;attempt<4;attempt++){
-    const dataset=await getWalletDataset(db),seen=new Set(dataset.records.map(recordFingerprint));
-    const pending=inputs.filter(input=>{const identity=recordFingerprint(input);if(seen.has(identity))return false;seen.add(identity);return true;});
+    const [dataset,persistedRecords]=await Promise.all([getWalletDataset(db),db.select({id:records.id}).from(records)]);
+    const seen=new Set(dataset.records.map(recordFingerprint));
+    // Editing changes the fingerprint; soft deletion hides the row from the UI.
+    // Neither operation frees its durable deterministic identity for another import.
+    const persistedIds=new Set(persistedRecords.map(record=>record.id));
+    const pending=inputs.filter(input=>{const identity=recordFingerprint(input);if(seen.has(identity)||persistedIds.has(importId(identity)))return false;seen.add(identity);return true;});
     if(!pending.length)return [];
     try{return await createRecordsBulk(pending,db,pending.map(input=>importId(recordFingerprint(input))));}
     catch(error){if(!isUniqueConflict(error)||attempt===3)throw error;}

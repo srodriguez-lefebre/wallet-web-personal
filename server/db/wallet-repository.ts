@@ -1719,6 +1719,7 @@ async function buildRecordMovementCompensations(recordId: string, db: Db) {
 }
 
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
+  if (input.debtId) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
   const recordId = randomUUID();
   const goalWrites = await prepareRecordGoalWrites(recordId, input, db);
   const { associations } = goalWrites;
@@ -1773,6 +1774,7 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
 }
 
 export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb(), importIds?: string[]) {
+  if (inputs.some((input) => input.debtId)) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
   const ids = importIds ?? inputs.map(() => randomUUID());
   const associationsByInput = await Promise.all(inputs.map((input) => resolveGoalAssociations(input, db)));
   const queries: unknown[] = [];
@@ -1839,6 +1841,9 @@ export async function updateRecord(
     db.select().from(recordGoals).where(eq(recordGoals.recordId, id)),
   ]);
   if (!existingRecord) return null;
+  if (input.debtId !== undefined && (input.debtId ?? null) !== existingRecord.debtId) {
+    throw validationError("A record's debt association cannot be added, removed, or changed. Use the debt payment action.");
+  }
   const current = mapRecord(
     existingRecord,
     { [id]: existingTagRows.map((item) => item.tagId) },
