@@ -1160,7 +1160,7 @@ function calculateBudgetProgressFromRecords(
         dataset.categories,
       ).reduce(
         (total, record) => {
-          const amount=budget.goalId?record.goalAssociations.find(link=>link.goalId===budget.goalId)?.allocatedAmount??record.amount:record.amount;
+          const amount=budget.goalId?record.goalAssociations?.find(link=>link.goalId===budget.goalId)?.allocatedAmount??record.amount:record.amount;
           if(record.currency===budget.currency) return total+amount;
           if(budget.currency===dataset.settings.primaryCurrency) return total+toPrimaryCurrency(amount,record.exchangeRateToPrimary);
           const account=dataset.accounts.find(account=>account.id===record.accountId);
@@ -1210,7 +1210,7 @@ function matchingBudgetRecords(
     if (budget.tagId && !record.tagIds.includes(budget.tagId)) {
       return false;
     }
-    if(budget.goalId&&!record.goalIds.includes(budget.goalId)) return false;
+    if(budget.goalId&&!record.goalIds?.includes(budget.goalId)) return false;
 
     if (budget.accountId && record.accountId !== budget.accountId) {
       return false;
