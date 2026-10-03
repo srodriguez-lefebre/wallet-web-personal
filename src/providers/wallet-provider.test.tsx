@@ -179,3 +179,18 @@ test("a complete backup can include archived history without publishing it into 
   expect(exported!.records.length).toBe(activeCount+1);
   expect(context.dataset.records.length).toBe(activeCount);
 });
+
+test("a pending write cannot recreate private cached data after the wallet is closed",async()=>{
+  auth.token=`${btoa(JSON.stringify({sub:"test-owner"}))}.signature`;
+  const storage=new Map<string,string>();
+  vi.stubGlobal("window",{location:{origin:"http://test.local"},localStorage:{getItem:(key:string)=>storage.get(key)??null,setItem:(key:string,value:string)=>storage.set(key,value)}});
+  await act(async()=>{tree=create(<WalletProvider><Consumer/></WalletProvider>);});
+  let release!:()=>void;
+  vi.mocked(api.deleteRecord).mockImplementation(()=>new Promise(resolve=>{release=()=>resolve({deleted:true});}));
+  let pending!:Promise<void>;
+  await act(async()=>{pending=context.deleteRecord("record");});
+  await act(async()=>{tree!.unmount();});tree=undefined;
+  storage.delete("wallet-dataset-cache");
+  await act(async()=>{release();await pending;});
+  expect(storage.has("wallet-dataset-cache")).toBe(false);
+});
