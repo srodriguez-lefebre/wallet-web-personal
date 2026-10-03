@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { GlobalSearch } from "@/components/wallet/global-search";
 import { useWallet } from "@/providers/wallet-provider";
 import { cn } from "@/lib/utils";
 import { monthKey, recentMonthKeys } from "@shared/calculations";
@@ -220,6 +221,7 @@ export function AppShell({ children }: PropsWithChildren) {
             </span>
           </div>
 
+          <GlobalSearch />
           <Button size="icon" onClick={openNewRecord} aria-label="New record">
             <Plus className="h-4 w-4" />
           </Button>
