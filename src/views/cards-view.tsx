@@ -1,7 +1,19 @@
 import { FormEvent, useMemo, useState } from "react";
 import { CreditCard as CreditCardIcon, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import {
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +29,9 @@ import {
 } from "@/components/ui/dialog";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
+import { CardStatementAgenda } from "@/components/wallet/card-statement-agenda";
+import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
+import { selectPendingCardStatements } from "@/lib/cards-presentation";
 import {
   calculateCreditCardCategoryUsage,
   calculateCreditCardSummaries,
@@ -74,14 +89,26 @@ function draftFromCard(card: CreditCard): CardDraft {
 
 export function CardsView() {
   const navigate = useNavigate();
-  const { dataset, selectedMonth, selectedPeriodMode, selectedDateRange, addCreditCard, updateCreditCard, deleteCreditCard } =
-    useWallet();
+  const {
+    dataset,
+    selectedMonth,
+    selectedPeriodMode,
+    selectedDateRange,
+    addCreditCard,
+    updateCreditCard,
+    deleteCreditCard,
+    isAllHistoryComplete,
+  } = useWallet();
   const [draft, setDraft] = useState<CardDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { toast, runAction } = useActionToast();
+  const pendingStatements = useMemo(
+    () => (isAllHistoryComplete ? selectPendingCardStatements(dataset) : []),
+    [dataset, isAllHistoryComplete],
+  );
   const cardSummaries = useMemo(
     () =>
       calculateCreditCardSummaries(dataset).map((summary) => ({
@@ -335,6 +362,11 @@ export function CardsView() {
         </DialogContent>
       </Dialog>
 
+      <CardStatementAgenda
+        entries={pendingStatements}
+        isComplete={isAllHistoryComplete}
+      />
+
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {
           const expenseTrend = expenseTrendsByCard.get(summary.card.id) ?? [];
@@ -390,6 +422,11 @@ export function CardsView() {
                 </Badge>
               </CardHeader>
               <CardContent className="space-y-4">
+                {isAllHistoryComplete && (
+                  <LimitUsageAlert
+                    utilizationPercent={summary.utilizationPercent}
+                  />
+                )}
                 <div className="grid items-center gap-4 sm:grid-cols-[11rem_1fr]">
                   <div className="relative h-44 min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
@@ -542,7 +579,11 @@ export function CardsView() {
                           strokeDasharray="3 3"
                           stroke="hsl(var(--border))"
                         />
-                        <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                        <XAxis
+                          dataKey="day"
+                          tickLine={false}
+                          axisLine={false}
+                        />
                         <YAxis
                           width={80}
                           tickLine={false}
