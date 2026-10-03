@@ -26,6 +26,51 @@ comportamiento desplegado.
 
 ## Setup Local
 
+Para pruebas aisladas con un respaldo personal, usar el sandbox:
+
+```powershell
+npm install
+npm run sandbox:setup -- --backup "$env:USERPROFILE/Downloads/wallet-backup.json"
+npm run sandbox
+```
+
+Abrir http://127.0.0.1:4173 y desbloquear con el código de prueba
+`wallet-local-test`. El simulador de correo está en
+http://127.0.0.1:4173/__sandbox. Permite crear avisos Itaú/Automation Wallet,
+configurar destinos, ejecutar `processPendingEmails` y volver un thread a
+pendiente para probar reintentos y duplicados. Ejecuta los archivos actuales de
+`mail-service/`, no envía correos ni accede a Gmail real.
+
+La API usa el router y repositorio reales, PostgreSQL embebido (PGlite), las
+migraciones del proyecto y el driver Neon HTTP con transporte local. Los datos
+persisten en `.local-wallet/`, ignorado por Git. No carga `.env` ni credenciales
+de producción; bloquea conexiones externas de la API, incluida clasificación
+OpenAI. Las cotizaciones usan los fallbacks que ya tiene el código.
+
+```powershell
+npm run sandbox:stop
+npm run sandbox:setup -- --reset
+npm run sandbox:check
+```
+
+El reset requiere detener el servidor y restaura la copia inicial del respaldo;
+conserva la base anterior en `.local-wallet/db-before-reset-*`. Para reemplazar
+el snapshot, agregar `--backup <ruta>` al reset. Nunca modifica el archivo
+original de Descargas. Si ya existe una base, el setup no la reemplaza sin
+`--reset`. Un lock impide abrir la misma base en dos procesos.
+La restauración valida e importa una base provisional antes de reemplazar la
+activa; si el snapshot falla, conserva la base, el buzón y el respaldo anteriores.
+Después de un cierre forzado, verificar que el proceso esté detenido antes de
+eliminar `.local-wallet/process.lock`; los locks viejos no se borran automáticamente.
+
+Un snapshot reproduce únicamente los datos que exportó la wallet: no incluye
+secretos, reglas privadas de comercios, eventos previos de ingesta ni filas
+archivadas ausentes del JSON. PGlite permite probar SQL, persistencia y rollback,
+pero usa una sola conexión; las carreras entre varias conexiones deben validarse
+posteriormente contra un PostgreSQL de pruebas independiente.
+
+Para el entorno tradicional conectado a una base Neon:
+
 ```powershell
 npm install
 ```
@@ -107,12 +152,12 @@ Todas las respuestas usan `{ data, error }`. Salvo `POST /api/auth/unlock` y la
 ingesta con token dedicado, las rutas requieren la sesión en
 `Authorization: Bearer <token>`.
 
-| Método | Ruta | Uso |
-|---|---|---|
-| `POST` | `/api/auth/unlock` | valida el token maestro y crea una sesión |
-| `GET` | `/api/health` | smoke check autenticado |
+| Método | Ruta                    | Uso                                             |
+| ------ | ----------------------- | ----------------------------------------------- |
+| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión       |
+| `GET`  | `/api/health`           | smoke check autenticado                         |
 | `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado |
-| `GET` | `/api/records` | pagina records por cursor y filtros |
+| `GET`  | `/api/records`          | pagina records por cursor y filtros             |
 
 Vercel despliega una sola Serverless Function: `vercel.json` reescribe todas las
 rutas `/api/*` al router consolidado de `api/index.ts`. La API es privada y

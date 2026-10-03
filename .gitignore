@@ -25,3 +25,6 @@ docs/
 .vercel
 .env*
 AGENTS.md
+
+# Local sandbox database, personal snapshots and simulated mailbox
+.local-wallet/

@@ -16,5 +16,13 @@
       "@server/*": ["./server/*"]
     }
   },
-  "include": ["vite.config.ts", "eslint.config.js", "drizzle.config.ts", "api", "server", "shared"]
+  "include": [
+    "vite.config.ts",
+    "eslint.config.js",
+    "drizzle.config.ts",
+    "api",
+    "server",
+    "shared",
+    "scripts/sandbox"
+  ]
 }
