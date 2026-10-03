@@ -10,7 +10,10 @@ import { Button } from "@/components/ui/button";
 import { readStorage, writeStorage } from "@/lib/storage";
 import { useAuth } from "@/providers/auth-provider";
 import * as walletApi from "@/services/wallet-api";
-import type { GoalPatch } from "@shared/schemas";
+import { WalletSync } from "@/lib/wallet-sync";
+import { importRecordBatches } from "@/lib/record-import";
+import { useTheme } from "@/providers/theme-provider";
+import type { GoalPatch, SettingsPatch } from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -36,7 +39,6 @@ import type {
   WalletDataset,
   RecordPage,
   WalletRecord,
-  WalletSettings,
 } from "@shared/types";
 
 type PeriodMode = "month" | "custom" | "all";
@@ -85,13 +87,36 @@ interface WalletContextValue {
     cardId: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId">,
   ) => Promise<void>;
-  addCreditCardRecord: (cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
-  updateCreditCardRecord: (cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
+  addCreditCardRecord: (
+    cardId: string,
+    movement: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) => Promise<void>;
+  updateCreditCardRecord: (
+    cardId: string,
+    movementId: string,
+    movement: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) => Promise<void>;
   deleteCreditCardRecord: (cardId: string, movementId: string) => Promise<void>;
-  addCreditCardRefund: (cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) => Promise<void>;
-  payCreditCardStatement: (cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) => Promise<void>;
+  addCreditCardRefund: (
+    cardId: string,
+    movement: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) => Promise<void>;
+  payCreditCardStatement: (
+    cardId: string,
+    statementId: string,
+    payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">,
+  ) => Promise<void>;
   deleteCreditCardPayment: (cardId: string, paymentId: string) => Promise<void>;
-  updateWalletSettings: (settings: WalletSettings) => Promise<void>;
+  updateWalletSettings: (settings: SettingsPatch) => Promise<void>;
   addTag: (tag: Omit<Tag, "id">) => Promise<string>;
   updateTag: (tagId: string, tag: Omit<Tag, "id">) => Promise<void>;
   deleteTag: (tagId: string) => Promise<void>;
@@ -102,7 +127,12 @@ interface WalletContextValue {
     reservation: Omit<GoalReservation, "id">,
   ) => Promise<void>;
   deleteGoalReservation: (reservationId: string) => Promise<void>;
-  releaseGoalReservation: (value: { goalId: string; accountId: string; amount: number; note?: string }) => Promise<void>;
+  releaseGoalReservation: (value: {
+    goalId: string;
+    accountId: string;
+    amount: number;
+    note?: string;
+  }) => Promise<void>;
   addBudget: (budget: Omit<Budget, "id">) => Promise<string>;
   updateBudget: (budgetId: string, budget: Omit<Budget, "id">) => Promise<void>;
   deleteBudget: (budgetId: string) => Promise<void>;
@@ -113,7 +143,10 @@ interface WalletContextValue {
   ) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
   addInstallmentPlan: (plan: Omit<InstallmentPlan, "id">) => Promise<string>;
-  updateInstallmentPlan: (planId: string, plan: Omit<InstallmentPlan, "id">) => Promise<void>;
+  updateInstallmentPlan: (
+    planId: string,
+    plan: Omit<InstallmentPlan, "id">,
+  ) => Promise<void>;
   deleteInstallmentPlan: (planId: string) => Promise<void>;
   addDebt: (debt: Omit<Debt, "id">) => Promise<string>;
   updateDebt: (debtId: string, debt: Omit<Debt, "id">) => Promise<void>;
@@ -123,6 +156,7 @@ interface WalletContextValue {
     payment: {
       amount: number;
       accountId: string;
+      accountAmount?: number;
       occurredAt: string;
       note?: string;
       saveAccountToDebt?: boolean;
@@ -144,6 +178,8 @@ interface WalletContextValue {
   isSelectedRangeComplete: boolean;
   isAllHistoryComplete: boolean;
   loadMoreRecords: () => Promise<void>;
+  getCompleteDataset: () => Promise<WalletDataset>;
+  restoreBackup: (backup: WalletDataset) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -161,10 +197,23 @@ const emptyDataset: WalletDataset = {
     defaultPaymentType: "debit",
     defaultPaymentStatus: "cleared",
   },
-  accounts: [], categories: [], tags: [], records: [], creditCards: [],
-  creditCardRecords: [], creditCardStatements: [], creditCardPayments: [],
-  creditCardPaymentAllocations: [], goals: [], goalReservations: [], budgets: [],
-  exchangeRates: [], investments: [], debts: [], recurringDebts: [], installmentPlans: [],
+  accounts: [],
+  categories: [],
+  tags: [],
+  records: [],
+  creditCards: [],
+  creditCardRecords: [],
+  creditCardStatements: [],
+  creditCardPayments: [],
+  creditCardPaymentAllocations: [],
+  goals: [],
+  goalReservations: [],
+  budgets: [],
+  exchangeRates: [],
+  investments: [],
+  debts: [],
+  recurringDebts: [],
+  installmentPlans: [],
 };
 
 function sessionOwnerKey(token: string | null) {
@@ -185,30 +234,48 @@ function readCachedDataset(token: string | null) {
 
   try {
     const parsed = JSON.parse(cached) as {
-      schemaVersion: number; cachedAt: string; environment: string; ownerKey: string;
-      dataset: WalletDataset; recordsPage: Omit<RecordPage, "items">;
+      schemaVersion: number;
+      cachedAt: string;
+      environment: string;
+      ownerKey: string;
+      dataset: WalletDataset;
+      recordsPage: Omit<RecordPage, "items">;
     };
     const ownerKey = sessionOwnerKey(token);
     const environment = window.location.origin;
-    if (parsed.schemaVersion !== cacheSchemaVersion || !ownerKey || parsed.ownerKey !== ownerKey || parsed.environment !== environment) return null;
-    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs) return null;
+    if (
+      parsed.schemaVersion !== cacheSchemaVersion ||
+      !ownerKey ||
+      parsed.ownerKey !== ownerKey ||
+      parsed.environment !== environment
+    )
+      return null;
+    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs)
+      return null;
     return parsed;
   } catch {
     return null;
   }
 }
 
-function cacheDataset(dataset: WalletDataset, recordsPage: Omit<RecordPage, "items">, token: string) {
+function cacheDataset(
+  dataset: WalletDataset,
+  recordsPage: Omit<RecordPage, "items">,
+  token: string,
+) {
   const ownerKey = sessionOwnerKey(token);
   if (!ownerKey) return;
-  writeStorage(datasetCacheKey, JSON.stringify({
-    schemaVersion: cacheSchemaVersion,
-    cachedAt: new Date().toISOString(),
-    environment: window.location.origin,
-    ownerKey,
-    dataset,
-    recordsPage,
-  }));
+  writeStorage(
+    datasetCacheKey,
+    JSON.stringify({
+      schemaVersion: cacheSchemaVersion,
+      cachedAt: new Date().toISOString(),
+      environment: window.location.origin,
+      ownerKey,
+      dataset,
+      recordsPage,
+    }),
+  );
 }
 
 function defaultCustomDateRange(): DateRange {
@@ -236,8 +303,12 @@ function allHistoryDateRange(records: WalletRecord[]): DateRange {
 
   const dates = records.map((record) => record.occurredAt.slice(0, 10));
   return {
-    from: dates.reduce((oldest, current) => current < oldest ? current : oldest),
-    to: dates.reduce((latest, current) => current > latest ? current : latest),
+    from: dates.reduce((oldest, current) =>
+      current < oldest ? current : oldest,
+    ),
+    to: dates.reduce((latest, current) =>
+      current > latest ? current : latest,
+    ),
   };
 }
 
@@ -255,38 +326,9 @@ function defaultRecordAccountId(dataset: WalletDataset) {
   );
 }
 
-let bootstrapInFlight: { token: string; request: ReturnType<typeof walletApi.bootstrapWallet> } | null = null;
-
-function loadWalletBootstrap(apiToken: string) {
-  if (bootstrapInFlight?.token === apiToken) return bootstrapInFlight.request;
-  const request = walletApi.bootstrapWallet(apiToken).finally(() => {
-    if (bootstrapInFlight?.request === request) bootstrapInFlight = null;
-  });
-  bootstrapInFlight = { token: apiToken, request };
-  return request;
-}
-
-const historyRequests = new Map<string, Promise<WalletRecord[]>>();
-
-function loadAllRecordHistory(apiToken: string) {
-  const existing = historyRequests.get(apiToken);
-  if (existing) return existing;
-  const request = (async () => {
-    const items: WalletRecord[] = [];
-    let cursor: string | null = null;
-    do {
-      const page = await walletApi.getRecordsPage(apiToken, { limit: 500, cursor });
-      items.push(...page.items);
-      cursor = page.nextCursor;
-    } while (cursor);
-    return items;
-  })().finally(() => historyRequests.delete(apiToken));
-  historyRequests.set(apiToken, request);
-  return request;
-}
-
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
+  const { setTheme } = useTheme();
   const [initialCache] = useState(() => readCachedDataset(token));
   const [hasCachedDataset] = useState(() => Boolean(initialCache));
   const [dataset, setDataset] = useState<WalletDataset>(
@@ -297,7 +339,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
   );
   const [isLoadingMoreRecords, setIsLoadingMoreRecords] = useState(false);
   const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingReads, setPendingReads] = useState(1);
+  const isRefreshing = pendingReads > 0;
   const [loadError, setLoadError] = useState("");
   const [selectedMonth, setSelectedMonthState] = useState(() =>
     monthKey(new Date()),
@@ -343,108 +386,111 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return token;
   }
 
-  async function reloadWallet() {
-    if (!token) return;
-
-    setIsRefreshing(true);
-    setLoadError("");
-    try {
-      const result = await loadWalletBootstrap(token);
-      setDataset(result.dataset);
-      setRecordsPage(result.recordsPage);
-      cacheDataset(result.dataset, result.recordsPage, token);
-    } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "Could not load wallet",
-      );
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }
-
-  useEffect(() => {
-    let isCancelled = false;
-
-    async function loadInitialWallet() {
-      if (!token) return;
-
-      if (hasCachedDataset) {
-        setIsRefreshing(true);
-      }
-
-      try {
-        const result = await loadWalletBootstrap(token);
-        if (isCancelled) return;
-        setDataset(result.dataset);
-        setRecordsPage(result.recordsPage);
-        cacheDataset(result.dataset, result.recordsPage, token);
+  const [sync] = useState(
+    () =>
+      new WalletSync<WalletDataset>((next) => {
+        setDataset(next);
+        setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
-      } catch (error) {
-        if (isCancelled) return;
-        if (!hasCachedDataset) {
-          setLoadError(
-            error instanceof Error ? error.message : "Could not load wallet",
-          );
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoading(false);
-          setIsRefreshing(false);
-        }
-      }
-    }
-
-    void loadInitialWallet();
-    return () => {
-      isCancelled = true;
-    };
-  }, [hasCachedDataset, token]);
-
-  const isAllHistoryComplete = !recordsPage.hasMore;
+        if (token)
+          cacheDataset(next, { nextCursor: null, hasMore: false }, token);
+      }),
+  );
+  const [hasLoaded, setHasLoaded] = useState(hasCachedDataset);
+  const [pendingMutations, setPendingMutations] = useState(0);
+  const isMutating = pendingMutations > 0;
+  const isAllHistoryComplete =
+    !recordsPage.hasMore &&
+    !isRefreshing &&
+    !isMutating &&
+    !loadError &&
+    hasLoaded;
   const isSelectedRangeComplete = isAllHistoryComplete;
 
   useEffect(() => {
-    if (!token || isAllHistoryComplete) return;
     let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) setIsLoadingMoreRecords(true);
-    });
-    void loadAllRecordHistory(token)
-      .then((items) => {
-        if (cancelled) return;
-        setDataset((current) => {
-          const byId = new Map(current.records.map((record) => [record.id, record]));
-          items.forEach((record) => byId.set(record.id, record));
-          const nextDataset = { ...current, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
-          cacheDataset(nextDataset, { nextCursor: null, hasMore: false }, token);
-          return nextDataset;
-        });
-        setRecordsPage({ nextCursor: null, hasMore: false });
+    // Bootstrap generates due recurring debts, then obtain the canonical complete
+    // snapshot. One epoch owns both reads so edits invalidate the entire load.
+    void sync
+      .read(async () => {
+        await walletApi.bootstrapWallet(token!);
+        return walletApi.getWallet(token!);
+      })
+      .then((result) => {
+        if (!cancelled && result) setHasLoaded(true);
       })
       .catch((error) => {
-        if (!cancelled) setLoadError(error instanceof Error ? error.message : "Could not load complete record history");
+        if (!cancelled)
+          setLoadError(
+            error instanceof Error
+              ? error.message
+              : "Could not refresh cached wallet",
+          );
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingMoreRecords(false);
+        if (!cancelled) {
+          setIsLoading(false);
+          setPendingReads((count) => Math.max(0, count - 1));
+        }
       });
-    return () => { cancelled = true; };
-  }, [isAllHistoryComplete, token]);
+    return () => {
+      cancelled = true;
+      sync.invalidate();
+    };
+  }, [sync, token]);
 
+  useEffect(() => {
+    setTheme(dataset.settings.theme);
+  }, [dataset.settings.theme, setTheme]);
+
+  async function getCompleteDataset() {
+    setPendingReads((count) => count + 1);
+    try {
+      const result = await sync.refresh(() =>
+        walletApi.getWallet(requireToken()),
+      );
+      setHasLoaded(true);
+      return result;
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Could not load complete wallet",
+      );
+      throw error;
+    } finally {
+      setIsLoading(false);
+      setPendingReads((count) => Math.max(0, count - 1));
+    }
+  }
+
+  async function reloadWallet() {
+    await getCompleteDataset();
+  }
   async function loadMoreRecords() {
-    if (!token || !recordsPage.hasMore || !recordsPage.nextCursor || isLoadingMoreRecords) return;
     setIsLoadingMoreRecords(true);
     try {
-      const page = await walletApi.getRecordsPage(token, { limit: 200, cursor: recordsPage.nextCursor });
-      const byId = new Map(dataset.records.map((record) => [record.id, record]));
-      page.items.forEach((record) => byId.set(record.id, record));
-      const nextDataset = { ...dataset, records: [...byId.values()].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt) || b.id.localeCompare(a.id)) };
-      setDataset(nextDataset);
-      const nextPage = { nextCursor: page.nextCursor, hasMore: page.hasMore };
-      setRecordsPage(nextPage);
-      cacheDataset(nextDataset, nextPage, token);
+      await reloadWallet();
     } finally {
       setIsLoadingMoreRecords(false);
+    }
+  }
+
+  async function mutate<T>(write: () => Promise<T>): Promise<T> {
+    setPendingMutations((count) => count + 1);
+    try {
+      const result = await sync.mutate(write, () =>
+        walletApi.getWallet(requireToken()),
+      );
+      setHasLoaded(true);
+      return result;
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Could not save wallet",
+      );
+      throw error;
+    } finally {
+      setPendingMutations((count) => Math.max(0, count - 1));
     }
   }
 
@@ -482,516 +528,250 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setNewRecordRequestId(0);
   }
 
-  async function addAccount(account: Omit<Account, "id">) {
-    const created = await walletApi.createAccount(requireToken(), account);
-    setDataset((current) => ({
-      ...current,
-      accounts: [created, ...current.accounts],
-    }));
-    return created.id;
+  async function addAccount(value: Omit<Account, "id">) {
+    return (await mutate(() => walletApi.createAccount(requireToken(), value)))
+      .id;
   }
-
-  async function updateAccount(
-    accountId: string,
-    account: Omit<Account, "id">,
-  ) {
-    const updated = await walletApi.updateAccount(
-      requireToken(),
-      accountId,
-      account,
-    );
-    setDataset((current) => ({
-      ...current,
-      accounts: current.accounts.map((currentAccount) =>
-        currentAccount.id === accountId ? updated : currentAccount,
-      ),
-    }));
+  async function updateAccount(id: string, value: Omit<Account, "id">) {
+    await mutate(() => walletApi.updateAccount(requireToken(), id, value));
   }
-
-  async function deleteAccount(accountId: string) {
-    await walletApi.deleteAccount(requireToken(), accountId);
-    setDataset((current) => {
-      const nextAccounts = current.accounts.filter(
-        (account) => account.id !== accountId,
-      );
-      const nextPrimaryAccountId =
-        current.settings.primaryAccountId === accountId
-          ? (nextAccounts.find((account) => account.isVisible)?.id ??
-            nextAccounts[0]?.id)
-          : current.settings.primaryAccountId;
-
-      return {
-        ...current,
-        settings: {
-          ...current.settings,
-          primaryAccountId: nextPrimaryAccountId,
-        },
-        accounts: nextAccounts,
-        records: current.records.filter(
-          (record) =>
-            record.accountId !== accountId &&
-            record.destinationAccountId !== accountId,
-        ),
-        goals: current.goals.map((goal) =>
-          goal.accountId === accountId
-            ? {
-                ...goal,
-                accountId: undefined,
-              }
-            : goal,
-        ),
-        goalReservations: current.goalReservations.filter(
-          (reservation) => reservation.accountId !== accountId,
-        ),
-        budgets: current.budgets.map((budget) =>
-          budget.accountId === accountId
-            ? {
-                ...budget,
-                accountId: undefined,
-              }
-            : budget,
-        ),
-        debts: current.debts.map((debt) =>
-          debt.accountId === accountId
-            ? {
-                ...debt,
-                accountId: undefined,
-              }
-            : debt,
-        ),
-        installmentPlans: current.installmentPlans.filter(
-          (plan) => plan.accountId !== accountId,
-        ),
-      };
-    });
-  }
-
-  async function addRecord(record: Omit<WalletRecord, "id">) {
-    await walletApi.createRecord(requireToken(), record);
-    await reloadWallet();
-  }
-
-  async function importRecords(records: Array<Omit<WalletRecord, "id">>) {
-    const created = await walletApi.importRecords(requireToken(), records);
-    setDataset((current) => ({ ...current, records: [...created, ...current.records] }));
-    return created.length;
-  }
-
-  async function deleteRecord(recordId: string) {
-    await walletApi.deleteRecord(requireToken(), recordId);
-    await reloadWallet();
-  }
-
-  async function updateRecord(
-    recordId: string,
-    record: Omit<WalletRecord, "id">,
-  ) {
-    await walletApi.updateRecord(
-      requireToken(),
-      recordId,
-      record,
-    );
-    await reloadWallet();
-  }
-
-  async function addCategory(category: Omit<Category, "id">) {
-    const created = await walletApi.createCategory(requireToken(), category);
-    setDataset((current) => ({
-      ...current,
-      categories: [created, ...current.categories],
-    }));
-    return created.id;
-  }
-
-  async function updateCategory(
-    categoryId: string,
-    category: Omit<Category, "id">,
-  ) {
-    const updated = await walletApi.updateCategory(
-      requireToken(),
-      categoryId,
-      category,
-    );
-    setDataset((current) => ({
-      ...current,
-      categories: current.categories.map((currentItem) =>
-        currentItem.id === categoryId ? updated : currentItem,
-      ),
-    }));
-  }
-
-  async function deleteCategory(categoryId: string) {
-    await walletApi.deleteCategory(requireToken(), categoryId);
-    await reloadWallet();
+  async function deleteAccount(id: string) {
+    await mutate(() => walletApi.deleteAccount(requireToken(), id));
     setRecordFiltersState((current) => ({
       ...current,
+      accountId: current.accountId === id ? undefined : current.accountId,
+    }));
+  }
+  async function addCategory(value: Omit<Category, "id">) {
+    return (await mutate(() => walletApi.createCategory(requireToken(), value)))
+      .id;
+  }
+  async function updateCategory(id: string, value: Omit<Category, "id">) {
+    await mutate(() => walletApi.updateCategory(requireToken(), id, value));
+  }
+  async function deleteCategory(id: string) {
+    await mutate(() => walletApi.deleteCategory(requireToken(), id));
+    setRecordFiltersState((current) => ({
+      ...current,
+      // Archiving a parent also reassigns its children.
       categoryId: undefined,
     }));
   }
-
-  async function addCreditCard(card: Omit<CreditCard, "id">) {
-    const created = await walletApi.createCreditCard(requireToken(), card);
-    setDataset((current) => ({
-      ...current,
-      creditCards: [created, ...current.creditCards],
-    }));
-    return created.id;
+  async function addCreditCard(value: Omit<CreditCard, "id">) {
+    return (
+      await mutate(() => walletApi.createCreditCard(requireToken(), value))
+    ).id;
   }
-
-  async function updateCreditCard(
-    cardId: string,
-    card: Omit<CreditCard, "id">,
-  ) {
-    const updated = await walletApi.updateCreditCard(
-      requireToken(),
-      cardId,
-      card,
-    );
-    setDataset((current) => ({
-      ...current,
-      creditCards: current.creditCards.map((currentCard) =>
-        currentCard.id === cardId ? updated : currentCard,
-      ),
-    }));
+  async function updateCreditCard(id: string, value: Omit<CreditCard, "id">) {
+    await mutate(() => walletApi.updateCreditCard(requireToken(), id, value));
   }
-
-  async function deleteCreditCard(cardId: string) {
-    await walletApi.deleteCreditCard(requireToken(), cardId);
-    setDataset((current) => ({
-      ...current,
-      creditCards: current.creditCards.map((card) =>
-        card.id === cardId ? { ...card, isActive: false } : card,
-      ),
-    }));
+  async function deleteCreditCard(id: string) {
+    await mutate(() => walletApi.deleteCreditCard(requireToken(), id));
   }
-
-  async function addCreditCardPayment(
-    cardId: string,
-    payment: Omit<CreditCardPayment, "id" | "creditCardId">,
-  ) {
-    const created = await walletApi.createCreditCardPayment(
-      requireToken(),
-      cardId,
-      payment,
-    );
-    setDataset((current) => ({
-      ...current,
-      creditCardPayments: [created, ...current.creditCardPayments],
-    }));
+  async function addTag(value: Omit<Tag, "id">) {
+    return (await mutate(() => walletApi.createTag(requireToken(), value))).id;
   }
-
-  async function addCreditCardRecord(cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
-    await walletApi.createCreditCardRecord(requireToken(), cardId, movement); await reloadWallet();
+  async function updateTag(id: string, value: Omit<Tag, "id">) {
+    await mutate(() => walletApi.updateTag(requireToken(), id, value));
   }
-  async function updateCreditCardRecord(cardId: string, movementId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
-    await walletApi.updateCreditCardRecord(requireToken(), cardId, movementId, movement); await reloadWallet();
-  }
-  async function deleteCreditCardRecord(cardId: string, movementId: string) {
-    await walletApi.deleteCreditCardRecord(requireToken(), cardId, movementId); await reloadWallet();
-  }
-  async function addCreditCardRefund(cardId: string, movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">) {
-    await walletApi.createCreditCardRefund(requireToken(), cardId, movement); await reloadWallet();
-  }
-  async function payCreditCardStatement(cardId: string, statementId: string, payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">) {
-    await walletApi.payCreditCardStatement(requireToken(), cardId, statementId, payment); await reloadWallet();
-  }
-  async function deleteCreditCardPayment(cardId: string, paymentId: string) {
-    await walletApi.deleteCreditCardPayment(requireToken(), cardId, paymentId); await reloadWallet();
-  }
-
-  async function updateWalletSettings(nextSettings: WalletSettings) {
-    const updated = await walletApi.updateSettings(requireToken(), nextSettings);
-    setDataset((current) => ({ ...current, settings: updated }));
-  }
-
-  async function addTag(tag: Omit<Tag, "id">) {
-    const created = await walletApi.createTag(requireToken(), tag);
-    setDataset((current) => ({
-      ...current,
-      tags: [created, ...current.tags],
-    }));
-    return created.id;
-  }
-
-  async function updateTag(tagId: string, tag: Omit<Tag, "id">) {
-    const updated = await walletApi.updateTag(requireToken(), tagId, tag);
-    setDataset((current) => ({
-      ...current,
-      tags: current.tags.map((currentTag) =>
-        currentTag.id === tagId ? updated : currentTag,
-      ),
-    }));
-  }
-
-  async function deleteTag(tagId: string) {
-    await walletApi.deleteTag(requireToken(), tagId);
-    setDataset((current) => ({
-      ...current,
-      tags: current.tags.filter((tag) => tag.id !== tagId),
-      records: current.records.map((record) => ({
-        ...record,
-        tagIds: record.tagIds.filter((currentTagId) => currentTagId !== tagId),
-      })),
-      goals: current.goals.map((goal) => ({
-        ...goal,
-        tagIds: goal.tagIds.filter((currentTagId) => currentTagId !== tagId),
-      })),
-      budgets: current.budgets.map((budget) =>
-        budget.tagId === tagId
-          ? {
-              ...budget,
-              tagId: undefined,
-            }
-          : budget,
-      ),
-    }));
+  async function deleteTag(id: string) {
+    await mutate(() => walletApi.deleteTag(requireToken(), id));
     setRecordFiltersState((current) => ({
       ...current,
-      tagId: undefined,
+      tagId: current.tagId === id ? undefined : current.tagId,
     }));
   }
-
-  async function addGoal(goal: Omit<Goal, "id">) {
-    const created = await walletApi.createGoal(requireToken(), goal);
-    setDataset((current) => ({
-      ...current,
-      goals: [created, ...current.goals],
-    }));
-    return created.id;
+  async function addGoal(value: Omit<Goal, "id">) {
+    return (await mutate(() => walletApi.createGoal(requireToken(), value))).id;
   }
-
-  async function updateGoal(goalId: string, goal: GoalPatch) {
-    const updated = await walletApi.updateGoal(requireToken(), goalId, goal);
-    setDataset((current) => ({
-      ...current,
-      goals: current.goals.map((currentGoal) =>
-        currentGoal.id === goalId ? updated : currentGoal,
-      ),
-    }));
+  async function updateGoal(id: string, value: GoalPatch) {
+    await mutate(() => walletApi.updateGoal(requireToken(), id, value));
   }
-
-  async function deleteGoal(goalId: string) {
-    await walletApi.deleteGoal(requireToken(), goalId);
-    setDataset((current) => ({
-      ...current,
-      goals: current.goals.filter((goal) => goal.id !== goalId),
-      goalReservations: current.goalReservations.filter(
-        (reservation) => reservation.goalId !== goalId,
-      ),
-      budgets: current.budgets.map((budget) =>
-        budget.goalId === goalId
-          ? {
-              ...budget,
-              goalId: undefined,
-            }
-          : budget,
-      ),
-    }));
+  async function deleteGoal(id: string) {
+    await mutate(() => walletApi.deleteGoal(requireToken(), id));
   }
-
-  async function addGoalReservation(reservation: Omit<GoalReservation, "id">) {
-    await walletApi.createGoalReservation(requireToken(), reservation);
-    await reloadWallet();
+  async function addBudget(value: Omit<Budget, "id">) {
+    return (await mutate(() => walletApi.createBudget(requireToken(), value)))
+      .id;
   }
-
-  async function deleteGoalReservation(reservationId: string) {
-    await walletApi.deleteGoalReservation(requireToken(), reservationId);
-    await reloadWallet();
+  async function updateBudget(id: string, value: Omit<Budget, "id">) {
+    await mutate(() => walletApi.updateBudget(requireToken(), id, value));
   }
-
-  async function releaseGoalReservation(value: { goalId: string; accountId: string; amount: number; note?: string }) {
-    await walletApi.releaseGoalReservation(requireToken(), value);
-    await reloadWallet();
+  async function deleteBudget(id: string) {
+    await mutate(() => walletApi.deleteBudget(requireToken(), id));
   }
-
-  async function addBudget(budget: Omit<Budget, "id">) {
-    const created = await walletApi.createBudget(requireToken(), budget);
-    setDataset((current) => ({ ...current, budgets: [created, ...current.budgets] }));
-    return created.id;
+  async function addInvestment(value: Omit<Investment, "id">) {
+    return (
+      await mutate(() => walletApi.createInvestment(requireToken(), value))
+    ).id;
   }
-
-  async function updateBudget(budgetId: string, budget: Omit<Budget, "id">) {
-    const updated = await walletApi.updateBudget(requireToken(), budgetId, budget);
-    setDataset((current) => ({ ...current, budgets: current.budgets.map((item) => item.id === budgetId ? updated : item) }));
+  async function updateInvestment(id: string, value: Omit<Investment, "id">) {
+    await mutate(() => walletApi.updateInvestment(requireToken(), id, value));
   }
-
-  async function deleteBudget(budgetId: string) {
-    await walletApi.deleteBudget(requireToken(), budgetId);
-    setDataset((current) => ({ ...current, budgets: current.budgets.filter((item) => item.id !== budgetId) }));
+  async function deleteInvestment(id: string) {
+    await mutate(() => walletApi.deleteInvestment(requireToken(), id));
   }
-
-  async function addInvestment(investment: Omit<Investment, "id">) {
-    const created = await walletApi.createInvestment(requireToken(), investment);
-    setDataset((current) => ({
-      ...current,
-      investments: [created, ...current.investments],
-    }));
-    return created.id;
+  async function addInstallmentPlan(value: Omit<InstallmentPlan, "id">) {
+    return (
+      await mutate(() => walletApi.createInstallmentPlan(requireToken(), value))
+    ).id;
   }
-
-  async function updateInvestment(
-    investmentId: string,
-    investment: Omit<Investment, "id">,
+  async function updateInstallmentPlan(
+    id: string,
+    value: Omit<InstallmentPlan, "id">,
   ) {
-    const updated = await walletApi.updateInvestment(requireToken(), investmentId, investment);
-    setDataset((current) => ({
-      ...current,
-      investments: current.investments.map((currentInvestment) =>
-        currentInvestment.id === investmentId ? updated : currentInvestment,
-      ),
-    }));
-  }
-
-  async function deleteInvestment(investmentId: string) {
-    await walletApi.deleteInvestment(requireToken(), investmentId);
-    setDataset((current) => ({
-      ...current,
-      investments: current.investments.filter(
-        (investment) => investment.id !== investmentId,
-      ),
-    }));
-  }
-
-  async function addInstallmentPlan(plan: Omit<InstallmentPlan, "id">) {
-    const created = await walletApi.createInstallmentPlan(requireToken(), plan);
-    setDataset((current) => ({ ...current, installmentPlans: [created, ...current.installmentPlans] }));
-    return created.id;
-  }
-
-  async function updateInstallmentPlan(planId: string, plan: Omit<InstallmentPlan, "id">) {
-    const updated = await walletApi.updateInstallmentPlan(requireToken(), planId, plan);
-    setDataset((current) => ({ ...current, installmentPlans: current.installmentPlans.map((item) => item.id === planId ? updated : item) }));
-  }
-
-  async function deleteInstallmentPlan(planId: string) {
-    await walletApi.deleteInstallmentPlan(requireToken(), planId);
-    setDataset((current) => ({ ...current, installmentPlans: current.installmentPlans.filter((item) => item.id !== planId) }));
-  }
-
-  async function addDebt(debt: Omit<Debt, "id">) {
-    const created = await walletApi.createDebt(requireToken(), debt);
-    setDataset((current) => ({
-      ...current,
-      debts: [created, ...current.debts],
-    }));
-    return created.id;
-  }
-
-  async function updateDebt(debtId: string, debt: Omit<Debt, "id">) {
-    const updated = await walletApi.updateDebt(requireToken(), debtId, debt);
-    setDataset((current) => ({
-      ...current,
-      debts: current.debts.map((currentDebt) =>
-        currentDebt.id === debtId ? updated : currentDebt,
-      ),
-    }));
-  }
-
-  async function deleteDebt(debtId: string) {
-    await walletApi.deleteDebt(requireToken(), debtId);
-    setDataset((current) => ({
-      ...current,
-      debts: current.debts.filter((debt) => debt.id !== debtId),
-      records: current.records.map((record) =>
-        record.debtId === debtId
-          ? {
-              ...record,
-              debtId: undefined,
-            }
-          : record,
-      ),
-    }));
-  }
-
-  async function recordDebtPayment(
-    debtId: string,
-    payment: {
-      amount: number;
-      accountId: string;
-      occurredAt: string;
-      note?: string;
-      saveAccountToDebt?: boolean;
-      idempotencyKey?: string;
-    },
-  ) {
-    const result = await walletApi.recordDebtPayment(
-      requireToken(),
-      debtId,
-      payment,
+    await mutate(() =>
+      walletApi.updateInstallmentPlan(requireToken(), id, value),
     );
-    setDataset((current) => ({
-      ...current,
-      debts: current.debts.map((debt) =>
-        debt.id === debtId ? result.debt : debt,
-      ),
-      records: [result.record, ...current.records],
-    }));
   }
-
-  async function addRecurringDebt(recurringDebt: Omit<RecurringDebt, "id">) {
-    const created = await walletApi.createRecurringDebt(
-      requireToken(),
-      recurringDebt,
-    );
-    setDataset((current) => ({
-      ...current,
-      recurringDebts: [created, ...current.recurringDebts],
-    }));
-    return created.id;
+  async function deleteInstallmentPlan(id: string) {
+    await mutate(() => walletApi.deleteInstallmentPlan(requireToken(), id));
   }
-
+  async function addDebt(value: Omit<Debt, "id">) {
+    return (await mutate(() => walletApi.createDebt(requireToken(), value))).id;
+  }
+  async function updateDebt(id: string, value: Omit<Debt, "id">) {
+    await mutate(() => walletApi.updateDebt(requireToken(), id, value));
+  }
+  async function deleteDebt(id: string) {
+    await mutate(() => walletApi.deleteDebt(requireToken(), id));
+  }
+  async function addRecurringDebt(value: Omit<RecurringDebt, "id">) {
+    return (
+      await mutate(() => walletApi.createRecurringDebt(requireToken(), value))
+    ).id;
+  }
   async function updateRecurringDebt(
-    recurringDebtId: string,
-    recurringDebt: Omit<RecurringDebt, "id">,
+    id: string,
+    value: Omit<RecurringDebt, "id">,
   ) {
-    const updated = await walletApi.updateRecurringDebt(
-      requireToken(),
-      recurringDebtId,
-      recurringDebt,
+    await mutate(() =>
+      walletApi.updateRecurringDebt(requireToken(), id, value),
     );
-    setDataset((current) => ({
-      ...current,
-      recurringDebts: current.recurringDebts.map((currentRecurringDebt) =>
-        currentRecurringDebt.id === recurringDebtId
-          ? updated
-          : currentRecurringDebt,
-      ),
-    }));
+  }
+  async function deleteRecurringDebt(id: string) {
+    await mutate(() => walletApi.deleteRecurringDebt(requireToken(), id));
+  }
+  async function restoreBackup(backup: WalletDataset) {
+    await mutate(() => walletApi.restoreWallet(requireToken(), backup));
   }
 
-  async function deleteRecurringDebt(recurringDebtId: string) {
-    await walletApi.deleteRecurringDebt(requireToken(), recurringDebtId);
-    setDataset((current) => ({
-      ...current,
-      recurringDebts: current.recurringDebts.filter(
-        (recurringDebt) => recurringDebt.id !== recurringDebtId,
-      ),
-    }));
+  async function addRecord(record: Omit<WalletRecord, "id">) {
+    await mutate(() => walletApi.createRecord(requireToken(), record));
   }
-
-  async function toggleAccountVisibility(accountId: string) {
-    const account = dataset.accounts.find((item) => item.id === accountId);
-    if (!account) return;
-
-    await updateAccount(accountId, {
-      ...account,
-      isVisible: !account.isVisible,
+  async function updateRecord(id: string, record: Omit<WalletRecord, "id">) {
+    await mutate(() => walletApi.updateRecord(requireToken(), id, record));
+  }
+  async function deleteRecord(id: string) {
+    await mutate(() => walletApi.deleteRecord(requireToken(), id));
+  }
+  async function importRecords(records: Array<Omit<WalletRecord, "id">>) {
+    return mutate(async () => {
+      const complete = await walletApi.getWallet(requireToken());
+      return importRecordBatches(records, complete.records, (batch) =>
+        walletApi.importRecords(requireToken(), batch),
+      );
     });
   }
-
-  async function setPrimaryAccount(accountId: string) {
-    const nextSettings = {
-      ...dataset.settings,
-      primaryAccountId: accountId,
-    };
-    const updated = await walletApi.updateSettings(
-      requireToken(),
-      nextSettings,
+  async function updateWalletSettings(settings: SettingsPatch) {
+    await mutate(() => walletApi.updateSettings(requireToken(), settings));
+  }
+  async function addCreditCardPayment(
+    id: string,
+    payment: Omit<CreditCardPayment, "id" | "creditCardId">,
+  ) {
+    await mutate(() =>
+      walletApi.createCreditCardPayment(requireToken(), id, payment),
     );
-    setDataset((current) => ({
-      ...current,
-      settings: updated,
-    }));
+  }
+
+  async function addCreditCardRecord(
+    id: string,
+    value: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) {
+    await mutate(() =>
+      walletApi.createCreditCardRecord(requireToken(), id, value),
+    );
+  }
+  async function addCreditCardRefund(
+    id: string,
+    value: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) {
+    await mutate(() =>
+      walletApi.createCreditCardRefund(requireToken(), id, value),
+    );
+  }
+  async function updateCreditCardRecord(
+    id: string,
+    movementId: string,
+    value: Omit<
+      CreditCardRecord,
+      "id" | "creditCardId" | "walletRecordId" | "statementId"
+    >,
+  ) {
+    await mutate(() =>
+      walletApi.updateCreditCardRecord(requireToken(), id, movementId, value),
+    );
+  }
+  async function deleteCreditCardRecord(id: string, movementId: string) {
+    await mutate(() =>
+      walletApi.deleteCreditCardRecord(requireToken(), id, movementId),
+    );
+  }
+  async function deleteCreditCardPayment(id: string, paymentId: string) {
+    await mutate(() =>
+      walletApi.deleteCreditCardPayment(requireToken(), id, paymentId),
+    );
+  }
+  async function payCreditCardStatement(
+    id: string,
+    statementId: string,
+    payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">,
+  ) {
+    await mutate(() =>
+      walletApi.payCreditCardStatement(
+        requireToken(),
+        id,
+        statementId,
+        payment,
+      ),
+    );
+  }
+  async function addGoalReservation(value: Omit<GoalReservation, "id">) {
+    await mutate(() => walletApi.createGoalReservation(requireToken(), value));
+  }
+  async function deleteGoalReservation(id: string) {
+    await mutate(() => walletApi.deleteGoalReservation(requireToken(), id));
+  }
+  async function releaseGoalReservation(value: {
+    goalId: string;
+    accountId: string;
+    amount: number;
+    note?: string;
+  }) {
+    await mutate(() => walletApi.releaseGoalReservation(requireToken(), value));
+  }
+  async function recordDebtPayment(
+    id: string,
+    payment: Parameters<typeof walletApi.recordDebtPayment>[2],
+  ) {
+    await mutate(() =>
+      walletApi.recordDebtPayment(requireToken(), id, payment),
+    );
+  }
+  async function toggleAccountVisibility(id: string) {
+    const account = dataset.accounts.find((item) => item.id === id);
+    if (account)
+      await updateAccount(id, { ...account, isVisible: !account.isVisible });
+  }
+  async function setPrimaryAccount(id: string) {
+    await updateWalletSettings({ primaryAccountId: id });
   }
 
   if (isLoading) {
@@ -1002,7 +782,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     );
   }
 
-  if (loadError) {
+  if (loadError && !hasLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
         <div className="max-w-md space-y-4 rounded-md border bg-card p-6 shadow-sm">
@@ -1011,7 +791,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
             <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => void reloadWallet()}>Retry</Button>
+            <Button onClick={() => void reloadWallet().catch(() => undefined)}>
+              Retry
+            </Button>
             <Button variant="outline" onClick={lock}>
               Lock
             </Button>
@@ -1091,8 +873,24 @@ export function WalletProvider({ children }: PropsWithChildren) {
         isSelectedRangeComplete,
         isAllHistoryComplete,
         loadMoreRecords,
+        getCompleteDataset,
+        restoreBackup,
       }}
     >
+      {loadError ? (
+        <div
+          role="alert"
+          className="border border-amber-500 bg-card p-3 text-sm"
+        >
+          Showing the last loaded data. {loadError}
+          <Button
+            variant="outline"
+            onClick={() => void reloadWallet().catch(() => undefined)}
+          >
+            Retry refresh
+          </Button>
+        </div>
+      ) : null}
       {isRefreshing ? (
         <div className="fixed bottom-4 right-4 z-50 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground shadow-sm">
           Refreshing wallet...

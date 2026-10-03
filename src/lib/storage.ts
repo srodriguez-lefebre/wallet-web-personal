@@ -1,14 +1,26 @@
 export function readStorage(key: string) {
   if (typeof window === "undefined") return null;
-  return window.localStorage.getItem(key);
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 export function writeStorage(key: string, value: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, value);
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    /* Cache is optional. */
+  }
 }
 
 export function removeStorage(key: string) {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(key);
+  try {
+    window.localStorage.removeItem(key);
+  } catch {
+    /* Storage can be disabled. */
+  }
 }

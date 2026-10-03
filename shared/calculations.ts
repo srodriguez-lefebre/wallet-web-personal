@@ -820,9 +820,10 @@ export function calculateSummary(
   );
 
   const now = new Date();
-  const monthEnd = endOfMonth(now);
-  const dayOfMonth = Math.max(1, now.getDate());
-  const remainingDays = Math.max(1, monthEnd.getDate() - now.getDate() + 1);
+  const monthEnd = endOfMonth(parseISO(`${month}-01T12:00:00`));
+  const isCurrentMonth = month === monthKey(now);
+  const dayOfMonth = isCurrentMonth ? Math.max(1, now.getDate()) : monthEnd.getDate();
+  const remainingDays = isCurrentMonth ? Math.max(1, monthEnd.getDate() - now.getDate() + 1) : 1;
 
   return calculateSummaryFromRecords(
     dataset,

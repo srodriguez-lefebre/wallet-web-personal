@@ -1,0 +1,169 @@
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { useEffect } from "react";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { mockWalletData } from "../../shared/mock-data";
+import { WalletProvider, useWallet } from "./wallet-provider";
+import * as api from "../services/wallet-api";
+
+const auth = vi.hoisted(() => ({ token: "test-session", lock: vi.fn() }));
+const theme = vi.hoisted(() => ({ setTheme: vi.fn() }));
+vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
+vi.mock("@/providers/theme-provider", () => ({ useTheme: () => theme }));
+vi.mock("@/services/wallet-api");
+let context: ReturnType<typeof useWallet>;
+let tree: ReactTestRenderer | undefined;
+function Consumer() {
+  const value = useWallet();
+  useEffect(() => { context = value; }, [value]);
+  return <p>{value.dataset.records.length} records</p>;
+}
+const bootstrap = {
+  dataset: mockWalletData,
+  recordsPage: { hasMore: true, nextCursor: "page2" },
+  generatedDebts: [],
+  serverDate: "2026-10-03",
+};
+beforeEach(() => {
+  vi.clearAllMocks();
+  auth.token = "test-session";
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.mocked(api.bootstrapWallet).mockResolvedValue(bootstrap);
+  vi.mocked(api.getWallet).mockResolvedValue(structuredClone(mockWalletData));
+});
+afterEach(async () => {
+  if (tree) await act(async () => tree?.unmount());
+  tree = undefined;
+  vi.unstubAllGlobals();
+});
+
+test("account archive refresh retains durable records returned by server", async () => {
+  await act(async () => {
+    tree = create(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
+  const before = context.dataset.records.length;
+  vi.mocked(api.deleteAccount).mockResolvedValue({ deleted: true });
+  const canonical = structuredClone(mockWalletData);
+  canonical.accounts[0].isActive = false;
+  vi.mocked(api.getWallet).mockResolvedValue(canonical);
+  await act(async () => {
+    await context.deleteAccount(canonical.accounts[0].id);
+  });
+  expect(context.dataset.records).toHaveLength(before);
+  expect(context.dataset.accounts[0].isActive).toBe(false);
+  expect(theme.setTheme).toHaveBeenCalledWith(canonical.settings.theme);
+});
+
+test("successful write plus failed reload rejects and preserves visible error feedback", async () => {
+  await act(async () => {
+    tree = create(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
+  vi.mocked(api.deleteRecord).mockResolvedValue({ deleted: true });
+  vi.mocked(api.getWallet).mockRejectedValue(new Error("offline"));
+  await act(async () => {
+    await expect(context.deleteRecord("record")).rejects.toThrow(
+      /saved.*refresh/i,
+    );
+  });
+  expect(context.isAllHistoryComplete).toBe(false);
+  expect(JSON.stringify(tree?.toJSON())).toContain("offline");
+  vi.mocked(api.getWallet).mockResolvedValue({
+    ...mockWalletData,
+    records: [],
+  });
+  await act(async () => {
+    await context.loadMoreRecords();
+  });
+  expect(context.isAllHistoryComplete).toBe(true);
+  expect(context.dataset.records).toEqual([]);
+});
+
+test("background boot snapshot cannot undo an edit made while cached data is visible", async () => {
+  auth.token = `${btoa(JSON.stringify({ sub: "test-owner" }))}.signature`;
+  const storage = {
+    getItem: () =>
+      JSON.stringify({
+        schemaVersion: 2,
+        cachedAt: new Date().toISOString(),
+        environment: "http://test.local",
+        ownerKey: "test-owner",
+        dataset: mockWalletData,
+        recordsPage: { hasMore: false, nextCursor: null },
+      }),
+    setItem: vi.fn(),
+  };
+  vi.stubGlobal("window", {
+    location: { origin: "http://test.local" },
+    localStorage: storage,
+  });
+  let resolve!: (value: typeof bootstrap) => void;
+  vi.mocked(api.bootstrapWallet).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  await act(async () => {
+    tree = create(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
+  vi.mocked(api.deleteRecord).mockResolvedValue({ deleted: true });
+  vi.mocked(api.getWallet).mockResolvedValue({
+    ...mockWalletData,
+    records: [],
+  });
+  await act(async () => {
+    await context.deleteRecord("record");
+  });
+  vi.mocked(api.getWallet).mockResolvedValue(mockWalletData);
+  await act(async () => {
+    resolve(bootstrap);
+  });
+  expect(context.dataset.records).toEqual([]);
+});
+
+test("cached bootstrap failure remains visible and storage quota does not break a later refresh", async () => {
+  auth.token = `${btoa(JSON.stringify({ sub: "test-owner" }))}.signature`;
+  vi.stubGlobal("window", {
+    location: { origin: "http://test.local" },
+    localStorage: {
+      getItem: () =>
+        JSON.stringify({
+          schemaVersion: 2,
+          cachedAt: new Date().toISOString(),
+          environment: "http://test.local",
+          ownerKey: "test-owner",
+          dataset: mockWalletData,
+          recordsPage: { hasMore: false, nextCursor: null },
+        }),
+      setItem() {
+        throw new Error("quota");
+      },
+    },
+  });
+  vi.mocked(api.bootstrapWallet).mockRejectedValue(
+    new Error("offline cached refresh"),
+  );
+  await act(async () => {
+    tree = create(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
+  expect(JSON.stringify(tree?.toJSON())).toContain("offline cached refresh");
+  expect(context.dataset.records.length).toBeGreaterThan(0);
+  await act(async () => {
+    await context.getCompleteDataset();
+  });
+  expect(context.isAllHistoryComplete).toBe(true);
+});

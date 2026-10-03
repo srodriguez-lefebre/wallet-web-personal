@@ -4,10 +4,11 @@ Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credit
 
 ## Estado actual
 
-La persistencia completa por API cubre cuentas, records, categorias, settings,
-deudas, reglas recurrentes, tarjetas, movimientos y pagos de tarjeta. Goals,
-reservas, inversiones y tags tienen soporte parcial en repositorio/UI, pero sus
-mutaciones del frontend todavia son locales y se pierden al recargar.
+La API persiste cuentas, records, categorías, settings, deudas y reglas
+recurrentes, tarjetas y sus consumos/pagos, tags, goals y reservas, presupuestos,
+inversiones y planes de cuotas. El cliente recarga el estado canónico después de
+cada mutación; una falla de recarga se informa sin presentar datos viejos como
+una operación completamente actualizada.
 
 El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/openapi.yaml).
 `docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
@@ -45,7 +46,7 @@ La API usa el router y repositorio reales, PostgreSQL embebido (PGlite), las
 migraciones del proyecto y el driver Neon HTTP con transporte local. Los datos
 persisten en `.local-wallet/`, ignorado por Git. No carga `.env` ni credenciales
 de producción; bloquea conexiones externas de la API, incluida clasificación
-OpenAI. Las cotizaciones usan los fallbacks que ya tiene el código.
+OpenAI. Las conversiones requieren una cotización guardada o un importe convertido explícito.
 
 ```powershell
 npm run sandbox:stop
@@ -107,7 +108,9 @@ npm run db:import-merchant-rules
 ```
 
 El unlock siempre valida contra `API_TOKEN`; no existe un bypass de desarrollo.
-El token maestro se intercambia por una sesión firmada de duración limitada.
+El token maestro se intercambia por una sesión firmada de duración limitada;
+el navegador guarda esa sesión, no el token maestro. La ingesta usa un token
+independiente y no acepta la sesión de usuario.
 
 Para probar la app completa con endpoints reales en local, usar Vercel Dev:
 
@@ -158,6 +161,27 @@ ingesta con token dedicado, las rutas requieren la sesión en
 | `GET`  | `/api/health`           | smoke check autenticado                         |
 | `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado |
 | `GET`  | `/api/records`          | pagina records por cursor y filtros             |
+| `GET`  | `/api/wallet`           | snapshot completo para sincronización y exportación |
+| `POST` | `/api/records/import`   | hasta 200 records por transacción |
+| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente |
+
+`GET /api/records` acepta `limit`, `cursor`, `from` y `to`; devuelve
+`{ items, nextCursor, hasMore }` dentro de `data`. El bootstrap genera las
+recurrentes pendientes y devuelve una primera página. El frontend obtiene además
+el snapshot completo para reportes/exportaciones e invalida lecturas anteriores
+cuando hay una mutación. `PATCH` modifica únicamente los campos enviados;
+los campos opcionales que admiten limpieza se envían como `null`.
+
+En `/data`, CSV conserva la moneda y los importes/tasas congelados, admite
+campos entrecomillados con saltos de línea y consulta el historial completo antes
+de comprobar duplicados. Los archivos grandes se envían en lotes de hasta 200:
+cada lote es atómico, pero el archivo completo no lo es. Ante un error se muestra
+el número confirmado y se recarga antes de reintentar. Una respuesta perdida
+puede requerir reconciliar el último lote.
+
+La exportación JSON espera el snapshot completo. La restauración JSON valida el
+archivo, muestra sus cantidades y exige confirmar el reemplazo de los datos.
+Un respaldo de la wallet no incluye credenciales ni configuración externa.
 
 Vercel despliega una sola Serverless Function: `vercel.json` reescribe todas las
 rutas `/api/*` al router consolidado de `api/index.ts`. La API es privada y
