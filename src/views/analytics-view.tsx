@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowLeft, X } from "lucide-react";
+import { ArrowLeft, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
@@ -21,6 +21,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { BudgetAssistant } from "@/components/wallet/budget-assistant";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { useWallet } from "@/providers/wallet-provider";
@@ -55,6 +57,8 @@ import { reportDataset } from "@/lib/preferences";
 import { calculateMerchantSpending } from "@shared/merchant-analytics";
 
 export function AnalyticsView() {
+  const [budgetAssistantOpen, setBudgetAssistantOpen] = useState(false);
+  const [budgetAssistantBusy, setBudgetAssistantBusy] = useState(false);
   const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState<
     string | undefined
   >();
@@ -211,6 +215,21 @@ export function AnalyticsView() {
             : "Reports by category, month, account, cash flow, and balance trend."
         }
       >
+        <Dialog open={budgetAssistantOpen} onOpenChange={open => { if (!budgetAssistantBusy) setBudgetAssistantOpen(open); }}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" onClick={() => setBudgetAssistantOpen(true)}>
+              <Sparkles className="h-4 w-4" />
+              Budget assistant
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create budgets from history</DialogTitle>
+              <DialogDescription>Review suggested category limits and choose which monthly budgets to create.</DialogDescription>
+            </DialogHeader>
+            {budgetAssistantOpen ? <BudgetAssistant initialMonth={selectedMonth} onBusyChange={setBudgetAssistantBusy} /> : null}
+          </DialogContent>
+        </Dialog>
         {selectedAccount ? (
           <>
             <Badge variant="info">Account: {selectedAccount.name}</Badge>

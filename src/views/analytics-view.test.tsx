@@ -6,17 +6,21 @@ import type { WalletDataset } from "../../shared/types";
 import { formatMoney } from "../../shared/calculations";
 import { AnalyticsView } from "./analytics-view";
 
-let dataset:WalletDataset,historyComplete:boolean;
-vi.mock("@/providers/wallet-provider",()=>({useWallet:()=>({dataset,selectedMonth:"2026-02",selectedPeriodMode:"month",selectedDateRange:{from:"2026-02-01",to:"2026-02-28"},recordFilters:{},setRecordFilters:vi.fn(),isAllHistoryComplete:historyComplete})}));
+let dataset:WalletDataset,historyComplete:boolean,assistantReads:number;
+vi.mock("@/providers/wallet-provider",()=>({useWallet:()=>({dataset,selectedMonth:"2026-02",selectedPeriodMode:"month",selectedDateRange:{from:"2026-02-01",to:"2026-02-28"},recordFilters:{},setRecordFilters:vi.fn(),isAllHistoryComplete:historyComplete,getCompleteDataset:async()=>{assistantReads+=1;return structuredClone(dataset);},addBudget:vi.fn()})}));
 vi.mock("react-router-dom",()=>({useNavigate:()=>vi.fn()}));
 vi.mock("recharts",()=>{
   const Part=({children}:{children?:ReactNode})=><>{children}</>;
   return Object.fromEntries(["Bar","BarChart","CartesianGrid","Cell","Legend","Line","LineChart","Pie","PieChart","ResponsiveContainer","Tooltip","XAxis","YAxis"].map(name=>[name,Part]));
 });
+vi.mock("@/components/ui/dialog",()=>{
+  const Part=({children}:{children?:ReactNode})=><div>{children}</div>;
+  return {Dialog:Part,DialogContent:Part,DialogHeader:Part,DialogTitle:Part,DialogDescription:Part,DialogTrigger:Part};
+});
 let tree:ReactTestRenderer|undefined;
 beforeEach(()=>{
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT",true);
-  historyComplete=true;dataset=structuredClone(mockWalletData);
+  historyComplete=true;assistantReads=0;dataset=structuredClone(mockWalletData);
   dataset.settings.primaryCurrency="UYU";dataset.settings.includeHiddenAccountsInReports=true;
   dataset.records=[{...dataset.records[0],id:"purchase",amount:10,currency:"USD",exchangeRateToPrimary:40,type:"expense",paymentStatus:"cleared",counterpartyName:"Visible shop",occurredAt:"2026-02-01T12:00:00Z"}];
 });
@@ -87,4 +91,14 @@ test("a budget with missing FX displays a missing-rate placeholder for spent and
   expect(spent.children.join("")).toContain("Falta cotización");
   expect(spent.children.join("")).not.toContain("NaN");
   expect(budget.findAllByType("p")[2].children).toEqual(["Falta cotización"]);
+});
+
+test("opens budget creation from analytics using the selected month and fresh full history",async()=>{
+  await act(async()=>{tree=create(<AnalyticsView/>);});
+  expect(assistantReads).toBe(0);
+  const trigger=tree!.root.findAllByType("button").find(node=>node.children.includes("Budget assistant"));
+  expect(trigger).toBeDefined();
+  await act(async()=>{trigger!.props.onClick();});
+  expect(assistantReads).toBe(1);
+  expect(tree!.root.findByProps({"aria-label":"Target month"}).props.value).toBe("2026-02");
 });
