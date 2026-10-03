@@ -187,6 +187,8 @@ export const creditCardSchema = z.object({
 
 export const creditCardPaymentSchema = z
   .object({
+    idempotencyKey: uuidSchema.optional(),
+    statementId: uuidSchema.optional(),
     amount: z.number().positive(),
     currency: currencySchema,
     amountInLimitCurrency: z.number().positive(),

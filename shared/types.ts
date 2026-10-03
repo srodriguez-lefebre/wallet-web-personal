@@ -118,6 +118,7 @@ export interface CreditCard {
 export interface CreditCardPayment {
   id: string;
   creditCardId: string;
+  idempotencyKey?: string;
   statementId?: string;
   amount: number;
   currency: CurrencyCode;

@@ -377,7 +377,7 @@ export function creditCardCycleDates(
           card.closingDay,
         )
       : closeThisMonth;
-  const currentCycleStart = addDays(lastClosingDate, 1);
+  const currentCycleStart = new Date(lastClosingDate.getTime() + 1);
   const dueMonthOffset = card.dueDay > card.closingDay ? 0 : 1;
   const dueMonth = new Date(
     Date.UTC(
@@ -393,6 +393,34 @@ export function creditCardCycleDates(
   );
 
   return { currentCycleStart, currentCycleEnd, lastClosingDate, dueDate };
+}
+
+// Refunds release payment credit for the other purchases on the same statement.
+// Reapply the statement's payment pool to net purchases in stable FIFO order.
+function creditCardRemainingPurchases(
+  movements: Array<{ id: string; kind: "purchase" | "refund"; originalRecordId?: string; statementId?: string; amount: number; amountInLimitCurrency: number; exchangeRateToLimitCurrency: number; currency: CurrencyCode; occurredAt: string }>,
+  payments: WalletDataset["creditCardPayments"],
+  allocations: WalletDataset["creditCardPaymentAllocations"],
+) {
+  const refunds = new Map<string, number>();
+  for (const movement of movements) if (movement.kind === "refund" && movement.originalRecordId) {
+    refunds.set(movement.originalRecordId, (refunds.get(movement.originalRecordId) ?? 0) + movement.amountInLimitCurrency);
+  }
+  const pools = new Map<string | undefined, number>();
+  for (const payment of payments) {
+    const allocated = allocations.filter(allocation => allocation.paymentId === payment.id);
+    const paid = allocated.length > 0 ? allocated.reduce((sum, allocation) => sum + allocation.amountInLimitCurrency, 0) : payment.amountInLimitCurrency;
+    pools.set(payment.statementId, (pools.get(payment.statementId) ?? 0) + paid);
+  }
+  return movements.filter(movement => movement.kind === "purchase")
+    .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
+    .map(purchase => {
+      const net = Math.max(0, purchase.amountInLimitCurrency - (refunds.get(purchase.id) ?? 0));
+      const pool = pools.get(purchase.statementId) ?? 0;
+      const used = Math.min(net, pool);
+      pools.set(purchase.statementId, pool - used);
+      return { ...purchase, remaining: Math.max(0, net - used) / purchase.exchangeRateToLimitCurrency };
+    });
 }
 
 export function calculateCreditCardSummary(
@@ -417,16 +445,11 @@ export function calculateCreditCardSummary(
       payment.creditCardId === card.id &&
       !isAfter(parseISO(payment.occurredAt), asOf),
   );
-  const paymentByCurrency = payments.map((payment) => ({
-    currency: payment.currency,
-    amount: -payment.amount,
-  }));
+  const remainingPurchases = creditCardRemainingPurchases(movements, payments, dataset.creditCardPaymentAllocations);
+  const unlinkedRefunds = movements.filter(record => record.kind === "refund" && !("originalRecordId" in record && record.originalRecordId));
   const outstanding = aggregateCurrencyAmounts([
-    ...movements.map((record) => ({
-      currency: record.currency,
-      amount: record.kind === "refund" ? -record.amount : record.amount,
-    })),
-    ...paymentByCurrency,
+    ...remainingPurchases.map(record => ({ currency: record.currency, amount: record.remaining })),
+    ...unlinkedRefunds.map(record => ({ currency: record.currency, amount: -record.amount })),
   ]);
   const currentCycle = aggregateCurrencyAmounts(
     movements
@@ -439,15 +462,10 @@ export function calculateCreditCardSummary(
       })
       .map((record) => ({ currency: record.currency, amount: record.kind === "refund" ? -record.amount : record.amount })),
   );
-  const statementDue = aggregateCurrencyAmounts([
-    ...movements
-      .filter(
-        (record) =>
-          !isAfter(parseISO(record.occurredAt), dates.lastClosingDate),
-      )
-      .map((record) => ({ currency: record.currency, amount: record.kind === "refund" ? -record.amount : record.amount })),
-    ...paymentByCurrency,
-  ]);
+  const statementDue = aggregateCurrencyAmounts(
+    remainingPurchases.filter(record => !isAfter(parseISO(record.occurredAt), dates.lastClosingDate))
+      .map(record => ({ currency: record.currency, amount: record.remaining })),
+  );
   const purchaseLimitAmount = movements.reduce(
     (total, record) =>
       total +
@@ -480,7 +498,7 @@ export function calculateCreditCardSummary(
     availableLimit,
     utilizationPercent:
       card.creditLimit > 0 ? (usedLimit / card.creditLimit) * 100 : 0,
-    currentCycleStart: dateKey(dates.currentCycleStart),
+    currentCycleStart: dates.currentCycleStart.toISOString().slice(0, 10),
     currentCycleEnd: dateKey(dates.currentCycleEnd),
     lastClosingDate: dateKey(dates.lastClosingDate),
     dueDate: dateKey(dates.dueDate),
@@ -523,32 +541,6 @@ export function calculateCreditCardStatementBalance(
       payment.creditCardId === statement.creditCardId &&
       payment.statementId === statement.id,
   );
-  const statementPaymentIds = new Set(
-    statementPayments.map((payment) => payment.id),
-  );
-  const allocations = dataset.creditCardPaymentAllocations.filter(
-    (allocation) =>
-      statementPaymentIds.has(allocation.paymentId) &&
-      purchaseIds.has(allocation.creditCardRecordId),
-  );
-  const refundsByPurchase = new Map<string, CreditCardCurrencyAmount[]>();
-  refunds.forEach((refund) => {
-    const id = refund.originalRecordId;
-    if (!id) return;
-    refundsByPurchase.set(id, [
-      ...(refundsByPurchase.get(id) ?? []),
-      { currency: refund.currency, amount: refund.amount },
-    ]);
-  });
-  const allocationsByPurchase = new Map<string, number>();
-  allocations.forEach((allocation) => {
-    allocationsByPurchase.set(
-      allocation.creditCardRecordId,
-      (allocationsByPurchase.get(allocation.creditCardRecordId) ?? 0) +
-        allocation.amount,
-    );
-  });
-
   const purchaseTotal = purchases.reduce(
     (total, record) => total + record.amountInLimitCurrency,
     0,
@@ -564,16 +556,8 @@ export function calculateCreditCardStatementBalance(
   const totalAmountInLimitCurrency = Math.max(0, purchaseTotal - refundTotal);
 
   const currencyBreakdown = aggregateCurrencyAmounts(
-    purchases.map((purchase) => {
-      const refunded = (refundsByPurchase.get(purchase.id) ?? [])
-        .filter((refund) => refund.currency === purchase.currency)
-        .reduce((total, refund) => total + refund.amount, 0);
-      const allocated = allocationsByPurchase.get(purchase.id) ?? 0;
-      return {
-        currency: purchase.currency,
-        amount: purchase.amount - refunded - allocated,
-      };
-    }),
+    creditCardRemainingPurchases([...purchases, ...refunds], statementPayments, dataset.creditCardPaymentAllocations)
+      .map(purchase => ({ currency: purchase.currency, amount: purchase.remaining })),
   );
 
   return {
@@ -764,8 +748,8 @@ export function creditCardStatementStatusAfterPaymentChange(
 ) {
   const remaining = Math.max(0, total - paid);
   if (remaining <= 0.005) return "paid" as const;
-  if (paid > 0.005) return "partial" as const;
-  return new Date(dueAt) < now ? "overdue" as const : "pending" as const;
+  if (new Date(dueAt) < now) return "overdue" as const;
+  return paid > 0.005 ? "partial" as const : "pending" as const;
 }
 
 function recurringDebtDueDate(rule: RecurringDebt, month: string) {

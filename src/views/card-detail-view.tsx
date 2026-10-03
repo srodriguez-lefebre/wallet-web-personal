@@ -1,4 +1,4 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { format } from "date-fns";
 import {
   ArrowLeft,
@@ -97,6 +97,7 @@ export function CardDetailView() {
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentAccountAmount, setPaymentAccountAmount] = useState("");
   const { toast, runAction } = useActionToast();
+  const paymentRequest = useRef<{ fingerprint: string; idempotencyKey: string; occurredAt: string } | null>(null);
 
   if (!card || !summary) {
     return (
@@ -179,6 +180,7 @@ export function CardDetailView() {
           ? updateCreditCardRecord(cardId, editingMovementId, payload)
           : addCreditCardRecord(cardId, payload),
       {
+        singleFlight: "save-card-movement",
         processing: "Saving movement...",
         success: "Movement saved",
         error: "Could not save movement",
@@ -209,6 +211,7 @@ export function CardDetailView() {
           occurredAt: new Date().toISOString(),
         }),
       {
+        singleFlight: `refund:${movementId}`,
         processing: "Saving refund...",
         success: "Refund saved",
         error: "Could not save refund",
@@ -219,6 +222,11 @@ export function CardDetailView() {
   async function submitPayment(event: FormEvent) {
     event.preventDefault();
     if (!payableStatement || Number(paymentAmount) <= 0) return;
+    const fingerprint = JSON.stringify([payableStatement.id, Number(paymentAmount), paymentAccountId, Number(paymentAccountAmount)]);
+    if (paymentRequest.current?.fingerprint !== fingerprint) paymentRequest.current = {
+      fingerprint, idempotencyKey: crypto.randomUUID(), occurredAt: new Date().toISOString(),
+    };
+    const request = paymentRequest.current;
     await runAction(
       () =>
         payCreditCardStatement(cardId, payableStatement.id, {
@@ -229,14 +237,17 @@ export function CardDetailView() {
           accountAmount: paymentAccountId
             ? Number(paymentAccountAmount)
             : undefined,
-          occurredAt: new Date().toISOString(),
+          idempotencyKey: request.idempotencyKey,
+          occurredAt: request.occurredAt,
         }),
       {
+        singleFlight: `pay:${payableStatement.id}`,
         processing: "Paying statement...",
         success: "Payment saved",
         error: "Could not save payment",
       },
     );
+    paymentRequest.current = null;
     setPaymentAmount("");
     setPaymentAccountAmount("");
   }
@@ -393,7 +404,7 @@ export function CardDetailView() {
               />
             </label>
             <div className="flex items-end gap-2">
-              <Button type="submit">Save movement</Button>
+              <Button type="submit" disabled={toast?.status === "processing"}>Save movement</Button>
               <Button
                 type="button"
                 variant="outline"
@@ -548,7 +559,7 @@ export function CardDetailView() {
               ) : (
                 <div />
               )}
-              <Button type="submit">Pay</Button>
+              <Button type="submit" disabled={toast?.status === "processing"}>Pay</Button>
             </form>
           </CardContent>
         </Card>

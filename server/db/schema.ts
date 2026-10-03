@@ -242,6 +242,8 @@ export const creditCardPayments = pgTable(
     statementId: uuid("statement_id").references(
       (): AnyPgColumn => creditCardStatements.id,
     ),
+    idempotencyKey: text("idempotency_key"),
+    requestHash: text("request_hash"),
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     currency: text("currency").notNull(),
     amountInLimitCurrency: numeric("amount_in_limit_currency", {
@@ -257,6 +259,7 @@ export const creditCardPayments = pgTable(
       .defaultNow(),
   },
   (table) => ({
+    idempotencyIdx: uniqueIndex("credit_card_payments_idempotency_idx").on(table.idempotencyKey),
     cardIdx: index("credit_card_payments_card_idx").on(table.creditCardId),
     accountIdx: index("credit_card_payments_account_idx").on(table.accountId),
     occurredAtIdx: index("credit_card_payments_occurred_at_idx").on(
