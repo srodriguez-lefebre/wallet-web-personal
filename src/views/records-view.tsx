@@ -1,7 +1,7 @@
 ﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import * as Select from "@radix-ui/react-select";
-import { Check, ChevronDown, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Copy, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -213,6 +213,7 @@ export function RecordsView() {
     recordFilters,
     setRecordFilters,
     clearRecordFilters,
+    setAllPeriod,
     addRecord,
     updateRecord,
     deleteRecord,
@@ -221,6 +222,7 @@ export function RecordsView() {
     recordsPage,
     isLoadingMoreRecords,
     isSelectedRangeComplete,
+    isAllHistoryComplete,
     loadMoreRecords,
   } = useWallet();
 
@@ -255,6 +257,7 @@ export function RecordsView() {
   const [paymentType, setPaymentType] = useState<PaymentType>("debit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const { toast, runAction } = useActionToast();
+  const reviewCount = dataset.records.filter(record => record.paymentStatus === "needs_review").length;
   const categories = useMemo(
     () => sortCategoriesForSelect(dataset.categories),
     [dataset.categories],
@@ -535,6 +538,36 @@ export function RecordsView() {
     setIsRecordDialogOpen(true);
   }
 
+  function duplicateEditingRecord() {
+    const record = dataset.records.find(item => item.id === editingId);
+    if (!record) return;
+    resetForm(record.type);
+    const now = new Date();
+    const account = dataset.accounts.find(item => item.id === record.accountId && item.isActive);
+    const card = record.type === "expense"
+      ? dataset.creditCards.find(item => item.id === record.creditCardId && item.isActive)
+      : undefined;
+    const destination = dataset.accounts.find(item => item.id === record.destinationAccountId && item.isActive && item.id !== account?.id);
+    setAccountId(account?.id ?? "");
+    setCreditCardId(card?.id ?? "");
+    setDestinationAccountId(record.type === "transfer" ? destination?.id ?? "" : "");
+    setCurrency(record.currency);
+    setAmount(String(record.amount));
+    setCategoryId(record.categoryId ?? "");
+    setCounterpartyName(record.counterpartyName ?? "");
+    setNote(record.note ?? "");
+    setTagId(record.tagIds[0] ?? "");
+    setPaymentType(record.type === "transfer" ? "transfer" : card ? "credit" : record.paymentType === "credit" ? "debit" : record.paymentType);
+    setExchangeRateToLimitCurrency(card ? String(findExchangeRate(dataset.exchangeRates, record.currency, card.limitCurrency, now.toISOString()) ?? "") : "1");
+    setOccurredAtLocal(toDateTimeLocal(now));
+  }
+
+  function openReviewQueue() {
+    clearRecordFilters();
+    setAllPeriod();
+    setRecordFilters({ paymentStatus: "needs_review" });
+  }
+
   function closeRecordDialog() {
     setIsRecordDialogOpen(false);
     openedNewRecordRef.current = 0;
@@ -658,11 +691,18 @@ export function RecordsView() {
         title="Records"
         description="Open any record to edit amount, account, counterparty, status, or notes."
       >
+        <Button variant="outline" onClick={openReviewQueue} aria-label="Open review queue">
+          Needs review {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
+        </Button>
         <Button onClick={openNewRecordDialog}>
           <Plus className="h-4 w-4" />
           New
         </Button>
       </PageHeader>
+
+      {selectedPeriodMode === "all" && recordFilters.paymentStatus === "needs_review" && (
+        <p className="mb-4 text-sm text-muted-foreground" role="status">Review queue · All dates. Review each draft before it affects your balances.</p>
+      )}
 
       {selectedAccountBalance ? (
         <AccountStateSummary balance={selectedAccountBalance} />
@@ -1047,15 +1087,21 @@ export function RecordsView() {
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
               {editingId ? (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={Boolean(editingLinkedRefund)}
-                  onClick={handleDeleteEditingRecord}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={Boolean(editingLinkedRefund)}
+                    onClick={handleDeleteEditingRecord}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </Button>
+                  <Button type="button" variant="outline" aria-label="Duplicate record" onClick={duplicateEditingRecord}>
+                    <Copy className="h-4 w-4" />
+                    Duplicate
+                  </Button>
+                </div>
               ) : (
                 <Button
                   type="button"

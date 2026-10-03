@@ -2,13 +2,21 @@ import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "../../shared/mock-data";
-import type { WalletDataset } from "../../shared/types";
+import type { RecordFilters, WalletDataset } from "../../shared/types";
+import { recordCreateSchema } from "../../shared/schemas";
 import { RecordsView } from "./records-view";
 
 const update = vi.hoisted(() => vi.fn());
+const add = vi.hoisted(() => vi.fn());
+const clearFilters = vi.hoisted(() => vi.fn());
+const setAllPeriod = vi.hoisted(() => vi.fn());
+const setFilters = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;
+let filters: RecordFilters;
+let periodMode: "month" | "all";
+let historyComplete: boolean;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset, selectedMonth: "2020-06", selectedPeriodMode: "month", selectedDateRange: { from: "2020-06-01", to: "2020-06-30" }, recordFilters: {}, setRecordFilters: vi.fn(), clearRecordFilters: vi.fn(), addRecord: vi.fn(), updateRecord: update, deleteRecord: vi.fn(), newRecordRequestId: 0, consumeNewRecordRequest: vi.fn(), recordsPage: {}, isSelectedRangeComplete: true, loadMoreRecords: vi.fn() }),
+  useWallet: () => ({ dataset, selectedMonth: "2020-06", selectedPeriodMode: periodMode, selectedDateRange: periodMode === "all" ? { from: "2019-01-01", to: "2026-12-31" } : { from: "2020-06-01", to: "2020-06-30" }, recordFilters: filters, setRecordFilters: setFilters, clearRecordFilters: clearFilters, setAllPeriod, addRecord: add, updateRecord: update, deleteRecord: vi.fn(), newRecordRequestId: 0, consumeNewRecordRequest: vi.fn(), recordsPage: {}, isAllHistoryComplete: historyComplete, isSelectedRangeComplete: historyComplete, loadMoreRecords: vi.fn() }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({ useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }) }));
 vi.mock("@/components/ui/dialog", () => {
@@ -25,6 +33,11 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   update.mockResolvedValue(undefined);
+  add.mockResolvedValue(undefined);
+  filters={};periodMode="month";historyComplete=true;
+  clearFilters.mockImplementation(()=>{filters={};});
+  setAllPeriod.mockImplementation(()=>{periodMode="all";});
+  setFilters.mockImplementation((patch:RecordFilters)=>{filters={...filters,...patch};});
   dataset = structuredClone(mockWalletData);
   dataset.goals = [];
   dataset.creditCards = [{ id: "test-card", name: "Card", issuer: "Issuer", lastFour: "1234", creditLimit: 1000, limitCurrency: "UYU", closingDay: 20, dueDay: 5, color: "blue", icon: "card", isActive: true }];
@@ -109,3 +122,89 @@ test("editing an existing card-only purchase retains Card only", async () => {
   await openRecord();
   expect(tree!.root.findAllByType("option").filter(option => option.children.includes("Card only"))).toHaveLength(1);
 });
+test("review queue clears incompatible filters and includes drafts outside the selected month",async()=>{
+  dataset.records.push({...dataset.records[0],id:"old-draft",occurredAt:"2019-01-01T12:00:00Z",paymentStatus:"needs_review",counterpartyName:"Old review merchant"});
+  filters={search:"unrelated",accountId:"other-account",paymentStatus:"cleared"};
+  await act(async()=>{tree=create(<RecordsView/>);});
+  await act(async()=>tree!.root.findByProps({"aria-label":"Open review queue"}).props.onClick());
+  await act(async()=>tree!.update(<RecordsView/>));
+  expect(clearFilters).toHaveBeenCalledOnce();expect(setAllPeriod).toHaveBeenCalledOnce();
+  expect(filters).toEqual({paymentStatus:"needs_review"});
+  expect(tree!.root.findAllByProps({role:"button"})).toHaveLength(1);
+  expect(JSON.stringify(tree!.toJSON())).toContain("Old review merchant");
+});
+
+test("review count does not present partial loaded history as a complete total",async()=>{
+  historyComplete=false;
+  await act(async()=>{tree=create(<RecordsView/>);});
+  expect(JSON.stringify(tree!.root.findByProps({"aria-label":"Open review queue"}).props.children)).toContain("Loading");
+});
+
+test("duplicating opens a fresh draft and writes only once on submit with current conversions",async()=>{
+  const accountId="11111111-1111-4111-8111-111111111111",categoryId="22222222-2222-4222-8222-222222222222",tagId="33333333-3333-4333-8333-333333333333";
+  dataset.accounts[0].id=accountId;dataset.categories[0].id=categoryId;
+  dataset.records[0]={...dataset.records[0],accountId,categoryId,currency:"USD",creditCardId:undefined,paymentType:"debit",amount:100,accountAmount:3900,exchangeRateToPrimary:39,debtId:"old-debt",goalIds:["old-goal"],goalAssociations:[{goalId:"old-goal",assignmentSource:"manual",useReserved:true,reserveIncome:true}],tagIds:[tagId,"44444444-4444-4444-8444-444444444444"],counterpartyName:"Repeat shop",note:"Template note"};
+  dataset.accounts[0].currency="UYU";dataset.settings.primaryCurrency="UYU";
+  dataset.exchangeRates=[{id:"current-rate",fromCurrency:"USD",toCurrency:"UYU",rate:42,date:"2026-01-01T12:00:00Z"}];
+  const original=structuredClone(dataset.records[0]);
+  await openRecord();
+  await act(async()=>tree!.root.findByProps({"aria-label":"Duplicate record"}).props.onClick());
+  expect(add).not.toHaveBeenCalled();expect(update).not.toHaveBeenCalled();
+  let finish!:()=>void;add.mockImplementation(()=>new Promise<void>(resolve=>{finish=resolve;}));
+  await act(async()=>{
+    const submit=tree!.root.findByType("form").props.onSubmit;
+    const first=submit({preventDefault(){}}),second=submit({preventDefault(){}});
+    finish();await Promise.all([first,second]);
+  });
+  expect(add).toHaveBeenCalledOnce();expect(update).not.toHaveBeenCalled();
+  const payload=add.mock.calls[0][0];
+  expect(payload).toMatchObject({amount:100,currency:"USD",accountAmount:4200,exchangeRateToPrimary:42,tagIds:[tagId],counterpartyName:"Repeat shop",note:"Template note",goalIds:[]});
+  expect(recordCreateSchema.safeParse(payload).success).toBe(true);
+  expect(payload.occurredAt.slice(0,10)).toBe(new Date().toISOString().slice(0,10));
+  for(const key of ["id","debtId","idempotencyKey","requestHash"])expect(payload).not.toHaveProperty(key);
+  expect(dataset.records[0]).toEqual(original);
+});
+
+test("duplicate with no current quote stays editable and sends no write",async()=>{
+  dataset.records[0]={...dataset.records[0],currency:"EUR",creditCardId:undefined,paymentType:"debit",exchangeRateToPrimary:50,accountAmount:5000};
+  dataset.exchangeRates=[];dataset.settings.primaryCurrency="UYU";dataset.accounts[0].currency="UYU";
+  await openRecord();await act(async()=>tree!.root.findByProps({"aria-label":"Duplicate record"}).props.onClick());
+  await act(async()=>tree!.root.findByType("form").props.onSubmit({preventDefault(){}}));
+  expect(add).not.toHaveBeenCalled();expect(tree!.root.findByProps({role:"alert"})).toBeDefined();
+});
+
+test("duplicate does not reuse inactive cards or accounts and retains its form after a failed save",async()=>{
+  dataset.creditCards[0].isActive=false;dataset.accounts[0].isActive=false;
+  await openRecord();await act(async()=>tree!.root.findByProps({"aria-label":"Duplicate record"}).props.onClick());
+  const accountSelect=tree!.root.findAllByType("select").find(select=>select.findAllByType("option").some(option=>option.props.value===dataset.accounts[1].id))!;
+  expect(accountSelect.props.value).not.toBe(dataset.accounts[0].id);
+  expect(tree!.root.findAllByType("select").some(select=>select.props.value==="card:test-card")).toBe(false);
+  await act(async()=>accountSelect.props.onChange({target:{value:dataset.accounts[1].id}}));
+  add.mockRejectedValue(new Error("Offline"));
+  await act(async()=>tree!.root.findByType("form").props.onSubmit({preventDefault(){}}));
+  expect(add).toHaveBeenCalledOnce();expect(tree!.root.findByType("form")).toBeDefined();
+});
+
+test("a submitted duplicate persists as a separate record after a canonical reload",async()=>{
+  const {createPostgresTestDatabase}=await import("../../scripts/sandbox/postgres-test");
+  const {createRecord,getWalletDataset}=await import("../../server/db/wallet-repository");
+  const {randomUUID}=await import("node:crypto");
+  const fixture=await createPostgresTestDatabase();
+  try{
+    const accountId=randomUUID(),categoryId=randomUUID(),sourceId=randomUUID();
+    await fixture.pool.query("INSERT INTO accounts(id,name,type,currency,initial_balance,color,icon) VALUES($1,'Duplicate test','bank','UYU',10000,'blue','bank')",[accountId]);
+    await fixture.pool.query("INSERT INTO categories(id,name,color,icon) VALUES($1,'Duplicate test','blue','bank')",[categoryId]);
+    await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
+    await fixture.pool.query("INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',42,'2026-01-01')");
+    await fixture.pool.query("INSERT INTO records(id,type,amount,currency,account_id,account_amount,category_id,payment_type,payment_status,exchange_rate_to_primary,occurred_at,debt_id) VALUES($1,'expense',100,'USD',$2,3900,$3,'debit','cleared',39,'2020-06-01T12:00:00Z',$4)",[sourceId,accountId,categoryId,randomUUID()]);
+    dataset=await getWalletDataset();const original=structuredClone(dataset.records[0]);
+    add.mockImplementation(createRecord);
+    await openRecord();await act(async()=>tree!.root.findByProps({"aria-label":"Duplicate record"}).props.onClick());
+    expect((await getWalletDataset()).records).toHaveLength(1);
+    await act(async()=>tree!.root.findByType("form").props.onSubmit({preventDefault(){}}));
+    const reloaded=await getWalletDataset();
+    expect(reloaded.records).toHaveLength(2);
+    expect(reloaded.records.find(record=>record.id===sourceId)).toEqual(original);
+    expect(reloaded.records.find(record=>record.id!==sourceId)).toMatchObject({amount:100,currency:"USD",accountAmount:4200,exchangeRateToPrimary:42,debtId:undefined});
+  }finally{await fixture.close();}
+},60_000);
