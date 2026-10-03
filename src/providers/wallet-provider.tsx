@@ -13,7 +13,12 @@ import * as walletApi from "@/services/wallet-api";
 import { WalletSync } from "@/lib/wallet-sync";
 import { importRecordBatches } from "@/lib/record-import";
 import { useTheme } from "@/providers/theme-provider";
-import type { GoalPatch, InvestmentPatch, RecordPatch, SettingsPatch } from "@shared/schemas";
+import type {
+  GoalPatch,
+  InvestmentPatch,
+  RecordPatch,
+  SettingsPatch,
+} from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -66,10 +71,7 @@ interface WalletContextValue {
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
-  updateRecord: (
-    recordId: string,
-    record: RecordPatch,
-  ) => Promise<void>;
+  updateRecord: (recordId: string, record: RecordPatch) => Promise<void>;
   deleteRecord: (recordId: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<string>;
   updateCategory: (
@@ -302,7 +304,7 @@ function allHistoryDateRange(records: WalletRecord[]): DateRange {
   const today = dateKey(new Date());
   if (records.length === 0) return { from: today, to: today };
 
-  const dates = records.map((record) => record.occurredAt.slice(0, 10));
+  const dates = records.map((record) => dateKey(record.occurredAt));
   return {
     from: dates.reduce((oldest, current) =>
       current < oldest ? current : oldest,
@@ -465,10 +467,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
       setPendingReads((count) => Math.max(0, count - 1));
     }
   }
-  async function getBackupDataset(){
-    setPendingReads(count=>count+1);
-    try{return await sync.snapshot(()=>walletApi.getWalletBackup(requireToken()));}
-    finally{setPendingReads(count=>Math.max(0,count-1));}
+  async function getBackupDataset() {
+    setPendingReads((count) => count + 1);
+    try {
+      return await sync.snapshot(() =>
+        walletApi.getWalletBackup(requireToken()),
+      );
+    } finally {
+      setPendingReads((count) => Math.max(0, count - 1));
+    }
   }
 
   async function reloadWallet() {

@@ -162,8 +162,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
         event.key === tokenKey ||
         event.key === expiresAtKey ||
         event.key === null
-      )
+      ) {
+        attempt.current += 1;
         setSession(readStoredSession());
+      }
       if (event.key === "wallet-auto-lock-minutes" || event.key === null)
         setAutoLockMinutes(readAutoLockMinutes());
     };

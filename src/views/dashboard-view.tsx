@@ -28,6 +28,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
+import { WalletAttentionPanel } from "@/components/wallet/wallet-attention-panel";
+import { WalletRefreshButton } from "@/components/wallet/wallet-refresh-button";
+import { DebtNetBadge } from "@/components/wallet/debt-net-badge";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import { reportDataset } from "@/lib/preferences";
@@ -60,8 +63,11 @@ export function DashboardView() {
     setRecordFilters,
     recordDebtPayment,
     isAllHistoryComplete,
+    clearRecordFilters,
+    setAllPeriod,
+    getCompleteDataset,
   } = useWallet();
-  const reportingDataset=reportDataset(dataset);
+  const reportingDataset = reportDataset(dataset);
   const summary =
     selectedPeriodMode !== "month"
       ? calculateSummaryForDateRange(reportingDataset, selectedDateRange)
@@ -78,7 +84,10 @@ export function DashboardView() {
     ) ?? visibleBalances[0];
   const categories =
     selectedPeriodMode !== "month"
-      ? calculateCategoryExpensesForDateRange(reportingDataset, selectedDateRange)
+      ? calculateCategoryExpensesForDateRange(
+          reportingDataset,
+          selectedDateRange,
+        )
       : calculateCategoryExpenses(reportingDataset, selectedMonth);
   const visibleGoals = calculateGoalProgress(dataset).filter(
     (item) => item.goal.isVisible,
@@ -150,7 +159,19 @@ export function DashboardView() {
         description="Interactive summary: each metric opens the related records or reports."
       >
         <Badge variant="info">General preset</Badge>
+        <WalletRefreshButton refresh={getCompleteDataset} />
       </PageHeader>
+
+      <WalletAttentionPanel
+        dataset={dataset}
+        isComplete={isAllHistoryComplete}
+        onReview={() => {
+          clearRecordFilters();
+          setAllPeriod();
+          setRecordFilters({ paymentStatus: "needs_review" });
+          navigate("/records");
+        }}
+      />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -159,35 +180,38 @@ export function DashboardView() {
             !isAllHistoryComplete
               ? "Loading history..."
               : primaryBalance
-              ? formatMoney(
-                  primaryBalance.balance,
-                  primaryBalance.account.currency,
-                )
-              : formatMoney(summary.balance, dataset.settings.primaryCurrency)
+                ? formatMoney(
+                    primaryBalance.balance,
+                    primaryBalance.account.currency,
+                  )
+                : formatMoney(summary.balance, dataset.settings.primaryCurrency)
           }
           detail={
             !isAllHistoryComplete
               ? "Calculating the current balance"
               : primaryBalance
-              ? `Available in ${primaryBalance.account.name}`
-              : "Primary account"
+                ? `Available in ${primaryBalance.account.name}`
+                : "Primary account"
           }
           icon={<WalletCards className="h-4 w-4" />}
           tone={
             !isAllHistoryComplete
               ? "default"
               : (primaryBalance?.balance ?? summary.balance) >= 0
-              ? "success"
-              : "danger"
+                ? "success"
+                : "danger"
           }
-          onClick={isAllHistoryComplete ? () =>
-            primaryBalance
-              ? goToRecords({
-                  accountId: primaryBalance.account.id,
-                  type: "all",
-                })
-              : goToRecords({ type: "all" })
-          : undefined}
+          onClick={
+            isAllHistoryComplete
+              ? () =>
+                  primaryBalance
+                    ? goToRecords({
+                        accountId: primaryBalance.account.id,
+                        type: "all",
+                      })
+                    : goToRecords({ type: "all" })
+              : undefined
+          }
         />
         <MetricCard
           label="Income"
@@ -314,7 +338,11 @@ export function DashboardView() {
                 key={category.id}
                 type="button"
                 onClick={() =>
-                  goToRecords({ type: "expense", categoryId: category.id, accountId: dataset.settings.primaryAccountId })
+                  goToRecords({
+                    type: "expense",
+                    categoryId: category.id,
+                    accountId: dataset.settings.primaryAccountId,
+                  })
                 }
                 className="flex items-center justify-between rounded-md border bg-card px-3 py-2 text-left text-sm transition hover:border-primary/50 hover:bg-secondary"
               >
@@ -416,46 +444,55 @@ export function DashboardView() {
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {goalStatusLabels[item.goal.status]} - Reserved{" "}
-                              {item.hasMissingExchangeRate ? "Falta cotización" : formatMoney(item.reserved, item.goal.currency)}
+                              {item.hasMissingExchangeRate
+                                ? "Falta cotización"
+                                : formatMoney(
+                                    item.reserved,
+                                    item.goal.currency,
+                                  )}
                             </p>
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="font-semibold">
-                            {item.hasMissingExchangeRate ? "—" : formatMoney(item.remaining, item.goal.currency)}
+                            {item.hasMissingExchangeRate
+                              ? "—"
+                              : formatMoney(item.remaining, item.goal.currency)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             remaining
                           </p>
                         </div>
                       </div>
-                      {!item.hasMissingExchangeRate && <div
-                        className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted"
-                        aria-label={`${item.percentage.toFixed(1)}% committed`}
-                      >
-                        <span
-                          style={{
-                            width: `${Math.min(
-                              100,
-                              (item.spent / item.goal.targetAmount) * 100,
-                            )}%`,
-                            backgroundColor: item.goal.color,
-                          }}
-                        />
-                        <span
-                          className="bg-emerald-400"
-                          style={{
-                            width: `${Math.min(
-                              Math.max(
-                                0,
-                                100 -
-                                  (item.spent / item.goal.targetAmount) * 100,
-                              ),
-                              (item.reserved / item.goal.targetAmount) * 100,
-                            )}%`,
-                          }}
-                        />
-                      </div>}
+                      {!item.hasMissingExchangeRate && (
+                        <div
+                          className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted"
+                          aria-label={`${item.percentage.toFixed(1)}% committed`}
+                        >
+                          <span
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                (item.spent / item.goal.targetAmount) * 100,
+                              )}%`,
+                              backgroundColor: item.goal.color,
+                            }}
+                          />
+                          <span
+                            className="bg-emerald-400"
+                            style={{
+                              width: `${Math.min(
+                                Math.max(
+                                  0,
+                                  100 -
+                                    (item.spent / item.goal.targetAmount) * 100,
+                                ),
+                                (item.reserved / item.goal.targetAmount) * 100,
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -471,13 +508,10 @@ export function DashboardView() {
                   Debts
                 </p>
                 {visibleOpenDebts.length > 0 ? (
-                  <Badge variant={debtSummary.net >= 0 ? "success" : "danger"}>
-                    Net{" "}
-                    {formatMoney(
-                      debtSummary.net,
-                      dataset.settings.primaryCurrency,
-                    )}
-                  </Badge>
+                  <DebtNetBadge
+                    summary={debtSummary}
+                    currency={dataset.settings.primaryCurrency}
+                  />
                 ) : null}
               </div>
               {visibleOpenDebts.length > 0 ? (

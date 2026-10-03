@@ -172,3 +172,31 @@ test("returning to a suspended tab checks expiration before accepting activity",
   expect(context.isUnlocked).toBe(false);
   expect(vi.getTimerCount()).toBe(0);
 });
+test("a cross-tab lock invalidates a pending unlock response", async () => {
+  await mount();
+  let release!: (value: { token: string; expiresAt: string }) => void;
+  vi.mocked(createSession).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  let pending!: Promise<boolean>;
+  await act(async () => {
+    pending = context.unlock("local-code");
+    storage.delete("wallet-session-token");
+    storage.delete("wallet-session-expires-at");
+    const event = new Event("storage");
+    Object.assign(event, { key: "wallet-session-token" });
+    window.dispatchEvent(event);
+  });
+  expect(context.isUnlocked).toBe(false);
+  await act(async () => {
+    release({
+      token: "late-session",
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(await pending).toBe(false);
+  });
+  expect(context.isUnlocked).toBe(false);
+});

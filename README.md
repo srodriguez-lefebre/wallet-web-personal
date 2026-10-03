@@ -14,6 +14,35 @@ El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/ope
 `docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
 comportamiento desplegado.
 
+## Mejoras de uso
+
+- Inicio: avisos de revisión en todo el historial, deudas próximas/vencidas y
+  agenda de estados de cuenta pendientes; actualización manual con hora comprobada.
+- Cuentas: liquidez disponible y reservada por moneda, sin sumar monedas distintas;
+  guardado de cambios con protección frente a doble clic y reintentos parciales.
+- Tarjetas: estados pendientes ordenados por vencimiento, incluidas tarjetas
+  archivadas; apertura del estado exacto y advertencias al 80%/100% del límite.
+- Movimientos: cola de revisión independiente del período; duplicación como
+  borrador nuevo, con fecha y cotizaciones actuales, sin copiar pagos de deuda.
+- Análisis: diez comercios principales, frecuencia e importe medio según el período
+  y las preferencias del reporte. Usa gastos WalletRecord con cotizaciones congeladas;
+  muestra compras brutas, sin restar devoluciones ni volver a sumar consumos vinculados.
+- Metas: importe restante y aportes orientativos diarios/semanales hasta la fecha
+  objetivo; distingue metas vencidas, completas y conversiones pendientes.
+- Deudas: filtros por vencidas, próximos 7/30 días y avisos de vencimiento;
+  una deuda sin importe definido conserva esa indicación.
+- Inversiones: cartera por moneda y actualización persistida de valoración,
+  incluido valor cero, preservando coste, moneda y fecha originales.
+- Datos: diagnóstico de referencias/conversiones/revisión/categorías desde el
+  respaldo completo; vista previa CSV por moneda y respaldos JSON fechados.
+  El recibo indica cuándo se solicitó la descarga; comprobar el archivo descargado.
+- Ajustes: caducidad automática de sesión y bloqueo por inactividad opcional de
+  5/15/30 minutos, desactivado por defecto y guardado sólo en este navegador.
+  Bloquear elimina la sesión y la caché financiera del navegador.
+
+Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
+en producción son pasos operativos separados.
+
 ## Stack
 
 - React + Vite + TypeScript
@@ -64,9 +93,10 @@ activa; si el snapshot falla, conserva la base, el buzón y el respaldo anterior
 Después de un cierre forzado, verificar que el proceso esté detenido antes de
 eliminar `.local-wallet/process.lock`; los locks viejos no se borran automáticamente.
 
-Un snapshot reproduce únicamente los datos que exportó la wallet: no incluye
-secretos, reglas privadas de comercios, eventos previos de ingesta ni filas
-archivadas ausentes del JSON. PGlite permite probar SQL, persistencia y rollback,
+Un snapshot reproduce únicamente los datos que exportó la wallet y nunca incluye
+secretos. Un respaldo antiguo puede carecer de reglas privadas de comercios,
+eventos de ingesta y filas archivadas; el respaldo completo actual conserva
+reglas, claves de procesamiento e historial archivado. PGlite permite probar SQL, persistencia y rollback,
 pero usa una sola conexión; las carreras entre varias conexiones deben validarse
 posteriormente contra un PostgreSQL de pruebas independiente.
 
@@ -155,16 +185,16 @@ Todas las respuestas usan `{ data, error }`. Salvo `POST /api/auth/unlock` y la
 ingesta con token dedicado, las rutas requieren la sesión en
 `Authorization: Bearer <token>`.
 
-| Método | Ruta                    | Uso                                             |
-| ------ | ----------------------- | ----------------------------------------------- |
-| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión       |
-| `GET`  | `/api/health`           | smoke check autenticado                         |
-| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado |
-| `GET`  | `/api/records`          | pagina records por cursor y filtros             |
-| `GET`  | `/api/wallet`           | snapshot completo para sincronización y exportación |
+| Método | Ruta                    | Uso                                                  |
+| ------ | ----------------------- | ---------------------------------------------------- |
+| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión            |
+| `GET`  | `/api/health`           | smoke check autenticado                              |
+| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado      |
+| `GET`  | `/api/records`          | pagina records por cursor y filtros                  |
+| `GET`  | `/api/wallet`           | snapshot completo para sincronización y exportación  |
 | `GET`  | `/api/wallet/backup`    | respaldo consistente, incluyendo historial archivado |
-| `POST` | `/api/records/import`   | hasta 200 records por transacción |
-| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente |
+| `POST` | `/api/records/import`   | hasta 200 records por transacción                    |
+| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente  |
 
 `GET /api/records` acepta `limit`, `cursor`, `from` y `to`; devuelve
 `{ items, nextCursor, hasMore }` dentro de `data`. El bootstrap genera las
