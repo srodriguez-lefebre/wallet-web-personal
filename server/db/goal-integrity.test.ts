@@ -191,7 +191,8 @@ test("date changes re-evaluate automatic associations while preserving manual li
 });
 
 test("fallback reservation conversion uses the destination account currency and ignores unowned accountAmount", async () => {
-  await pg.query("update accounts set currency='USD'");
+  await pg.query("update accounts set initial_balance=0");
+  await pg.query("update accounts set currency='USD',initial_balance=1000");
   await pg.query(
     "insert into exchange_rates (from_currency,to_currency,rate,date) values ('UYU','USD',0.025,'2026-06-01')",
   );
@@ -204,8 +205,8 @@ test("fallback reservation conversion uses the destination account currency and 
   });
   const db = createDb();
   const recordId = randomUUID();
-  const record = input({ accountId: undefined, paymentStatus: "needs_review" });
-  // Imported drafts may carry an amount without owning its account. The helper
+  const record = {...input({ accountId: undefined, paymentStatus: "needs_review" }),paymentStatus:"cleared" as const};
+  // Validated card-only movements may carry an amount without owning its account. The helper
   // must never interpret that value as the fallback account's currency amount.
   const prepared = await prepareRecordGoalWrites(
     recordId,
@@ -236,10 +237,11 @@ test("fallback reservation conversion uses the destination account currency and 
 });
 
 test("missing as-of conversion rejects rather than inventing an account amount", async () => {
-  await pg.query("update accounts set currency='USD'");
+  await pg.query("update accounts set initial_balance=0");
+  await pg.query("update accounts set currency='USD',initial_balance=1000");
   await expect(
-    createRecord(
-      input({ accountId: undefined, paymentStatus: "needs_review" }),
+    prepareRecordGoalWrites(
+      randomUUID(),{...input({ accountId: undefined, paymentStatus: "needs_review" }),paymentStatus:"cleared"},createDb(),
     ),
   ).rejects.toThrow();
 });
@@ -316,7 +318,8 @@ test("reversing already consumed reserved income rolls back the record change", 
 });
 
 test("disabled monetary flags do not require an unused currency conversion", async () => {
-  await pg.query("update accounts set currency='USD'");
+  await pg.query("update accounts set initial_balance=0");
+  await pg.query("update accounts set currency='USD',initial_balance=1000");
   await expect(
     createRecord(
       input({

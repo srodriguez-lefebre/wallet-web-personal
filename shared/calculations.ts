@@ -1159,15 +1159,21 @@ function calculateBudgetProgressFromRecords(
         budget,
         dataset.categories,
       ).reduce(
-        (total, record) =>
-          total +
-          toPrimaryCurrency(record.amount, record.exchangeRateToPrimary),
+        (total, record) => {
+          const amount=budget.goalId?record.goalAssociations.find(link=>link.goalId===budget.goalId)?.allocatedAmount??record.amount:record.amount;
+          if(record.currency===budget.currency) return total+amount;
+          if(budget.currency===dataset.settings.primaryCurrency) return total+toPrimaryCurrency(amount,record.exchangeRateToPrimary);
+          const account=dataset.accounts.find(account=>account.id===record.accountId);
+          if(account?.currency===budget.currency&&record.accountAmount!==undefined) return total+record.accountAmount*amount/record.amount;
+          const rate=findExchangeRate(dataset.exchangeRates,record.currency,budget.currency,record.occurredAt);
+          return total+(rate===null?Number.NaN:amount*rate);
+        },
         0,
       );
       const percentage = Math.min(999, (spent / budget.limitAmount) * 100);
       const remaining = budget.limitAmount - spent;
       const status =
-        percentage >= 100 ? "exceeded" : percentage >= 80 ? "warning" : "ok";
+        !Number.isFinite(spent) ? "warning" : percentage>=100 ? "exceeded" : percentage>=80 ? "warning" : "ok";
 
       return {
         budget,
@@ -1204,6 +1210,7 @@ function matchingBudgetRecords(
     if (budget.tagId && !record.tagIds.includes(budget.tagId)) {
       return false;
     }
+    if(budget.goalId&&!record.goalIds.includes(budget.goalId)) return false;
 
     if (budget.accountId && record.accountId !== budget.accountId) {
       return false;

@@ -730,11 +730,11 @@ export function AnalyticsView() {
                     </p>
                   </div>
                   <p className="font-semibold">
-                    {budget.percentage.toFixed(0)}%
+                    {Number.isFinite(budget.percentage)?`${budget.percentage.toFixed(0)}%`:"Falta cotización"}
                   </p>
                 </div>
                 <Progress
-                  value={budget.percentage}
+                  value={Number.isFinite(budget.percentage)?budget.percentage:0}
                   className="mt-3"
                   indicatorClassName={
                     budget.status === "exceeded"

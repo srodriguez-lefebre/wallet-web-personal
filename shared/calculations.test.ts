@@ -31,6 +31,18 @@ import {
 import { mockWalletData } from "./mock-data.js";
 
 describe("wallet calculations", () => {
+  it("measures each budget in its own currency and leaves missing conversions unresolved",()=>{
+    const record={...mockWalletData.records.find(record=>record.type==="expense")!,amount:10,currency:"USD" as const,exchangeRateToPrimary:40,paymentStatus:"cleared" as const,occurredAt:"2026-06-21T12:00:00Z"};
+    const budget={...mockWalletData.budgets[0],limitAmount:100,currency:"USD" as const,categoryId:undefined,tagId:undefined,accountId:undefined,goalId:undefined,isActive:true};
+    const dataset={...mockWalletData,records:[record],budgets:[budget],exchangeRates:[]};
+    expect(calculateBudgetProgress(dataset,"2026-06")[0].spent).toBe(10);
+    expect(calculateBudgetProgress({...dataset,budgets:[{...budget,currency:"UYU"}]},"2026-06")[0].spent).toBe(400);
+    const missing=calculateBudgetProgress({...dataset,budgets:[{...budget,currency:"EUR"}]},"2026-06")[0];
+    expect(Number.isNaN(missing.spent)).toBe(true);
+    const goalDataset={...dataset,records:[{...record,goalIds:["goal-budget"],goalAssociations:[{goalId:"goal-budget",assignmentSource:"manual" as const,useReserved:false,reserveIncome:false,allocatedAmount:2}]}],budgets:[{...budget,goalId:"goal-budget"}]};
+    expect(calculateBudgetProgress(goalDataset,"2026-06")[0].spent).toBe(2);
+    expect(calculateBudgetProgress({...goalDataset,budgets:[{...budget,goalId:"different-goal"}]},"2026-06")[0].spent).toBe(0);
+  });
   it("keeps unvalidated records out of bank balances, goals, budgets and reports", () => {
     const base={...mockWalletData,records:[],creditCardRecords:[],creditCardPayments:[],goalReservations:[],goalReservationMovements:[]};
     const dataset={...base,records:mockWalletData.records.map(record=>({...record,paymentStatus:"needs_review" as const}))};
