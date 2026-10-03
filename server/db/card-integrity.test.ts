@@ -26,6 +26,9 @@ import {
   updateCreditCardRecord,
   deleteCreditCardRecord,
   createRecord,
+  createRecordsBulk,
+  updateRecord,
+  deleteRecord,
 } from "./wallet-repository.js";
 import {
   calculateCreditCardStatementBalance,
@@ -498,4 +501,60 @@ test("a bank refund uses the account-to-primary quote instead of an invented 1:1
     currency: "UYU",
     exchangeRateToPrimary: 0.025,
   });
+});
+
+
+const linkedPurchaseInput = (paymentStatus: "cleared" | "cancelled" | "needs_review" = "cleared") => ({
+  type: "expense" as const, amount: 100, currency: "UYU" as const, accountId, accountAmount: 100,
+  creditCardId: cardId, categoryId, tagIds: [], paymentType: "credit" as const, paymentStatus,
+  exchangeRateToPrimary: 1, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1,
+  occurredAt: "2020-06-01T12:00:00.000Z",
+});
+
+test.each(["refund", "payment"] as const)("linked purchase mutations preserve %s dependencies", async dependency => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  const dataset = await getWalletDataset();
+  const original = dataset.creditCardRecords.find(row => row.walletRecordId === wallet.id)!;
+  const otherCardId = randomUUID();
+  await createDb().insert(creditCards).values({ ...card, id: otherCardId, creditLimit: "10000" });
+  if (dependency === "refund") await refund(original.id, 40);
+  else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(40));
+  for (const patch of [
+    { paymentStatus: "cancelled" as const }, { paymentStatus: "needs_review" as const },
+    { creditCardId: undefined }, { creditCardId: otherCardId }, { type: "income" as const },
+  ]) await expect(updateRecord(wallet.id, patch)).rejects.toThrow();
+  await expect(deleteRecord(wallet.id)).rejects.toThrow();
+  const after = await getWalletDataset();
+  expect(after.records.find(row => row.id === wallet.id)?.paymentStatus).toBe("cleared");
+  expect(after.creditCardRecords.find(row => row.id === original.id)?.creditCardId).toBe(cardId);
+});
+
+test("linked purchase edits enforce refund amount and currency constraints", async () => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  const original = (await getWalletDataset()).creditCardRecords.find(row => row.walletRecordId === wallet.id)!;
+  await refund(original.id, 60);
+  await expect(updateRecord(wallet.id, { amount: 50, amountInLimitCurrency: 50, accountAmount: 50 })).rejects.toThrow();
+  await expect(updateRecord(wallet.id, { currency: "USD", amount: 100, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1 })).rejects.toThrow();
+  await expect(updateRecord(wallet.id, { amount: 100, amountInLimitCurrency: 50, exchangeRateToLimitCurrency: 0.5 })).rejects.toThrow();
+  await updateRecord(wallet.id, { amount: 120, amountInLimitCurrency: 120, accountAmount: 120 });
+  expect((await getWalletDataset()).creditCardRecords.find(row => row.id === original.id)?.amount).toBe(120);
+});
+
+test.each(["cancelled", "needs_review"] as const)("%s creates no active linked card liability through single or bulk creation", async status => {
+  const single = await createRecord(linkedPurchaseInput(status));
+  const [bulk] = await createRecordsBulk([linkedPurchaseInput(status)]);
+  expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
+  await updateRecord(single.id, { paymentStatus: "cleared" });
+  await updateRecord(bulk.id, { paymentStatus: "cleared" });
+  expect((await getWalletDataset()).creditCardRecords.filter(row => row.kind === "purchase")).toHaveLength(2);
+});
+
+test("an unencumbered linked purchase can be cancelled, reviewed, and restored", async () => {
+  const wallet = await createRecord(linkedPurchaseInput());
+  await updateRecord(wallet.id, { paymentStatus: "cancelled" });
+  expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
+  await updateRecord(wallet.id, { paymentStatus: "needs_review" });
+  expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
+  await updateRecord(wallet.id, { paymentStatus: "cleared" });
+  expect((await getWalletDataset()).creditCardRecords).toHaveLength(1);
 });
