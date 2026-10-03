@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { createDebt, recordDebtPayment, updateRecord, deleteRecord, getWalletDataset, createRecord, generateDueRecurringDebts, upsertSettings } from "./wallet-repository.js";
+import { createDebt, recordDebtPayment, updateRecord, deleteRecord, getWalletDataset, createRecord, generateDueRecurringDebts, upsertSettings,updateAccount } from "./wallet-repository.js";
 import { calculateAccountBalances, calculateVisibleDebtSummary } from "../../shared/calculations.js";
 import { randomUUID } from "node:crypto";
 import { importWalletRecords } from "./record-import.js";
@@ -50,6 +50,16 @@ test("simultaneous payments cannot overpay or partially insert a financial recor
   expect(dataset.debts[0].pendingAmount).toBe(25);
   expect(dataset.records).toHaveLength(1);
 });
+
+test("reviewing a debt payment restores its pending balance until it is validated",async()=>{
+  const debt=await createDebt(debtInput);
+  const result=await recordDebtPayment(debt.id,payment);
+  await updateRecord(result!.record.id,{paymentStatus:"needs_review"});
+  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(200);
+  expect(calculateAccountBalances(await getWalletDataset()).find(item=>item.account.id===accountId)!.balance).toBe(5000);
+  await updateRecord(result!.record.id,{paymentStatus:"cleared"});
+  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(100);
+});
 test("cross currency transfer persists the actual amount received", async () => {
   const input = {type:"transfer" as const,amount:4000,currency:"UYU" as const,accountId,destinationAccountId:dollarAccount,destinationAmount:100,tagIds:[],paymentType:"transfer" as const,paymentStatus:"cleared" as const,exchangeRateToPrimary:1,occurredAt:payment.occurredAt};
   await createRecord(input);
@@ -62,6 +72,14 @@ test("primary currency cannot relabel frozen financial history",async()=>{
   const debt=await createDebt(debtInput); await recordDebtPayment(debt.id,payment);
   const dataset=await getWalletDataset();
   await expect(upsertSettings({...dataset.settings,primaryCurrency:"USD"})).rejects.toThrow("moneda principal");
+});
+
+test("account currencies cannot relabel bank history while an unused empty account can change",async()=>{
+  await expect(updateAccount(accountId,{currency:"USD"})).rejects.toThrow();
+  await updateAccount(dollarAccount,{currency:"UYU"});
+  await createRecord({type:"income",amount:100,currency:"UYU",accountId:dollarAccount,categoryId,tagIds:[],paymentType:"debit",paymentStatus:"cleared",exchangeRateToPrimary:1,occurredAt:payment.occurredAt});
+  await expect(updateAccount(dollarAccount,{currency:"USD"})).rejects.toThrow();
+  expect((await getWalletDataset()).accounts.find(account=>account.id===dollarAccount)!.currency).toBe("UYU");
 });
 test("unknown recurring amounts stay unknown and cycles do not precede rule start",async()=>{
   await fixture.pool.query("INSERT INTO recurring_debts(name,direction,currency,counterparty_name,category_id,day_of_month,is_active,started_at) VALUES('Test','payable','UYU','Test',$1,5,true,'2026-01-20')",[categoryId]);

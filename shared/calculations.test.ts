@@ -31,6 +31,17 @@ import {
 import { mockWalletData } from "./mock-data.js";
 
 describe("wallet calculations", () => {
+  it("keeps unvalidated records out of bank balances, goals, budgets and reports", () => {
+    const base={...mockWalletData,records:[],creditCardRecords:[],creditCardPayments:[],goalReservations:[],goalReservationMovements:[]};
+    const dataset={...base,records:mockWalletData.records.map(record=>({...record,paymentStatus:"needs_review" as const}))};
+    expect(calculateAccountBalances(dataset)).toEqual(calculateAccountBalances(base));
+    expect(calculateAccountBalanceAtDate(dataset,"acc-bank","2026-06-30")).toBe(calculateAccountBalanceAtDate(base,"acc-bank","2026-06-30"));
+    expect(calculateSummary(dataset,"2026-06")).toEqual(calculateSummary(base,"2026-06"));
+    expect(calculateCategoryExpenses(dataset,"2026-06")).toEqual(calculateCategoryExpenses(base,"2026-06"));
+    expect(calculateCategoryIncome(dataset,"2026-06")).toEqual(calculateCategoryIncome(base,"2026-06"));
+    expect(calculateGoalProgress(dataset)).toEqual(calculateGoalProgress(base));
+    expect(calculateBudgetProgress(dataset,"2026-06")).toEqual(calculateBudgetProgress(base,"2026-06"));
+  });
   it("calculates monthly income, expenses and cash flow without counting transfers", () => {
     const summary = calculateSummary(mockWalletData, "2026-06");
 

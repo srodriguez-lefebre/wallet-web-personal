@@ -32,6 +32,7 @@ import type {
   WalletRecord,
 } from "./types.js";
 import { findExchangeRate } from "./money.js";
+import { isFinancialRecord } from "./record-status.js";
 
 export function toPrimaryCurrency(amount: number, recordRate = 1) {
   return amount * recordRate;
@@ -146,7 +147,7 @@ export function calculateAccountBalances(
 ): AccountBalance[] {
   return dataset.accounts.map((account) => {
     const recordBalance = dataset.records.reduce((total, record) => {
-      if (record.paymentStatus === "cancelled") return total;
+      if (!isFinancialRecord(record)) return total;
 
       if (record.type === "income" && record.accountId === account.id) {
         return total + (record.accountAmount ?? record.amount);
@@ -280,7 +281,7 @@ function calculateAccountBalanceAtCutoff(
   if (!account) return 0;
 
   const recordBalance = dataset.records.reduce((total, record) => {
-    if (record.paymentStatus === "cancelled") return total;
+    if (!isFinancialRecord(record)) return total;
     if (isAfter(parseISO(record.occurredAt), cutoff)) return total;
 
     if (record.type === "income" && record.accountId === account.id) {
@@ -844,7 +845,7 @@ export function calculateSummary(
   month = monthKey(new Date()),
 ): AnalyticsSummary {
   const records = recordsForMonth(dataset.records, month).filter(
-    (record) => record.paymentStatus !== "cancelled",
+    (record) => isFinancialRecord(record),
   );
 
   const now = new Date();
@@ -866,7 +867,7 @@ export function calculateSummaryForDateRange(
   range: DateRange,
 ): AnalyticsSummary {
   const records = recordsForDateRange(dataset.records, range).filter(
-    (record) => record.paymentStatus !== "cancelled",
+    (record) => isFinancialRecord(record),
   );
   const from = parseISO(`${range.from}T12:00:00.000Z`);
   const to = parseISO(`${range.to}T12:00:00.000Z`);
@@ -924,7 +925,7 @@ export function calculateCategoryExpenses(
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
     (record) =>
-      record.type === "expense" && record.paymentStatus !== "cancelled",
+      record.type === "expense" && isFinancialRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -937,7 +938,7 @@ export function calculateCategoryExpensesForDateRange(
 ) {
   const records = recordsForDateRange(dataset.records, range).filter(
     (record) =>
-      record.type === "expense" && record.paymentStatus !== "cancelled",
+      record.type === "expense" && isFinancialRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -950,7 +951,7 @@ export function calculateCategoryIncome(
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
     (record) =>
-      record.type === "income" && record.paymentStatus !== "cancelled",
+      record.type === "income" && isFinancialRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -963,7 +964,7 @@ export function calculateCategoryIncomeForDateRange(
 ) {
   const records = recordsForDateRange(dataset.records, range).filter(
     (record) =>
-      record.type === "income" && record.paymentStatus !== "cancelled",
+      record.type === "income" && isFinancialRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -1049,7 +1050,7 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
       .filter(
         (record) =>
           (record.type === "expense" || record.type === "income") &&
-          record.paymentStatus !== "cancelled" &&
+          isFinancialRecord(record) &&
           (record.goalIds ?? []).includes(goal.id),
       )
       .reduce(
@@ -1090,7 +1091,7 @@ export function buildExpenseComparisonSeries(
   const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
     dateKeysForRange(range).map((date) =>
       recordsForDateRange(dataset.records, { from: range.from, to: date })
-        .filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled")
+        .filter((record) => record.type === "expense" && isFinancialRecord(record))
         .reduce((total, record) => total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary), 0),
     ),
   );
@@ -1110,7 +1111,7 @@ export function buildExpenseSequenceComparisonSeries(
   const [twoPeriodsAgo, previous, current] = ranges.map((range) => {
     let cumulative = 0;
     return recordsForDateRange(dataset.records, range)
-      .filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled")
+      .filter((record) => record.type === "expense" && isFinancialRecord(record))
       .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
       .map((record) => {
         cumulative += toPrimaryCurrency(record.amount, record.exchangeRateToPrimary);
@@ -1184,7 +1185,7 @@ function matchingBudgetRecords(
   categories: Category[],
 ) {
   return records.filter((record) => {
-    if (record.type !== "expense" || record.paymentStatus === "cancelled") {
+    if (record.type !== "expense" || !isFinancialRecord(record)) {
       return false;
     }
 

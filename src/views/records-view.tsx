@@ -241,6 +241,7 @@ export function RecordsView() {
   const [amount, setAmount] = useState("");
   const [accountAmount, setAccountAmount] = useState("");
   const [destinationAmount,setDestinationAmount] = useState("");
+  const conversionBasis=useRef<{source?:{amount:string;converted:string};destination?:{amount:string;converted:string}}>({});
   const [primaryRate,setPrimaryRate] = useState("");
   const [moneyError,setMoneyError] = useState("");
   const recordSubmission = useRef(false);
@@ -324,6 +325,7 @@ export function RecordsView() {
       );
       setCategoryId("");
       setAmount("");
+      conversionBasis.current={};
       setAccountAmount("");
       setDestinationAmount(""); setPrimaryRate(""); setMoneyError("");
       setNote("");
@@ -457,6 +459,7 @@ export function RecordsView() {
   ].filter(Boolean);
 
   function resetForm(nextType: RecordType = "expense") {
+    conversionBasis.current={};
     const nextAccountId = defaultAccountId(dataset);
     setEditingId(null);
     setType(nextType);
@@ -515,6 +518,10 @@ export function RecordsView() {
     setAmount(String(record.amount));
     setAccountAmount(String(record.accountAmount ?? record.amount));
     setDestinationAmount(record.destinationAmount === undefined ? "" : String(record.destinationAmount));
+    conversionBasis.current={
+      source:record.accountAmount===undefined?undefined:{amount:String(record.amount),converted:String(record.accountAmount)},
+      destination:record.destinationAmount===undefined?undefined:{amount:String(record.amount),converted:String(record.destinationAmount)},
+    };
     setPrimaryRate(String(record.exchangeRateToPrimary)); setMoneyError("");
     setNote(record.note ?? "");
     setTagId(record.tagIds[0] ?? "");
@@ -532,6 +539,15 @@ export function RecordsView() {
     resetForm(type);
   }
 
+  function changeCurrency(next:CurrencyCode) {
+    if(next===currency) return;
+    setCurrency(next);
+    conversionBasis.current={};
+    setPrimaryRate("");setAccountAmount("");setDestinationAmount("");
+    const card=dataset.creditCards.find(item=>item.id===creditCardId);
+    setExchangeRateToLimitCurrency(card?String(findExchangeRate(dataset.exchangeRates,next,card.limitCurrency)??""):"1");
+  }
+
   function buildRecord(): Omit<WalletRecord, "id"> | null {
     const numericAmount = Number(amount);
     if (!numericAmount || numericAmount <= 0) return null;
@@ -539,7 +555,7 @@ export function RecordsView() {
 
     const account = dataset.accounts.find((item) => item.id === accountId);
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
-    const limitRate = Number(exchangeRateToLimitCurrency) || 1;
+    const limitRate = Number(exchangeRateToLimitCurrency);
     const date=dateTimeLocalToIso(occurredAtLocal);
     const frozenPrimaryRate=Number(primaryRate)||findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,date);
     const sourceRate=account?findExchangeRate(dataset.exchangeRates,currency,account.currency,date):1;
@@ -549,7 +565,7 @@ export function RecordsView() {
     const unchangedAmount=original?.amount===numericAmount&&original.currency===currency;
     const sourceAmount=account?recordAccountAmount(numericAmount,currency,account.currency,accountAmount,sourceRate,unchangedAmount&&original?.accountId===accountId):undefined;
     const targetAmount=type==="transfer"&&destination?recordAccountAmount(numericAmount,currency,destination.currency,destinationAmount,destinationRate,unchangedAmount&&original?.destinationAccountId===destinationAccountId):undefined;
-    if(!frozenPrimaryRate || sourceAmount===null || targetAmount===null){setMoneyError("Ingresá los importes convertidos y una cotización válida para las monedas elegidas.");return null;}
+    if(!frozenPrimaryRate || sourceAmount===null || targetAmount===null || (card&&!(limitRate>0))){setMoneyError("Ingresá los importes convertidos y una cotización válida para las monedas elegidas.");return null;}
 
     return {
       type,
@@ -662,15 +678,15 @@ export function RecordsView() {
             {moneyError && <p role="alert" className="text-sm text-red-500">{moneyError}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="space-y-1 text-sm">Moneda del movimiento
-                <select value={currency} onChange={event=>{setCurrency(event.target.value as CurrencyCode);setPrimaryRate("");setAccountAmount("");setDestinationAmount("");}} className={fieldClassName}>
+                <select value={currency} onChange={event=>changeCurrency(event.target.value as CurrencyCode)} className={fieldClassName}>
                   {["UYU","USD","EUR","BRL","ARS"].map(value=><option key={value}>{value}</option>)}
                 </select>
               </label>
               <label className="space-y-1 text-sm">Cotización a {dataset.settings.primaryCurrency}
                 <input value={primaryRate} onChange={event=>setPrimaryRate(event.target.value)} placeholder={String(findExchangeRate(dataset.exchangeRates,currency,dataset.settings.primaryCurrency,dateTimeLocalToIso(occurredAtLocal))??"Ingresá cotización")} className={fieldClassName} inputMode="decimal" />
               </label>
-              {accountId && dataset.accounts.find(item=>item.id===accountId)?.currency !== currency && <label className="space-y-1 text-sm">Importe en cuenta ({dataset.accounts.find(item=>item.id===accountId)?.currency})<input value={accountAmount} onChange={event=>setAccountAmount(limitDecimalPlaces(event.target.value))} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
-              {type==="transfer" && <label className="space-y-1 text-sm">Importe recibido ({dataset.accounts.find(item=>item.id===destinationAccountId)?.currency})<input value={destinationAmount} onChange={event=>setDestinationAmount(limitDecimalPlaces(event.target.value))} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {accountId && dataset.accounts.find(item=>item.id===accountId)?.currency !== currency && <label className="space-y-1 text-sm">Importe en cuenta ({dataset.accounts.find(item=>item.id===accountId)?.currency})<input value={accountAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setAccountAmount(next);conversionBasis.current.source=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+              {type==="transfer" && <label className="space-y-1 text-sm">Importe recibido ({dataset.accounts.find(item=>item.id===destinationAccountId)?.currency})<input value={destinationAmount} onChange={event=>{const next=limitDecimalPlaces(event.target.value);setDestinationAmount(next);conversionBasis.current.destination=Number(amount)>0&&Number(next)>0?{amount,converted:next}:undefined;}} className={fieldClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
               {creditCardId && <label className="space-y-1 text-sm">Cotización a moneda del límite<input value={exchangeRateToLimitCurrency} onChange={event=>setExchangeRateToLimitCurrency(event.target.value)} className={fieldClassName} inputMode="decimal" /></label>}
             </div>
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
@@ -705,8 +721,10 @@ export function RecordsView() {
                   value={amount}
                   onChange={(event) => {
                     const next=limitDecimalPlaces(event.target.value);
-                    setAccountAmount(scaleConvertedAmount(accountAmount,amount,next));
-                    setDestinationAmount(scaleConvertedAmount(destinationAmount,amount,next));
+                    const source=conversionBasis.current.source;
+                    const destination=conversionBasis.current.destination;
+                    if(source)setAccountAmount(scaleConvertedAmount(source.converted,source.amount,next));
+                    if(destination)setDestinationAmount(scaleConvertedAmount(destination.converted,destination.amount,next));
                     setAmount(next);
                   }}
                   className={fieldClassName}
@@ -734,8 +752,8 @@ export function RecordsView() {
                 <select
                   value={accountId}
                   onChange={(event) => {
-                    const nextId=event.target.value;setAccountId(nextId);setAccountAmount("");
-                    if(!editingId&&!creditCardId){const next=dataset.accounts.find(item=>item.id===nextId);if(next)setCurrency(next.currency);setPrimaryRate("");}
+                    const nextId=event.target.value;setAccountId(nextId);setAccountAmount("");conversionBasis.current.source=undefined;
+                    if(!editingId&&!creditCardId){const next=dataset.accounts.find(item=>item.id===nextId);if(next)changeCurrency(next.currency);setPrimaryRate("");}
                   }}
                   className={fieldClassName}
                 >
@@ -755,7 +773,7 @@ export function RecordsView() {
                   </span>
                   <select
                     value={destinationAccountId}
-                    onChange={(event) => {setDestinationAccountId(event.target.value);setDestinationAmount("");}}
+                    onChange={(event) => {setDestinationAccountId(event.target.value);setDestinationAmount("");conversionBasis.current.destination=undefined;}}
                     className={fieldClassName}
                   >
                     {dataset.accounts
@@ -946,7 +964,7 @@ export function RecordsView() {
                       );
                       setCreditCardId(nextCardId);
                       setPaymentType("credit");
-                      setCurrency(card?.limitCurrency ?? "UYU");
+                      changeCurrency(card?.limitCurrency ?? "UYU");
                       setExchangeRateToLimitCurrency("1");
                       return;
                     }
@@ -958,7 +976,7 @@ export function RecordsView() {
                     const account = dataset.accounts.find(
                       (item) => item.id === nextAccountId,
                     );
-                    if (account) setCurrency(account.currency);
+                    if (account) changeCurrency(account.currency);
                   }}
                   className={fieldClassName}
                 >

@@ -80,6 +80,7 @@ import {
 import { conflictError, validationError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
 import { findExchangeRate } from "../../shared/money.js";
+import { isFinancialRecord } from "../../shared/record-status.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -1618,7 +1619,7 @@ async function buildRecordReservationMovements(
   associations: RecordGoalAssociation[],
   db: Db,
 ) {
-  if (input.paymentStatus === "cancelled" || input.type === "transfer" || associations.length === 0) return [];
+  if (!isFinancialRecord(input) || input.type === "transfer" || associations.length === 0) return [];
   const goalRows = await db.select().from(goals).where(inArray(goals.id, associations.map((item) => item.goalId)));
   const accountRows = await db.select().from(accounts);
   const rateRows = await db.select().from(exchangeRates).where(sql`${exchangeRates.date} <= ${new Date(input.occurredAt).toISOString()}`).orderBy(desc(exchangeRates.date));
