@@ -8,7 +8,7 @@ import {
   buildBudgetPlan,
   conflictingCategoryBudgets,
 } from "@shared/budget-planning";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney, monthKey } from "@shared/calculations";
 import { budgetSchema } from "@shared/schemas";
 import type { BudgetPlan, BudgetProposal } from "@shared/budget-planning";
 import type { WalletDataset } from "@shared/types";
@@ -43,6 +43,7 @@ export function BudgetAssistant({
   const [outcomes, setOutcomes] = useState<Record<string, Outcome>>({});
   const [error, setError] = useState<string | null>(null);
   const { toast, runAction } = useActionToast();
+  const currentMonth = monthKey(new Date());
 
   useEffect(() => {
     active.current = true;
@@ -79,6 +80,7 @@ export function BudgetAssistant({
           targetMonth,
           margin.trim() ? Number(margin) : Number.NaN,
           history.budgets,
+          new Date(`${currentMonth}-15T12:00:00`),
         ),
         planningError: null,
       };
@@ -91,7 +93,7 @@ export function BudgetAssistant({
             : "Could not calculate proposals.",
       };
     }
-  }, [history, targetMonth, margin]);
+  }, [history, targetMonth, margin, currentMonth]);
   function choiceFor(proposal: BudgetProposal): Choice {
     return (
       choices[proposal.categoryId] ?? {
@@ -248,7 +250,8 @@ export function BudgetAssistant({
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         New monthly budgets apply every month. The target month only selects the
-        three earlier calendar months used for the estimate.
+        three earlier calendar months used for the estimate. Choose the current
+        month or an earlier month to use three complete months.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm font-medium">
@@ -257,6 +260,7 @@ export function BudgetAssistant({
             className={field}
             aria-label="Target month"
             type="month"
+            max={currentMonth}
             value={targetMonth}
             disabled={busy}
             onChange={(event) => {
@@ -303,8 +307,9 @@ export function BudgetAssistant({
               Uses report account preferences and frozen historical conversions.
               Includes cleared and pending expenses; excludes cancelled and
               review drafts. Subcategories roll into their main category. Linked
-              card entries are not added again. Uncategorized expenses do not
-              generate budgets.
+              card entries are not added again. Direct card purchases without a
+              wallet record are excluded. Uncategorized expenses do not generate
+              budgets.
             </p>
             <p className="mt-1">
               Scope:{" "}

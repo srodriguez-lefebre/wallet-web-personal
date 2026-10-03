@@ -61,9 +61,14 @@ export function buildBudgetPlan(
   targetMonth: string,
   headroomPercent: number,
   budgets = dataset.budgets,
+  today = new Date(),
 ): BudgetPlan {
   if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(targetMonth))
     throw new Error("Choose a valid target month.");
+  if (targetMonth > monthKey(today))
+    throw new Error(
+      "Choose the current month or an earlier month so all source months are complete.",
+    );
   if (
     !Number.isFinite(headroomPercent) ||
     headroomPercent < 0 ||

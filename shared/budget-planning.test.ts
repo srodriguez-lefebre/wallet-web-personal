@@ -46,6 +46,52 @@ function expense(overrides: Partial<WalletRecord> = {}): WalletRecord {
 }
 
 describe("history budget planning", () => {
+  it("rejects future target months so every source month is complete at the planning date", () => {
+    const dataset = fixture();
+    dataset.records = [expense({ occurredAt: "2026-07-03T12:00:00Z" })];
+    const today = new Date(2026, 9, 3, 12);
+    expect(() => buildBudgetPlan(dataset, "2026-11", 10, [], today)).toThrow(
+      /complete|earlier/i,
+    );
+    expect(
+      buildBudgetPlan(dataset, "2026-10", 10, [], today).sourceMonths,
+    ).toEqual(["2026-07", "2026-08", "2026-09"]);
+    expect(
+      buildBudgetPlan(dataset, "2026-09", 10, [], today).sourceMonths,
+    ).toEqual(["2026-06", "2026-07", "2026-08"]);
+  });
+
+  it("keeps direct unlinked card purchases outside the wallet-record budget domain", () => {
+    const dataset = fixture();
+    dataset.records = [expense({ amount: 30 })];
+    const purchase = {
+      id: "linked-card-entry",
+      creditCardId: "card",
+      walletRecordId: "expense",
+      kind: "purchase" as const,
+      amount: 30,
+      currency: "UYU" as const,
+      amountInLimitCurrency: 30,
+      exchangeRateToLimitCurrency: 1,
+      categoryId: food,
+      accountImpactAtCreation: false,
+      occurredAt: "2026-01-10T12:00:00Z",
+    };
+    dataset.creditCardRecords = [
+      purchase,
+      {
+        ...purchase,
+        id: "direct-card-entry",
+        walletRecordId: undefined,
+        amount: 3000,
+        amountInLimitCurrency: 3000,
+      },
+    ];
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]).toMatchObject({
+      total: 30,
+      limitAmount: 10,
+    });
+  });
   it("uses the three full calendar months before the target including zero-spend months", () => {
     const dataset = fixture();
     dataset.records = [

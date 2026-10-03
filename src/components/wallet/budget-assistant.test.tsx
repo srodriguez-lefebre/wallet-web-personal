@@ -67,6 +67,8 @@ async function save(label = "Create selected budgets") {
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal("window", { setTimeout, clearTimeout });
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 9, 3, 12));
   writes = [];
   reads = 0;
   failRead = false;
@@ -96,6 +98,7 @@ beforeEach(() => {
 afterEach(async () => {
   if (tree) await act(async () => tree!.unmount());
   tree = undefined;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -290,4 +293,19 @@ test("changing primary currency before save requires reloading proposals and cau
   await save();
   expect(writes).toHaveLength(0);
   expect(text()).toContain("Primary currency changed");
+});
+
+test("caps the target month at the current month and explains excluded direct card activity", async () => {
+  await mount();
+  const month = tree!.root.findByProps({ "aria-label": "Target month" });
+  expect(month.props.max).toBe("2026-10");
+  expect(text()).toContain(
+    "Direct card purchases without a wallet record are excluded",
+  );
+  await act(async () => month.props.onChange({ target: { value: "2026-11" } }));
+  expect(
+    tree!.root.findAllByProps({ "aria-label": "Limit for Food" }),
+  ).toHaveLength(0);
+  expect(text()).toContain("complete");
+  expect(button("Create selected budgets").props.disabled).toBe(true);
 });
