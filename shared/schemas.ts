@@ -93,6 +93,11 @@ export const recordSchema = z
     debtId: uuidSchema.optional(),
   })
   .superRefine((value, ctx) => {
+    for (const [index, association] of value.goalAssociations.entries()) {
+      if (association.allocatedAmount !== undefined && association.allocatedAmount > value.amount) {
+        ctx.addIssue({ code: "custom", path: ["goalAssociations", index, "allocatedAmount"], message: "Goal allocation cannot exceed the record amount" });
+      }
+    }
     if (value.type !== "transfer") {
       if (
         !value.accountId &&

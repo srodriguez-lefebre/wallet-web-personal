@@ -417,6 +417,7 @@ export interface AccountBalance {
 
 export interface GoalProgress {
   goal: Goal;
+  hasMissingExchangeRate: boolean;
   reserved: number;
   spent: number;
   committed: number;

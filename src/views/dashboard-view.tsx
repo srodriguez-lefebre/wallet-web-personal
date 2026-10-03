@@ -414,20 +414,20 @@ export function DashboardView() {
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {goalStatusLabels[item.goal.status]} - Reserved{" "}
-                              {formatMoney(item.reserved, item.goal.currency)}
+                              {item.hasMissingExchangeRate ? "Falta cotización" : formatMoney(item.reserved, item.goal.currency)}
                             </p>
                           </div>
                         </div>
                         <div className="shrink-0 text-right">
                           <p className="font-semibold">
-                            {formatMoney(item.remaining, item.goal.currency)}
+                            {item.hasMissingExchangeRate ? "—" : formatMoney(item.remaining, item.goal.currency)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             remaining
                           </p>
                         </div>
                       </div>
-                      <div
+                      {!item.hasMissingExchangeRate && <div
                         className="mt-3 flex h-3 w-full overflow-hidden rounded-full bg-muted"
                         aria-label={`${item.percentage.toFixed(1)}% committed`}
                       >
@@ -453,7 +453,7 @@ export function DashboardView() {
                             )}%`,
                           }}
                         />
-                      </div>
+                      </div>}
                     </div>
                   ))}
                 </div>

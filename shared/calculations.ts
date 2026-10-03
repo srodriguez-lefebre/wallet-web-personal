@@ -1011,15 +1011,22 @@ export function isCategoryOrDescendant(
 
 export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
   return dataset.goals.map((goal) => {
-    const convert = (amount: number, currency: CurrencyCode, recordRate?: number) => {
-      if (currency === goal.currency) return amount;
-      const primary = dataset.settings.primaryCurrency;
-      const toPrimary = currency === primary
-        ? amount
-        : amount * (recordRate ?? dataset.exchangeRates.find((rate) => rate.fromCurrency === currency && rate.toCurrency === primary)?.rate ?? 1);
-      if (goal.currency === primary) return toPrimary;
-      const goalToPrimary = dataset.exchangeRates.find((rate) => rate.fromCurrency === goal.currency && rate.toCurrency === primary)?.rate ?? 1;
-      return toPrimary / goalToPrimary;
+    let hasMissingExchangeRate = false;
+    const convert = (amount: number, currency: CurrencyCode, record?: WalletRecord) => {
+      if (amount === 0 || currency === goal.currency) return amount;
+      if (record) {
+        const account = dataset.accounts.find((item) => item.id === record.accountId);
+        if (account?.currency === goal.currency && record.accountAmount !== undefined) {
+          return record.accountAmount * amount / record.amount;
+        }
+        if (goal.currency === dataset.settings.primaryCurrency) {
+          return amount * record.exchangeRateToPrimary;
+        }
+      }
+      const rate = findExchangeRate(dataset.exchangeRates, currency, goal.currency, record?.occurredAt);
+      if (rate !== null) return amount * rate;
+      hasMissingExchangeRate = true;
+      return Number.NaN;
     };
     const reserved = dataset.goalReservations
       .filter((reservation) => reservation.goalId === goal.id)
@@ -1039,7 +1046,7 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
           );
           const amount = association?.allocatedAmount ?? record.amount;
           return total + (record.type === "expense" ? 1 : -1) *
-            convert(amount, record.currency, record.exchangeRateToPrimary);
+            convert(amount, record.currency, record);
         },
         0,
       );
@@ -1052,6 +1059,7 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
 
     return {
       goal,
+      hasMissingExchangeRate,
       reserved,
       spent,
       committed,

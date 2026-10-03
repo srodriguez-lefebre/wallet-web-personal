@@ -101,6 +101,7 @@ export function GoalDetailView() {
               </div>
             </CardHeader>
             <CardContent>
+              {goalProgress.hasMissingExchangeRate ? <p className="text-sm text-muted-foreground">Falta una cotización para calcular el progreso.</p> : <>
               <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
                 <span style={{ width: `${Math.min(100, (goalProgress.spent / goalProgress.goal.targetAmount) * 100)}%`, backgroundColor: goalProgress.goal.color }} />
                 <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (goalProgress.spent / goalProgress.goal.targetAmount) * 100), (goalProgress.reserved / goalProgress.goal.targetAmount) * 100)}%` }} />
@@ -131,6 +132,7 @@ export function GoalDetailView() {
                   </p>
                 </div>
               </div>
+              </>}
               <div className="mt-4 flex flex-wrap gap-2">
                 {goalProgress.overTarget > 0 ? <Badge variant="warning">Excedido {formatMoney(goalProgress.overTarget, goalProgress.goal.currency)}</Badge> : null}
                 {goalProgress.goal.deadline ? (
