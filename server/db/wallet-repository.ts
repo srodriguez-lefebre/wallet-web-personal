@@ -21,6 +21,7 @@ import {
   merchantAliases,
   ingestionEvents,
   records,
+  recordTemplates,
   recordGoals,
   recordTags,
   recurringDebts,
@@ -48,6 +49,7 @@ import type {
   Tag,
   WalletDataset,
   WalletRecord,
+  RecordTemplate,
   WalletSettings,
 } from "../../shared/types.js";
 import {
@@ -60,6 +62,9 @@ import {
   goalSchema,
   investmentSchema,
   recordSchema,
+  recordTemplateSchema,
+  recordTemplatePatchSchema,
+  type RecordTemplatePatch,
   recurringDebtSchema,
   settingsSchema,
   tagSchema,
@@ -78,7 +83,7 @@ import {
   type InstallmentPlanPatch,
   type TagPatch,
 } from "../../shared/schemas.js";
-import { conflictError, validationError } from "../api/errors.js";
+import { conflictError, validationError, referenceNotFoundError, translateDatabaseError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
 import { findExchangeRate } from "../../shared/money.js";
 import { isFinancialRecord } from "../../shared/record-status.js";
@@ -188,6 +193,72 @@ function mapTag(row: typeof tags.$inferSelect): Tag {
     color: row.color,
     isActive: row.isActive,
   };
+}
+
+function mapRecordTemplate(row: typeof recordTemplates.$inferSelect): RecordTemplate {
+  return { id: row.id, name: row.name, type: row.type, amount: asNumber(row.amount),
+    currency: row.currency as RecordTemplate["currency"], paymentType: row.paymentType,
+    accountId: optional(row.accountId), creditCardId: optional(row.creditCardId),
+    destinationAccountId: optional(row.destinationAccountId), categoryId: optional(row.categoryId),
+    tagId: optional(row.tagId), counterpartyName: optional(row.counterpartyName), note: optional(row.note) };
+}
+
+/** Validate the prospective row inside its mutation statement, including untouched references on patches. */
+function templateReferenceConditions(values: Partial<RecordTemplate> | RecordTemplatePatch, useCurrent = false) {
+  const value = (key: "accountId" | "destinationAccountId" | "creditCardId" | "categoryId" | "tagId") =>
+    hasOwn(values, key) ? sql`${values[key] ?? null}::uuid` : useCurrent ? sql`${recordTemplates[key]}` : sql`NULL::uuid`;
+  return and(
+    ...(["accountId", "destinationAccountId"] as const).map(key => sql`(${value(key)} IS NULL OR EXISTS (SELECT 1 FROM ${accounts} WHERE ${accounts.id} = ${value(key)} AND ${accounts.isActive} AND ${accounts.deletedAt} IS NULL))`),
+    sql`(${value("creditCardId")} IS NULL OR EXISTS (SELECT 1 FROM ${creditCards} WHERE ${creditCards.id} = ${value("creditCardId")} AND ${creditCards.isActive}))`,
+    sql`(${value("categoryId")} IS NULL OR EXISTS (SELECT 1 FROM ${categories} WHERE ${categories.id} = ${value("categoryId")} AND ${categories.deletedAt} IS NULL))`,
+    sql`(${value("tagId")} IS NULL OR EXISTS (SELECT 1 FROM ${tags} WHERE ${tags.id} = ${value("tagId")} AND ${tags.isActive}))`,
+  )!;
+}
+
+export async function listRecordTemplates(db: Db = createDb()) {
+  return (await db.select().from(recordTemplates).orderBy(recordTemplates.name,recordTemplates.id)).map(mapRecordTemplate);
+}
+
+async function saveRecordTemplate<T>(write:PromiseLike<T>):Promise<T> {
+  try { return await write; }
+  catch(error) {
+    if(translateDatabaseError(error)?.status === 409) throw conflictError("A template with this name already exists");
+    throw error;
+  }
+}
+
+export async function createRecordTemplate(value: Omit<RecordTemplate,"id">, db: Db = createDb()) {
+  const input = recordTemplateSchema.parse(value);
+  const id = randomUUID();
+  const [, result] = await saveRecordTemplate(db.batch([
+    // A separate statement obtains the lock before the insertion's READ COMMITTED snapshot.
+    db.execute(sql`SELECT pg_advisory_xact_lock(1791000018)`),
+    db.execute(sql`INSERT INTO ${recordTemplates} (id,name,type,amount,currency,account_id,credit_card_id,destination_account_id,category_id,tag_id,counterparty_name,note,payment_type)
+      SELECT ${id}::uuid,${input.name},${input.type}::record_type,${decimal(input.amount)}::numeric,${input.currency},${input.accountId ?? null}::uuid,${input.creditCardId ?? null}::uuid,${input.destinationAccountId ?? null}::uuid,${input.categoryId ?? null}::uuid,${input.tagId ?? null}::uuid,${input.counterpartyName ?? null},${input.note ?? null},${input.paymentType}::payment_type
+      WHERE (SELECT count(*) FROM ${recordTemplates}) < 100 AND ${templateReferenceConditions(input)} RETURNING id`),
+  ]));
+  if (!result.rows.length) {
+    const [{count}] = await db.select({count:sql<number>`count(*)::int`}).from(recordTemplates);
+    if (count >= 100) throw conflictError("The template library is limited to 100 templates");
+    throw referenceNotFoundError("Choose active references for this template");
+  }
+  const [row] = await db.select().from(recordTemplates).where(eq(recordTemplates.id,id));
+  return mapRecordTemplate(row);
+}
+
+export async function updateRecordTemplate(id: string, value: RecordTemplatePatch, db: Db = createDb()) {
+  const input = recordTemplatePatchSchema.parse(value);
+  const {amount,...fields} = input;
+  const [row] = await saveRecordTemplate(db.update(recordTemplates).set({...fields, ...(amount === undefined ? {} : {amount:decimal(amount)})})
+    .where(and(eq(recordTemplates.id,id),templateReferenceConditions(input,true))).returning());
+  if (row) return mapRecordTemplate(row);
+  const [existing] = await db.select({id:recordTemplates.id}).from(recordTemplates).where(eq(recordTemplates.id,id));
+  if (existing) throw referenceNotFoundError("Choose active references for this template");
+  return null;
+}
+
+export async function deleteRecordTemplate(id: string, db: Db = createDb()) {
+  return Boolean((await db.delete(recordTemplates).where(eq(recordTemplates.id,id)).returning({id:recordTemplates.id})).length);
 }
 
 function mapRecord(
@@ -545,6 +616,7 @@ export async function getWalletDataset(
     merchantRows,
     merchantAliasRows,
     ingestionRows,
+    templateRows,
   ] = await db.batch([
     db.execute(sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`),
     db.select().from(settings).limit(1),
@@ -594,6 +666,7 @@ export async function getWalletDataset(
     db.select().from(merchants).where(options.includeArchived ? undefined : sql`false`),
     db.select().from(merchantAliases).where(options.includeArchived ? undefined : sql`false`),
     db.select().from(ingestionEvents).where(options.includeArchived ? undefined : sql`false`),
+    db.select().from(recordTemplates).orderBy(recordTemplates.name,recordTemplates.id),
   ]);
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
@@ -608,6 +681,7 @@ export async function getWalletDataset(
   };
 
   return {
+    recordTemplates: templateRows.map(mapRecordTemplate),
     ...(options.includeArchived ? {
       merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,isActive:row.isActive},row)),
       merchantAliases: merchantAliasRows.map(row=>withMetadata({id:row.id,merchantId:row.merchantId,alias:row.alias,normalizedAlias:row.normalizedAlias},row)),

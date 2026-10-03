@@ -67,6 +67,21 @@ export const tagSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const recordTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  type: recordTypeSchema,
+  amount: z.number().finite().positive(),
+  currency: currencySchema,
+  accountId: uuidSchema.optional(),
+  creditCardId: uuidSchema.optional(),
+  destinationAccountId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+  tagId: uuidSchema.optional(),
+  counterpartyName: z.string().optional(),
+  note: z.string().optional(),
+  paymentType: paymentTypeSchema,
+}).strict();
+
 export const recordSchema = z
   .object({
     type: recordTypeSchema,
@@ -422,6 +437,22 @@ function nonEmptyPatch<T extends z.ZodRawShape>(shape: T) {
   });
 }
 
+export const recordTemplatePatchSchema = nonEmptyPatch({
+  name: recordTemplateSchema.shape.name.optional(),
+  type: recordTypeSchema.optional(),
+  amount: recordTemplateSchema.shape.amount.optional(),
+  currency: currencySchema.optional(),
+  accountId: uuidSchema.nullable().optional(),
+  creditCardId: uuidSchema.nullable().optional(),
+  destinationAccountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.nullable().optional(),
+  tagId: uuidSchema.nullable().optional(),
+  counterpartyName: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  paymentType: paymentTypeSchema.optional(),
+});
+export type RecordTemplatePatch = z.infer<typeof recordTemplatePatchSchema>;
+
 export const accountPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
   type: accountSchema.shape.type.optional(),
@@ -625,6 +656,7 @@ export const exchangeRateResponseSchema = z.object({ ...id,fromCurrency:currency
 export const paymentAllocationResponseSchema = z.object({ ...id,paymentId:uuidSchema,creditCardRecordId:uuidSchema,amount:z.number().nonnegative(),amountInLimitCurrency:z.number().nonnegative() });
 export const goalResponseSchema = goalSchema.safeExtend({...id,tagIds:z.array(uuidSchema).default([])});
 export const walletDatasetSchema = z.object({
+  recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
   settings:settingsSchema,
   accounts:z.array(accountSchema.extend(id)),categories:z.array(categorySchema.extend(id)),tags:z.array(tagSchema.extend(id)),records:z.array(walletRecordResponseSchema),
   creditCards:z.array(creditCardSchema.extend(id)),creditCardRecords:z.array(cardRecordResponseSchema),creditCardStatements:z.array(cardStatementResponseSchema),creditCardPayments:z.array(cardPaymentResponseSchema),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema),
@@ -634,6 +666,7 @@ export const walletDatasetSchema = z.object({
 const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
 const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
 export const walletBackupSchema = walletDatasetSchema.extend({
+  recordTemplates: z.array(recordTemplateSchema.extend({...id,...backupMetadata})).max(100).optional().default([]),
   ingestionEvents:z.array(z.object({...id,idempotencyKey:z.string().min(1),source:z.string(),status:z.string(),action:z.string().optional(),fingerprint:z.string().optional(),targetKey:z.string().optional(),merchantNormalized:z.string().optional(),amount:z.number().nonnegative().optional(),currency:currencySchema.optional(),occurredAt:z.string().datetime().optional(),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),completedAt:z.string().datetime().optional(),createdAt:z.string().datetime(),updatedAt:z.string().datetime()})).optional(),
   merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),isActive:z.boolean()})).optional(),
   merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
@@ -660,6 +693,12 @@ export const walletBackupSchema = walletDatasetSchema.extend({
   const reference=(collection:string,value:string|undefined,path:(string|number)[])=>{
     if(value&&!ids.get(collection)?.has(value))ctx.addIssue({code:"custom",path,message:`Missing ${collection} reference`});
   };
+  dataset.recordTemplates.forEach((template,index)=>{
+    for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",template[key],["recordTemplates",index,key]);
+    reference("creditCards",template.creditCardId,["recordTemplates",index,"creditCardId"]);
+    reference("categories",template.categoryId,["recordTemplates",index,"categoryId"]);
+    reference("tags",template.tagId,["recordTemplates",index,"tagId"]);
+  });
   dataset.records.forEach((record,index)=>{
     for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",record[key],["records",index,key]);
     reference("categories",record.categoryId,["records",index,"categoryId"]);

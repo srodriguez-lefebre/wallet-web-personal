@@ -27,6 +27,41 @@ const bootstrap = {
   serverDate: "2026-10-03",
 };
 
+test("old server snapshots normalize the template library to empty", async () => {
+  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  expect(context.dataset.recordTemplates).toEqual([]);
+});
+
+test("template actions publish only the canonical reloaded library and retain records", async () => {
+  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  const value = { name: "Coffee", type: "expense" as const, amount: 50, currency: "UYU" as const, paymentType: "cash" as const };
+  const template = { ...value,id:"00000000-0000-4000-8000-000000000001" };
+  const canonical = {...structuredClone(mockWalletData),recordTemplates:[template]};
+  vi.mocked(api.createRecordTemplate).mockResolvedValue(template);
+  vi.mocked(api.getWallet).mockResolvedValue(canonical);
+  await act(async () => { expect(await context.addRecordTemplate(value)).toBe(template.id); });
+  expect(context.dataset.recordTemplates).toEqual([template]);
+  expect(context.dataset.records).toEqual(canonical.records);
+  const changed = {...template,name:"Morning coffee"};
+  vi.mocked(api.updateRecordTemplate).mockResolvedValue(changed);
+  vi.mocked(api.getWallet).mockResolvedValue({...canonical,recordTemplates:[changed]});
+  await act(async () => { await context.updateRecordTemplate(template.id,{name:changed.name}); });
+  expect(context.dataset.recordTemplates).toEqual([changed]);
+  vi.mocked(api.deleteRecordTemplate).mockResolvedValue({deleted:true});
+  vi.mocked(api.getWallet).mockResolvedValue({...canonical,recordTemplates:[]});
+  await act(async () => { await context.deleteRecordTemplate(template.id); });
+  expect(context.dataset.recordTemplates).toEqual([]);
+  expect(api.createRecord).not.toHaveBeenCalled();
+});
+
+test("failed template writes preserve the library and expose the failure", async () => {
+  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  vi.mocked(api.createRecordTemplate).mockRejectedValue(new Error("Template limit"));
+  await act(async () => { await expect(context.addRecordTemplate({name:"Coffee",type:"expense",amount:50,currency:"UYU",paymentType:"cash"})).rejects.toThrow("Template limit"); });
+  expect(context.dataset.recordTemplates).toEqual([]);
+  expect(JSON.stringify(tree?.toJSON())).toContain("Template limit");
+});
+
 test("all history includes the oldest review draft on its local calendar date", async () => {
   const data = structuredClone(mockWalletData);
   data.records = [

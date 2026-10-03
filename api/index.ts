@@ -15,6 +15,8 @@ import {
   debtPatchSchema,
   recordCreateSchema,
   recordPatchSchema,
+  recordTemplateSchema,
+  recordTemplatePatchSchema,
   recurringDebtSchema,
   recurringDebtPatchSchema,
   settingsSchema,
@@ -96,6 +98,7 @@ import {
   listGoals, createGoal, updateGoal, deleteGoal,
   listGoalReservations, createGoalReservation, deleteGoalReservation, releaseGoalReservation,
   listBudgets, createBudget, updateBudget, deleteBudget,
+  listRecordTemplates, createRecordTemplate, updateRecordTemplate, deleteRecordTemplate,
   listInvestments, createInvestment, updateInvestment, deleteInvestment,
   listInstallmentPlans, createInstallmentPlan, updateInstallmentPlan, deleteInstallmentPlan,
 } from "../server/db/wallet-repository.js";
@@ -511,6 +514,22 @@ async function handleRecurringDebts(
   sendData(res, { deleted: true });
 }
 
+async function handleRecordTemplates(req: VercelRequest, res: VercelResponse, id?: string) {
+  if (!id) {
+    if (!guardApi(req,res,["GET","POST"])) return;
+    if (req.method === "POST") sendData(res,await createRecordTemplate(validateBody(req,recordTemplateSchema)),201);
+    else sendData(res,await listRecordTemplates());
+    return;
+  }
+  if (!guardApi(req,res,["PATCH","DELETE"])) return;
+  id = validatePathId(id);
+  if (req.method === "PATCH") {
+    const template = await updateRecordTemplate(id,validateBody(req,recordTemplatePatchSchema));
+    if (!template) sendError(res,404,"NOT_FOUND","Template not found"); else sendData(res,template);
+  } else if (!(await deleteRecordTemplate(id))) sendError(res,404,"NOT_FOUND","Template not found");
+  else sendData(res,{deleted:true});
+}
+
 async function handleTags(req: VercelRequest, res: VercelResponse, id?: string) {
   if (!id) {
     if (!guardApi(req, res, ["GET", "POST"])) return;
@@ -744,8 +763,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await handleRecurringDebts(req, res, segments[1]);
         return;
       case "tags":
+      case "record-templates":
         if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }
-        await handleTags(req, res, segments[1]);
+        if (resource === "record-templates") await handleRecordTemplates(req,res,segments[1]);
+        else await handleTags(req, res, segments[1]);
         return;
       case "goals":
         if (segments.length > 2) { sendError(res, 404, "NOT_FOUND", "Not found"); return; }

@@ -17,6 +17,7 @@ import type {
   GoalPatch,
   InvestmentPatch,
   RecordPatch,
+  RecordTemplatePatch,
   SettingsPatch,
 } from "@shared/schemas";
 import {
@@ -44,6 +45,7 @@ import type {
   WalletDataset,
   RecordPage,
   WalletRecord,
+  RecordTemplate,
 } from "@shared/types";
 
 type PeriodMode = "month" | "custom" | "all";
@@ -73,6 +75,9 @@ interface WalletContextValue {
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
   updateRecord: (recordId: string, record: RecordPatch) => Promise<void>;
   deleteRecord: (recordId: string) => Promise<void>;
+  addRecordTemplate: (template: Omit<RecordTemplate,"id">) => Promise<string>;
+  updateRecordTemplate: (templateId: string, template: RecordTemplatePatch) => Promise<void>;
+  deleteRecordTemplate: (templateId: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<string>;
   updateCategory: (
     categoryId: string,
@@ -191,6 +196,7 @@ const cacheSchemaVersion = 2;
 const cacheMaxAgeMs = 24 * 60 * 60 * 1000;
 
 const emptyDataset: WalletDataset = {
+  recordTemplates: [],
   settings: {
     primaryCurrency: "UYU",
     theme: "system",
@@ -335,7 +341,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [initialCache] = useState(() => readCachedDataset(token));
   const [hasCachedDataset] = useState(() => Boolean(initialCache));
   const [dataset, setDataset] = useState<WalletDataset>(
-    () => initialCache?.dataset ?? emptyDataset,
+    () => ({...(initialCache?.dataset ?? emptyDataset),recordTemplates:initialCache?.dataset.recordTemplates ?? []}),
   );
   const [recordsPage, setRecordsPage] = useState<Omit<RecordPage, "items">>(
     () => initialCache?.recordsPage ?? { nextCursor: null, hasMore: false },
@@ -392,7 +398,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [sync] = useState(
     () =>
       new WalletSync<WalletDataset>((next) => {
-        setDataset(next);
+        setDataset({...next,recordTemplates:next.recordTemplates ?? []});
         setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
         if (token)
@@ -607,6 +613,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function addBudget(value: Omit<Budget, "id">) {
     return (await mutate(() => walletApi.createBudget(requireToken(), value)))
       .id;
+  }
+  async function addRecordTemplate(value:Omit<RecordTemplate,"id">) {
+    return (await mutate(() => walletApi.createRecordTemplate(requireToken(),value))).id;
+  }
+  async function updateRecordTemplate(id:string,value:RecordTemplatePatch) {
+    await mutate(() => walletApi.updateRecordTemplate(requireToken(),id,value));
+  }
+  async function deleteRecordTemplate(id:string) {
+    await mutate(() => walletApi.deleteRecordTemplate(requireToken(),id));
   }
   async function updateBudget(id: string, value: Omit<Budget, "id">) {
     await mutate(() => walletApi.updateBudget(requireToken(), id, value));
@@ -865,6 +880,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
         deleteGoalReservation,
         releaseGoalReservation,
         addBudget,
+        addRecordTemplate,
+        updateRecordTemplate,
+        deleteRecordTemplate,
         updateBudget,
         deleteBudget,
         addInvestment,
