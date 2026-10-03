@@ -26,6 +26,19 @@ const snapshot = {
     },
   ],
   categories: [{ id: categoryId, name: "Test", color: "blue", icon: "bank" }],
+  recordTemplates: [
+    {
+      id: "00000000-0000-4000-8000-000000000005",
+      name: "Imported template",
+      type: "expense",
+      amount: 12.5,
+      currency: "UYU",
+      accountId,
+      categoryId,
+      paymentType: "debit",
+      note: "Reusable configuration",
+    },
+  ],
   goals: [
     {
       id: goalId,
@@ -82,6 +95,8 @@ test("reconstructs snapshot associations and exact amounts through the real repo
     allocatedAmount: 5,
     useReserved: false,
   });
+  expect(result.recordTemplates).toHaveLength(1);
+  expect(result.recordTemplates![0]).toMatchObject(snapshot.recordTemplates[0]);
 });
 
 test("Neon batches roll back earlier financial writes when a later write fails", async () => {

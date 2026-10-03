@@ -10,6 +10,14 @@ inversiones y planes de cuotas. El cliente recarga el estado canónico después 
 cada mutación; una falla de recarga se informa sin presentar datos viejos como
 una operación completamente actualizada.
 
+Las plantillas reutilizables de movimientos también se guardan en PostgreSQL,
+se incluyen en el respaldo y se administran desde Movimientos. Guardar una
+plantilla conserva importe, moneda, destinos, categoría, una etiqueta y notas.
+Usarla abre un borrador con fecha y conversiones actuales; el movimiento requiere
+confirmación. Los destinos archivados exigen elegir un reemplazo. Si una creación
+financiera falla con resultado incierto, se bloquea el reintento desde ese borrador
+y se exige recargar y revisar los movimientos.
+
 El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/openapi.yaml).
 `docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
 comportamiento desplegado.
@@ -42,6 +50,28 @@ comportamiento desplegado.
 
 Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
 en producción son pasos operativos separados.
+
+## Funcionalidades nuevas
+
+- Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,
+  tarjetas, categorías, metas, deudas, inversiones y movimientos, o abrir acciones
+  rápidas. Buscar movimientos limpia filtros anteriores y abre todo el historial.
+  La búsqueda ignora mayúsculas y acentos; indica si el historial aún se está cargando.
+- Plantillas: biblioteca en Movimientos para guardar, editar, reutilizar y quitar
+  configuraciones sin modificar el historial financiero. Los nombres son únicos
+  sin distinguir mayúsculas ni espacios exteriores y se admiten hasta 100 plantillas.
+- Asistente de presupuestos: en Análisis propone límites mensuales a partir de
+  tres meses completos anteriores, incluyendo meses sin gastos, con margen e
+  importes editables. Los nuevos presupuestos se aplican todos los meses; el mes
+  elegido sólo determina el período de cálculo y no puede ser futuro. Usa los
+  gastos WalletRecord y sus cotizaciones congeladas, según las preferencias del
+  reporte; excluye compras directas de Tarjetas sin WalletRecord. Agrupa
+  subcategorías y bloquea categorías que se superponen con presupuestos activos.
+  Guarda cada selección por separado; ante fallos muestra lo confirmado y
+  concilia el estado actual antes de reintentar. El lote completo no es atómico.
+
+La tabla de plantillas requiere la migración `0018` antes de desplegar esta versión.
+El sandbox aplica las migraciones sólo a su base local al iniciar.
 
 ## Stack
 

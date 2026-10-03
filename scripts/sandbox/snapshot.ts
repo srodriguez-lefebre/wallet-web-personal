@@ -18,6 +18,7 @@ const collections: Array<[string, Table, string?]> = [
   ["categories", schema.categories, "parentId"],
   ["tags", schema.tags],
   ["creditCards", schema.creditCards],
+  ["recordTemplates", schema.recordTemplates],
   ["goals", schema.goals],
   ["recurringDebts", schema.recurringDebts],
   ["debts", schema.debts],
