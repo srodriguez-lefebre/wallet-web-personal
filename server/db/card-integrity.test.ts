@@ -24,12 +24,16 @@ import {
   listCreditCardStatements,
   payCreditCardStatement,
   updateCreditCardRecord,
+  deleteCreditCardRecord,
+  createRecord,
 } from "./wallet-repository.js";
 import {
   calculateCreditCardStatementBalance,
   calculateCreditCardSummary,
   creditCardCycleDates,
   creditCardStatementStatusAfterPaymentChange,
+  calculateAccountBalances,
+  calculateAccountBalanceAtDate,
 } from "../../shared/calculations.js";
 
 const pg = new PGlite();
@@ -61,7 +65,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   await pg.exec(
-    "TRUNCATE accounts, categories, credit_cards RESTART IDENTITY CASCADE",
+    "TRUNCATE accounts, categories, credit_cards, settings, exchange_rates RESTART IDENTITY CASCADE",
   );
   const db = createDb();
   await db.insert(accounts).values({
@@ -310,6 +314,133 @@ test("a calculated foreign-currency amount is rounded by PostgreSQL to persisted
   });
   expect(movement.amountInLimitCurrency).toBe(47.8);
 });
+
+test("deleting a purchase cannot orphan its refund or payment history", async () => {
+  const original = await purchase();
+  await refund(original.id, 20);
+  await expect(deleteCreditCardRecord(cardId, original.id)).rejects.toThrow();
+  const second = await purchase(50);
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(130));
+  await expect(deleteCreditCardRecord(cardId, second.id)).rejects.toThrow();
+  expect((await getWalletDataset()).creditCardRecords.filter(row => row.kind === "purchase")).toHaveLength(2);
+});
+
+test("a paid linked purchase refund cannot credit the bank while its payment credit settles another purchase", async () => {
+  await createRecord({ type: "expense", amount: 100, currency: "UYU", accountId, accountAmount: 100, creditCardId: cardId, categoryId, tagIds: [], paymentType: "credit", paymentStatus: "cleared", exchangeRateToPrimary: 1, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const original = (await getWalletDataset()).creditCardRecords[0];
+  await purchase(100, "2020-06-02T12:00:00.000Z");
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(100));
+  await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  const dataset = await getWalletDataset();
+  expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(0);
+  expect(calculateAccountBalances(dataset).find(row => row.account.id === accountId)?.totalBalance).toBe(9900);
+});
+
+test("a paid direct purchase refund keeps its credit on the card", async () => {
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  await purchase(100, "2020-06-02T12:00:00.000Z");
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(100));
+  const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  const dataset = await getWalletDataset();
+  expect(returned.accountImpactAtCreation).toBe(false);
+  expect(returned.accountAmount).toBeUndefined();
+  expect(calculateAccountBalances(dataset).find(row => row.account.id === accountId)?.totalBalance).toBe(9900);
+  expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(0);
+});
+
+test("a partially paid linked refund restores only the unpaid bank reservation", async () => {
+  await createRecord({ type: "expense", amount: 100, currency: "UYU", accountId, accountAmount: 100, creditCardId: cardId, categoryId, tagIds: [], paymentType: "credit", paymentStatus: "cleared", exchangeRateToPrimary: 1, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const original = (await getWalletDataset()).creditCardRecords[0];
+  await purchase(100, "2020-06-02T12:00:00.000Z");
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(40));
+  const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  const dataset = await getWalletDataset();
+  expect(returned.accountAmount).toBe(60);
+  expect(dataset.records.find(row => row.type === "income")?.amount).toBe(60);
+  expect(calculateAccountBalances(dataset).find(row => row.account.id === accountId)?.totalBalance).toBe(9960);
+  expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(60);
+  await payCreditCardStatement(cardId, statement.id, payment(60));
+  expect(calculateAccountBalances(await getWalletDataset()).find(row => row.account.id === accountId)?.totalBalance).toBe(9900);
+});
+
+test("the final partial bank refund returns the remaining cent", async () => {
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 3, currency: "UYU", amountInLimitCurrency: 3, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 1, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const amounts: number[] = [];
+  for (let i = 0; i < 3; i++) {
+    const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 1, currency: "UYU", amountInLimitCurrency: 1, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 0.33, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+    amounts.push(returned.accountAmount!);
+  }
+  expect(amounts).toEqual([0.33, 0.33, 0.34]);
+  expect(calculateAccountBalances(await getWalletDataset()).find(row => row.account.id === accountId)?.totalBalance).toBe(10000);
+});
+
+test("editing a direct bank refund recomputes its authoritative bank amount", async () => {
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  const edited = await updateCreditCardRecord(cardId, returned.id, { amount: 50, amountInLimitCurrency: 50, accountAmount: 200 });
+  expect(edited?.accountAmount).toBe(50);
+  expect(calculateAccountBalances(await getWalletDataset()).find(row => row.account.id === accountId)?.totalBalance).toBe(9950);
+});
+
+test("a fully paid foreign-currency refund needs no bank quote because it remains card credit", async () => {
+  await createDb().insert(settings).values({ primaryCurrency: "USD" });
+  await createRecord({ type: "expense", amount: 100, currency: "USD", accountId, accountAmount: 4000, creditCardId: cardId, categoryId, tagIds: [], paymentType: "credit", paymentStatus: "cleared", exchangeRateToPrimary: 1, amountInLimitCurrency: 4000, exchangeRateToLimitCurrency: 40, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const original = (await getWalletDataset()).creditCardRecords[0];
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(4000));
+  const returned = await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "USD", amountInLimitCurrency: 4000, exchangeRateToLimitCurrency: 40, categoryId, accountId, accountAmount: 4000, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  expect(returned.walletRecordId).toBeUndefined();
+  expect(returned.accountImpactAtCreation).toBe(false);
+  expect((await getWalletDataset()).records.filter(row => row.type === "income")).toHaveLength(0);
+});
+
+test("reused payment credit releases the other purchase's reservation in its own bank account", async () => {
+  const otherAccountId = randomUUID();
+  await createDb().insert(accounts).values({ id: otherAccountId, name: "Other bank", type: "bank", currency: "UYU", initialBalance: "10000", color: "blue", icon: "bank" });
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId: otherAccountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-02T12:00:00.000Z" });
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(100));
+  await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  const balances = calculateAccountBalances(await getWalletDataset());
+  expect(balances.find(row => row.account.id === accountId)?.totalBalance).toBe(9900);
+  expect(balances.find(row => row.account.id === otherAccountId)?.totalBalance).toBe(10000);
+});
+test("reservation release excludes future refunds and payments from historical balances", async () => {
+  const otherAccountId = randomUUID();
+  await createDb().insert(accounts).values({ id: otherAccountId, name: "Other bank", type: "bank", currency: "UYU", initialBalance: "10000", color: "blue", icon: "bank" });
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  await createCreditCardRecord(cardId, { kind: "purchase", amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId: otherAccountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-06-02T12:00:00.000Z" });
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, { ...payment(40), occurredAt: "2020-07-01T12:00:00.000Z" });
+  await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 100, currency: "UYU", amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 100, accountImpactAtCreation: true, occurredAt: "2020-07-10T12:00:00.000Z" });
+  await payCreditCardStatement(cardId, statement.id, { ...payment(60), occurredAt: "2020-07-20T12:00:00.000Z" });
+  const dataset = await getWalletDataset();
+  expect(calculateAccountBalanceAtDate(dataset, accountId, "2020-07-05")).toBe(9900);
+  expect(calculateAccountBalanceAtDate(dataset, otherAccountId, "2020-07-05")).toBe(9900);
+  expect(calculateAccountBalanceAtDate(dataset, accountId, "2020-07-10")).toBe(9960);
+  expect(calculateAccountBalanceAtDate(dataset, otherAccountId, "2020-07-10")).toBe(9940);
+  expect(calculateAccountBalanceAtDate(dataset, otherAccountId, "2020-07-20")).toBe(9940);
+  expect(calculateAccountBalances(dataset).find(row => row.account.id === otherAccountId)?.totalBalance).toBe(9940);
+});
+
+test("releasing part of a bank reservation preserves its rounding remainder", async () => {
+  const otherAccountId = randomUUID();
+  await createDb().insert(accounts).values({ id: otherAccountId, name: "Other bank", type: "bank", currency: "UYU", initialBalance: "10000", color: "blue", icon: "bank" });
+  const original = await createCreditCardRecord(cardId, { kind: "purchase", amount: 1, currency: "UYU", amountInLimitCurrency: 1, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 1, accountImpactAtCreation: true, occurredAt: "2020-06-01T12:00:00.000Z" });
+  const [statement] = await listCreditCardStatements(cardId);
+  await payCreditCardStatement(cardId, statement.id, payment(1));
+  await createCreditCardRecord(cardId, { kind: "purchase", amount: 3, currency: "UYU", amountInLimitCurrency: 3, exchangeRateToLimitCurrency: 1, categoryId, accountId: otherAccountId, accountAmount: 1, accountImpactAtCreation: true, occurredAt: "2020-06-02T12:00:00.000Z" });
+  await payCreditCardStatement(cardId, statement.id, { ...payment(1), accountId: otherAccountId });
+  await createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 1, currency: "UYU", amountInLimitCurrency: 1, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 1, accountImpactAtCreation: true, occurredAt: new Date().toISOString() });
+  // Of the bank's 1.00 debit: .33 is settled, .33 is still reserved, .34 is released.
+  expect(calculateAccountBalances(await getWalletDataset()).find(row => row.account.id === otherAccountId)?.totalBalance).toBe(9999.34);
+});
+
 test("a bank refund uses the account-to-primary quote instead of an invented 1:1 rate", async () => {
   const db = createDb();
   await db.insert(settings).values({ primaryCurrency: "USD" });

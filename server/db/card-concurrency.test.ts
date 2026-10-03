@@ -8,6 +8,7 @@ import {
   getWalletDataset,
   listCreditCardStatements,
   payCreditCardStatement,
+  deleteCreditCardRecord,
 } from "./wallet-repository.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
@@ -162,4 +163,59 @@ test("concurrent retries of one partial request return one durable payment", asy
       0,
     ),
   ).toBe(25);
+});
+
+test("deletion waits for an in-flight refund and cannot hide its purchase", async () => {
+  const original = (await getWalletDataset()).creditCardRecords[0];
+  await fixture.pool.query(`CREATE FUNCTION delay_test_refund() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+    IF NEW.kind = 'refund' THEN PERFORM pg_sleep(0.25); END IF;
+    RETURN NEW; END $$;
+    CREATE TRIGGER delay_test_refund BEFORE INSERT ON credit_card_records FOR EACH ROW EXECUTE FUNCTION delay_test_refund()`);
+  try {
+    const refund = createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 60, currency: "UYU", amountInLimitCurrency: 60, exchangeRateToLimitCurrency: 1, categoryId, accountImpactAtCreation: false, occurredAt: new Date().toISOString() });
+    const deadline = Date.now() + 5000;
+    let refundIsInserting = false;
+    while (Date.now() < deadline) {
+      const active = await fixture.pool.query("SELECT pid FROM pg_stat_activity WHERE wait_event = 'PgSleep' AND query ILIKE '%credit_card_records%'");
+      if (active.rows.length) { refundIsInserting = true; break; }
+    }
+    expect(refundIsInserting).toBe(true);
+    const deletion = deleteCreditCardRecord(cardId, original.id);
+    const results = await Promise.allSettled([refund, deletion]);
+    expect(results[0].status).toBe("fulfilled");
+    expect(results[1].status).toBe("rejected");
+    expect((await getWalletDataset()).creditCardRecords).toHaveLength(2);
+  } finally {
+    await fixture.pool.query("DROP TRIGGER delay_test_refund ON credit_card_records; DROP FUNCTION delay_test_refund()");
+  }
+});
+
+
+test("a refund rejects a purchase whose bank data changed before acquiring the card lock", async () => {
+  const original = (await getWalletDataset()).creditCardRecords[0];
+  await fixture.pool.query("UPDATE credit_card_records SET account_impact_at_creation=true, account_id=$2, account_amount=100 WHERE id=$1", [original.id, accountId]);
+  const otherAccountId = randomUUID();
+  await createDb().insert(accounts).values({ id: otherAccountId, name: "Other", type: "bank", currency: "UYU", initialBalance: "1000", color: "blue", icon: "bank" });
+  const holder = await fixture.pool.connect();
+  let committed = false;
+  try {
+    await holder.query("BEGIN");
+    await holder.query("SELECT id FROM credit_cards WHERE id=$1 FOR UPDATE", [cardId]);
+    const refund = createCreditCardRecord(cardId, { kind: "refund", originalRecordId: original.id, amount: 60, currency: "UYU", amountInLimitCurrency: 60, exchangeRateToLimitCurrency: 1, categoryId, accountId, accountAmount: 60, accountImpactAtCreation: true, occurredAt: new Date().toISOString() }).then(value => ({ value }), error => ({ error }));
+    const deadline = Date.now() + 5000;
+    let waitingForCard = false;
+    while (Date.now() < deadline) {
+      const waiting = await fixture.pool.query("SELECT pid FROM pg_stat_activity WHERE wait_event = 'transactionid' AND query ILIKE '%credit_cards%'");
+      if (waiting.rows.length) { waitingForCard = true; break; }
+    }
+    expect(waitingForCard).toBe(true);
+    await holder.query("UPDATE credit_card_records SET account_id=$2 WHERE id=$1", [original.id, otherAccountId]);
+    await holder.query("COMMIT");
+    committed = true;
+    expect(await refund).toHaveProperty("error");
+    expect((await getWalletDataset()).creditCardRecords.filter(row => row.kind === "refund")).toHaveLength(0);
+  } finally {
+    if (!committed) await holder.query("ROLLBACK");
+    holder.release();
+  }
 });

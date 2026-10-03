@@ -178,7 +178,7 @@ export function calculateAccountBalances(
         return total;
       }
       return total - payment.accountAmount;
-    }, directCardBalance);
+    }, directCardBalance + creditCardBankReservationRelease(dataset, account.id));
 
     const reserved = dataset.goalReservations
       .filter((reservation) => reservation.accountId === account.id)
@@ -315,7 +315,7 @@ function calculateAccountBalanceAtCutoff(
     }
     if (isAfter(parseISO(payment.occurredAt), cutoff)) return total;
     return total - payment.accountAmount;
-  }, directCardBalance);
+  }, directCardBalance + creditCardBankReservationRelease(dataset, account.id, cutoff));
 
   const movements = dataset.goalReservationMovements ?? [];
   const reservedAtCutoff = movements.length
@@ -420,8 +420,35 @@ function creditCardRemainingPurchases(
       const pool = pools.get(purchase.statementId) ?? 0;
       const used = Math.min(net, pool);
       pools.set(purchase.statementId, pool - used);
-      return { ...purchase, remaining: Math.max(0, net - used) / purchase.exchangeRateToLimitCurrency };
+      return { ...purchase, paidInLimitCurrency: used, remaining: Math.max(0, net - used) / purchase.exchangeRateToLimitCurrency };
     });
+}
+
+// Paid refund credit can settle another purchase whose bank debit was reserved
+// at creation. Release that purchase's duplicate reserve in its own account.
+function creditCardBankReservationRelease(
+  dataset: WalletDataset,
+  accountId: string,
+  cutoff?: Date,
+) {
+  const movements = dataset.creditCardRecords.filter(movement => !cutoff || !isAfter(parseISO(movement.occurredAt), cutoff));
+  const payments = dataset.creditCardPayments.filter(payment => !cutoff || !isAfter(parseISO(payment.occurredAt), cutoff));
+  const paymentIds = new Set(payments.map(payment => payment.id));
+  const allocations = dataset.creditCardPaymentAllocations.filter(allocation => paymentIds.has(allocation.paymentId));
+  const historicalPaid = new Map<string, number>();
+  for (const allocation of allocations) historicalPaid.set(allocation.creditCardRecordId, (historicalPaid.get(allocation.creditCardRecordId) ?? 0) + allocation.amountInLimitCurrency);
+  let released = 0;
+  for (const cardId of new Set(movements.map(movement => movement.creditCardId))) {
+    const purchases = creditCardRemainingPurchases(movements.filter(movement => movement.creditCardId === cardId), payments.filter(payment => payment.creditCardId === cardId), allocations);
+    for (const purchase of purchases) {
+      const original = movements.find(movement => movement.id === purchase.id)!;
+      if (!original.accountImpactAtCreation || original.accountId !== accountId || original.accountAmount === undefined || original.amountInLimitCurrency <= 0) continue;
+      const bankCents = (limitAmount: number) => Math.round(original.accountAmount! * Math.min(original.amountInLimitCurrency, limitAmount) / original.amountInLimitCurrency * 100);
+      // Difference of rounded totals preserves the last cent of a partial reserve.
+      released += Math.max(0, bankCents(purchase.paidInLimitCurrency) - bankCents(historicalPaid.get(purchase.id) ?? 0)) / 100;
+    }
+  }
+  return released;
 }
 
 export function calculateCreditCardSummary(

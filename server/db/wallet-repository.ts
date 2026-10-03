@@ -792,6 +792,31 @@ function creditCardRecordGuard(db: Db, creditCardId: string, input: NewCreditCar
   `);
 }
 
+// Bank impact at creation is an unpaid reservation. Refund only that remaining
+// reservation; settled money stays on the card and can fund another purchase.
+// The last refund returns the remainder so proportional rounding loses no cent.
+function creditCardBankRefundAmount(originalId: string, amountInLimitCurrency: number, editedRefundId?: string) {
+  return sql`coalesce((
+    SELECT CASE WHEN round(${decimal(amountInLimitCurrency)}::numeric, 2) >= b.unpaid_limit THEN b.unpaid_bank
+      ELSE least(b.unpaid_bank, round(p.account_amount * round(${decimal(amountInLimitCurrency)}::numeric, 2)
+        / nullif(p.amount_in_limit_currency, 0), 2)) END
+    FROM credit_card_records p
+    CROSS JOIN LATERAL (
+      SELECT coalesce((SELECT sum(a.amount_in_limit_currency) FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id), 0) AS paid,
+        coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.id <> coalesce(${editedRefundId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0) AS refunded,
+        coalesce((SELECT sum(coalesce(w.account_amount, w.amount, r.account_amount, 0)) FROM credit_card_records r
+          LEFT JOIN records w ON w.id = r.wallet_record_id
+          WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.account_impact_at_creation AND r.id <> coalesce(${editedRefundId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0) AS refunded_bank
+    ) prior
+    CROSS JOIN LATERAL (
+      SELECT greatest(0, p.amount_in_limit_currency - prior.paid - prior.refunded) AS unpaid_limit,
+        greatest(0, p.account_amount - round(p.account_amount * least(p.amount_in_limit_currency, prior.paid)
+          / nullif(p.amount_in_limit_currency, 0), 2) - prior.refunded_bank) AS unpaid_bank
+    ) b
+    WHERE p.id = ${originalId}::uuid AND p.account_impact_at_creation AND p.account_id IS NOT NULL AND p.account_amount IS NOT NULL
+  ), 0)`;
+}
+
 function cardMutationError(error: unknown): never {
   const failure = error as { code?: string; cause?: { code?: string } };
   if (failure.code === "22012" || failure.cause?.code === "22012") {
@@ -897,6 +922,8 @@ export async function createCreditCardRecord(
   let walletRecordId: string | null = null;
   let walletRefundValues: typeof records.$inferInsert | undefined;
   let walletRefundAmount: ReturnType<typeof sql> | undefined;
+  let originalMovement: typeof creditCardRecords.$inferSelect | undefined;
+  let refundBankRateMissing = false;
   if (input.kind === "refund" && input.originalRecordId) {
     const [[original], previousRefunds] = await db.batch([
       db
@@ -921,6 +948,8 @@ export async function createCreditCardRecord(
         )),
     ]);
     if (!original) throw validationError("Original movement not found");
+    originalMovement = original;
+    walletRefundAmount = creditCardBankRefundAmount(original.id, input.amountInLimitCurrency);
     const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + asNumber(refund.amount), 0);
     if (
       input.amountInLimitCurrency >
@@ -945,8 +974,7 @@ export async function createCreditCardRecord(
       const primaryRate = refundCurrency === primaryCurrency ? 1
         : walletOriginal?.currency === refundCurrency ? asNumber(walletOriginal.exchangeRateToPrimary)
         : findExchangeRate(rateRows.map(mapExchangeRate), refundCurrency, primaryCurrency, input.occurredAt);
-      if (primaryRate === null) throw validationError("Exchange rate is required for the bank refund");
-      walletRefundAmount = sql`(SELECT account_amount * ${decimal(input.amount)}::numeric / amount FROM credit_card_records WHERE id = ${original.id}::uuid)`;
+      refundBankRateMissing = primaryRate === null;
       walletRecordId = randomUUID();
       walletRefundValues = {
         id: walletRecordId,
@@ -959,7 +987,7 @@ export async function createCreditCardRecord(
         counterpartyName: input.counterpartyName ?? null,
         paymentType: "credit",
         paymentStatus: "cleared",
-        exchangeRateToPrimary: decimal(primaryRate),
+        exchangeRateToPrimary: decimal(primaryRate ?? 0),
         amountInLimitCurrency: decimal(input.amountInLimitCurrency),
         exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency),
         occurredAt: new Date(input.occurredAt),
@@ -987,16 +1015,46 @@ export async function createCreditCardRecord(
     occurredAt: new Date(input.occurredAt),
   };
   const cycleQueries = await creditCardCycleQueries(db, creditCardId, movementValues.id, input.occurredAt);
+  const walletRefundInsert = walletRefundValues ? db.execute(sql`
+    INSERT INTO records (id, type, amount, currency, account_id, credit_card_id, category_id, counterparty_name,
+      payment_type, payment_status, exchange_rate_to_primary, amount_in_limit_currency, exchange_rate_to_limit_currency, occurred_at, note)
+    SELECT ${walletRefundValues.id}::uuid, 'income', ${walletRefundAmount!}, ${walletRefundValues.currency},
+      ${walletRefundValues.accountId}::uuid, ${creditCardId}::uuid, ${walletRefundValues.categoryId}::uuid, ${walletRefundValues.counterpartyName},
+      'credit', 'cleared', ${walletRefundValues.exchangeRateToPrimary}::numeric,
+      ${walletRefundValues.amountInLimitCurrency}::numeric, ${walletRefundValues.exchangeRateToLimitCurrency}::numeric,
+      ${input.occurredAt}::timestamptz, ${walletRefundValues.note}
+    WHERE ${walletRefundAmount!} > 0
+  `) : undefined;
+  const authoritativeRefund = originalMovement && walletRefundAmount ? {
+    walletRecordId: walletRecordId ? sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${walletRecordId}::uuid ELSE NULL END` : null,
+    accountId: sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${originalMovement.accountId}::uuid ELSE NULL END`,
+    accountAmount: sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${walletRefundAmount} ELSE NULL END`,
+    accountImpactAtCreation: sql`${walletRefundAmount} > 0`,
+  } : {};
   try {
     await db.batch([
       lockCreditCard(db, creditCardId),
       creditCardRecordGuard(db, creditCardId, input),
-      ...(walletRefundValues ? [db.insert(records).values({ ...walletRefundValues, amount: walletRefundAmount! })] : []),
-      db.insert(creditCardRecords).values(movementValues),
+      // Bank and FX metadata was read before entering the batch. Reject a stale
+      // source rather than crediting the previously observed bank account.
+      ...(originalMovement ? [db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
+        SELECT 1 FROM credit_card_records p WHERE p.id = ${originalMovement.id}::uuid
+          AND p.account_id IS NOT DISTINCT FROM ${originalMovement.accountId}::uuid
+          AND p.account_amount IS NOT DISTINCT FROM ${originalMovement.accountAmount}::numeric
+          AND p.account_impact_at_creation = ${originalMovement.accountImpactAtCreation}
+          AND p.wallet_record_id IS NOT DISTINCT FROM ${originalMovement.walletRecordId}::uuid
+      ) THEN 1 ELSE 0 END AS valid`)] : []),
+      ...(refundBankRateMissing ? [db.execute(sql`SELECT 1 / CASE WHEN ${walletRefundAmount!} <= 0 THEN 1 ELSE 0 END AS valid`)] : []),
+      ...(walletRefundInsert ? [walletRefundInsert] : []),
+      db.insert(creditCardRecords).values({ ...movementValues, ...authoritativeRefund }),
       ...cycleQueries,
       refreshCreditCardStatements(db, creditCardId),
     ]);
-  } catch (error) { cardMutationError(error); }
+  } catch (error) {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if (refundBankRateMissing && (failure.code === "22012" || failure.cause?.code === "22012")) throw validationError("Exchange rate is required for the bank refund");
+    cardMutationError(error);
+  }
   const [row] = await db.select().from(creditCardRecords).where(eq(creditCardRecords.id, movementValues.id));
   return mapCreditCardRecord(row);
 }
@@ -1039,10 +1097,17 @@ export async function updateCreditCardRecord(
   if (hasOwn(input, "occurredAt")) values.occurredAt = new Date(merged.occurredAt);
   if (merged.kind !== mapped.kind) throw validationError("Movement kind cannot be changed");
   const cycleQueries = await creditCardCycleQueries(db, creditCardId, id, merged.occurredAt);
+  const refundBankAmount = merged.kind === "refund" && merged.originalRecordId
+    ? creditCardBankRefundAmount(merged.originalRecordId, merged.amountInLimitCurrency, id) : undefined;
+  const authoritativeRefund = refundBankAmount ? {
+    accountId: sql`CASE WHEN ${refundBankAmount} > 0 THEN (SELECT account_id FROM credit_card_records WHERE id = ${merged.originalRecordId!}::uuid) ELSE NULL END`,
+    accountAmount: sql`CASE WHEN ${refundBankAmount} > 0 THEN ${refundBankAmount} ELSE NULL END`,
+    accountImpactAtCreation: sql`${refundBankAmount} > 0`,
+  } : {};
   try {
     await db.batch([
       lockCreditCard(db, creditCardId), creditCardRecordGuard(db, creditCardId, merged, id),
-      db.update(creditCardRecords).set(values).where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId))),
+      db.update(creditCardRecords).set({ ...values, ...authoritativeRefund }).where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId))),
       ...cycleQueries, refreshCreditCardStatements(db, creditCardId),
     ]);
   } catch (error) { cardMutationError(error); }
@@ -1055,18 +1120,25 @@ export async function deleteCreditCardRecord(
   id: string,
   db: Db = createDb(),
 ) {
-  const [row] = await db
-    .update(creditCardRecords)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(creditCardRecords.id, id),
-        eq(creditCardRecords.creditCardId, creditCardId),
-        isNull(creditCardRecords.walletRecordId),
-      ),
-    )
-    .returning();
-  return Boolean(row);
+  try {
+    const [, , deleted] = await db.batch([
+      lockCreditCard(db, creditCardId),
+      db.execute(sql`SELECT 1 / CASE WHEN NOT EXISTS (
+        SELECT 1 FROM credit_card_records WHERE original_record_id = ${id}::uuid AND deleted_at IS NULL
+      ) AND NOT EXISTS (
+        SELECT 1 FROM credit_card_payment_allocations WHERE credit_card_record_id = ${id}::uuid
+      ) THEN 1 ELSE 0 END AS valid`),
+      db.update(creditCardRecords).set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId), isNull(creditCardRecords.deletedAt)))
+        .returning({ id: creditCardRecords.id }),
+      refreshCreditCardStatements(db, creditCardId),
+    ]);
+    return deleted.length > 0;
+  } catch (error) {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if (failure.code === "22012" || failure.cause?.code === "22012") throw conflictError("Movement has linked refunds or payments");
+    throw error;
+  }
 }
 
 export async function listCreditCardStatements(
