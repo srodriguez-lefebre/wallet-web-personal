@@ -1885,6 +1885,72 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
   return ids.map((id) => byId.get(id)).filter((record): record is WalletRecord => Boolean(record));
 }
 
+async function normalizeRecordMoneyPatch(current: WalletRecord, patch: RecordPatch, db: Db): Promise<RecordPatch> {
+  const amount = patch.amount ?? current.amount;
+  const currency = patch.currency ?? current.currency;
+  const accountId = patch.accountId ?? current.accountId;
+  const destinationAccountId = hasOwn(patch, "destinationAccountId") ? patch.destinationAccountId ?? undefined : current.destinationAccountId;
+  const cardId = hasOwn(patch, "creditCardId") ? patch.creditCardId ?? undefined : current.creditCardId;
+  const amountChanged = amount !== current.amount;
+  const currencyChanged = currency !== current.currency;
+  const sourceChanged = accountId !== current.accountId;
+  const destinationChanged = destinationAccountId !== current.destinationAccountId;
+  const cardChanged = cardId !== current.creditCardId;
+  const limitRateChanged = hasOwn(patch, "exchangeRateToLimitCurrency");
+  if (!amountChanged && !currencyChanged && !sourceChanged && !destinationChanged && !cardChanged && !limitRateChanged) return patch;
+
+  const normalized = { ...patch };
+  const accountIds = [accountId, destinationAccountId].filter((id): id is string => Boolean(id));
+  const [accountRows, rateRows, [settingsRow], [card]] = await db.batch([
+    db.select().from(accounts).where(inArray(accounts.id, accountIds)),
+    db.select().from(exchangeRates),
+    db.select().from(settings).limit(1),
+    db.select().from(creditCards).where(eq(creditCards.id, cardId ?? "00000000-0000-0000-0000-000000000000")).limit(1),
+  ]);
+  const rates = rateRows.map(mapExchangeRate);
+  const date = patch.occurredAt ?? current.occurredAt;
+  const convertedAmount = async (id: string | undefined, previousId: string | undefined, previousAmount: number | undefined) => {
+    if (!id) return undefined;
+    const account = accountRows.find((row) => row.id === id);
+    if (!account) throw validationError("Account does not exist");
+    if (account.currency === currency) return amount;
+    // Amount edits retain the conversion agreed when the transaction was recorded.
+    const expression = !currencyChanged && id === previousId && previousAmount !== undefined
+      ? sql`${decimal(amount)}::numeric * ${decimal(previousAmount)}::numeric / ${decimal(current.amount)}::numeric`
+      : (() => {
+        const rate = findExchangeRate(rates, currency, account.currency as Account["currency"], date);
+        if (rate === null) throw validationError("An exchange rate is required for the account currency");
+        return sql`${decimal(amount)}::numeric * ${decimal(rate)}::numeric`;
+      })();
+    const result = await db.execute(sql`select round(${expression}, 2) as amount`);
+    return Number((result.rows[0] as { amount: string }).amount);
+  };
+  if (!hasOwn(patch, "accountAmount") && (amountChanged || currencyChanged || sourceChanged)) {
+    normalized.accountAmount = await convertedAmount(accountId, current.accountId, current.accountAmount);
+  }
+  if (!hasOwn(patch, "destinationAmount") && (amountChanged || currencyChanged || destinationChanged)) {
+    normalized.destinationAmount = await convertedAmount(destinationAccountId, current.destinationAccountId, current.destinationAmount);
+  }
+  if (currencyChanged && !hasOwn(patch, "exchangeRateToPrimary")) {
+    const rate = findExchangeRate(rates, currency, (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"], date);
+    if (rate === null) throw validationError("An exchange rate is required for the primary currency");
+    normalized.exchangeRateToPrimary = rate;
+  }
+  if (cardId && (amountChanged || currencyChanged || cardChanged || limitRateChanged)) {
+    if (!card) throw validationError("Credit card does not exist");
+    const rate = patch.exchangeRateToLimitCurrency
+      ?? (!currencyChanged && !cardChanged ? current.exchangeRateToLimitCurrency : undefined)
+      ?? findExchangeRate(rates, currency, card.limitCurrency as WalletRecord["currency"], date);
+    if (rate === null) throw validationError("An exchange rate is required for the card limit currency");
+    const result = await db.execute(sql`select round(${decimal(rate)}::numeric, 6) as rate,
+      round(${decimal(amount)}::numeric * round(${decimal(rate)}::numeric, 6), 2) as amount`);
+    const converted = result.rows[0] as { rate: string; amount: string };
+    normalized.exchangeRateToLimitCurrency = Number(converted.rate);
+    if (!hasOwn(patch, "amountInLimitCurrency")) normalized.amountInLimitCurrency = Number(converted.amount);
+  }
+  return normalized;
+}
+
 export async function updateRecord(
   id: string,
   input: RecordPatch,
@@ -1909,6 +1975,7 @@ export async function updateRecord(
     { [id]: existingTagRows.map((item) => item.tagId) },
     { [id]: groupGoalAssociations(existingGoalRows)[id] ?? [] },
   );
+  input = await normalizeRecordMoneyPatch(current, input, db);
   const merged = recordSchema.parse({
     ...current,
     ...input,
