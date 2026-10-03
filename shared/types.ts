@@ -361,6 +361,8 @@ export interface WalletSettings {
 }
 
 export interface WalletDataset {
+  merchants?: Array<{ id: string; name: string; categoryId: string; priority: number; isActive: boolean; createdAt?: string; updatedAt?: string }>;
+  merchantAliases?: Array<{ id: string; merchantId: string; alias: string; normalizedAlias: string; createdAt?: string }>;
   settings: WalletSettings;
   accounts: Account[];
   categories: Category[];

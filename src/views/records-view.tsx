@@ -21,6 +21,7 @@ import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { findExchangeRate } from "@shared/money";
+import { recordAccountAmount, scaleConvertedAmount } from "@/lib/record-form-money";
 import {
   calculateAccountBalances,
   formatMoney,
@@ -544,18 +545,22 @@ export function RecordsView() {
     const sourceRate=account?findExchangeRate(dataset.exchangeRates,currency,account.currency,date):1;
     const destination=dataset.accounts.find(item=>item.id===destinationAccountId);
     const destinationRate=destination?findExchangeRate(dataset.exchangeRates,currency,destination.currency,date):1;
-    if(!frozenPrimaryRate || (account&&sourceRate===null&&!Number(accountAmount)) || (type==="transfer"&&destinationRate===null&&!Number(destinationAmount))){setMoneyError("Ingresá los importes convertidos y una cotización válida para las monedas elegidas.");return null;}
+    const original=editingId?dataset.records.find(record=>record.id===editingId):undefined;
+    const unchangedAmount=original?.amount===numericAmount&&original.currency===currency;
+    const sourceAmount=account?recordAccountAmount(numericAmount,currency,account.currency,accountAmount,sourceRate,unchangedAmount&&original?.accountId===accountId):undefined;
+    const targetAmount=type==="transfer"&&destination?recordAccountAmount(numericAmount,currency,destination.currency,destinationAmount,destinationRate,unchangedAmount&&original?.destinationAccountId===destinationAccountId):undefined;
+    if(!frozenPrimaryRate || sourceAmount===null || targetAmount===null){setMoneyError("Ingresá los importes convertidos y una cotización válida para las monedas elegidas.");return null;}
 
     return {
       type,
       amount: numericAmount,
       currency,
       accountId: accountId || undefined,
-      accountAmount: account ? Number(accountAmount) || numericAmount * sourceRate! : undefined,
+      accountAmount: sourceAmount,
       creditCardId: creditCardId || undefined,
       destinationAccountId:
         type === "transfer" ? destinationAccountId : undefined,
-      destinationAmount: type === "transfer" ? Number(destinationAmount) || numericAmount * destinationRate! : undefined,
+      destinationAmount: targetAmount,
       categoryId: type === "transfer" ? undefined : categoryId,
       counterpartyName: counterpartyName.trim() || undefined,
       tagIds: tagId ? [tagId] : [],
@@ -698,9 +703,12 @@ export function RecordsView() {
                 <span className="text-sm font-medium">Amount</span>
                 <input
                   value={amount}
-                  onChange={(event) =>
-                    setAmount(limitDecimalPlaces(event.target.value))
-                  }
+                  onChange={(event) => {
+                    const next=limitDecimalPlaces(event.target.value);
+                    setAccountAmount(scaleConvertedAmount(accountAmount,amount,next));
+                    setDestinationAmount(scaleConvertedAmount(destinationAmount,amount,next));
+                    setAmount(next);
+                  }}
                   className={fieldClassName}
                   type="number"
                   min="0"
@@ -747,9 +755,7 @@ export function RecordsView() {
                   </span>
                   <select
                     value={destinationAccountId}
-                    onChange={(event) =>
-                      setDestinationAccountId(event.target.value)
-                    }
+                    onChange={(event) => {setDestinationAccountId(event.target.value);setDestinationAmount("");}}
                     className={fieldClassName}
                   >
                     {dataset.accounts

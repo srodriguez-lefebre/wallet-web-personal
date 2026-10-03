@@ -3,9 +3,11 @@ import { createDb, type DbClient } from "./client.js";
 import * as schema from "./schema.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
 import { getWalletDataset } from "./wallet-repository.js";
+import { validationError } from "../api/errors.js";
 
 const collections: Array<[string, Table, string?]> = [
   ["accounts",schema.accounts],["categories",schema.categories,"parentId"],["tags",schema.tags],["creditCards",schema.creditCards],
+  ["merchants",schema.merchants],["merchantAliases",schema.merchantAliases],
   ["goals",schema.goals],["recurringDebts",schema.recurringDebts],["debts",schema.debts],["creditCardStatements",schema.creditCardStatements],
   ["records",schema.records],["creditCardRecords",schema.creditCardRecords,"originalRecordId"],["creditCardPayments",schema.creditCardPayments],
   ["creditCardPaymentAllocations",schema.creditCardPaymentAllocations],["goalReservationMovements",schema.goalReservationMovements,"reversesMovementId"],
@@ -16,9 +18,24 @@ const collections: Array<[string, Table, string?]> = [
 export async function restoreWalletBackup(input: unknown, db: DbClient = createDb()) {
   const dataset = walletBackupSchema.parse(input);
   const snapshot = dataset as unknown as Record<string, unknown>;
-  const tables = [schema.ingestionEvents,schema.recordTags,schema.recordGoals,schema.goalTags,schema.settings,...collections.map(([,table])=>table)];
+  if(dataset.merchants === undefined){
+    const [currentCategories,currentMerchants,currentAliases] = await db.batch([
+      db.select().from(schema.categories),db.select().from(schema.merchants),db.select().from(schema.merchantAliases),
+    ]);
+    const normalize = (name:string)=>name.normalize("NFKC").trim().toLocaleLowerCase("es");
+    snapshot.merchants=currentMerchants.map(merchant=>{
+      const oldCategory=currentCategories.find(category=>category.id===merchant.categoryId);
+      const exact=dataset.categories.find(category=>category.id===merchant.categoryId);
+      const matches=exact?[exact]:dataset.categories.filter(category=>
+        oldCategory?.systemKey ? category.systemKey===oldCategory.systemKey : oldCategory && normalize(category.name)===normalize(oldCategory.name));
+      if(matches.length!==1) throw validationError("The backup cannot preserve a merchant category; include merchant rules or restore matching categories");
+      return {...merchant,categoryId:matches[0].id};
+    });
+    snapshot.merchantAliases=currentAliases;
+  }
+  const tables = [schema.ingestionEvents,schema.recordTags,schema.recordGoals,schema.goalTags,schema.settings,schema.goalReservations,...collections.map(([,table])=>table)];
   const queries: unknown[] = [db.execute(sql`LOCK TABLE ${sql.join(tables.map(table=>sql.identifier(getTableName(table))),sql`, `)} IN ACCESS EXCLUSIVE MODE`)];
-  for (const table of tables.slice(0,5)) queries.push(db.execute(sql`DELETE FROM ${table}`));
+  for (const table of tables.slice(0,6)) queries.push(db.execute(sql`DELETE FROM ${table}`));
   for (const [,table] of [...collections].reverse()) queries.push(db.execute(sql`DELETE FROM ${table}`));
   const insert = (table:Table,row:Record<string,unknown>,defer?:string) => {
     const columns=getTableColumns(table);

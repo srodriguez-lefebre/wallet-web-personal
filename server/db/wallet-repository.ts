@@ -18,6 +18,7 @@ import {
   installmentPlans,
   investments,
   merchants,
+  merchantAliases,
   records,
   recordGoals,
   recordTags,
@@ -539,6 +540,8 @@ export async function getWalletDataset(
     debtRows,
     recurringDebtRows,
     installmentPlanRows,
+    merchantRows,
+    merchantAliasRows,
   ] = await db.batch([
     db.execute(sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`),
     db.select().from(settings).limit(1),
@@ -585,6 +588,8 @@ export async function getWalletDataset(
     db.select().from(debts),
     db.select().from(recurringDebts).orderBy(desc(recurringDebts.startedAt)),
     db.select().from(installmentPlans),
+    db.select().from(merchants).where(options.includeArchived ? undefined : sql`false`),
+    db.select().from(merchantAliases).where(options.includeArchived ? undefined : sql`false`),
   ]);
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
@@ -599,6 +604,10 @@ export async function getWalletDataset(
   };
 
   return {
+    ...(options.includeArchived ? {
+      merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,isActive:row.isActive},row)),
+      merchantAliases: merchantAliasRows.map(row=>withMetadata({id:row.id,merchantId:row.merchantId,alias:row.alias,normalizedAlias:row.normalizedAlias},row)),
+    } : {}),
     settings: withMetadata(mapSettings(settingsRows[0]), settingsRows[0]),
     accounts: accountRows.map((row) => withMetadata(mapAccount(row), row)),
     categories: categoryRows.map((row) => withMetadata(mapCategory(row), row)),

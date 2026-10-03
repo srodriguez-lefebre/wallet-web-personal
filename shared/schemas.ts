@@ -625,6 +625,8 @@ export const walletDatasetSchema = z.object({
 const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
 const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
 export const walletBackupSchema = walletDatasetSchema.extend({
+  merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),isActive:z.boolean()})).optional(),
+  merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
   settings:settingsSchema.extend({...backupMetadata,id:uuidSchema.optional()}),
   accounts:z.array(accountSchema.extend({...id,...backupMetadata})),categories:z.array(categorySchema.extend({...id,...backupMetadata,systemKey:z.string().optional()})),
   tags:z.array(tagSchema.extend({...id,...backupMetadata})),
@@ -652,10 +654,13 @@ export const walletBackupSchema = walletDatasetSchema.extend({
     for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",record[key],["records",index,key]);
     reference("categories",record.categoryId,["records",index,"categoryId"]);
     reference("creditCards",record.creditCardId,["records",index,"creditCardId"]);
-    reference("debts",record.debtId,["records",index,"debtId"]);
+    // Historical debt IDs can outlive deleted debt metadata; records.debt_id has no FK.
     record.tagIds.forEach(value=>reference("tags",value,["records",index,"tagIds"]));
     record.goalAssociations.forEach(value=>reference("goals",value.goalId,["records",index,"goalAssociations"]));
     record.goalIds.forEach(value=>reference("goals",value,["records",index,"goalIds"]));
   });
+  if ((dataset.merchants === undefined) !== (dataset.merchantAliases === undefined)) ctx.addIssue({code:"custom",path:["merchants"],message:"Backup must include both merchant collections"});
+  dataset.merchants?.forEach((merchant,index)=>reference("categories",merchant.categoryId,["merchants",index,"categoryId"]));
+  dataset.merchantAliases?.forEach((alias,index)=>reference("merchants",alias.merchantId,["merchantAliases",index,"merchantId"]));
 });
 
