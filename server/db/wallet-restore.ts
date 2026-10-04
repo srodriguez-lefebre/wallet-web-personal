@@ -34,16 +34,24 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
     });
     snapshot.merchantAliases=currentAliases;
   }
-  if(dataset.ingestionEvents===undefined){
-    const existing=await db.select().from(schema.ingestionEvents);
-    const recordIds=new Set(dataset.records.map(record=>record.id)),cardIds=new Set(dataset.creditCardRecords.map(record=>record.id));
-    let retained=existing.filter(event=>(!event.recordId||recordIds.has(event.recordId))&&(!event.creditCardRecordId||cardIds.has(event.creditCardRecordId)));
-    let previousCount:number;
-    do {previousCount=retained.length;const retainedIds=new Set(retained.map(event=>event.id));retained=retained.filter(event=>!event.duplicateOfId||retainedIds.has(event.duplicateOfId));}while(retained.length!==previousCount);
-    snapshot.ingestionEvents=retained;
-  }
+  const preserveIngestion = dataset.ingestionEvents === undefined;
   const tables = [schema.recordTags,schema.recordGoals,schema.goalTags,schema.settings,schema.goalReservations,...collections.map(([,table])=>table)];
   const queries: unknown[] = [db.execute(sql`LOCK TABLE ${sql.join(tables.map(table=>sql.identifier(getTableName(table))),sql`, `)} IN ACCESS EXCLUSIVE MODE`)];
+  if (preserveIngestion) {
+    // Capture after acquiring the lock: preparation must not discard a concurrent
+    // ingestion's retry identity. The transaction owns and drops this staging table.
+    const recordIds = JSON.stringify(dataset.records.map(record => record.id));
+    const cardIds = JSON.stringify(dataset.creditCardRecords.map(record => record.id));
+    queries.push(db.execute(sql`CREATE TEMP TABLE wallet_restore_ingestion ON COMMIT DROP AS
+      WITH RECURSIVE excluded(id) AS (
+        SELECT id FROM ingestion_events WHERE
+          (record_id IS NOT NULL AND record_id NOT IN (SELECT value::uuid FROM jsonb_array_elements_text(${recordIds}::jsonb)))
+          OR (credit_card_record_id IS NOT NULL AND credit_card_record_id NOT IN (SELECT value::uuid FROM jsonb_array_elements_text(${cardIds}::jsonb)))
+        UNION
+        SELECT child.id FROM ingestion_events child JOIN excluded parent ON child.duplicate_of_id = parent.id
+      )
+      SELECT event.* FROM ingestion_events event WHERE NOT EXISTS (SELECT 1 FROM excluded WHERE excluded.id = event.id)`));
+  }
   for (const table of tables.slice(0,5)) queries.push(db.execute(sql`DELETE FROM ${table}`));
   for (const [,table] of [...collections].reverse()) queries.push(db.execute(sql`DELETE FROM ${table}`));
   const insert = (table:Table,row:Record<string,unknown>,defer?:string) => {
@@ -58,6 +66,7 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
     for(const row of rows) insert(table,row,defer);
     if(defer) for(const row of rows) if(row[defer]) queries.push(db.execute(sql`UPDATE ${table} SET ${sql.identifier(getTableColumns(table)[defer].name)} = ${row[defer]} WHERE id = ${row.id}`));
   }
+  if (preserveIngestion) queries.push(db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`));
   insert(schema.settings,dataset.settings as unknown as Record<string,unknown>);
   for(const record of dataset.records){
     for(const tagId of record.tagIds) insert(schema.recordTags,{recordId:record.id,tagId});
