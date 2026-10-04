@@ -2189,7 +2189,7 @@ export async function updateRecord(
   const reservationFingerprint = (record: NewRecord, items: RecordGoalAssociation[]) => JSON.stringify({
     type: record.type, amount: record.amount, currency: record.currency,
     accountId: record.accountId, accountAmount: record.accountAmount,
-    paymentStatus: record.paymentStatus,
+    financial: isFinancialRecord(record),
     associations: items.map((item) => ({ goalId: item.goalId, useReserved: item.useReserved, reserveIncome: item.reserveIncome, allocatedAmount: item.allocatedAmount })).sort((a, b) => a.goalId.localeCompare(b.goalId)),
   });
   let newMovements: ReservationMovementWrite[] = [];

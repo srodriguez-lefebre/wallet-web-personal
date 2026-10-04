@@ -86,6 +86,17 @@ test("independent repeated closes release the ledger once", async () => {
   expect(dataset.records[0].id).toBe(record.id);
 });
 
+test("clearing a review changes no reservation consumption after a later reserve", async () => {
+  await createGoalReservation({ goalId, accountId, amount: 40, currency: "UYU", createdAt: date });
+  const record = await createRecord({ ...input(100), paymentStatus: "needs_review" });
+  expect(await balance()).toBe(0);
+  await createGoalReservation({ goalId, accountId, amount: 60, currency: "UYU", createdAt: date });
+  const before = (await getWalletDataset()).goalReservationMovements;
+  await updateRecord(record.id, { paymentStatus: "cleared" });
+  expect(await balance()).toBe(60);
+  expect((await getWalletDataset()).goalReservationMovements).toEqual(before);
+});
+
 test("closing races with expense reconciliation and reservations without recreating a reserve", async () => {
   await reserve();
   const record = await createRecord(input(40));

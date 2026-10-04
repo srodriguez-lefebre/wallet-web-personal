@@ -96,6 +96,20 @@ describe("wallet calculations", () => {
     expect(calculateCreditCardCategoryUsage(dataset,card,new Date("2026-06-30T12:00:00Z")).reduce((total,item)=>total+item.amount,0)).toBe(100);
   });
 
+  it("combines uncategorized review liabilities with card history without counting linked purchases twice", () => {
+    const card = { id: "mixed-card", name: "Mixed card", issuer: "Bank", lastFour: "1234", closingDay: 20, dueDay: 5, color: "blue", icon: "bank", isActive: true, limitCurrency: "UYU" as const, creditLimit: 1000 };
+    const review = { ...mockWalletData.records[0], id: "review", type: "expense" as const, categoryId: undefined, creditCardId: card.id,
+      amount: 100, currency: "UYU" as const, paymentStatus: "needs_review" as const, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, occurredAt: "2026-06-10T12:00:00Z" };
+    const ledger = { id: "linked-ledger", walletRecordId: "linked-wallet", creditCardId: card.id, kind: "purchase" as const,
+      amount: 50, currency: "UYU" as const, amountInLimitCurrency: 50, exchangeRateToLimitCurrency: 1, categoryId: "", accountImpactAtCreation: false, occurredAt: review.occurredAt };
+    const dataset = { ...mockWalletData, creditCards: [card], creditCardRecords: [ledger], creditCardPayments: [], creditCardPaymentAllocations: [], records: [review, { ...review, id: "linked-wallet", amount: 50, amountInLimitCurrency: 50 }, { ...review, id: "cancelled", paymentStatus: "cancelled" as const }] };
+    const asOf = new Date("2026-06-30T12:00:00Z");
+    expect(calculateCreditCardSummary(dataset, card, asOf).usedLimit).toBe(150);
+    expect(calculateCreditCardSummary(dataset, card, asOf).outstanding).toEqual([{ currency: "UYU", amount: 150 }]);
+    expect(calculateCreditCardCategoryUsage(dataset, card, asOf).reduce((sum, item) => sum + item.amount, 0)).toBe(150);
+    expect(calculateCreditCardSummary({ ...dataset, creditCardRecords: [{ ...ledger, creditCardId: "other-card", walletRecordId: undefined }], records: [review] }, card, asOf).usedLimit).toBe(100);
+  });
+
   it("calculates the savings rate and emergency runway from free balance", () => {
     expect(calculateSavingsRate(10_000, 7_500)).toBe(25);
     expect(calculateSavingsRate(0, 7_500)).toBe(0);

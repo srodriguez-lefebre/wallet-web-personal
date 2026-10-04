@@ -465,22 +465,26 @@ function legacyCardFinancialRecords(dataset: WalletDataset, card: CreditCard) {
       || (record.exchangeRateToLimitCurrency!==undefined && Number.isFinite(record.exchangeRateToLimitCurrency) && record.exchangeRateToLimitCurrency>0)));
 }
 
+function cardFinancialMovements(dataset: WalletDataset, card: CreditCard) {
+  const linkedWalletIds = new Set(dataset.creditCardRecords.filter(record => record.creditCardId === card.id).map(record => record.walletRecordId));
+  const unlinked = legacyCardFinancialRecords(dataset, card).filter(record => !linkedWalletIds.has(record.id)).map(record => ({
+    ...record,
+    kind: record.type === "income" ? "refund" as const : "purchase" as const,
+    amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
+    exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
+    categoryId: record.categoryId ?? "",
+    accountImpactAtCreation: Boolean(record.accountId),
+  }));
+  return [...dataset.creditCardRecords.filter(record => record.creditCardId === card.id), ...unlinked];
+}
+
 export function calculateCreditCardSummary(
   dataset: WalletDataset,
   card: CreditCard,
   asOf: Date = new Date(),
 ): CreditCardSummary {
   const dates = creditCardCycleDates(card, asOf);
-  const movements = (dataset.creditCardRecords.length > 0
-    ? dataset.creditCardRecords
-    : legacyCardFinancialRecords(dataset, card).map((record) => ({
-        ...record,
-        kind: record.type === "income" ? "refund" as const : "purchase" as const,
-        amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
-        exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
-        categoryId: record.categoryId ?? "",
-        accountImpactAtCreation: Boolean(record.accountId),
-      })))
+  const movements = cardFinancialMovements(dataset, card)
     .filter((record) => record.creditCardId === card.id && !isAfter(parseISO(record.occurredAt), asOf));
   const payments = dataset.creditCardPayments.filter(
     (payment) =>
@@ -618,14 +622,7 @@ export function calculateCreditCardCategoryUsage(
   card: CreditCard,
   asOf: Date = new Date(),
 ): CreditCardCategoryUsage[] {
-  const purchases = (dataset.creditCardRecords.length > 0
-    ? dataset.creditCardRecords
-    : legacyCardFinancialRecords(dataset, card).map((record) => ({
-        ...record, kind: record.type === "income" ? "refund" as const : "purchase" as const,
-        amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
-        exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
-        categoryId: record.categoryId ?? "", accountImpactAtCreation: Boolean(record.accountId),
-      }))).filter(
+  const purchases = cardFinancialMovements(dataset, card).filter(
     (record) =>
       record.creditCardId === card.id &&
       record.kind === "purchase" &&
