@@ -315,11 +315,8 @@ test("an unknown-bank purchase can be resolved as card-only without a bank accou
   await act(async () =>
     paymentType.props.onChange({ target: { value: "card:test-card" } }),
   );
-  const status = tree!.root
-    .findAllByType("select")
-    .find((select) => select.props.value === "needs_review")!;
   await act(async () =>
-    status.props.onChange({ target: { value: "cleared" } }),
+    tree!.root.findByProps({ "aria-label": "Set status to Cleared" }).props.onClick(),
   );
   expect(
     tree!.root
@@ -352,11 +349,8 @@ test("an unresolved review record can be cancelled without inventing destination
   dataset.exchangeRates = [];
   const original = structuredClone(dataset.records[0]);
   await openRecord();
-  const status = tree!.root
-    .findAllByType("select")
-    .find((select) => select.props.value === "needs_review")!;
   await act(async () =>
-    status.props.onChange({ target: { value: "cancelled" } }),
+    tree!.root.findByProps({ "aria-label": "Set status to Cancelled" }).props.onClick(),
   );
   expect(
     tree!.root

@@ -49,6 +49,14 @@ afterEach(async () => {
 });
 const text = () => JSON.stringify(tree?.toJSON());
 
+test("completed goals do not show a remaining contribution plan", async () => {
+  const progress = calculateGoalProgress(mockWalletData)[0];
+  await act(async () => {
+    tree = create(<GoalFundingPlan progress={{ ...progress, goal: { ...progress.goal, status: "completed" } }} />);
+  });
+  expect(tree!.toJSON()).toBeNull();
+});
+
 test("debt list puts undated amounts last and filters overdue without turning unknown balances into zero", async () => {
   const dataset = state.dataset as WalletDataset;
   const base = dataset.debts[0];

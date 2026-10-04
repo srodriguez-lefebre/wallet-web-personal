@@ -10,6 +10,7 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
+import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { GoalEditDialog } from "@/components/wallet/goal-edit-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { GoalPatch } from "@shared/schemas";
@@ -102,16 +103,84 @@ export function GoalDetailView() {
           <ReceiptText className="h-4 w-4" />
           Ver records
         </Button>
-        <Button aria-label="Edit goal" variant="outline" disabled={pending} onClick={() => setIsEditing(true)}><Edit3 className="h-4 w-4" />Edit</Button>
-        <Button aria-label="Close goal" variant="outline" disabled={pending || goalProgress.goal.status === "completed"} onClick={() => setIsClosing(true)}><Check className="h-4 w-4" />Close goal</Button>
+        <Button
+          aria-label="Edit goal"
+          variant="outline"
+          disabled={pending}
+          onClick={() => setIsEditing(true)}
+        >
+          <Edit3 className="h-4 w-4" />
+          Edit
+        </Button>
+        <Button
+          aria-label="Close goal"
+          variant="outline"
+          disabled={pending || goalProgress.goal.status === "completed"}
+          onClick={() => setIsClosing(true)}
+        >
+          <Check className="h-4 w-4" />
+          Close goal
+        </Button>
       </PageHeader>
 
-      {isEditing ? <GoalEditDialog goal={goalProgress.goal} accounts={dataset.accounts} pending={pending} onClose={() => setIsEditing(false)} onSave={saveGoal} /> : null}
-      <Dialog open={isClosing} onOpenChange={(open) => { if (!pending) setIsClosing(open); }}>
+      {isEditing ? (
+        <GoalEditDialog
+          goal={goalProgress.goal}
+          accounts={dataset.accounts}
+          pending={pending}
+          onClose={() => setIsEditing(false)}
+          onSave={saveGoal}
+        />
+      ) : null}
+      <Dialog
+        open={isClosing}
+        onOpenChange={(open) => {
+          if (!pending) setIsClosing(open);
+        }}
+      >
         <DialogContent>
-          <DialogHeader><DialogTitle>Close {goalProgress.goal.name}</DialogTitle><DialogDescription>You can complete this goal before reaching its target. All remaining reserved funds become available in their original accounts. Account totals stay the same; this does not create income. Spent amounts, linked records, and reservation history are preserved. Automatic capture stops.</DialogDescription></DialogHeader>
-          {reservations.length ? <ul className="space-y-2 text-sm">{reservations.map((reservation) => <li key={reservation.id}>{dataset.accounts.find((account) => account.id === reservation.accountId)?.name ?? "Original account"}: {formatMoney(reservation.amount, reservation.currency)}</li>)}</ul> : <p className="text-sm text-muted-foreground">There are no remaining ledger reservations to release.</p>}
-          <div className="flex justify-end gap-2"><Button variant="outline" disabled={pending} onClick={() => setIsClosing(false)}>Cancel</Button><Button aria-label="Complete goal and release reservations" disabled={pending} onClick={() => saveGoal({ status: "completed" }, true)}>{pending ? "Closing..." : "Complete and release"}</Button></div>
+          <DialogHeader>
+            <DialogTitle>Close {goalProgress.goal.name}</DialogTitle>
+            <DialogDescription>
+              You can complete this goal before reaching its target. All
+              remaining reserved funds become available in their original
+              accounts. Account totals stay the same; this does not create
+              income. Spent amounts, linked records, and reservation history are
+              preserved. Automatic capture stops.
+            </DialogDescription>
+          </DialogHeader>
+          {reservations.length ? (
+            <ul className="space-y-2 text-sm">
+              {reservations.map((reservation) => (
+                <li key={reservation.id}>
+                  {dataset.accounts.find(
+                    (account) => account.id === reservation.accountId,
+                  )?.name ?? "Original account"}
+                  : {formatMoney(reservation.amount, reservation.currency)}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              There are no remaining ledger reservations to release.
+            </p>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setIsClosing(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              aria-label="Complete goal and release reservations"
+              disabled={pending}
+              onClick={() => saveGoal({ status: "completed" }, true)}
+            >
+              {pending ? "Closing..." : "Complete and release"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -130,56 +199,99 @@ export function GoalDetailView() {
                   <div>
                     <CardTitle>{goalProgress.goal.name}</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Target {formatMoney(goalProgress.goal.targetAmount, goalProgress.goal.currency)}
+                      Target{" "}
+                      {formatMoney(
+                        goalProgress.goal.targetAmount,
+                        goalProgress.goal.currency,
+                      )}
                     </p>
                   </div>
                 </div>
-                <Badge variant={goalProgress.goal.status === "active" ? "success" : "muted"}>
+                <Badge
+                  variant={
+                    goalProgress.goal.status === "active" ? "success" : "muted"
+                  }
+                >
                   {goalStatusLabels[goalProgress.goal.status]}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent>
-              {goalProgress.hasMissingExchangeRate ? <p className="text-sm text-muted-foreground">Falta una cotización para calcular el progreso.</p> : <>
-              <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
-                <span style={{ width: `${Math.min(100, (goalProgress.spent / goalProgress.goal.targetAmount) * 100)}%`, backgroundColor: goalProgress.goal.color }} />
-                <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (goalProgress.spent / goalProgress.goal.targetAmount) * 100), (goalProgress.reserved / goalProgress.goal.targetAmount) * 100)}%` }} />
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-4">
-                <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Reserved</p>
-                  <p className="font-semibold">
-                    {formatMoney(goalProgress.reserved, goalProgress.goal.currency)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Spent</p>
-                  <p className="font-semibold">
-                    {formatMoney(goalProgress.spent, goalProgress.goal.currency)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Committed</p>
-                  <p className="font-semibold">
-                    {formatMoney(goalProgress.committed, goalProgress.goal.currency)}
-                  </p>
-                </div>
-                <div className="rounded-md bg-secondary p-3">
-                  <p className="text-sm text-muted-foreground">Remaining</p>
-                  <p className="font-semibold">
-                    {formatMoney(goalProgress.remaining, goalProgress.goal.currency)}
-                  </p>
-                </div>
-              </div>
-              </>}
+              <GoalProgressBar progress={goalProgress} />
+              {goalProgress.hasMissingExchangeRate ? (
+                <p className="text-sm text-muted-foreground">
+                  An exchange rate is needed to calculate these totals.
+                </p>
+              ) : (
+                <>
+                  <div
+                    className={`mt-4 grid gap-3 ${goalProgress.goal.status === "completed" ? "sm:grid-cols-2" : "sm:grid-cols-4"}`}
+                  >
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-sm text-muted-foreground">Reserved</p>
+                      <p className="font-semibold">
+                        {formatMoney(
+                          goalProgress.reserved,
+                          goalProgress.goal.currency,
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-sm text-muted-foreground">Spent</p>
+                      <p className="font-semibold">
+                        {formatMoney(
+                          goalProgress.spent,
+                          goalProgress.goal.currency,
+                        )}
+                      </p>
+                    </div>
+                    {goalProgress.goal.status !== "completed" && (
+                      <>
+                        <div className="rounded-md bg-secondary p-3">
+                          <p className="text-sm text-muted-foreground">
+                            Committed
+                          </p>
+                          <p className="font-semibold">
+                            {formatMoney(
+                              goalProgress.committed,
+                              goalProgress.goal.currency,
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-secondary p-3">
+                          <p className="text-sm text-muted-foreground">
+                            Remaining
+                          </p>
+                          <p className="font-semibold">
+                            {formatMoney(
+                              goalProgress.remaining,
+                              goalProgress.goal.currency,
+                            )}
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
               <GoalFundingPlan progress={goalProgress} />
               <div className="mt-4 flex flex-wrap gap-2">
-                {goalProgress.overTarget > 0 ? <Badge variant="warning">Excedido {formatMoney(goalProgress.overTarget, goalProgress.goal.currency)}</Badge> : null}
+                {goalProgress.overTarget > 0 ? (
+                  <Badge variant="warning">
+                    Excedido{" "}
+                    {formatMoney(
+                      goalProgress.overTarget,
+                      goalProgress.goal.currency,
+                    )}
+                  </Badge>
+                ) : null}
                 {goalProgress.goal.deadline ? (
                   <Badge variant="muted">
                     <CalendarDays className="mr-1 h-3 w-3" />
                     {goalProgress.goal.deadline}
-                    {deadlineDays !== null ? ` · ${deadlineDays >= 0 ? `Faltan ${deadlineDays} días` : `Finalizó hace ${Math.abs(deadlineDays)} días`}` : ""}
+                    {deadlineDays !== null
+                      ? ` · ${deadlineDays >= 0 ? `Faltan ${deadlineDays} días` : `Finalizó hace ${Math.abs(deadlineDays)} días`}`
+                      : ""}
                   </Badge>
                 ) : null}
               </div>
@@ -200,7 +312,8 @@ export function GoalDetailView() {
                   const association = (record.goalAssociations ?? []).find(
                     (item) => item.goalId === goalProgress.goal.id,
                   );
-                  const goalAmount = association?.allocatedAmount ?? record.amount;
+                  const goalAmount =
+                    association?.allocatedAmount ?? record.amount;
                   const category = dataset.categories.find(
                     (item) => item.id === record.categoryId,
                   );
@@ -215,7 +328,9 @@ export function GoalDetailView() {
                       className="flex w-full items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                     >
                       <div>
-                        <p className="font-medium">{category?.name ?? "Transfer"}</p>
+                        <p className="font-medium">
+                          {category?.name ?? "Transfer"}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {account?.name} · {record.note ?? "No note"}
                         </p>
@@ -259,14 +374,19 @@ export function GoalDetailView() {
                   <div key={reservation.id} className="rounded-md border p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="font-medium">{account?.name ?? "Account"}</p>
+                        <p className="font-medium">
+                          {account?.name ?? "Account"}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {reservation.note ?? "Reservation"}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="font-semibold">
-                          {formatMoney(reservation.amount, reservation.currency)}
+                          {formatMoney(
+                            reservation.amount,
+                            reservation.currency,
+                          )}
                         </p>
                         <input
                           aria-label="Amount to release"
@@ -275,16 +395,44 @@ export function GoalDetailView() {
                           min="0.01"
                           max={reservation.amount}
                           step="0.01"
-                          value={releaseAmounts[reservation.id] ?? String(reservation.amount)}
-                          onChange={(event) => setReleaseAmounts((current) => ({ ...current, [reservation.id]: event.target.value }))}
+                          value={
+                            releaseAmounts[reservation.id] ??
+                            String(reservation.amount)
+                          }
+                          onChange={(event) =>
+                            setReleaseAmounts((current) => ({
+                              ...current,
+                              [reservation.id]: event.target.value,
+                            }))
+                          }
                         />
-                        <Button variant="outline" onClick={() => {
-                          const amount = Number(releaseAmounts[reservation.id] ?? reservation.amount);
-                          if (amount <= 0 || amount > reservation.amount) return;
-                          void runAction(() => releaseGoalReservation({ goalId: reservation.goalId, accountId: reservation.accountId, amount, note: "Liberación desde Goal" }), {
-                            processing: "Releasing reservation...", success: "Reservation released", error: "Could not release reservation",
-                          }).catch(() => undefined);
-                        }}>Liberar</Button>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const amount = Number(
+                              releaseAmounts[reservation.id] ??
+                                reservation.amount,
+                            );
+                            if (amount <= 0 || amount > reservation.amount)
+                              return;
+                            void runAction(
+                              () =>
+                                releaseGoalReservation({
+                                  goalId: reservation.goalId,
+                                  accountId: reservation.accountId,
+                                  amount,
+                                  note: "Liberación desde Goal",
+                                }),
+                              {
+                                processing: "Releasing reservation...",
+                                success: "Reservation released",
+                                error: "Could not release reservation",
+                              },
+                            ).catch(() => undefined);
+                          }}
+                        >
+                          Liberar
+                        </Button>
                       </div>
                     </div>
                   </div>

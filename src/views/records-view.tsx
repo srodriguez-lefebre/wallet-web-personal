@@ -878,7 +878,7 @@ export function RecordsView() {
       (card && (!Number.isFinite(limitRate) || !(limitRate > 0)))
     ) {
       setMoneyError(
-        "Ingresá los importes convertidos y una cotización válida para las monedas elegidas.",
+        "Enter the converted amounts and a valid exchange rate for the selected currencies.",
       );
       return null;
     }
@@ -1068,8 +1068,8 @@ export function RecordsView() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             {statusOnlyCancellation && (
               <p role="status" className="text-sm text-muted-foreground">
-                Al cancelar se conservan los datos originales del movimiento y
-                se lo excluye de los saldos.
+                Cancelling preserves the original record and excludes it from
+                balances.
               </p>
             )}
             {templateNotice && (
@@ -1089,110 +1089,6 @@ export function RecordsView() {
                 {moneyError}
               </p>
             )}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                Moneda del movimiento
-                <select
-                  disabled={Boolean(editingLinkedRefund)}
-                  value={currency}
-                  onChange={(event) =>
-                    changeCurrency(event.target.value as CurrencyCode)
-                  }
-                  className={fieldClassName}
-                >
-                  {["UYU", "USD", "EUR", "BRL", "ARS"].map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
-              </label>
-              {
-                <label className="space-y-1 text-sm">
-                  Cotización a {dataset.settings.primaryCurrency}
-                  <input
-                    disabled={Boolean(editingLinkedRefund)}
-                    value={primaryRate}
-                    onChange={(event) => setPrimaryRate(event.target.value)}
-                    placeholder={String(
-                      findExchangeRate(
-                        dataset.exchangeRates,
-                        currency,
-                        dataset.settings.primaryCurrency,
-                        dateTimeLocalToIso(occurredAtLocal),
-                      ) ?? "Ingresá cotización",
-                    )}
-                    className={fieldClassName}
-                    inputMode="decimal"
-                  />
-                </label>
-              }
-              {accountId &&
-                dataset.accounts.find((item) => item.id === accountId)
-                  ?.currency !== currency && (
-                  <label className="space-y-1 text-sm">
-                    Importe en cuenta (
-                    {
-                      dataset.accounts.find((item) => item.id === accountId)
-                        ?.currency
-                    }
-                    )
-                    <input
-                      disabled={Boolean(editingLinkedRefund)}
-                      value={accountAmount}
-                      onChange={(event) => {
-                        const next = limitDecimalPlaces(event.target.value);
-                        setAccountAmount(next);
-                        conversionBasis.current.source =
-                          Number(amount) > 0 && Number(next) > 0
-                            ? { amount, converted: next }
-                            : undefined;
-                      }}
-                      className={fieldClassName}
-                      inputMode="decimal"
-                      placeholder="Calculado con cotización histórica"
-                    />
-                  </label>
-                )}
-              {type === "transfer" && (
-                <label className="space-y-1 text-sm">
-                  Importe recibido (
-                  {
-                    dataset.accounts.find(
-                      (item) => item.id === destinationAccountId,
-                    )?.currency
-                  }
-                  )
-                  <input
-                    disabled={Boolean(editingLinkedRefund)}
-                    value={destinationAmount}
-                    onChange={(event) => {
-                      const next = limitDecimalPlaces(event.target.value);
-                      setDestinationAmount(next);
-                      conversionBasis.current.destination =
-                        Number(amount) > 0 && Number(next) > 0
-                          ? { amount, converted: next }
-                          : undefined;
-                    }}
-                    className={fieldClassName}
-                    inputMode="decimal"
-                    placeholder="Calculado con cotización histórica"
-                  />
-                </label>
-              )}
-              {creditCardId && (
-                <label className="space-y-1 text-sm">
-                  Cotización a moneda del límite
-                  <input
-                    disabled={Boolean(editingLinkedRefund)}
-                    value={exchangeRateToLimitCurrency}
-                    onChange={(event) =>
-                      setExchangeRateToLimitCurrency(event.target.value)
-                    }
-                    className={fieldClassName}
-                    inputMode="decimal"
-                  />
-                </label>
-              )}
-            </div>
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
               {(["expense", "income", "transfer"] as RecordType[]).map(
                 (item) => (
@@ -1253,19 +1149,125 @@ export function RecordsView() {
                   placeholder="0"
                 />
               </label>
-
-              {
+              <div className="space-y-2">
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium">Date and time</span>
-                  <input
+                  <span className="text-sm font-medium">Currency</span>
+                  <select
                     disabled={Boolean(editingLinkedRefund)}
-                    value={occurredAtLocal}
-                    onChange={(event) => setOccurredAtLocal(event.target.value)}
+                    value={currency}
+                    onChange={(event) =>
+                      changeCurrency(event.target.value as CurrencyCode)
+                    }
                     className={fieldClassName}
-                    type="datetime-local"
-                  />
+                  >
+                    {["UYU", "USD", "EUR", "BRL", "ARS"].map((value) => (
+                      <option key={value}>{value}</option>
+                    ))}
+                  </select>
                 </label>
-              }
+                <details className="rounded-md border bg-background p-2">
+                  <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                    Exchange rate (optional)
+                  </summary>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Uses the default rate unless you enter a custom rate.
+                  </p>
+                  <div className="mt-3 grid gap-3">
+                    {
+                      <label className="space-y-1 text-sm">
+                        Exchange rate to {dataset.settings.primaryCurrency}
+                        <input
+                          disabled={Boolean(editingLinkedRefund)}
+                          value={primaryRate}
+                          onChange={(event) =>
+                            setPrimaryRate(event.target.value)
+                          }
+                          placeholder={String(
+                            findExchangeRate(
+                              dataset.exchangeRates,
+                              currency,
+                              dataset.settings.primaryCurrency,
+                              dateTimeLocalToIso(occurredAtLocal),
+                            ) ?? "Enter exchange rate",
+                          )}
+                          className={fieldClassName}
+                          inputMode="decimal"
+                        />
+                      </label>
+                    }
+                    {accountId &&
+                      dataset.accounts.find((item) => item.id === accountId)
+                        ?.currency !== currency && (
+                        <label className="space-y-1 text-sm">
+                          Account amount (
+                          {
+                            dataset.accounts.find(
+                              (item) => item.id === accountId,
+                            )?.currency
+                          }
+                          )
+                          <input
+                            disabled={Boolean(editingLinkedRefund)}
+                            value={accountAmount}
+                            onChange={(event) => {
+                              const next = limitDecimalPlaces(
+                                event.target.value,
+                              );
+                              setAccountAmount(next);
+                              conversionBasis.current.source =
+                                Number(amount) > 0 && Number(next) > 0
+                                  ? { amount, converted: next }
+                                  : undefined;
+                            }}
+                            className={fieldClassName}
+                            inputMode="decimal"
+                            placeholder="Calculated using the historical rate"
+                          />
+                        </label>
+                      )}
+                    {type === "transfer" && (
+                      <label className="space-y-1 text-sm">
+                        Received amount (
+                        {
+                          dataset.accounts.find(
+                            (item) => item.id === destinationAccountId,
+                          )?.currency
+                        }
+                        )
+                        <input
+                          disabled={Boolean(editingLinkedRefund)}
+                          value={destinationAmount}
+                          onChange={(event) => {
+                            const next = limitDecimalPlaces(event.target.value);
+                            setDestinationAmount(next);
+                            conversionBasis.current.destination =
+                              Number(amount) > 0 && Number(next) > 0
+                                ? { amount, converted: next }
+                                : undefined;
+                          }}
+                          className={fieldClassName}
+                          inputMode="decimal"
+                          placeholder="Calculated using the historical rate"
+                        />
+                      </label>
+                    )}
+                    {creditCardId && (
+                      <label className="space-y-1 text-sm">
+                        Exchange rate to card limit currency
+                        <input
+                          disabled={Boolean(editingLinkedRefund)}
+                          value={exchangeRateToLimitCurrency}
+                          onChange={(event) =>
+                            setExchangeRateToLimitCurrency(event.target.value)
+                          }
+                          className={fieldClassName}
+                          inputMode="decimal"
+                        />
+                      </label>
+                    )}
+                  </div>
+                </details>
+              </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1293,11 +1295,18 @@ export function RecordsView() {
                   }}
                   className={fieldClassName}
                 >
-                  {!(type === "expense" && creditCardId && dataset.records.find(record => record.id === editingId)?.accountId) && <option value="">
-                    {type === "expense" && creditCardId
-                      ? "Card only"
-                      : "Choose account"}
-                  </option>}
+                  {!(
+                    type === "expense" &&
+                    creditCardId &&
+                    dataset.records.find((record) => record.id === editingId)
+                      ?.accountId
+                  ) && (
+                    <option value="">
+                      {type === "expense" && creditCardId
+                        ? "Card only"
+                        : "Choose account"}
+                    </option>
+                  )}
                   {dataset.accounts
                     .filter((account) => account.isActive && account.isVisible)
                     .map((account) => (
@@ -1354,142 +1363,18 @@ export function RecordsView() {
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
-              {type !== "transfer" ? (
-                <div className="space-y-2">
-                  <span className="text-sm font-medium">Goals</span>
-                  <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
-                    {dataset.goals
-                      .filter(
-                        (goal) =>
-                          goal.status === "active" ||
-                          goalAssociations.some(
-                            (association) => association.goalId === goal.id,
-                          ),
-                      )
-                      .map((goal) => {
-                        const association = goalAssociations.find(
-                          (item) => item.goalId === goal.id,
-                        );
-
-                        return (
-                          <button
-                            key={goal.id}
-                            type="button"
-                            onClick={() =>
-                              setGoalAssociations((current) =>
-                                association
-                                  ? current.filter(
-                                      (item) => item.goalId !== goal.id,
-                                    )
-                                  : [
-                                      ...current,
-                                      {
-                                        goalId: goal.id,
-                                        assignmentSource: "manual",
-                                        useReserved: !editingId,
-                                        reserveIncome: true,
-                                      },
-                                    ],
-                              )
-                            }
-                            className={
-                              association
-                                ? "rounded-md border px-2 py-1 text-xs font-medium text-white"
-                                : "rounded-md border px-2 py-1 text-xs text-muted-foreground"
-                            }
-                            style={
-                              association
-                                ? {
-                                    backgroundColor: goal.color,
-                                    borderColor: goal.color,
-                                  }
-                                : undefined
-                            }
-                          >
-                            {goal.name}
-                            {association?.assignmentSource === "date_rule"
-                              ? " · automático"
-                              : ""}
-                          </button>
-                        );
-                      })}
-                    {dataset.goals.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        No active goals
-                      </span>
-                    ) : null}
-                  </div>
-                  {goalAssociations.map((association) => {
-                    const goal = dataset.goals.find(
-                      (item) => item.id === association.goalId,
-                    );
-                    if (!goal) return null;
-                    const key =
-                      type === "income" ? "reserveIncome" : "useReserved";
-
-                    return (
-                      <div
-                        key={goal.id}
-                        className="space-y-2 rounded-md border p-2"
-                      >
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={association[key]}
-                            onChange={(event) =>
-                              updateGoalAssociation(goal.id, {
-                                [key]: event.target.checked,
-                              })
-                            }
-                          />
-                          {type === "income"
-                            ? "Volver a reservar este ingreso"
-                            : "Usar fondos reservados"}{" "}
-                          · {goal.name}
-                        </label>
-                        <label className="block space-y-1 text-xs text-muted-foreground">
-                          <span>Monto para este objetivo</span>
-                          <input
-                            value={association.allocatedAmount ?? ""}
-                            onChange={(event) => {
-                              const value = limitDecimalPlaces(
-                                event.target.value,
-                              );
-                              updateGoalAssociation(goal.id, {
-                                allocatedAmount: value
-                                  ? Number(value)
-                                  : undefined,
-                              });
-                            }}
-                            className={fieldClassName}
-                            type="number"
-                            min="0"
-                            max={amount || undefined}
-                            step="0.01"
-                            placeholder={
-                              amount
-                                ? `Todo el record (${formatMoney(
-                                    numericAmount,
-                                    currency,
-                                  )})`
-                                : "Todo el record"
-                            }
-                          />
-                          {association.allocatedAmount !== undefined &&
-                          association.allocatedAmount > numericAmount ? (
-                            <span className="text-red-600">
-                              No puede superar el monto del record.
-                            </span>
-                          ) : null}
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div />
-              )}
-
+              {
+                <label className="block space-y-2">
+                  <span className="text-sm font-medium">Date and time</span>
+                  <input
+                    disabled={Boolean(editingLinkedRefund)}
+                    value={occurredAtLocal}
+                    onChange={(event) => setOccurredAtLocal(event.target.value)}
+                    className={fieldClassName}
+                    type="datetime-local"
+                  />
+                </label>
+              }
               <label className="block space-y-2">
                 <span className="text-sm font-medium">Counterparty</span>
                 <input
@@ -1549,37 +1434,175 @@ export function RecordsView() {
                   <option value="other">{paymentTypeLabels.other}</option>
                 </select>
               </label>
+              {type !== "transfer" ? (
+                <div className="space-y-2">
+                  <span className="text-sm font-medium">Goals</span>
+                  <div className="flex min-h-10 flex-wrap gap-2 rounded-md border bg-background p-2">
+                    {dataset.goals
+                      .filter(
+                        (goal) =>
+                          goal.status === "active" ||
+                          goalAssociations.some(
+                            (association) => association.goalId === goal.id,
+                          ),
+                      )
+                      .map((goal) => {
+                        const association = goalAssociations.find(
+                          (item) => item.goalId === goal.id,
+                        );
 
-              {
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Status</span>
-                  <select
-                    disabled={Boolean(editingLinkedRefund)}
-                    value={paymentStatus}
-                    onChange={(event) =>
-                      setPaymentStatus(event.target.value as PaymentStatus)
-                    }
-                    className={fieldClassName}
-                  >
-                    <option value="cleared">
-                      {paymentStatusLabels.cleared}
-                    </option>
-                    <option value="pending">
-                      {paymentStatusLabels.pending}
-                    </option>
-                    <option value="needs_review">
-                      {paymentStatusLabels.needs_review}
-                    </option>
-                    <option value="cancelled">
-                      {paymentStatusLabels.cancelled}
-                    </option>
-                  </select>
-                </label>
-              }
+                        return (
+                          <button
+                            key={goal.id}
+                            type="button"
+                            onClick={() =>
+                              setGoalAssociations((current) =>
+                                association
+                                  ? current.filter(
+                                      (item) => item.goalId !== goal.id,
+                                    )
+                                  : [
+                                      ...current,
+                                      {
+                                        goalId: goal.id,
+                                        assignmentSource: "manual",
+                                        useReserved: !editingId,
+                                        reserveIncome: true,
+                                      },
+                                    ],
+                              )
+                            }
+                            className={
+                              association
+                                ? "rounded-md border px-2 py-1 text-xs font-medium text-white"
+                                : "rounded-md border px-2 py-1 text-xs text-muted-foreground"
+                            }
+                            style={
+                              association
+                                ? {
+                                    backgroundColor: goal.color,
+                                    borderColor: goal.color,
+                                  }
+                                : undefined
+                            }
+                          >
+                            {goal.name}
+                            {association?.assignmentSource === "date_rule"
+                              ? " · automatic"
+                              : ""}
+                          </button>
+                        );
+                      })}
+                    {dataset.goals.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        No active goals
+                      </span>
+                    ) : null}
+                  </div>
+                  {goalAssociations.map((association) => {
+                    const goal = dataset.goals.find(
+                      (item) => item.id === association.goalId,
+                    );
+                    if (!goal) return null;
+                    const key =
+                      type === "income" ? "reserveIncome" : "useReserved";
+
+                    return (
+                      <div
+                        key={goal.id}
+                        className="space-y-2 rounded-md border p-2"
+                      >
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={association[key]}
+                            onChange={(event) =>
+                              updateGoalAssociation(goal.id, {
+                                [key]: event.target.checked,
+                              })
+                            }
+                          />
+                          {type === "income"
+                            ? "Reserve this income again"
+                            : "Use reserved funds"}{" "}
+                          · {goal.name}
+                        </label>
+                        <label className="block space-y-1 text-xs text-muted-foreground">
+                          <span>Amount for this goal</span>
+                          <input
+                            value={association.allocatedAmount ?? ""}
+                            onChange={(event) => {
+                              const value = limitDecimalPlaces(
+                                event.target.value,
+                              );
+                              updateGoalAssociation(goal.id, {
+                                allocatedAmount: value
+                                  ? Number(value)
+                                  : undefined,
+                              });
+                            }}
+                            className={fieldClassName}
+                            type="number"
+                            min="0"
+                            max={amount || undefined}
+                            step="0.01"
+                            placeholder={
+                              amount
+                                ? `Entire record (${formatMoney(
+                                    numericAmount,
+                                    currency,
+                                  )})`
+                                : "Entire record"
+                            }
+                          />
+                          {association.allocatedAmount !== undefined &&
+                          association.allocatedAmount > numericAmount ? (
+                            <span className="text-red-600">
+                              Cannot exceed the record amount.
+                            </span>
+                          ) : null}
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div />
+              )}
             </div>
 
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Status</legend>
+              <div className="grid grid-cols-2 gap-2 rounded-md bg-secondary p-1 sm:grid-cols-4">
+                {(
+                  [
+                    "cleared",
+                    "pending",
+                    "needs_review",
+                    "cancelled",
+                  ] as PaymentStatus[]
+                ).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    aria-label={`Set status to ${paymentStatusLabels[item]}`}
+                    aria-pressed={paymentStatus === item}
+                    disabled={Boolean(editingLinkedRefund)}
+                    onClick={() => setPaymentStatus(item)}
+                    className={
+                      paymentStatus === item
+                        ? "rounded-md bg-background px-2 py-2 text-sm font-medium shadow-sm"
+                        : "rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-background/60"
+                    }
+                  >
+                    {paymentStatusLabels[item]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
             <label className="block space-y-2">
-              <span className="text-sm font-medium">Note</span>
+              <span className="text-sm font-medium">Notes</span>
               <input
                 value={note}
                 onChange={(event) => setNote(event.target.value)}

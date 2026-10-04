@@ -84,7 +84,7 @@ export function DashboardView() {
         )
       : calculateCategoryExpenses(reportingDataset, selectedMonth);
   const visibleGoals = calculateGoalProgress(dataset).filter(
-    (item) => item.goal.isVisible,
+    (item) => item.goal.isVisible && item.goal.status !== "completed",
   );
   const visibleOpenDebts = dataset.debts.filter(
     (debt) => debt.isVisible && isOpenDebt(debt),

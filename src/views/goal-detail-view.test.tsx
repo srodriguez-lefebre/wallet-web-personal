@@ -84,6 +84,21 @@ const save = () =>
     .findByProps({ "aria-label": "Edit goal details" })
     .props.onSubmit({ preventDefault: vi.fn() });
 
+test("completed goal keeps its target and totals but hides remaining funding and fills the bar", async () => {
+  const dataset = state.dataset as WalletDataset;
+  dataset.goals[0].status = "completed";
+  dataset.goals[0].targetAmount = 999999;
+  await act(async () => { tree = create(<GoalDetailView />); });
+  const content = JSON.stringify(tree!.toJSON());
+  expect(content).toContain("Reserved");
+  expect(content).toContain("Spent");
+  expect(content).not.toContain("Still needed");
+  expect(content).not.toContain("Remaining");
+  expect(content).not.toContain("Committed");
+  expect(tree!.root.findByProps({ "aria-label": "Completed goal" }).props["aria-valuenow"]).toBe(100);
+  expect(dataset.goals[0].targetAmount).toBe(999999);
+});
+
 test("detail editing validates and saves through the persisted goal action", async () => {
   await open("Edit goal");
   await change("Goal name", "  Updated trip  ");

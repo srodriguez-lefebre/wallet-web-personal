@@ -12,6 +12,7 @@ const messages = {
 };
 
 export function GoalFundingPlan({ progress }: { progress: GoalProgress }) {
+  if (progress.goal.status === "completed") return null;
   const plan = calculateGoalFundingPlan(progress);
   return (
     <div className="mt-4 space-y-3 rounded-md border p-3 text-sm">

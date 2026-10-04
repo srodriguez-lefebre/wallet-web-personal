@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/dialog";
 import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
+import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
@@ -565,21 +566,73 @@ export function GoalsView() {
                     <div className="rounded-lg border p-4">
                       <label className="flex items-center justify-between gap-3">
                         <span>
-                          <span className="block text-sm font-medium">Captura automática de gastos</span>
-                          <span className="block text-xs text-muted-foreground">Asocia gastos del rango y usa primero la reserva.</span>
+                          <span className="block text-sm font-medium">
+                            Captura automática de gastos
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            Asocia gastos del rango y usa primero la reserva.
+                          </span>
                         </span>
                         <input
                           type="checkbox"
                           className="h-5 w-5 accent-primary"
                           checked={draft.autoCaptureEnabled}
-                          onChange={(event) => updateGoalDraft(draft.id, { autoCaptureEnabled: event.target.checked })}
+                          onChange={(event) =>
+                            updateGoalDraft(draft.id, {
+                              autoCaptureEnabled: event.target.checked,
+                            })
+                          }
                         />
                       </label>
                       {draft.autoCaptureEnabled ? (
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <label className="space-y-2"><span className="text-sm font-medium">Desde</span><input type="date" className={inputClassName} value={draft.autoCaptureStart} onChange={(event) => updateGoalDraft(draft.id, { autoCaptureStart: event.target.value })} /></label>
-                          <label className="space-y-2"><span className="text-sm font-medium">Hasta</span><input type="date" className={inputClassName} value={draft.autoCaptureEnd} onChange={(event) => updateGoalDraft(draft.id, { autoCaptureEnd: event.target.value })} /></label>
-                          <label className="space-y-2"><span className="text-sm font-medium">Account de reserva</span><select className={inputClassName} value={draft.autoReservationAccountId} onChange={(event) => updateGoalDraft(draft.id, { autoReservationAccountId: event.target.value })}><option value="">Sin fallback</option>{dataset.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
+                          <label className="space-y-2">
+                            <span className="text-sm font-medium">Desde</span>
+                            <input
+                              type="date"
+                              className={inputClassName}
+                              value={draft.autoCaptureStart}
+                              onChange={(event) =>
+                                updateGoalDraft(draft.id, {
+                                  autoCaptureStart: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="space-y-2">
+                            <span className="text-sm font-medium">Hasta</span>
+                            <input
+                              type="date"
+                              className={inputClassName}
+                              value={draft.autoCaptureEnd}
+                              onChange={(event) =>
+                                updateGoalDraft(draft.id, {
+                                  autoCaptureEnd: event.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label className="space-y-2">
+                            <span className="text-sm font-medium">
+                              Account de reserva
+                            </span>
+                            <select
+                              className={inputClassName}
+                              value={draft.autoReservationAccountId}
+                              onChange={(event) =>
+                                updateGoalDraft(draft.id, {
+                                  autoReservationAccountId: event.target.value,
+                                })
+                              }
+                            >
+                              <option value="">Sin fallback</option>
+                              {dataset.accounts.map((account) => (
+                                <option key={account.id} value={account.id}>
+                                  {account.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                         </div>
                       ) : null}
                     </div>
@@ -652,29 +705,34 @@ export function GoalsView() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  {item.hasMissingExchangeRate ? <p className="text-sm text-muted-foreground">Falta una cotización para calcular el progreso.</p> : <>
-                  <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-label={`${item.percentage.toFixed(1)}% committed`}>
-                    <span style={{ width: `${Math.min(100, (item.spent / item.goal.targetAmount) * 100)}%`, backgroundColor: item.goal.color }} />
-                    <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (item.spent / item.goal.targetAmount) * 100), (item.reserved / item.goal.targetAmount) * 100)}%` }} />
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Reserved</p>
-                      <p className="font-semibold">
-                        {formatMoney(item.reserved, item.goal.currency)}
-                      </p>
-                    </div>
-                    <div className="rounded-md bg-secondary p-3">
-                      <p className="text-muted-foreground">Spent</p>
-                      <p className="font-semibold">
-                        {formatMoney(item.spent, item.goal.currency)}
-                      </p>
-                    </div>
-                  </div>
-                  </>}
+                  <GoalProgressBar progress={item} />
+                  {item.hasMissingExchangeRate ? (
+                    <p className="text-sm text-muted-foreground">
+                      An exchange rate is needed to calculate these totals.
+                    </p>
+                  ) : (
+                    <>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                        <div className="rounded-md bg-secondary p-3">
+                          <p className="text-muted-foreground">Reserved</p>
+                          <p className="font-semibold">
+                            {formatMoney(item.reserved, item.goal.currency)}
+                          </p>
+                        </div>
+                        <div className="rounded-md bg-secondary p-3">
+                          <p className="text-muted-foreground">Spent</p>
+                          <p className="font-semibold">
+                            {formatMoney(item.spent, item.goal.currency)}
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                   <GoalFundingPlan progress={item} />
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {item.goal.autoCaptureEnabled ? <Badge variant="info">Captura automática</Badge> : null}
+                    {item.goal.autoCaptureEnabled ? (
+                      <Badge variant="info">Captura automática</Badge>
+                    ) : null}
                     {item.goal.deadline ? (
                       <Badge variant="muted">
                         <CalendarDays className="mr-1 h-3 w-3" />

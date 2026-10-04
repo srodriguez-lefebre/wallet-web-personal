@@ -135,10 +135,8 @@ function rate() {
     .findAllByType("input")
     .find((input) => input.props.value === "0")!;
 }
-function status() {
-  return tree!.root
-    .findAllByType("select")
-    .find((select) => select.props.value === "needs_review")!;
+async function clearStatus() {
+  await act(async () => tree!.root.findByProps({ "aria-label": "Set status to Cleared" }).props.onClick());
 }
 
 test.each([false, true])(
@@ -220,7 +218,7 @@ test.each(["0", "-1", "Infinity"])(
   async (value) => {
     await open();
     await change(rate(), value);
-    await change(status(), "cleared");
+    await clearStatus();
     await submit();
     expect(update).not.toHaveBeenCalled();
   },
@@ -229,7 +227,7 @@ test.each(["0", "-1", "Infinity"])(
 test("clearing with a valid primary rate preserves the recorded bank conversion", async () => {
   await open();
   await change(rate(), "50");
-  await change(status(), "cleared");
+  await clearStatus();
   await submit();
   expect(update.mock.calls[0][1]).toMatchObject({
     exchangeRateToPrimary: 50,
@@ -368,7 +366,7 @@ test("changing an existing card's frozen conversion requires primary FX", async 
   await open();
   const limitRate = tree!.root
     .findAllByType("label")
-    .find((label) => label.children.includes("Cotización a moneda del límite"))!
+    .find((label) => label.children.includes("Exchange rate to card limit currency"))!
     .findByType("input");
   await change(limitRate, "2");
   await submit();
