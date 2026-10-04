@@ -1,8 +1,8 @@
 import { PGlite } from "@electric-sql/pglite";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { restoreLocalDatabase } from "./restore.js";
 
 test("a rejected replacement leaves the active database and mailbox intact", async () => {
@@ -32,6 +32,11 @@ test("a rejected replacement leaves the active database and mailbox intact", asy
     await expect(
       restoreLocalDatabase(invalid, directory, true),
     ).rejects.toThrow();
+    expect((await readdir(directory)).sort()).toEqual([
+      "db",
+      "mailbox.json",
+      "wallet-backup.json",
+    ]);
     const reopened = await PGlite.create(path.join(directory, "db"));
     try {
       expect(
@@ -47,6 +52,24 @@ test("a rejected replacement leaves the active database and mailbox intact", asy
       await readFile(path.join(directory, "wallet-backup.json"), "utf8"),
     ).toBe('{"marker":"snapshot"}');
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 30_000);
+
+test("failed migrations remove the staged database", async () => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "wallet-restore-test-"),
+  );
+  const execution = vi
+    .spyOn(PGlite.prototype, "exec")
+    .mockRejectedValueOnce(new Error("migration failed"));
+  try {
+    await expect(restoreLocalDatabase({}, directory, false)).rejects.toThrow(
+      "migration failed",
+    );
+    expect(await readdir(directory)).toEqual([]);
+  } finally {
+    execution.mockRestore();
     await rm(directory, { recursive: true, force: true });
   }
 }, 30_000);

@@ -8,7 +8,7 @@ const rows = z.array(z.record(z.string(), z.unknown()));
 const snapshotSchema = z
   .object({
     settings: z.record(z.string(), z.unknown()),
-    accounts: rows.min(1),
+    accounts: rows,
     categories: rows.min(1),
     records: rows,
   })
