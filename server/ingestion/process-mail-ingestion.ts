@@ -180,11 +180,11 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
   };
   const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
   // A broad Uber alias must not consume the more specific food-delivery notice.
-  if (generic && local && normalizeMerchantTerm(local.normalizedAlias) === "UBER" && ["UBER EATS", "UBEREATS"].includes(generic.normalizedAlias)) {
+  if (generic && local && normalizeMerchantTerm(local.merchantName) === "UBER" && ["UBER EATS", "UBEREATS"].includes(generic.normalizedAlias)) {
     return { categoryId: generic.categoryId, merchantName: merchantRaw, source: "generic_rule", needsReview: false };
   }
   const taxi = allCategories.find(item => item.name.toLowerCase() === "taxi");
-  if (local && taxi && ["UBER", "CABIFY", "TAXI"].includes(normalizeMerchantTerm(local.normalizedAlias)) && allCategories.find(item => item.id === local.categoryId)?.name.toLowerCase() === "public transport") {
+  if (local && taxi && ["UBER", "CABIFY", "TAXI"].includes(normalizeMerchantTerm(local.merchantName)) && allCategories.find(item => item.id === local.categoryId)?.name.toLowerCase() === "public transport") {
     return { categoryId: taxi.id, merchantName: local.merchantName, source: "corrected_rule", needsReview: false };
   }
   if (local && !isUnknown(local.categoryId))
@@ -614,7 +614,7 @@ export async function processMailIngestion(
     const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
     const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
     const cardLocks=effectiveCard?[db.update(creditCards).set({updatedAt:new Date()}).where(eq(creditCards.id,effectiveCard.id))]:[];
-    const bankAccountIds = isCredit ? [] : [...new Set([effectiveAccount?.id, destinationAccount?.id].filter((id): id is string => Boolean(id)))].sort();
+    const bankAccountIds = [...new Set([effectiveAccount?.id, destinationAccount?.id].filter((id): id is string => Boolean(id)))].sort();
     const bankReferences = bankAccountIds.length ? [
       db.execute(sql`SELECT id FROM ${accounts} WHERE id IN (${sql.join(bankAccountIds.map(id => sql`${id}::uuid`), sql`, `)}) ORDER BY id FOR UPDATE`),
       db.execute(sql`SELECT 1 / CASE WHEN count(*) = ${bankAccountIds.length} THEN 1 ELSE 0 END AS valid_bank_accounts

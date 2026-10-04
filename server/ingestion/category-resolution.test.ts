@@ -230,3 +230,22 @@ test.each(["generic", "failed model"])("unknown-rule %s fallback preserves canon
   await processMailIngestion(input(mode === "generic" ? "RESTAURANTE MONTE" : "SHOP MONTE"));
   expect((await stored()).record.counterparty_name).toBe(mode === "generic" ? "Restaurante" : "Shop");
 });
+
+test.each(["UBER TRIP", "UBER EATS"])("a longer %s alias does not retain an erroneous public-transport category", async alias => {
+  await rule("Uber", publicId);
+  await fixture.pool.query("INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) SELECT id,$1,$1 FROM merchants WHERE name='Uber'", [alias]);
+  await processMailIngestion(input(alias + " MONTE"));
+  const saved = await stored();
+  expect(saved.record.category_id).toBe(alias === "UBER EATS" ? foodId : taxiId);
+  expect(saved.record.counterparty_name).toBe(alias === "UBER EATS" ? "UBER EATS MONTE" : "Uber");
+});
+
+test("a credit notice cannot debit an account deactivated during classification", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
+    await fixture.pool.query("UPDATE accounts SET is_active=false WHERE id=$1", [accountId]);
+    return foodId;
+  });
+  await expect(processMailIngestion(input("New store"))).rejects.toThrow();
+  expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(0);
+  expect((await fixture.pool.query("SELECT * FROM credit_card_records")).rows).toHaveLength(0);
+});
