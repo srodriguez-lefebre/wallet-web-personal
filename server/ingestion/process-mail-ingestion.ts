@@ -16,10 +16,11 @@ import {
 } from "../db/schema.js";
 import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
-import { inferCategoryWithOpenAi } from "./openai-category.js";
+import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
 import {
   cardLastFour,
   normalizeMerchantTerm,
+  merchantTokenSequenceMatch,
   pickLongestMerchantMatch,
 } from "./normalization.js";
 
@@ -39,11 +40,31 @@ function addDays(date: Date, days: number) {
 
 const genericMerchantCategoryRules = [
   {
+    aliases: ["PANALERA", "PANALERIA"],
+    categoryNames: ["Shopping"],
+  },
+  {
+    aliases: ["BANCO DE SEGUROS", "ASEGURADORA"],
+    categoryNames: ["Insurance", "Seguros"],
+  },
+  {
+    aliases: ["UBER EATS", "UBEREATS"],
+    categoryNames: ["Restaurant, fast-food", "Restaurants"],
+  },
+  {
+    aliases: ["UBER", "CABIFY", "TAXI"],
+    categoryNames: ["Taxi"],
+  },
+  {
+    aliases: ["HBOMAX", "HBO MAX", "HELPHBOMAX"],
+    categoryNames: ["TV, Streaming", "Subscriptions"],
+  },
+  {
     aliases: ["FRUTERIA", "VERDULERIA", "VERDULERIA Y FRUTERIA"],
     categoryNames: ["Fruits, vegetables and healthy", "Greengrocer"],
   },
   {
-    aliases: ["PANADERIA"],
+    aliases: ["PANADERIA", "CROISSANTERIA", "PANES 1"],
     categoryNames: ["Bakery"],
   },
   {
@@ -55,7 +76,7 @@ const genericMerchantCategoryRules = [
     categoryNames: ["Drug-store, chemist", "Medical services"],
   },
   {
-    aliases: ["SUPERMERCADO"],
+    aliases: ["SUPERMERCADO", "MINIMARKET"],
     categoryNames: ["Supermarket"],
   },
   {
@@ -120,7 +141,16 @@ async function pruneExpiredMetadata(db: DbClient) {
     );
 }
 
-async function resolveCategory(db: DbClient, merchantRaw: string) {
+interface CategoryResolution {
+  categoryId: string | undefined;
+  merchantName: string;
+  source: "merchant_rule" | "corrected_rule" | "generic_rule" | "openai" | "fallback" | "transfer";
+  needsReview: boolean;
+  reason?: string;
+  modelAttempt?: CategoryInferenceDiagnostic;
+}
+
+export async function resolveCategory(db: DbClient, merchantRaw: string): Promise<CategoryResolution> {
   const aliasRows = await db
     .select({
       normalizedAlias: merchantAliases.normalizedAlias,
@@ -138,20 +168,44 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
       ),
     );
   const local = pickLongestMerchantMatch(merchantRaw, aliasRows);
-  if (local)
+  // Classification may change, but the identity used to deduplicate must stay stable.
+  const merchantName = local?.merchantName ?? merchantRaw;
+  const allCategories = await db.select().from(categories);
+  const fallback = allCategories.find(item => item.systemKey === "unknown_expense")
+    ?? allCategories.find(item => item.name.toLowerCase() === "unknown expense")
+    ?? allCategories.find(item => item.name.toLowerCase() === "others");
+  const isUnknown = (id: string) => {
+    const category = allCategories.find(item => item.id === id);
+    return !category || category.systemKey === "unknown_expense" || ["unknown expense", "others"].includes(category.name.toLowerCase());
+  };
+  const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
+  // A broad Uber alias must not consume the more specific food-delivery notice.
+  if (generic && local && normalizeMerchantTerm(local.normalizedAlias) === "UBER" && ["UBER EATS", "UBEREATS"].includes(generic.normalizedAlias)) {
+    return { categoryId: generic.categoryId, merchantName: merchantRaw, source: "generic_rule", needsReview: false };
+  }
+  const taxi = allCategories.find(item => item.name.toLowerCase() === "taxi");
+  if (local && taxi && ["UBER", "CABIFY", "TAXI"].includes(normalizeMerchantTerm(local.normalizedAlias)) && allCategories.find(item => item.id === local.categoryId)?.name.toLowerCase() === "public transport") {
+    return { categoryId: taxi.id, merchantName: local.merchantName, source: "corrected_rule", needsReview: false };
+  }
+  if (local && !isUnknown(local.categoryId))
     return {
       categoryId: local.categoryId,
       merchantName: local.merchantName,
       source: "merchant_rule",
+      needsReview: false,
     };
 
-  const allCategories = await db.select().from(categories);
-  const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
+  const missingInsuranceCategory = genericMerchantCategoryRules.find(rule => rule.categoryNames[0] === "Insurance"
+    && rule.aliases.some(alias => merchantTokenSequenceMatch(merchantRaw, alias))
+    && !allCategories.some(category => rule.categoryNames.some(name => name.toLowerCase() === category.name.toLowerCase())));
+  if (missingInsuranceCategory && fallback) return { categoryId: fallback.id, merchantName, source: "fallback", needsReview: true, reason: "missing_insurance_category" };
+
   if (generic)
     return {
       categoryId: generic.categoryId,
-      merchantName: generic.merchantName,
+      merchantName,
       source: "generic_rule",
+      needsReview: false,
     };
 
   const parentIds = new Set(
@@ -165,29 +219,28 @@ async function resolveCategory(db: DbClient, merchantRaw: string) {
       ? `${byId.get(item.parentId)?.name ?? ""} > ${item.name}`
       : item.name,
   }));
+  let modelAttempt: CategoryInferenceDiagnostic | undefined;
   try {
-    const inferred = await inferCategoryWithOpenAi(merchantRaw, options);
-    if (inferred)
+    const inferred = await inferCategoryWithOpenAi(merchantRaw, options, diagnostic => { modelAttempt = diagnostic; });
+    if (inferred && options.some(item => item.id === inferred))
       return {
         categoryId: inferred,
-        merchantName: merchantRaw,
+        merchantName,
         source: "openai",
+        needsReview: isUnknown(inferred),
+        modelAttempt,
       };
   } catch {
-    // Classification failure deliberately falls through to the protected category.
+    modelAttempt = { outcome: "failed", model: process.env.OPENAI_MODEL?.trim() || "gpt-5-nano", reason: "unexpected_classifier_error", elapsedMs: 0 };
   }
-  const fallback =
-    allCategories.find((item) => item.systemKey === "unknown_expense") ??
-    allCategories.find(
-      (item) => item.name.toLowerCase() === "unknown expense",
-    ) ??
-    allCategories.find((item) => item.name.toLowerCase() === "others");
   if (!fallback)
     throw new Error("Protected Unknown expense category is not configured");
   return {
     categoryId: fallback.id,
-    merchantName: merchantRaw,
+    merchantName,
     source: "fallback",
+    needsReview: true,
+    modelAttempt,
   };
 }
 
@@ -329,8 +382,9 @@ export async function processMailIngestion(
     const accountWasInvalid = Boolean(input.destination.accountId && !account);
     const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
     const category = isOwnedTransfer
-      ? { categoryId: undefined, merchantName: input.transaction.merchantRaw }
+      ? { categoryId: undefined, merchantName: input.transaction.merchantRaw, source: "transfer" as const, needsReview: false }
       : await resolveCategory(db, input.transaction.merchantRaw);
+    console.info(JSON.stringify({ event: "mail_category_classification", ingestionEventId: eventId, source: category.source, categoryId: category.categoryId, needsReview: category.needsReview, reason: "reason" in category ? category.reason : undefined, modelAttempt: "modelAttempt" in category ? category.modelAttempt : undefined }));
     const canonicalMerchantNormalized = normalizeMerchantTerm(
       category.merchantName,
     );
@@ -425,13 +479,15 @@ export async function processMailIngestion(
       warnings.push("Transfer destination ownership is unconfirmed; review whether it belongs to another Wallet account.");
     }
     if (!isCredit && !account) warnings.push("Bank account mapping unavailable; assign the correct account before confirming this notice.");
+    if (category.needsReview) warnings.push("Category could not be determined automatically; review this expense.");
     const requiresReview =
-      accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || (isTransfer && !isOwnedTransfer) || unavailableConversion;
+      accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || (isTransfer && !isOwnedTransfer) || unavailableConversion || category.needsReview;
     const effectiveAccount = isOwnedTransfer ? account : !accountWasInvalid && (isCredit ? Boolean(card) : true) && accountConversion ? account : undefined;
     const effectiveCard = cardConversion ? card : undefined;
     const noteParts = [
       input.transaction.sourceLabel ||
         `Imported from ${input.transaction.source}`,
+      category.source === "openai" ? "Categorized by OpenAI" : undefined,
       primary &&
         conversionNote(
           input.transaction.currency,
@@ -550,6 +606,7 @@ export async function processMailIngestion(
         merchantNormalized: canonicalMerchantNormalized,
         recordId: recordId ?? null,
         creditCardRecordId: cardRecordId ?? null,
+        sanitizedPayload: { ...sanitizedPayload(input), classification: category },
         completedAt: now,
         updatedAt: now,
       })

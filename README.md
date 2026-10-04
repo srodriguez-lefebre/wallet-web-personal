@@ -298,6 +298,25 @@ de `mail-service/` y se autentica exclusivamente con `INGEST_API_TOKEN`. El back
 resuelve comercios, categorias, moneda, destino, idempotencia y duplicados. Los
 destinos desconocidos se guardan como `needs_review` sin inventar IDs ni impactos.
 
+La clasificación usa reglas de comercio, reglas específicas y finalmente
+OpenAI con las categorías actuales. Las reglas que apuntan a `Unknown expense`
+también permiten consultar OpenAI. Uber, Cabify y Taxi corrigen el antiguo mapeo
+a transporte público; Uber Eats mantiene la categoría de comida.
+
+El fallback usa 2048 tokens de salida, razonamiento `low` para modelos GPT-5 y
+un timeout de 30 segundos. Respuestas incompletas, refusals, errores HTTP y
+categorías inválidas mantienen el gasto bajo revisión. Una categoría desconocida
+también queda como `needs_review`; los importes válidos conservan su efecto en
+saldos e informes.
+
+Los logs de Vercel incluyen el evento `mail_category_classification`, el ID de
+ingesta, origen de la categoría y diagnóstico de la llamada: modelo, motivo,
+HTTP, request ID, duración y tokens. No registran claves, cuerpos de error ni
+descriptores financieros. El mismo diagnóstico queda en
+`ingestion_events.sanitized_payload.classification` durante la retención de
+metadatos existente de 90 días. Los fallos de categoría incluyen una nota visible
+en el movimiento; los clasificados por el modelo indican `Categorized by OpenAI`.
+
 Después de migrar, cargar el catálogo de 254 reglas desde el checkout WSL de
 `wallet-automation`:
 

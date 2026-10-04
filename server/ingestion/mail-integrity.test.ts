@@ -11,7 +11,7 @@ import { calculateAccountBalances, calculateCreditCardSummary, calculateSummary 
 import { walletDataHealth } from "../../shared/data-quality.js";
 
 let fixture:Awaited<ReturnType<typeof createPostgresTestDatabase>>;
-const accountId=randomUUID(),cardId=randomUUID();
+const accountId=randomUUID(),cardId=randomUUID(),knownCategoryId=randomUUID();
 beforeAll(async()=>{fixture=await createPostgresTestDatabase();},60_000);
 afterAll(async()=>{await fixture?.close();});
 beforeEach(async()=>{
@@ -20,7 +20,8 @@ beforeEach(async()=>{
   await fixture.pool.query("INSERT INTO accounts(id,name,type,currency,initial_balance,color,icon) VALUES($1,'Test','bank','UYU',500,'blue','bank')",[accountId]);
   await fixture.pool.query("INSERT INTO credit_cards(id,name,issuer,last_four,credit_limit,limit_currency,closing_day,due_day,color,icon,is_active) VALUES($1,'Test','Test','1234',1000,'UYU',20,5,'blue','bank',true)",[cardId]);
   await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
-  vi.spyOn(classification,"inferCategoryWithOpenAi").mockResolvedValue(null);
+  await fixture.pool.query("INSERT INTO categories(id,name,color,icon) VALUES($1,'Restaurant, fast-food','blue','bank') ON CONFLICT(id) DO NOTHING",[knownCategoryId]);
+  vi.spyOn(classification,"inferCategoryWithOpenAi").mockResolvedValue(knownCategoryId);
 });
 function input():MailIngestionInput{
   const messageId=randomUUID();
