@@ -90,7 +90,9 @@ const prepared = payload.reglas.map((rule, priority) => {
     ...rule,
     priority: payload.reglas.length - priority,
     categoryId: categoryIdByName.get(
-      CATEGORY_MAP[rule.categoria] || "Unknown expense",
+      ["UBER", "CABIFY", "TAXI"].includes(normalize(rule.nombre))
+        ? "Taxi"
+        : CATEGORY_MAP[rule.categoria] || "Unknown expense",
     ),
     terms,
   };

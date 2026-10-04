@@ -30,7 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActionToast } from "@/lib/use-action-toast";
-import { limitDecimalPlaces } from "@/lib/utils";
+import { cn, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { findExchangeRate } from "@shared/money";
 import {
@@ -59,6 +59,14 @@ import type {
   WalletDataset,
   WalletRecord,
 } from "@shared/types";
+
+const paymentMethodClasses: Record<PaymentType, string> = {
+  cash: "bg-muted text-muted-foreground",
+  debit: "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  credit: "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  transfer: "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  other: "bg-muted text-muted-foreground",
+};
 
 function formatCategoryName(categories: Category[], category: Category) {
   const parent = category.parentId
@@ -1776,7 +1784,12 @@ export function RecordsView() {
                             loadRecord(record);
                           }
                         }}
-                        className="flex cursor-pointer items-center justify-between rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
+                        className={cn(
+                          "flex cursor-pointer items-center justify-between rounded-md border p-3 transition",
+                          record.paymentStatus === "needs_review"
+                            ? "border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 dark:border-amber-400/50 dark:bg-amber-500/15 dark:hover:border-amber-400/70 dark:hover:bg-amber-500/20"
+                            : "hover:border-primary/50 hover:bg-secondary",
+                        )}
                       >
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -1815,9 +1828,11 @@ export function RecordsView() {
                             </Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {creditCard
-                              ? `${creditCard.name} **** ${creditCard.lastFour}`
-                              : account?.name}
+                            <span className="font-medium text-foreground">
+                              {creditCard
+                                ? `${creditCard.name} **** ${creditCard.lastFour}`
+                                : account?.name}
+                            </span>
                             {record.counterpartyName
                               ? ` - ${record.counterpartyName}`
                               : " - No counterparty"}
@@ -1831,7 +1846,18 @@ export function RecordsView() {
                                 </Badge>
                               ) : null,
                             )}
-                            <Badge variant="muted">
+                            <Badge
+                              variant="muted"
+                              className={`font-semibold ${paymentMethodClasses[record.paymentType]}`}
+                              style={
+                                record.paymentType === "credit" && creditCard
+                                  ? {
+                                      color: creditCard.color,
+                                      backgroundColor: `color-mix(in srgb, ${creditCard.color} 15%, transparent)`,
+                                    }
+                                  : undefined
+                              }
+                            >
                               {paymentTypeLabels[record.paymentType]}
                             </Badge>
                           </div>
