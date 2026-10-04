@@ -97,3 +97,15 @@ test("an unknown-bank purchase can be resolved as card-only without a bank accou
   expect(update.mock.calls[0][1]).toMatchObject({ creditCardId: "test-card", paymentStatus: "cleared" });
   expect(update.mock.calls[0][1].accountId).toBeUndefined();
 });
+
+test("editing a bank-backed purchase cannot select Card only", async () => {
+  await openRecord();
+  expect(tree!.root.findAllByType("option").filter(option => option.children.includes("Card only"))).toHaveLength(0);
+});
+
+test("editing an existing card-only purchase retains Card only", async () => {
+  dataset.records[0].accountId = undefined;
+  dataset.records[0].accountAmount = undefined;
+  await openRecord();
+  expect(tree!.root.findAllByType("option").filter(option => option.children.includes("Card only"))).toHaveLength(1);
+});

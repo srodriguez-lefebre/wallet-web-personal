@@ -233,3 +233,24 @@ test("a rejected row does not mark a later valid row as already imported", () =>
   expect(result[0].error).toBeTruthy();
   expect(result[1].error).toBeUndefined();
 });
+
+test.each(["tagIds", "goalIds", "goalAssociations"] as const)("CSV preview rejects an unknown %s reference per row", (field) => {
+  const unknownId = "00000000-0000-4000-8000-000000007777";
+  const dataset = { ...mockWalletData, records: [] };
+  const valid = { ...mockWalletData.records[0], tagIds: [], goalIds: [], goalAssociations: [] };
+  const invalid = { ...valid, [field]: field === "goalAssociations" ? [{ goalId: unknownId, assignmentSource: "manual", useReserved: true, reserveIncome: true }] : [unknownId] };
+  const result = prepareCsvRecords(recordsCsv([invalid, valid]), dataset, dataset.accounts[0].id, dataset.categories[0].id, dataset.categories[0].id);
+  expect(result[0].error).toMatch(/does not exist/i);
+  expect(result[0].record).toBeUndefined();
+  expect(result[1].error).toBeUndefined();
+});
+
+test.each(["goalIds", "goalAssociations"] as const)("new %s links require active goals without invalidating unrelated historical links", (field) => {
+  const dataset = structuredClone(mockWalletData);
+  dataset.goals[0].status = "completed";
+  const valid = { ...dataset.records[0], counterpartyName: "New CSV row", tagIds: [dataset.tags[0].id], goalIds: [], goalAssociations: [] };
+  const invalid = { ...valid, [field]: field === "goalAssociations" ? [{ goalId: dataset.goals[0].id, assignmentSource: "manual", useReserved: true, reserveIncome: true }] : [dataset.goals[0].id] };
+  const result = prepareCsvRecords(recordsCsv([invalid, valid]), dataset, dataset.accounts[0].id, dataset.categories[0].id, dataset.categories[0].id);
+  expect(result[0].error).toMatch(/active goal/i);
+  expect(result[1].error).toBeUndefined();
+});

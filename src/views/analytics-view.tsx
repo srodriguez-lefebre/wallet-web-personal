@@ -722,7 +722,9 @@ export function AnalyticsView() {
                   <div>
                     <p className="font-medium">{budget.budget.name}</p>
                     <p className="text-sm text-muted-foreground">
-                      {formatMoney(budget.spent, budget.budget.currency)} of{" "}
+                      {Number.isFinite(budget.spent)
+                        ? formatMoney(budget.spent, budget.budget.currency)
+                        : "Falta cotización"} of{" "}
                       {formatMoney(
                         budget.budget.limitAmount,
                         budget.budget.currency,

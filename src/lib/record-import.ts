@@ -265,6 +265,22 @@ export function prepareCsvRecords(
         !dataset.debts.some((debt) => debt.id === record.debtId)
       )
         throw new Error("Linked debt does not exist.");
+      for (const tagId of record.tagIds) {
+        if (!dataset.tags.some((tag) => tag.id === tagId))
+          throw new Error("Tag does not exist.");
+      }
+      const goalIds = new Set([
+        ...(record.goalIds ?? []),
+        ...(record.goalAssociations ?? []).map((association) => association.goalId),
+      ]);
+      // CSV imports create new links; historical links in dataset.records are
+      // unrelated and may legitimately refer to completed goals.
+      for (const goalId of goalIds) {
+        const goal = dataset.goals.find((item) => item.id === goalId);
+        if (!goal) throw new Error("Goal does not exist.");
+        if (goal.status !== "active")
+          throw new Error("New records can only be associated with active goals.");
+      }
       if (destination) {
         const amountInDestination = positive(
           row.destinationamount,

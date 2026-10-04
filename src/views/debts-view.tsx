@@ -281,8 +281,15 @@ export function DebtsView() {
     );
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentAccountAmount,setPaymentAccountAmount] = useState("");
-  const paymentRequests=useRef(new Map<string,string>());
-  function paymentKey(debtId:string,value:unknown){const fingerprint=JSON.stringify([debtId,value]);let key=paymentRequests.current.get(fingerprint);if(!key){key=crypto.randomUUID();paymentRequests.current.set(fingerprint,key);}return key;}
+  const paymentRequests = useRef(new Map<string, string>());
+  function paymentKey(fingerprint: string) {
+    let key = paymentRequests.current.get(fingerprint);
+    if (!key) {
+      key = crypto.randomUUID();
+      paymentRequests.current.set(fingerprint, key);
+    }
+    return key;
+  }
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentDate, setPaymentDate] = useState(todayDate());
   const [paymentNote, setPaymentNote] = useState("");
@@ -495,17 +502,20 @@ export function DebtsView() {
       return;
     }
 
-    await runAction(
-      () =>
-        recordDebtPayment(activePaymentDebt.id, {
+    const fingerprint = JSON.stringify([activePaymentDebt.id, [amount, paymentAccountAmount, paymentAccountId, paymentDate, paymentNote, saveAccountToDebt]]);
+    const succeeded = await runAction(
+      async () => {
+        await recordDebtPayment(activePaymentDebt.id, {
           amount,
           accountAmount: paymentAccountAmount ? Number(paymentAccountAmount) : undefined,
           accountId: paymentAccountId,
           occurredAt: dateToIso(paymentDate),
           note: paymentNote.trim() || undefined,
           saveAccountToDebt,
-          idempotencyKey: paymentKey(activePaymentDebt.id,[amount,paymentAccountAmount,paymentAccountId,paymentDate,paymentNote,saveAccountToDebt]),
-        }),
+          idempotencyKey: paymentKey(fingerprint),
+        });
+        return true;
+      },
       {
         processing:
           activePaymentDebt.direction === "receivable"
@@ -518,15 +528,19 @@ export function DebtsView() {
         error: "Could not save payment",
       },
     );
-    setPaymentDialogOpen(false);
+    if (succeeded) {
+      paymentRequests.current.delete(fingerprint);
+      setPaymentDialogOpen(false);
+    }
   }
 
   async function settleDebt(debt: Debt) {
     if (!debt.accountId || debt.pendingAmount === undefined) return;
 
-    await runAction(
-      () =>
-        recordDebtPayment(debt.id, {
+    const fingerprint = JSON.stringify([debt.id, [debt.pendingAmount, debt.accountId, todayDate(), "settle"]]);
+    const succeeded = await runAction(
+      async () => {
+        await recordDebtPayment(debt.id, {
           amount: debt.pendingAmount ?? 0,
           accountId: debt.accountId ?? "",
           occurredAt: dateToIso(todayDate()),
@@ -535,8 +549,10 @@ export function DebtsView() {
               ? `Full debt received: ${debt.name}`
               : `Full debt paid: ${debt.name}`,
           saveAccountToDebt: true,
-          idempotencyKey: paymentKey(debt.id,[debt.pendingAmount,debt.accountId,todayDate(),"settle"]),
-        }),
+          idempotencyKey: paymentKey(fingerprint),
+        });
+        return true;
+      },
       {
         processing:
           debt.direction === "receivable"
@@ -547,6 +563,7 @@ export function DebtsView() {
         error: "Could not close debt",
       },
     );
+    if (succeeded) paymentRequests.current.delete(fingerprint);
   }
 
   function renderDebtList(debts: Debt[]) {

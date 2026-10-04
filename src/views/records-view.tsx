@@ -771,7 +771,9 @@ export function RecordsView() {
                   }}
                   className={fieldClassName}
                 >
-                  {type === "expense" && creditCardId && <option value="">Card only</option>}
+                  {type === "expense" && creditCardId &&
+                    !dataset.records.find(record => record.id === editingId)?.accountId &&
+                    <option value="">Card only</option>}
                   {dataset.accounts
                     .filter((account) => account.isActive && account.isVisible)
                     .map((account) => (
