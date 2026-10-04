@@ -316,8 +316,47 @@ export function RecordsView() {
     dataset.records.find((record) => record.id === editingId)?.paymentStatus ===
       "needs_review",
   );
+  const editingRecord = dataset.records.find(
+    (record) => record.id === editingId,
+  );
+  const originalGoalAssociations =
+    editingRecord?.goalAssociations ??
+    (editingRecord?.goalIds ?? []).map((goalId) => ({
+      goalId,
+      assignmentSource: "manual",
+      useReserved: true,
+      reserveIncome: true,
+    }));
+  // A review item with unknown primary FX may still receive metadata edits.
+  // Send a sparse patch so its recorded amounts and unresolved rate survive.
+  const reviewMetadataOnly = Boolean(
+    editingRecord &&
+    editingRecord.exchangeRateToPrimary === 0 &&
+    editingRecord.paymentStatus === "needs_review" &&
+    paymentStatus === "needs_review" &&
+    primaryRate.trim() !== "" &&
+    Number(primaryRate) === 0 &&
+    type === editingRecord.type &&
+    numericAmount === editingRecord.amount &&
+    currency === editingRecord.currency &&
+    (accountId || undefined) === editingRecord.accountId &&
+    (!accountId ||
+      Number(accountAmount) ===
+        (editingRecord.accountAmount ?? editingRecord.amount)) &&
+    (destinationAccountId || undefined) ===
+      editingRecord.destinationAccountId &&
+    destinationAmount === String(editingRecord.destinationAmount ?? "") &&
+    (creditCardId || undefined) === editingRecord.creditCardId &&
+    Number(exchangeRateToLimitCurrency) ===
+      (editingRecord.exchangeRateToLimitCurrency ?? 1) &&
+    paymentType === editingRecord.paymentType &&
+    occurredAtLocal === toDateTimeLocal(editingRecord.occurredAt) &&
+    JSON.stringify(goalAssociations) ===
+      JSON.stringify(originalGoalAssociations),
+  );
   const canSubmit =
     statusOnlyCancellation ||
+    (reviewMetadataOnly && !hasInvalidGoalAllocation) ||
     (numericAmount > 0 &&
       Boolean(accountId || (type === "expense" && creditCardId)) &&
       (type === "transfer"
@@ -823,10 +862,12 @@ export function RecordsView() {
           )
         : undefined;
     if (
-      !frozenPrimaryRate ||
+      frozenPrimaryRate === null ||
+      !Number.isFinite(frozenPrimaryRate) ||
+      frozenPrimaryRate <= 0 ||
       sourceAmount === null ||
       targetAmount === null ||
-      (card && !(limitRate > 0))
+      (card && (!Number.isFinite(limitRate) || !(limitRate > 0)))
     ) {
       setMoneyError(
         "Ingresá los importes convertidos y una cotización válida para las monedas elegidas.",
@@ -880,8 +921,16 @@ export function RecordsView() {
       return;
     }
     const nextRecord =
-      editingLinkedRefund || statusOnlyCancellation ? null : buildRecord();
-    if (!nextRecord && !editingLinkedRefund && !statusOnlyCancellation) return;
+      editingLinkedRefund || statusOnlyCancellation || reviewMetadataOnly
+        ? null
+        : buildRecord();
+    if (
+      !nextRecord &&
+      !editingLinkedRefund &&
+      !statusOnlyCancellation &&
+      !reviewMetadataOnly
+    )
+      return;
     recordSubmission.current = true;
     const revision = recordDraftRevision.current;
 
@@ -893,16 +942,23 @@ export function RecordsView() {
               editingId,
               statusOnlyCancellation
                 ? { paymentStatus: "cancelled" }
-                : editingLinkedRefund
+                : reviewMetadataOnly
                   ? {
-                      categoryId,
+                      categoryId: categoryId || null,
                       counterpartyName: counterpartyName.trim() || null,
                       note: note || null,
                       tagIds: tagId ? [tagId] : [],
-                      goalIds: goalAssociations.map((item) => item.goalId),
-                      goalAssociations,
                     }
-                  : { ...nextRecord!, creditCardId: creditCardId || null },
+                  : editingLinkedRefund
+                    ? {
+                        categoryId,
+                        counterpartyName: counterpartyName.trim() || null,
+                        note: note || null,
+                        tagIds: tagId ? [tagId] : [],
+                        goalIds: goalAssociations.map((item) => item.goalId),
+                        goalAssociations,
+                      }
+                    : { ...nextRecord!, creditCardId: creditCardId || null },
             ),
           {
             processing: "Saving record...",
