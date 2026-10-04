@@ -412,3 +412,34 @@ test("HTML-only debit body is normalized before ingestion", () => {
     transaction: { paymentType: "debit", amount: 95.84 },
   });
 });
+
+test("Gmail wraps the approved debit sentence and merchant without changing the purchase", () => {
+  const result = runMailAutomation(mail({
+    ...debit,
+    body: "*Aviso de consumo aprobado con tarjeta de débito* *Se aprobo un consumo de\nsu tarjeta Visa terminada en 2468 . Realizado en TEST *SUBSCRIPTION\nMonto: 95.84 Dolares. Si no fuiste tú comunícate al 1784.*",
+  }), ok);
+  expect(result.deliveries[0]?.payload).toMatchObject({
+    transaction: { paymentType: "debit", amount: 95.84, merchantRaw: "TEST *SUBSCRIPTION" },
+  });
+  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+});
+
+test("Gmail bold formatting around transfer fields preserves the masked account and amount", () => {
+  const value = mail({
+    ...transfer,
+    body: "*Aviso de transferencia realizada*\nTransferencia realizada desde la cuenta *****1357*\nImporte: *44.00* *USD*\nCuenta destino: *9876540*\nBanco/Institución destino: *Banco Itau*",
+  });
+  value.targets.bankAccounts = {
+    "1357:USD": { accountId: "origin-account" },
+    "ITAU:9876540:USD": { accountId: "destination-account" },
+  };
+  const result = runMailAutomation(value, ok);
+  expect(result.deliveries[0]?.payload).toMatchObject({
+    transaction: {
+      paymentType: "transfer", amount: 44, currency: "USD", accountNumber: "****1357",
+      destinationAccountNumber: "9876540", destinationBank: "Banco Itau",
+    },
+    destination: { accountId: "origin-account", destinationAccountId: "destination-account" },
+  });
+  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+});
