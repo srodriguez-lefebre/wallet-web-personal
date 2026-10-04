@@ -4,6 +4,11 @@ import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test"
 import { processMailIngestion } from "./process-mail-ingestion";
 import * as classification from "./openai-category";
 import type { MailIngestionInput } from "../../shared/schemas";
+import { createDb } from "../db/client";
+import { getWalletDataset } from "../db/wallet-repository";
+import { resolveCategory } from "./process-mail-ingestion";
+import { walletBackupSchema } from "../../shared/schemas";
+import { restoreWalletBackup } from "../db/wallet-restore";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
@@ -248,4 +253,125 @@ test("a credit notice cannot debit an account deactivated during classification"
   await expect(processMailIngestion(input("New store"))).rejects.toThrow();
   expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(0);
   expect((await fixture.pool.query("SELECT * FROM credit_card_records")).rows).toHaveLength(0);
+});
+
+test("a successful GPT category becomes a persistent rule available in JSON backups", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await processMailIngestion(input("HDP HURBAN FOOD MONTE"));
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  const next = input("hdp hurban food monte");
+  next.transaction.amount = 60;
+  await processMailIngestion(next, createDb());
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  const backup = await getWalletDataset(createDb(), { includeArchived: true });
+  expect(backup.merchants).toEqual([expect.objectContaining({name: "HDP HURBAN FOOD MONTE", categoryId: foodId, matchMode: "exact"})]);
+  expect(backup.merchantAliases).toEqual([expect.objectContaining({normalizedAlias: "HDP HURBAN FOOD MONTE"})]);
+  expect((await fixture.pool.query("SELECT category_id FROM records")).rows).toEqual([{category_id: foodId}, {category_id: foodId}]);
+});
+
+test("a learned category promotes an unknown rule without changing its merchant identity", async () => {
+  await rule("Shop", unknownId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await processMailIngestion(input("SHOP MONTE"));
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  expect(await resolveCategory(createDb(), "HANDY*SHOP")).toMatchObject({merchantName: "Shop", categoryId: foodId, source: "merchant_rule"});
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([{name: "Shop", category_id: foodId}]);
+});
+
+test.each([null, "unknown"])("a model result %s does not become a learned rule", async result => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(result === "unknown" ? unknownId : null);
+  await processMailIngestion(input("OPAQUE SHOP"));
+  expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
+});
+
+test("learning does not overwrite a merchant category manually changed during GPT classification", async () => {
+  await rule("Shop", unknownId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
+    await fixture.pool.query("UPDATE merchants SET category_id=$1 WHERE name='Shop'", [tvId]);
+    return foodId;
+  });
+  await processMailIngestion(input("SHOP MONTE"));
+  expect((await fixture.pool.query("SELECT category_id FROM merchants")).rows).toEqual([{category_id: tvId}]);
+});
+
+test("two concurrent classifications create only one merchant and one alias", async () => {
+  let arrived = 0;
+  let release = () => {};
+  const both = new Promise<void>(resolve => {release = resolve;});
+  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementation(async () => {
+    if (++arrived === 2) release();
+    await both;
+    return foodId;
+  });
+  const first = input("NEW SHOP"), second = input("NEW SHOP");
+  second.transaction.amount = 60;
+  await Promise.all([processMailIngestion(first), processMailIngestion(second)]);
+  expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(1);
+  expect((await fixture.pool.query("SELECT * FROM merchant_aliases")).rows).toHaveLength(1);
+  expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(2);
+});
+
+test("failed financial writes roll back learned rules together with the records", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await fixture.pool.query("CREATE FUNCTION reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='completed' THEN RAISE EXCEPTION 'test completion failure'; END IF; RETURN NEW; END $$");
+  await fixture.pool.query("CREATE TRIGGER reject_completion BEFORE UPDATE ON ingestion_events FOR EACH ROW EXECUTE FUNCTION reject_completion()");
+  try {
+    await expect(processMailIngestion(input("NEW SHOP"))).rejects.toThrow();
+    expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
+    expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(0);
+  } finally {
+    await fixture.pool.query("DROP TRIGGER reject_completion ON ingestion_events");
+    await fixture.pool.query("DROP FUNCTION reject_completion()");
+  }
+});
+
+test("a shorter learned descriptor cannot change old fingerprints and duplicate an expense", async () => {
+  await processMailIngestion(input("SHOP MONTE"));
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  const learning = input("SHOP"); learning.transaction.amount = 60;
+  await processMailIngestion(learning);
+  const repeat = input("SHOP MONTE"); repeat.transaction.source = "google_wallet";
+  expect((await processMailIngestion(repeat)).status).toBe("duplicate");
+  expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(2);
+});
+
+test("a broader manual rule created during GPT is not shadowed by learning", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
+    await rule("Shop", tvId);
+    return foodId;
+  });
+  await processMailIngestion(input("SHOP MONTE"));
+  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([{name: "Shop", category_id: tvId}]);
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId: tvId, merchantName: "Shop"});
+});
+
+test("a manual rule takes precedence over an older exact learned descriptor", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await processMailIngestion(input("SHOP MONTE"));
+  await rule("Shop", tvId);
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId: tvId, merchantName: "Shop"});
+});
+
+test("an existing explicit rule with negative priority keeps broad alias matching", async () => {
+  await rule("Shop", foodId);
+  await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({merchantName:"Shop", categoryId:foodId, source:"merchant_rule"});
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+});
+
+test("JSON restore retains exact learned rules and defaults legacy negative-priority rules to alias matching", async () => {
+  await rule("Shop", tvId);
+  await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await processMailIngestion(input("HDP HURBAN FOOD MONTE"));
+  const backup = await getWalletDataset(createDb(), {includeArchived:true});
+  for (const merchant of backup.merchants ?? []) if(merchant.name === "Shop") delete merchant.matchMode;
+  const parsed = walletBackupSchema.parse(JSON.parse(JSON.stringify(backup)));
+  await restoreWalletBackup(parsed);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId:tvId, merchantName:"Shop"});
+  expect(await resolveCategory(createDb(), "HDP HURBAN FOOD MONTE")).toMatchObject({categoryId:foodId, source:"merchant_rule"});
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect((await fixture.pool.query("SELECT match_mode FROM merchants WHERE name='HDP HURBAN FOOD MONTE'")).rows).toEqual([{match_mode:"exact"}]);
 });

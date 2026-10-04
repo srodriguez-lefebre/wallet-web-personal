@@ -690,7 +690,7 @@ const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),req
 export const walletBackupSchema = walletDatasetSchema.extend({
   recordTemplates: z.array(recordTemplateSchema.extend({...id,...backupMetadata})).max(100).optional().default([]),
   ingestionEvents:z.array(z.object({...id,idempotencyKey:z.string().min(1),source:z.string(),status:z.string(),action:z.string().optional(),fingerprint:z.string().optional(),targetKey:z.string().optional(),merchantNormalized:z.string().optional(),amount:z.number().nonnegative().optional(),currency:currencySchema.optional(),occurredAt:z.string().datetime().optional(),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),completedAt:z.string().datetime().optional(),createdAt:z.string().datetime(),updatedAt:z.string().datetime()})).optional(),
-  merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),isActive:z.boolean()})).optional(),
+  merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),matchMode:z.enum(["alias","exact"]).default("alias"),isActive:z.boolean()})).optional(),
   merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
   settings:settingsSchema.extend({...backupMetadata,id:uuidSchema.optional()}),
   accounts:z.array(accountSchema.extend({...id,...backupMetadata})),categories:z.array(categorySchema.extend({...id,...backupMetadata,systemKey:z.string().optional()})),

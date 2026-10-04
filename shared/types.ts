@@ -379,7 +379,7 @@ export interface WalletSettings {
 export interface WalletDataset {
   recordTemplates?: RecordTemplate[];
   ingestionEvents?: Array<{id:string;idempotencyKey:string;source:string;status:string;action?:string;fingerprint?:string;targetKey?:string;merchantNormalized?:string;amount?:number;currency?:CurrencyCode;occurredAt?:string;recordId?:string;creditCardRecordId?:string;duplicateOfId?:string;completedAt?:string;createdAt:string;updatedAt:string}>;
-  merchants?: Array<{ id: string; name: string; categoryId: string; priority: number; isActive: boolean; createdAt?: string; updatedAt?: string }>;
+  merchants?: Array<{ id: string; name: string; categoryId: string; priority: number; matchMode?: "alias" | "exact"; isActive: boolean; createdAt?: string; updatedAt?: string }>;
   merchantAliases?: Array<{ id: string; merchantId: string; alias: string; normalizedAlias: string; createdAt?: string }>;
   settings: WalletSettings;
   accounts: Account[];

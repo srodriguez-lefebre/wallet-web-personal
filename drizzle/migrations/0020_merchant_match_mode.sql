@@ -1,0 +1,2 @@
+ALTER TABLE "merchants" ADD COLUMN "match_mode" text DEFAULT 'alias' NOT NULL;--> statement-breakpoint
+ALTER TABLE "merchants" ADD CONSTRAINT "merchants_match_mode_check" CHECK ("merchants"."match_mode" IN ('alias','exact'));

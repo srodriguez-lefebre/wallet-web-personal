@@ -12598,6 +12598,12 @@ paths:
                               type: string
                             isActive:
                               type: boolean
+                            matchMode:
+                              default: alias
+                              enum:
+                                - alias
+                                - exact
+                              type: string
                             name:
                               minLength: 1
                               type: string
@@ -12614,6 +12620,7 @@ paths:
                             - name
                             - categoryId
                             - priority
+                            - matchMode
                             - isActive
                           type: object
                         type: array
@@ -15723,6 +15730,12 @@ paths:
                         type: string
                       isActive:
                         type: boolean
+                      matchMode:
+                        default: alias
+                        enum:
+                          - alias
+                          - exact
+                        type: string
                       name:
                         minLength: 1
                         type: string
@@ -15739,6 +15752,7 @@ paths:
                       - name
                       - categoryId
                       - priority
+                      - matchMode
                       - isActive
                     type: object
                   type: array

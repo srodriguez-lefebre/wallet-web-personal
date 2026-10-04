@@ -17,6 +17,7 @@ import {
 import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
 import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
+import { prepareMerchantLearning, type MerchantRuleLearning } from "./learned-merchant.js";
 import {
   cardLastFour,
   normalizeMerchantTerm,
@@ -148,6 +149,7 @@ interface CategoryResolution {
   needsReview: boolean;
   reason?: string;
   modelAttempt?: CategoryInferenceDiagnostic;
+  learning?: MerchantRuleLearning;
 }
 
 export async function resolveCategory(db: DbClient, merchantRaw: string): Promise<CategoryResolution> {
@@ -158,6 +160,7 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
       merchantName: merchants.name,
       categoryId: merchants.categoryId,
       priority: merchants.priority,
+      matchMode: merchants.matchMode,
     })
     .from(merchantAliases)
     .innerJoin(
@@ -167,7 +170,10 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
         eq(merchants.isActive, true),
       ),
     );
-  const local = pickLongestMerchantMatch(merchantRaw, aliasRows);
+  const explicit = pickLongestMerchantMatch(merchantRaw, aliasRows.filter(alias => alias.matchMode === "alias"));
+  const learned = aliasRows.find(alias => alias.matchMode === "exact"
+    && normalizeMerchantTerm(alias.normalizedAlias) === normalizeMerchantTerm(merchantRaw));
+  const local = explicit ?? learned;
   // Classification may change, but the identity used to deduplicate must stay stable.
   const merchantName = local?.merchantName ?? merchantRaw;
   const allCategories = await db.select().from(categories);
@@ -229,6 +235,12 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
         source: "openai",
         needsReview: isUnknown(inferred),
         modelAttempt,
+        learning: isUnknown(inferred) ? undefined : {
+          merchantName,
+          merchantRaw,
+          categoryId: inferred,
+          existingMerchant: local ? { id: local.merchantId, previousCategoryId: local.categoryId } : undefined,
+        },
       };
   } catch {
     modelAttempt = { outcome: "failed", model: process.env.OPENAI_MODEL?.trim() || "gpt-5-nano", reason: "unexpected_classifier_error", elapsedMs: 0 };
@@ -627,8 +639,9 @@ export async function processMailIngestion(
     const duplicateGuard = db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
       SELECT 1 FROM ${ingestionEvents} WHERE ${duplicateWhere}
     ) THEN 0 ELSE 1 END AS unique_notification`);
+    const learningQueries = prepareMerchantLearning(db, "learning" in category ? category.learning : undefined);
     try {
-      await db.batch([fingerprintLock,...cardLocks,...bankReferences,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+      await db.batch([fingerprintLock,...cardLocks,...bankReferences,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),...learningQueries,eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
     } catch (error) {
       const failure = error as { code?: string; cause?: { code?: string } };
       if (failure.code === "22012" || failure.cause?.code === "22012") {
