@@ -23,6 +23,7 @@ import {
   updateRecord,
 } from "./wallet-repository.js";
 import { records } from "./schema.js";
+import { calculateAccountBalances, calculateGoalProgress } from "../../shared/calculations.js";
 import { randomUUID } from "node:crypto";
 
 const pg = new PGlite();
@@ -95,6 +96,58 @@ const reserve = () =>
     currency: "UYU",
     createdAt: date,
   });
+
+test.each(["cleared", "needs_review"])("closing before the target releases each remaining source reserve without changing totals or %s history", async (paymentStatus) => {
+  const secondAccount = "00000000-0000-4000-8000-000000000005";
+  await pg.query("insert into accounts(id,name,type,currency,initial_balance,color,icon) values ($1,'USD source','bank','USD',500,'blue','bank')", [secondAccount]);
+  await pg.query("update goals set target_amount=1000,auto_capture_enabled=true,auto_capture_start='2026-06-01',auto_capture_end='2026-06-30'");
+  await reserve();
+  await createGoalReservation({ goalId, accountId: secondAccount, amount: 20, currency: "USD", createdAt: date });
+  await createRecord(input({ paymentStatus }));
+  const before = await getWalletDataset();
+  const totals = calculateAccountBalances(before).map((account) => account.totalBalance);
+  await updateGoal(goalId, { status: "completed" });
+  const after = await getWalletDataset();
+  expect(after.goals[0]).toMatchObject({ status: "completed", autoCaptureEnabled: false });
+  expect(after.goalReservations).toEqual([]);
+  expect(calculateGoalProgress(after)[0].spent).toBe(40);
+  expect(after.records).toEqual(before.records);
+  expect(calculateAccountBalances(after).map((account) => account.totalBalance)).toEqual(totals);
+  const released = await pg.query("select account_id,amount,currency from goal_reservation_movements where type='release' order by currency");
+  expect(released.rows).toEqual([
+    { account_id: secondAccount, amount: "20.00", currency: "USD" },
+    { account_id: accountId, amount: "60.00", currency: "UYU" },
+  ]);
+  await updateGoal(goalId, { status: "completed" });
+  expect((await pg.query("select id from goal_reservation_movements where type='release'")).rows).toHaveLength(2);
+  await expect(reserve()).rejects.toThrow();
+  const later = await createRecord(input({ goalIds: [] }));
+  expect(later.goalIds).toEqual([]);
+});
+
+test("closing rolls back the goal and all releases if a release fails", async () => {
+  await reserve();
+  await pg.exec("create function reject_goal_close_release() returns trigger language plpgsql as $$ begin if NEW.type='release' then raise exception 'simulated release failure'; end if; return NEW; end $$; create trigger reject_goal_close_release before insert on goal_reservation_movements for each row execute function reject_goal_close_release();");
+  try {
+    await expect(updateGoal(goalId, { status: "completed" })).rejects.toThrow();
+    const dataset = await getWalletDataset();
+    expect(dataset.goals[0].status).toBe("active");
+    expect(dataset.goalReservations[0].amount).toBe(100);
+    expect(dataset.goalReservationMovements).toHaveLength(1);
+  } finally {
+    await pg.exec("drop trigger reject_goal_close_release on goal_reservation_movements; drop function reject_goal_close_release();");
+  }
+});
+
+test.each(["delete", "cancel", "edit"])("completed goals stay released when a historical record is changed with %s", async (action) => {
+  await reserve();
+  const record = await createRecord(input());
+  await updateGoal(goalId, { status: "completed" });
+  if (action === "delete") await deleteRecord(record.id);
+  if (action === "cancel") await updateRecord(record.id, { paymentStatus: "cancelled" });
+  if (action === "edit") await updateRecord(record.id, { amount: 20 });
+  expect(await listGoalReservations()).toEqual([]);
+});
 
 test.each(["delete", "cancel", "edit"])(
   "archived goal remains fully released after record %s",
@@ -244,6 +297,20 @@ test("missing as-of conversion rejects rather than inventing an account amount",
       randomUUID(),{...input({ accountId: undefined, paymentStatus: "needs_review" }),paymentStatus:"cleared"},createDb(),
     ),
   ).rejects.toThrow();
+});
+
+test.each(["create", "bulk", "update"])("an unresolved automatic reservation skips only that goal while preserving review records during %s", async (action) => {
+  await pg.query("update accounts set initial_balance=0");
+  await pg.query("update accounts set currency='USD',initial_balance=1000");
+  await pg.query("update goals set auto_capture_enabled=true,auto_capture_start='2026-06-01',auto_capture_end='2026-06-30'");
+  const reviewInput = input({ goalIds: [], accountId: undefined, paymentStatus: "needs_review" });
+  const record = action === "bulk" ? (await createRecordsBulk([reviewInput]))[0] : action === "update"
+    ? (await updateRecord((await createRecord({ ...reviewInput, occurredAt: "2026-07-01T12:00:00.000Z" })).id, { occurredAt: date }))!
+    : await createRecord(reviewInput);
+  expect(record.goalIds).toEqual([]);
+  expect((await getWalletDataset()).records[0].id).toBe(record.id);
+  expect(record.note).toContain("automatic capture skipped");
+  expect(await listGoalReservations()).toEqual([]);
 });
 
 test("bulk consumption and income reserves share the transaction's current ledger", async () => {

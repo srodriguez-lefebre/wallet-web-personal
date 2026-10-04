@@ -23,13 +23,10 @@ import {
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { MetricCard } from "@/components/wallet/metric-card";
-import { WalletAttentionPanel } from "@/components/wallet/wallet-attention-panel";
-import { WalletRefreshButton } from "@/components/wallet/wallet-refresh-button";
 import { DebtNetBadge } from "@/components/wallet/debt-net-badge";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
@@ -63,9 +60,6 @@ export function DashboardView() {
     setRecordFilters,
     recordDebtPayment,
     isAllHistoryComplete,
-    clearRecordFilters,
-    setAllPeriod,
-    getCompleteDataset,
   } = useWallet();
   const reportingDataset = reportDataset(dataset);
   const summary =
@@ -157,20 +151,6 @@ export function DashboardView() {
         eyebrow="Dashboard"
         title="Financial overview"
         description="Interactive summary: each metric opens the related records or reports."
-      >
-        <Badge variant="info">General preset</Badge>
-        <WalletRefreshButton refresh={getCompleteDataset} />
-      </PageHeader>
-
-      <WalletAttentionPanel
-        dataset={dataset}
-        isComplete={isAllHistoryComplete}
-        onReview={() => {
-          clearRecordFilters();
-          setAllPeriod();
-          setRecordFilters({ paymentStatus: "needs_review" });
-          navigate("/records");
-        }}
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

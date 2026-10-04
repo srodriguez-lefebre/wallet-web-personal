@@ -4,9 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { mockWalletData } from "../../shared/mock-data";
 import { CardDetailView } from "./card-detail-view";
-import { CardStatementAgenda } from "../components/wallet/card-statement-agenda";
 import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
-import { selectPendingCardStatements } from "../lib/cards-presentation";
 
 let dataset = structuredClone(mockWalletData);
 const payment = vi.hoisted(() => vi.fn());
@@ -97,35 +95,7 @@ async function detail(query = "") {
     );
   });
 }
-test("agenda presents an archived overdue obligation and links its exact statement", async () => {
-  await act(async () => {
-    tree = create(
-      <MemoryRouter>
-        <CardStatementAgenda
-          entries={selectPendingCardStatements(dataset)}
-          isComplete
-        />
-      </MemoryRouter>,
-    );
-  });
-  const links = tree!.root.findAllByType("a");
-  expect(links.map((link) => link.props.href)).toEqual([
-    "/cards/card?statementId=oldest",
-    "/cards/card?statementId=later",
-  ]);
-  expect(JSON.stringify(tree!.toJSON())).toContain("Archived");
-  expect(JSON.stringify(tree!.toJSON())).toContain("Overdue");
-});
-test("incomplete agenda explains loading rather than declaring debts settled", async () => {
-  await act(async () => {
-    tree = create(<CardStatementAgenda entries={[]} isComplete={false} />);
-  });
-  expect(JSON.stringify(tree!.toJSON())).toContain("Loading complete history");
-  expect(JSON.stringify(tree!.toJSON())).not.toContain(
-    "All closed statements are settled",
-  );
-});
-test("detail defaults to the oldest actual debt and honors the exact agenda query", async () => {
+test("detail defaults to the oldest actual debt and honors the exact statement query", async () => {
   await detail();
   expect(
     tree!.root.findByProps({ "aria-label": "Select statement" }).props.value,
@@ -200,7 +170,7 @@ test("limit alert is absent below eighty and visible at eighty and one hundred",
   expect(JSON.stringify(tree!.toJSON())).toContain("Credit limit reached");
 });
 
-test("paying from an agenda link submits the exact selected statement", async () => {
+test("paying from a statement link submits the exact selected statement", async () => {
   payment.mockResolvedValue(undefined);
   await detail("?statementId=later");
   await act(async () =>

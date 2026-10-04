@@ -99,7 +99,7 @@ export const recordSchema = z
     goalAssociations: z.array(recordGoalAssociationSchema).default([]),
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
-    exchangeRateToPrimary: z.number().positive().default(1),
+    exchangeRateToPrimary: z.number().nonnegative().default(1),
     amountInLimitCurrency: z.number().positive().optional(),
     exchangeRateToLimitCurrency: z.number().positive().optional(),
     occurredAt: z.string().datetime(),
@@ -108,11 +108,17 @@ export const recordSchema = z
     debtId: uuidSchema.optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.exchangeRateToPrimary === 0 && value.paymentStatus !== "needs_review" && value.paymentStatus !== "cancelled") {
+      ctx.addIssue({code:"custom",path:["exchangeRateToPrimary"],message:"An unresolved primary conversion requires review"});
+    }
     for (const [index, association] of value.goalAssociations.entries()) {
       if (association.allocatedAmount !== undefined && association.allocatedAmount > value.amount) {
         ctx.addIssue({ code: "custom", path: ["goalAssociations", index, "allocatedAmount"], message: "Goal allocation cannot exceed the record amount" });
       }
     }
+    // Cancellation preserves incomplete review history without requiring a
+    // financial assignment or an invented conversion to remove its impact.
+    if (value.paymentStatus === "cancelled") return;
     if (value.type !== "transfer") {
       if (
         !value.accountId &&
@@ -481,7 +487,7 @@ export const recordPatchSchema = nonEmptyPatch({
   counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).max(1).optional(),
   goalIds: z.array(uuidSchema).optional(), goalAssociations: z.array(recordGoalAssociationSchema).optional(),
   paymentType: paymentTypeSchema.optional(), paymentStatus: paymentStatusSchema.optional(),
-  exchangeRateToPrimary: z.number().positive().optional(), amountInLimitCurrency: z.number().positive().optional(),
+  exchangeRateToPrimary: z.number().nonnegative().optional(), amountInLimitCurrency: z.number().positive().optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
   note: z.string().nullable().optional(), isFixed: z.boolean().optional(), debtId: uuidSchema.nullable().optional(),
 });

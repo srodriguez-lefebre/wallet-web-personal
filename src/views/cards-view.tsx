@@ -29,9 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
-import { CardStatementAgenda } from "@/components/wallet/card-statement-agenda";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import { selectPendingCardStatements } from "@/lib/cards-presentation";
 import {
   calculateCreditCardCategoryUsage,
   calculateCreditCardSummaries,
@@ -105,10 +103,6 @@ export function CardsView() {
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { toast, runAction } = useActionToast();
-  const pendingStatements = useMemo(
-    () => (isAllHistoryComplete ? selectPendingCardStatements(dataset) : []),
-    [dataset, isAllHistoryComplete],
-  );
   const cardSummaries = useMemo(
     () =>
       calculateCreditCardSummaries(dataset).map((summary) => ({
@@ -361,11 +355,6 @@ export function CardsView() {
           </form>
         </DialogContent>
       </Dialog>
-
-      <CardStatementAgenda
-        entries={pendingStatements}
-        isComplete={isAllHistoryComplete}
-      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {

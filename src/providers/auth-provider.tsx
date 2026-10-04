@@ -10,11 +10,6 @@ import {
 } from "react";
 import { createSession } from "@/services/auth-service";
 import { readStorage, removeStorage, writeStorage } from "@/lib/storage";
-import {
-  autoLockEvent,
-  readAutoLockMinutes,
-  validAutoLockMinutes,
-} from "@/lib/privacy";
 
 const tokenKey = "wallet-session-token";
 const expiresAtKey = "wallet-session-expires-at";
@@ -113,7 +108,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [session, setSession] = useState(readStoredSession);
-  const [autoLockMinutes, setAutoLockMinutes] = useState(readAutoLockMinutes);
   const attempt = useRef(0);
   const lock = useCallback(() => {
     attempt.current += 1;
@@ -150,13 +144,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     removeStorage(legacyTokenKey);
+    removeStorage("wallet-auto-lock-minutes");
     const handleUnauthorized = () => lock();
-    const handlePreference = (event: Event) => {
-      const value = (event as CustomEvent<unknown>).detail;
-      setAutoLockMinutes(
-        validAutoLockMinutes(value) ? value : readAutoLockMinutes(),
-      );
-    };
     const handleStorage = (event: StorageEvent) => {
       if (
         event.key === tokenKey ||
@@ -166,15 +155,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
         attempt.current += 1;
         setSession(readStoredSession());
       }
-      if (event.key === "wallet-auto-lock-minutes" || event.key === null)
-        setAutoLockMinutes(readAutoLockMinutes());
     };
     window.addEventListener("wallet:unauthorized", handleUnauthorized);
-    window.addEventListener(autoLockEvent, handlePreference);
     window.addEventListener("storage", handleStorage);
     return () => {
       window.removeEventListener("wallet:unauthorized", handleUnauthorized);
-      window.removeEventListener(autoLockEvent, handlePreference);
       window.removeEventListener("storage", handleStorage);
     };
   }, [lock]);
@@ -182,49 +167,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!session) return;
     let timeout: number | undefined;
-    let lastActivity = Date.now();
     const expiry = Date.parse(session.expiresAt);
     const check = () => {
       window.clearTimeout(timeout);
-      const now = Date.now(),
-        idleAt = autoLockMinutes
-          ? lastActivity + autoLockMinutes * 60_000
-          : Infinity;
-      if (now >= expiry || now >= idleAt) {
+      const now = Date.now();
+      if (now >= expiry) {
         lock();
         return;
       }
       timeout = window.setTimeout(
         check,
-        Math.min(expiry - now, idleAt - now, 24 * 60 * 60_000),
+        Math.min(expiry - now, 24 * 60 * 60_000),
       );
     };
-    const activity = () => {
-      const now = Date.now();
-      if (
-        now >= expiry ||
-        (autoLockMinutes && now - lastActivity >= autoLockMinutes * 60_000)
-      ) {
-        lock();
-        return;
-      }
-      lastActivity = now;
-      check();
-    };
-    const events = ["pointerdown", "keydown", "touchstart"] as const;
     check();
-    events.forEach((event) =>
-      window.addEventListener(event, activity, { passive: true }),
-    );
     window.addEventListener("focus", check);
     document.addEventListener("visibilitychange", check);
     return () => {
       window.clearTimeout(timeout);
-      events.forEach((event) => window.removeEventListener(event, activity));
       window.removeEventListener("focus", check);
       document.removeEventListener("visibilitychange", check);
     };
-  }, [session, autoLockMinutes, lock]);
+  }, [session, lock]);
 
   const value = useMemo(
     () => ({

@@ -34,7 +34,7 @@ test("diagnostics retain archived dictionaries and ignore archived records", () 
   expect(result.uncategorized).toBe(1);
   expect(result.references).toBe(0);
 });
-test("conversion checks exclude drafts and count affected records once", () => {
+test("conversion checks include review activity and count affected records once", () => {
   const data = structuredClone(mockWalletData),
     account = data.accounts[0];
   account.currency = "UYU";
@@ -59,9 +59,11 @@ test("conversion checks exclude drafts and count affected records once", () => {
     },
   ];
   const result = walletDataHealth(data);
-  expect(result.conversions).toBe(1);
+  expect(result.conversions).toBe(2);
   expect(result.review).toBe(1);
   data.records[0].accountAmount = 400;
+  expect(walletDataHealth(data).conversions).toBe(1);
+  data.records[1].paymentStatus = "cancelled";
   expect(walletDataHealth(data).conversions).toBe(0);
 });
 test("CSV preview totals keep currencies and directions separate and skip invalid rows", () => {

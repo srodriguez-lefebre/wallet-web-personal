@@ -17,7 +17,7 @@ test("merchant frequency and average use the recorded primary conversion rather 
 });
 test("only financial purchases in the selected range contribute to the gross merchant totals",()=>{
   const records=[record("keep"),record("draft",{paymentStatus:"needs_review"}),record("cancel",{paymentStatus:"cancelled"}),record("income",{type:"income"}),record("transfer",{type:"transfer"}),record("old",{occurredAt:"2026-01-31T12:00:00Z"}),record("new",{occurredAt:"2026-03-01T12:00:00Z"})];
-  expect(calculateMerchantSpending(records,range)).toEqual([{key:"corner store",name:"Corner Store",purchases:1,total:400,average:400}]);
+  expect(calculateMerchantSpending(records,range)).toEqual([{key:"corner store",name:"Corner Store",purchases:2,total:800,average:400}]);
 });
 test("merchant totals respect hidden-account preference and explicit account selection",()=>{
   const data=structuredClone(mockWalletData),visible=data.accounts[0],hidden=data.accounts[1];

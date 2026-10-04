@@ -4459,7 +4459,7 @@ paths:
                             type: number
                           exchangeRateToPrimary:
                             default: 1
-                            exclusiveMinimum: 0
+                            minimum: 0
                             type: number
                           goalAssociations:
                             default: []
@@ -7555,7 +7555,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -7746,7 +7746,7 @@ paths:
                   type: number
                 exchangeRateToPrimary:
                   default: 1
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 goalAssociations:
                   default: []
@@ -7893,7 +7893,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -8091,7 +8091,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -8245,7 +8245,7 @@ paths:
                           type: number
                         exchangeRateToPrimary:
                           default: 1
-                          exclusiveMinimum: 0
+                          minimum: 0
                           type: number
                         goalAssociations:
                           default: []
@@ -8520,7 +8520,7 @@ paths:
                   exclusiveMinimum: 0
                   type: number
                 exchangeRateToPrimary:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 goalAssociations:
                   items:
@@ -8655,7 +8655,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -11095,7 +11095,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -12748,7 +12748,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -14107,7 +14107,7 @@ paths:
                                   type: number
                                 exchangeRateToPrimary:
                                   default: 1
-                                  exclusiveMinimum: 0
+                                  minimum: 0
                                   type: number
                                 goalAssociations:
                                   default: []
@@ -15873,7 +15873,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -17178,7 +17178,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []

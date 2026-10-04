@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import { groupAccountLiquidity } from "@/lib/account-presentation";
 import { calculateAccountBalances, formatMoney } from "@shared/calculations";
 import { accountTypeLabels } from "@shared/constants";
 import type { Account, AccountType, CurrencyCode } from "@shared/types";
@@ -115,7 +114,6 @@ export function AccountsView() {
   const visibleBalances = balances.filter(
     (item) => showHidden || item.account.isVisible,
   );
-  const liquidity = groupAccountLiquidity(balances);
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
@@ -602,46 +600,6 @@ export function AccountsView() {
           </>
         )}
       </PageHeader>
-
-      {isAllHistoryComplete && (
-        <section aria-label="Liquidity by currency" className="mb-6 space-y-3">
-          <h2 className="text-lg font-semibold">Liquidity by currency</h2>
-          <p className="text-sm text-muted-foreground">
-            Active, visible accounts. Investments and legacy credit accounts are
-            excluded.
-          </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {liquidity.map((group) => (
-              <Card key={group.currency}>
-                <CardHeader>
-                  <CardTitle>{group.currency}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="grid grid-cols-3 gap-3 text-sm">
-                    {[
-                      ["Total", group.total],
-                      ["Reserved", group.reserved],
-                      ["Free", group.free],
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <dt className="text-muted-foreground">{label}</dt>
-                        <dd className="font-semibold">
-                          {formatMoney(Number(value), group.currency)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {liquidity.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No active visible liquid accounts.
-            </p>
-          )}
-        </section>
-      )}
 
       {isEditing ? (
         <fieldset

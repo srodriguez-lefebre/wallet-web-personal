@@ -67,6 +67,26 @@ test("missing goal conversion is marked unavailable instead of a 1:1 total", () 
   expect(Number.isNaN(result.committed)).toBe(true);
 });
 
+test("review records with unknown primary conversion leave goal progress unavailable", () => {
+  const data = dataset();
+  data.settings.primaryCurrency = "USD";
+  data.records[0].paymentStatus = "needs_review";
+  data.records[0].exchangeRateToPrimary = 0;
+  const progress = calculateGoalProgress(data)[0];
+  expect(progress.hasMissingExchangeRate).toBe(true);
+  expect(Number.isNaN(progress.spent)).toBe(true);
+});
+
+test("a zero foreign account amount cannot invent a goal conversion", () => {
+  const data = dataset();
+  data.accounts = [{ ...data.accounts[0], id: "usd-account", currency: "USD" }];
+  data.records[0].accountId = "usd-account";
+  data.records[0].accountAmount = 0;
+  const progress = calculateGoalProgress(data)[0];
+  expect(progress.hasMissingExchangeRate).toBe(true);
+  expect(Number.isNaN(progress.spent)).toBe(true);
+});
+
 test("goal reservations support inverse quotes without fabricating a primary rate", () => {
   const data = dataset();
   data.records = [];

@@ -309,37 +309,6 @@ export function AnalyticsView() {
         </div>
       </div>
 
-      <Card className="mt-4">
-        <CardHeader><CardTitle>Top merchants</CardTitle></CardHeader>
-        <CardContent>
-          {!isAllHistoryComplete ? (
-            <p className="text-sm text-muted-foreground" role="status">Loading complete history to compare merchants…</p>
-          ) : merchants.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No recorded purchases in this period.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <caption className="mb-3 text-left text-muted-foreground">Recorded account purchases for the selected period. Gross spending; refunds are not deducted.</caption>
-                <thead><tr className="border-b text-left text-muted-foreground">
-                  <th scope="col" className="pb-2 font-medium">Merchant</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Purchases</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Spending</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Average purchase</th>
-                </tr></thead>
-                <tbody>{merchants.map(merchant => (
-                  <tr key={merchant.key} className="border-b last:border-0">
-                    <th scope="row" className="py-3 text-left font-medium">{merchant.name}</th>
-                    <td className="py-3 text-right tabular-nums">{merchant.purchases}</td>
-                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.total, dataset.settings.primaryCurrency)}</td>
-                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.average, dataset.settings.primaryCurrency)}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
@@ -490,6 +459,37 @@ export function AnalyticsView() {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader><CardTitle>Top merchants</CardTitle></CardHeader>
+        <CardContent>
+          {!isAllHistoryComplete ? (
+            <p className="text-sm text-muted-foreground" role="status">Loading complete history to compare merchants…</p>
+          ) : merchants.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No recorded purchases in this period.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <caption className="mb-3 text-left text-muted-foreground">Recorded account purchases for the selected period. Gross spending; refunds are not deducted.</caption>
+                <thead><tr className="border-b text-left text-muted-foreground">
+                  <th scope="col" className="pb-2 font-medium">Merchant</th>
+                  <th scope="col" className="pb-2 text-right font-medium">Purchases</th>
+                  <th scope="col" className="pb-2 text-right font-medium">Spending</th>
+                  <th scope="col" className="pb-2 text-right font-medium">Average purchase</th>
+                </tr></thead>
+                <tbody>{merchants.map(merchant => (
+                  <tr key={merchant.key} className="border-b last:border-0">
+                    <th scope="row" className="py-3 text-left font-medium">{merchant.name}</th>
+                    <td className="py-3 text-right tabular-nums">{merchant.purchases}</td>
+                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.total, dataset.settings.primaryCurrency)}</td>
+                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.average, dataset.settings.primaryCurrency)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader>

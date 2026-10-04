@@ -15,9 +15,15 @@ se incluyen en el respaldo y se administran desde Configuración → Gestión de
 plantillas. Guardar una
 plantilla conserva importe, moneda, destinos, categoría, una etiqueta y notas.
 Usarla abre un borrador en Movimientos con fecha y conversiones actuales; el movimiento requiere
-confirmación. Los destinos archivados exigen elegir un reemplazo. Si una creación
-financiera falla con resultado incierto, se bloquea el reintento desde ese borrador
-y se exige recargar y revisar los movimientos.
+confirmación. Los destinos archivados exigen elegir un reemplazo. Un guardado
+fallido conserva el formulario para corregirlo o reintentar; los envíos pendientes
+siguen protegidos frente a doble clic.
+
+Needs review marca movimientos para verificar y conserva una etiqueta amarilla;
+no excluye actividad financiera válida de saldos e informes. Cancelled sí la
+excluye. Si falta una conversión, no se supone una relación 1:1: una cotización
+primaria congelada de cero indica conversión pendiente y no suma al reporte
+en esa moneda. Los importes conocidos de cuenta o tarjeta conservan su impacto.
 
 El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/openapi.yaml).
 `docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
@@ -25,19 +31,25 @@ comportamiento desplegado.
 
 ## Mejoras de uso
 
-- Inicio: avisos de revisión en todo el historial, deudas próximas/vencidas y
-  agenda de estados de cuenta pendientes; actualización manual con hora comprobada.
-- Cuentas: liquidez disponible y reservada por moneda, sin sumar monedas distintas;
+- Inicio: vista principal sin bloques de avisos. La campanita junto a agregar
+  reúne movimientos por revisar, deudas próximas/vencidas y estados de tarjeta
+  cerrados con saldo pendiente, incluidas tarjetas archivadas.
+- Cuentas: tarjetas de cuenta con sus importes disponibles y reservados;
   guardado de cambios con protección frente a doble clic y reintentos parciales.
-- Tarjetas: estados pendientes ordenados por vencimiento, incluidas tarjetas
-  archivadas; apertura del estado exacto y advertencias al 80%/100% del límite.
-- Movimientos: cola de revisión independiente del período; duplicación como
+- Tarjetas: apertura del estado exacto desde las notificaciones y advertencias
+  al 80%/100% del límite.
+- Movimientos: cola de revisión independiente del período; un segundo clic
+  desactiva el filtro de revisión. Duplicación como
   borrador nuevo, con fecha y cotizaciones actuales, sin copiar pagos de deuda.
-- Análisis: diez comercios principales, frecuencia e importe medio según el período
+- Análisis: Top merchants después de los cuatro bloques originales; diez
+  comercios principales, frecuencia e importe medio según el período
   y las preferencias del reporte. Usa gastos WalletRecord con cotizaciones congeladas;
   muestra compras brutas, sin restar devoluciones ni volver a sumar consumos vinculados.
 - Metas: importe restante y aportes orientativos diarios/semanales hasta la fecha
-  objetivo; distingue metas vencidas, completas y conversiones pendientes.
+  objetivo; distingue metas vencidas, completas y conversiones pendientes. Edición
+  y cierre desde el detalle: completar libera las reservas restantes en sus
+  cuentas originales, conserva gastos e historial y detiene la captura automática.
+  La operación es atómica y se puede cerrar antes de alcanzar el importe objetivo.
 - Deudas: filtros por vencidas, próximos 7/30 días y avisos de vencimiento;
   una deuda sin importe definido conserva esa indicación.
 - Inversiones: cartera por moneda y actualización persistida de valoración,
@@ -45,8 +57,7 @@ comportamiento desplegado.
 - Datos: diagnóstico de referencias/conversiones/revisión/categorías desde el
   respaldo completo; vista previa CSV por moneda y respaldos JSON fechados.
   El recibo indica cuándo se solicitó la descarga; comprobar el archivo descargado.
-- Ajustes: caducidad automática de sesión y bloqueo por inactividad opcional de
-  5/15/30 minutos, desactivado por defecto y guardado sólo en este navegador.
+- Ajustes: caducidad automática de sesión y bloqueo manual.
   Bloquear elimina la sesión y la caché financiera del navegador.
 
 Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
@@ -58,7 +69,7 @@ en producción son pasos operativos separados.
   tarjetas, categorías, metas, deudas, inversiones y movimientos, o abrir acciones
   rápidas. Buscar movimientos limpia filtros anteriores y abre todo el historial.
   La búsqueda ignora mayúsculas y acentos; indica si el historial aún se está cargando.
-- Plantillas: biblioteca en Movimientos para guardar, editar, reutilizar y quitar
+- Plantillas: gestión en Configuración para guardar, editar, reutilizar y quitar
   configuraciones sin modificar el historial financiero. Los nombres son únicos
   sin distinguir mayúsculas ni espacios exteriores y se admiten hasta 100 plantillas.
 - Asistente de presupuestos: en Análisis propone límites mensuales a partir de
@@ -71,7 +82,15 @@ en producción son pasos operativos separados.
   Guarda cada selección por separado; ante fallos muestra lo confirmado y
   concilia el estado actual antes de reintentar. El lote completo no es atómico.
 
-La tabla de plantillas requiere la migración `0018` antes de desplegar esta versión.
+La tabla de plantillas requiere la migración `0018`. La regla de revisión
+informativa y la conciliación de datos existentes requieren `0019` antes de
+desplegar esta versión. La migración conserva cancelaciones y eliminaciones;
+un saldo de deuda inconsistente se rechaza en vez de ocultarlo con un ajuste.
+No se corrigen automáticamente cotizaciones antiguas ambiguas de correos: deben
+verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
+a partir de intenciones de movimientos en revisión: se conserva el libro de
+reservas registrado y cualquier discrepancia histórica requiere revisión.
+Ninguna migración se ha ejecutado en producción.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
 
 ## Stack
@@ -257,8 +276,9 @@ por separado. Una cotización ausente exige revisión o entrada explícita; no s
 supone equivalencia entre monedas. La moneda principal queda protegida cuando
 existe historial financiero para evitar reinterpretar importes congelados.
 La moneda de las cuentas y del límite de las tarjetas también queda protegida
-cuando hay saldo inicial o actividad. Los registros `needs_review` no afectan
-los saldos, las reservas ni los informes hasta validarse. Los pagos de deuda se
+cuando hay saldo inicial o actividad. Los registros `needs_review` conservan el
+impacto financiero que permiten sus importes y conversiones conocidos; cancelar
+excluye el movimiento sin inventar datos faltantes. Los pagos de deuda se
 crean con la acción de pago; CSV no puede insertar nuevos pagos vinculados sin
 conciliar la deuda. Para restaurar ese historial se usa el respaldo JSON completo.
 

@@ -81,7 +81,7 @@ test("session expiration locks an already open wallet and removes private cached
   expect(storage.has("wallet-session-token")).toBe(false);
   expect(storage.has("wallet-dataset-cache")).toBe(false);
 });
-test("activity resets the optional inactivity lock", async () => {
+test("a legacy inactivity preference cannot lock an otherwise valid session", async () => {
   storage.set("wallet-auto-lock-minutes", "5");
   await mount();
   await advance(2 * 60_000);
@@ -91,7 +91,8 @@ test("activity resets the optional inactivity lock", async () => {
   await advance(4 * 60_000);
   expect(context.isUnlocked).toBe(true);
   await advance(60_001);
-  expect(context.isUnlocked).toBe(false);
+  expect(context.isUnlocked).toBe(true);
+  expect(storage.has("wallet-auto-lock-minutes")).toBe(false);
 });
 test("a disabled inactivity lock leaves a valid session open", async () => {
   await mount();
@@ -129,7 +130,7 @@ test("the signed expiration cannot be extended by browser storage", async () => 
   await advance(60_001);
   expect(context.isUnlocked).toBe(false);
 });
-test("changing the inactivity preference takes effect without reloading", async () => {
+test("obsolete inactivity events are ignored while session expiration remains active", async () => {
   await mount();
   await act(async () => {
     window.dispatchEvent(
@@ -137,6 +138,8 @@ test("changing the inactivity preference takes effect without reloading", async 
     );
   });
   await advance(5 * 60_000 + 1);
+  expect(context.isUnlocked).toBe(true);
+  await advance(25 * 60_000);
   expect(context.isUnlocked).toBe(false);
 });
 test("a late unlock response cannot reopen a wallet that was explicitly locked", async () => {

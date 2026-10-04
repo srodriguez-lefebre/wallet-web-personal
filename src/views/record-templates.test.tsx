@@ -212,7 +212,7 @@ test("an archived financial destination leaves an invalid draft that cannot be c
   expect(JSON.stringify(tree!.toJSON())).toContain("Choose an active account");
   expect(actions.addRecord).not.toHaveBeenCalled();
 });
-test("an uncertain financial save blocks a second create until records are reviewed", async () => {
+test("a failed record save retains an editable draft and allows a normal retry", async () => {
   actions.addRecord.mockRejectedValueOnce(
     new Error("Saved but refresh failed"),
   );
@@ -220,36 +220,40 @@ test("an uncertain financial save blocks a second create until records are revie
   await act(async () =>
     tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
   );
-  expect(button("Add").props.disabled).toBe(true);
+  expect(button("Add").props.disabled).toBe(false);
   await act(async () =>
     tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
   );
-  expect(actions.addRecord).toHaveBeenCalledTimes(1);
-  await act(async () => button("Reload and review records").props.onClick());
-  expect(actions.read).toHaveBeenCalledTimes(1);
+  expect(actions.addRecord).toHaveBeenCalledTimes(2);
+  expect(actions.read).not.toHaveBeenCalled();
   expect(tree!.root.findAllByType("form")).toHaveLength(0);
-  expect(actions.addRecord).toHaveBeenCalledTimes(1);
 });
 
-test("failed reconciliation keeps an uncertain create blocked", async () => {
+test("pending record submissions remain single flight", async () => {
+  let release!: () => void;
+  actions.addRecord.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  await openSaved();
+  await act(async () => {
+    void tree!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+    void tree!.root.findByType("form").props.onSubmit({ preventDefault() {} });
+  });
+  expect(actions.addRecord).toHaveBeenCalledTimes(1);
+  await act(async () => release());
+  expect(tree!.root.findAllByType("form")).toHaveLength(0);
+});
+
+test("a global new-record request starts fresh after a failed save", async () => {
   actions.addRecord.mockRejectedValueOnce(new Error("Response lost"));
-  actions.read.mockRejectedValue(new Error("Offline"));
   await openSaved();
   await act(async () =>
     tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
   );
-  await act(async () => button("Reload and review records").props.onClick());
-  expect(button("Add").props.disabled).toBe(true);
-  expect(actions.addRecord).toHaveBeenCalledTimes(1);
-});
-
-test("a global new-record request clears the previous draft's uncertain outcome", async () => {
-  actions.addRecord.mockRejectedValueOnce(new Error("Response lost"));
-  await openSaved();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
-  expect(button("Add").props.disabled).toBe(true);
+  expect(button("Add").props.disabled).toBe(false);
   newRecordRequestId = 2;
   newRecordTemplateId = null;
   await act(async () => tree!.update(<RecordsView />));

@@ -51,14 +51,26 @@ test("simultaneous payments cannot overpay or partially insert a financial recor
   expect(dataset.records).toHaveLength(1);
 });
 
-test("reviewing a debt payment restores its pending balance until it is validated",async()=>{
+test("reviewing a valid debt payment preserves the debt payment and bank balance",async()=>{
   const debt=await createDebt(debtInput);
   const result=await recordDebtPayment(debt.id,payment);
   await updateRecord(result!.record.id,{paymentStatus:"needs_review"});
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(200);
-  expect(calculateAccountBalances(await getWalletDataset()).find(item=>item.account.id===accountId)!.balance).toBe(5000);
+  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(100);
+  expect(calculateAccountBalances(await getWalletDataset()).find(item=>item.account.id===accountId)!.balance).toBe(1000);
   await updateRecord(result!.record.id,{paymentStatus:"cleared"});
   expect((await getWalletDataset()).debts[0].pendingAmount).toBe(100);
+});
+
+test("unclassified review history with unknown primary conversion can be cancelled and retried without a bank assignment",async()=>{
+  const record=await createRecord({type:"expense",amount:10,currency:"USD",tagIds:[],paymentType:"cash",paymentStatus:"needs_review",exchangeRateToPrimary:0,occurredAt:payment.occurredAt});
+  await expect(updateRecord(record.id,{paymentStatus:"cleared"})).rejects.toThrow();
+  await updateRecord(record.id,{paymentStatus:"cancelled"});
+  await updateRecord(record.id,{paymentStatus:"cancelled"});
+  const dataset=await getWalletDataset();
+  expect(dataset.records.find(row=>row.id===record.id)).toMatchObject({paymentStatus:"cancelled",exchangeRateToPrimary:0});
+  expect(dataset.records[0].accountId).toBeUndefined();
+  expect(dataset.records[0].categoryId).toBeUndefined();
+  expect(calculateAccountBalances(dataset).find(item=>item.account.id===accountId)!.totalBalance).toBe(5000);
 });
 test("cross currency transfer persists the actual amount received", async () => {
   const input = {type:"transfer" as const,amount:4000,currency:"UYU" as const,accountId,destinationAccountId:dollarAccount,destinationAmount:100,tagIds:[],paymentType:"transfer" as const,paymentStatus:"cleared" as const,exchangeRateToPrimary:1,occurredAt:payment.occurredAt};

@@ -105,36 +105,3 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
   );
   await act(async () => tree.unmount());
 });
-
-test("inactivity preference is retained when settings are reopened", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const stored = new Map<string, string>();
-  vi.stubGlobal(
-    "window",
-    Object.assign(new EventTarget(), {
-      localStorage: {
-        getItem: (key: string) => stored.get(key) ?? null,
-        setItem: (key: string, value: string) => stored.set(key, value),
-      },
-    }),
-  );
-  let tree!: ReturnType<typeof create>;
-  await act(async () => {
-    tree = create(<SettingsView />);
-  });
-  await act(async () =>
-    tree.root
-      .findByProps({ "aria-label": "Lock after inactivity" })
-      .props.onChange({ target: { value: "15" } }),
-  );
-  expect(stored.get("wallet-auto-lock-minutes")).toBe("15");
-  await act(async () => tree.unmount());
-  await act(async () => {
-    tree = create(<SettingsView />);
-  });
-  expect(
-    tree.root.findByProps({ "aria-label": "Lock after inactivity" }).props
-      .value,
-  ).toBe(15);
-  await act(async () => tree.unmount());
-});

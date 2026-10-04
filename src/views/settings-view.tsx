@@ -20,7 +20,6 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/wallet/category-icon";
-import { PrivacySettings } from "@/components/wallet/privacy-settings";
 import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
 import { categoryIconOptions } from "@/components/wallet/category-icons";
 import {
@@ -63,7 +62,7 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { lock } = useAuth();
+  const { lock, expiresAt } = useAuth();
   const { toast, runAction } = useActionToast();
   async function runSettingAction(
     work: () => Promise<unknown>,
@@ -685,26 +684,6 @@ export function SettingsView() {
                 <option value="dark">Dark</option>
               </select>
             </div>
-            <label className="flex items-center justify-between rounded-md border p-3">
-              Include hidden accounts in reports
-              <input
-                type="checkbox"
-                checked={dataset.settings.includeHiddenAccountsInReports}
-                onChange={(event) =>
-                  void runSettingAction(
-                    () =>
-                      updateWalletSettings({
-                        includeHiddenAccountsInReports: event.target.checked,
-                      }),
-                    {
-                      processing: "Saving reports...",
-                      success: "Report preference saved",
-                      error: "Could not save preference",
-                    },
-                  )
-                }
-              />
-            </label>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="font-medium">Session</p>
@@ -716,7 +695,11 @@ export function SettingsView() {
                 Lock
               </Button>
             </div>
-            <PrivacySettings />
+            {expiresAt && (
+              <p className="text-sm text-muted-foreground">
+                Session expires: {new Date(expiresAt).toLocaleString("es-UY")}
+              </p>
+            )}
           </CardContent>
         </Card>
 

@@ -524,13 +524,17 @@ test.each(["refund", "payment"] as const)("linked purchase mutations preserve %s
   if (dependency === "refund") await refund(original.id, 40);
   else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(40));
   for (const patch of [
-    { paymentStatus: "cancelled" as const }, { paymentStatus: "needs_review" as const },
+    { paymentStatus: "cancelled" as const },
     { creditCardId: undefined }, { creditCardId: otherCardId }, { type: "income" as const },
   ]) await expect(updateRecord(wallet.id, patch)).rejects.toThrow();
   await expect(deleteRecord(wallet.id)).rejects.toThrow();
   const after = await getWalletDataset();
   expect(after.records.find(row => row.id === wallet.id)?.paymentStatus).toBe("cleared");
   expect(after.creditCardRecords.find(row => row.id === original.id)?.creditCardId).toBe(cardId);
+  await updateRecord(wallet.id, { paymentStatus: "needs_review" });
+  const reviewed = await getWalletDataset();
+  expect(reviewed.records.find(row=>row.id===wallet.id)?.paymentStatus).toBe("needs_review");
+  expect(reviewed.creditCardRecords.find(row=>row.id===original.id)?.amountInLimitCurrency).toBe(100);
 });
 
 test("linked purchase edits enforce refund amount and currency constraints", async () => {
@@ -544,7 +548,8 @@ test("linked purchase edits enforce refund amount and currency constraints", asy
   expect((await getWalletDataset()).creditCardRecords.find(row => row.id === original.id)?.amount).toBe(100);
 });
 
-test.each(["cancelled", "needs_review"] as const)("%s creates no active linked card liability through single or bulk creation", async status => {
+test("cancelled creates no active linked card liability through single or bulk creation", async () => {
+  const status = "cancelled";
   const single = await createRecord(linkedPurchaseInput(status));
   const [bulk] = await createRecordsBulk([linkedPurchaseInput(status)]);
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
@@ -553,12 +558,51 @@ test.each(["cancelled", "needs_review"] as const)("%s creates no active linked c
   expect((await getWalletDataset()).creditCardRecords.filter(row => row.kind === "purchase")).toHaveLength(2);
 });
 
+test("review purchases preserve linked liability through single and bulk creation and clearing",async()=>{
+  const single=await createRecord(linkedPurchaseInput("needs_review"));
+  const [bulk]=await createRecordsBulk([linkedPurchaseInput("needs_review")]);
+  const reviewed=await getWalletDataset();
+  expect(reviewed.creditCardRecords.filter(row=>row.kind==="purchase")).toHaveLength(2);
+  expect(calculateCreditCardSummary(reviewed,reviewed.creditCards.find(row=>row.id===cardId)!).usedLimit).toBe(200);
+  await updateRecord(single.id,{paymentStatus:"cleared"});
+  await updateRecord(bulk.id,{paymentStatus:"cleared"});
+  const cleared=await getWalletDataset();
+  expect(cleared.creditCardRecords).toHaveLength(2);
+  expect(calculateCreditCardSummary(cleared,cleared.creditCards.find(row=>row.id===cardId)!).usedLimit).toBe(200);
+});
+
+test("clearing a card-only review purchase preserves its wallet history and reporting amount",async()=>{
+  const wallet=await createRecord({...linkedPurchaseInput("needs_review"),accountId:undefined,accountAmount:undefined});
+  const before=await getWalletDataset();
+  const movement=before.creditCardRecords.find(row=>row.walletRecordId===wallet.id)!;
+  await updateRecord(wallet.id,{paymentStatus:"cleared"});
+  const after=await getWalletDataset();
+  expect(after.records.find(row=>row.id===wallet.id)).toMatchObject({paymentStatus:"cleared",amount:100});
+  expect(after.creditCardRecords.find(row=>row.id===movement.id)?.walletRecordId).toBe(wallet.id);
+});
+
+test("unknown original primary FX cannot produce a cleared bank refund unless a dated quote resolves it",async()=>{
+  await createDb().insert(settings).values({primaryCurrency:"USD"});
+  const wallet=await createRecord({...linkedPurchaseInput("needs_review"),exchangeRateToPrimary:0});
+  const original=(await getWalletDataset()).creditCardRecords.find(row=>row.walletRecordId===wallet.id)!;
+  await expect(refund(original.id,20)).rejects.toThrow();
+  const rejected=await getWalletDataset();
+  expect(rejected.records).toHaveLength(1);
+  expect(rejected.creditCardRecords).toHaveLength(1);
+  expect(calculateAccountBalances(rejected).find(row=>row.account.id===accountId)!.totalBalance).toBe(9900);
+  await createDb().insert(exchangeRates).values({fromCurrency:"UYU",toCurrency:"USD",rate:"0.025",date:new Date("2020-01-01T00:00:00Z")});
+  await refund(original.id,20);
+  const resolved=await getWalletDataset();
+  expect(resolved.records.find(row=>row.type==="income")).toMatchObject({paymentStatus:"cleared",amount:20,currency:"UYU",exchangeRateToPrimary:0.025});
+  expect(calculateAccountBalances(resolved).find(row=>row.account.id===accountId)!.totalBalance).toBe(9920);
+});
+
 test("an unencumbered linked purchase can be cancelled, reviewed, and restored", async () => {
   const wallet = await createRecord(linkedPurchaseInput());
   await updateRecord(wallet.id, { paymentStatus: "cancelled" });
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
   await updateRecord(wallet.id, { paymentStatus: "needs_review" });
-  expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
+  expect((await getWalletDataset()).creditCardRecords).toHaveLength(1);
   await updateRecord(wallet.id, { paymentStatus: "cleared" });
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(1);
 });
@@ -604,7 +648,7 @@ test("linked refund bank history rejects generic financial changes but permits n
   await createDb().insert(creditCards).values({ ...card, id: otherCardId, creditLimit: "10000" });
   for (const patch of [
     { amount: 200, accountAmount: 200, amountInLimitCurrency: 200 },
-    { paymentStatus: "cancelled" as const }, { paymentStatus: "needs_review" as const },
+    { paymentStatus: "cancelled" as const },
     { creditCardId: null }, { creditCardId: otherCardId }, { type: "expense" as const },
   ]) await expect(updateRecord(returned.walletRecordId!, patch)).rejects.toThrow();
   await expect(deleteRecord(returned.walletRecordId!)).rejects.toThrow();
@@ -612,6 +656,10 @@ test("linked refund bank history rejects generic financial changes but permits n
   const after = await getWalletDataset();
   expect(after.creditCardRecords.find(row => row.id === returned.id)).toMatchObject({ originalRecordId: original.id, kind: "refund", amount: 20, note: "Confirmed refund" });
   expect(after.records.find(row => row.id === returned.walletRecordId)).toMatchObject({ amount: 20, paymentStatus: "cleared" });
+  await updateRecord(returned.walletRecordId!,{paymentStatus:"needs_review"});
+  const reviewed=await getWalletDataset();
+  expect(reviewed.records.find(row=>row.id===returned.walletRecordId)).toMatchObject({amount:20,paymentStatus:"needs_review"});
+  expect(reviewed.creditCardRecords.find(row=>row.id===returned.id)).toMatchObject({kind:"refund",amount:20});
 });
 
 test("foreign linked refund metadata keeps card-native and bank amounts distinct", async () => {

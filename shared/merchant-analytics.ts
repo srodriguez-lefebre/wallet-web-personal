@@ -1,5 +1,5 @@
 import { recordsForDateRange } from "./calculations.js";
-import { isFinancialRecord } from "./record-status.js";
+import { isPrimaryReportingRecord } from "./record-status.js";
 import type { DateRange, WalletRecord } from "./types.js";
 
 export interface MerchantSpending {
@@ -14,7 +14,7 @@ export interface MerchantSpending {
 export function calculateMerchantSpending(records: WalletRecord[], range: DateRange): MerchantSpending[] {
   const merchants = new Map<string, MerchantSpending>();
   for (const record of recordsForDateRange(records, range)) {
-    if (record.type !== "expense" || !isFinancialRecord(record)) continue;
+    if (record.type !== "expense" || !isPrimaryReportingRecord(record)) continue;
     const name = record.counterpartyName?.trim() || "Unspecified merchant";
     const key = record.counterpartyName?.trim().toLocaleLowerCase() || "";
     const merchant = merchants.get(key) ?? { key, name, purchases: 0, total: 0, average: 0 };

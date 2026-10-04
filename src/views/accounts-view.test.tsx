@@ -172,12 +172,17 @@ test("double creation submits a single request and preserves the form after fail
       .value,
   ).toBe("Retained bank");
 });
-test("incomplete history does not present a zero liquidity summary", async () => {
+test("incomplete history withholds account balances and displays its loading state", async () => {
   complete = false;
   await mount();
   expect(
-    tree!.root.findAllByProps({ "aria-label": "Liquidity by currency" }),
+    tree!.root
+      .findAllByType("div")
+      .filter((node) => node.props.role === "button"),
   ).toHaveLength(0);
+  expect(JSON.stringify(tree!.toJSON())).toContain(
+    "Loading complete history to calculate current balances",
+  );
 });
 
 test("a successful archive is not repeated when another account save fails", async () => {
@@ -221,24 +226,26 @@ test("primary selection is single flight and a failure remains visible", async (
   expect(JSON.stringify(tree!.toJSON())).toContain("Cannot save settings");
 });
 
-test("revealing a hidden account does not include it in visible-account liquidity", async () => {
+test("revealing a hidden account preserves the existing account cards and their balance values", async () => {
   dataset.accounts[1].isVisible = false;
   await mount();
-  const summaryValues = () =>
+  const accountCards = () =>
     tree!.root
-      .findByProps({ "aria-label": "Liquidity by currency" })
-      .findAllByType("dd")
-      .map((item) => item.children.join(""));
-  const before = summaryValues();
+      .findAllByType("div")
+      .filter((node) => node.props.role === "button");
+  expect(accountCards()).toHaveLength(1);
+  const originalBalance = accountCards()[0]
+    .findByProps({ className: "text-3xl font-semibold" })
+    .children.join("");
   await act(async () =>
     tree!.root
       .findByProps({ "aria-label": "Show hidden accounts" })
       .props.onClick(),
   );
+  expect(accountCards()).toHaveLength(2);
   expect(
-    tree!.root
-      .findAllByType("div")
-      .filter((item) => item.props.role === "button"),
-  ).toHaveLength(2);
-  expect(summaryValues()).toEqual(before);
+    accountCards()[0]
+      .findByProps({ className: "text-3xl font-semibold" })
+      .children.join(""),
+  ).toBe(originalBalance);
 });

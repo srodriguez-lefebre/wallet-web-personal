@@ -128,7 +128,7 @@ describe("history budget planning", () => {
       expect(() => buildBudgetPlan(dataset, month, 10)).toThrow();
   });
 
-  it("uses frozen FX and approved expenses once without summing linked card entries or descendants twice", () => {
+  it("uses frozen FX and valid review expenses once without summing linked card entries or descendants twice", () => {
     const dataset = fixture();
     dataset.records = [
       expense({
@@ -156,8 +156,8 @@ describe("history budget planning", () => {
     expect(plan.proposals).toHaveLength(1);
     expect(plan.proposals[0]).toMatchObject({
       categoryId: food,
-      total: 93,
-      limitAmount: 31,
+      total: 593,
+      limitAmount: 197.67,
     });
   });
 

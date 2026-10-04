@@ -244,15 +244,12 @@ export function RecordsView() {
     isSelectedRangeComplete,
     isAllHistoryComplete,
     loadMoreRecords,
-    getCompleteDataset,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [templateNotice, setTemplateNotice] = useState("");
-  const [recordCreateUncertain, setRecordCreateUncertain] = useState(false);
-  const recordCreateNeedsReview = useRef(false);
-  const templateDraftRevision = useRef(0);
+  const recordDraftRevision = useRef(0);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(defaultAccountId(dataset));
   const [creditCardId, setCreditCardId] = useState(
@@ -312,13 +309,21 @@ export function RecordsView() {
   const editingLinkedRefund = dataset.creditCardRecords.find(
     (record) => record.walletRecordId === editingId && record.kind === "refund",
   );
+  const statusOnlyCancellation = Boolean(
+    editingId &&
+    !editingLinkedRefund &&
+    paymentStatus === "cancelled" &&
+    dataset.records.find((record) => record.id === editingId)?.paymentStatus ===
+      "needs_review",
+  );
   const canSubmit =
-    numericAmount > 0 &&
-    Boolean(accountId || (type === "expense" && creditCardId)) &&
-    (type === "transfer"
-      ? Boolean(destinationAccountId)
-      : Boolean(categoryId)) &&
-    !hasInvalidGoalAllocation;
+    statusOnlyCancellation ||
+    (numericAmount > 0 &&
+      Boolean(accountId || (type === "expense" && creditCardId)) &&
+      (type === "transfer"
+        ? Boolean(destinationAccountId)
+        : Boolean(categoryId)) &&
+      !hasInvalidGoalAllocation);
   function updateGoalAssociation(
     goalId: string,
     patch: Partial<RecordGoalAssociation>,
@@ -339,10 +344,8 @@ export function RecordsView() {
       return;
 
     queueMicrotask(() => {
-      templateDraftRevision.current += 1;
+      recordDraftRevision.current += 1;
       setTemplateNotice("");
-      recordCreateNeedsReview.current = false;
-      setRecordCreateUncertain(false);
       openedNewRecordRef.current = newRecordRequestId;
       const nextAccountId = defaultAccountId(dataset);
       const requestedCard = dataset.creditCards.find(
@@ -540,11 +543,9 @@ export function RecordsView() {
   ].filter(Boolean);
 
   function resetForm(nextType: RecordType = "expense") {
-    templateDraftRevision.current += 1;
+    recordDraftRevision.current += 1;
     conversionBasis.current = {};
     setTemplateNotice("");
-    recordCreateNeedsReview.current = false;
-    setRecordCreateUncertain(false);
     const nextAccountId = defaultAccountId(dataset);
     setEditingId(null);
     setType(nextType);
@@ -611,11 +612,9 @@ export function RecordsView() {
   }
 
   function loadRecord(record: WalletRecord) {
-    templateDraftRevision.current += 1;
+    recordDraftRevision.current += 1;
     setTemplateNotice("");
     setEditingId(record.id);
-    recordCreateNeedsReview.current = false;
-    setRecordCreateUncertain(false);
     setType(record.type);
     setAccountId(record.accountId ?? "");
     setCreditCardId(record.creditCardId ?? "");
@@ -724,6 +723,10 @@ export function RecordsView() {
   }
 
   function openReviewQueue() {
+    if (recordFilters.paymentStatus === "needs_review") {
+      setRecordFilters({ paymentStatus: "all" });
+      return;
+    }
     clearRecordFilters();
     setAllPeriod();
     setRecordFilters({ paymentStatus: "needs_review" });
@@ -865,17 +868,22 @@ export function RecordsView() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (recordSubmission.current) return;
-    if (!editingId && recordCreateNeedsReview.current) return;
-    if (creditCardId && type !== "expense" && !editingLinkedRefund) {
+    if (
+      creditCardId &&
+      type !== "expense" &&
+      !editingLinkedRefund &&
+      !statusOnlyCancellation
+    ) {
       setMoneyError(
         "Use Cards to refund a purchase. Income and transfers cannot select a credit card.",
       );
       return;
     }
-    const nextRecord = editingLinkedRefund ? null : buildRecord();
-    if (!nextRecord && !editingLinkedRefund) return;
+    const nextRecord =
+      editingLinkedRefund || statusOnlyCancellation ? null : buildRecord();
+    if (!nextRecord && !editingLinkedRefund && !statusOnlyCancellation) return;
     recordSubmission.current = true;
-    const revision = templateDraftRevision.current;
+    const revision = recordDraftRevision.current;
 
     try {
       if (editingId) {
@@ -883,16 +891,18 @@ export function RecordsView() {
           () =>
             updateRecord(
               editingId,
-              editingLinkedRefund
-                ? {
-                    categoryId,
-                    counterpartyName: counterpartyName.trim() || null,
-                    note: note || null,
-                    tagIds: tagId ? [tagId] : [],
-                    goalIds: goalAssociations.map((item) => item.goalId),
-                    goalAssociations,
-                  }
-                : { ...nextRecord!, creditCardId: creditCardId || null },
+              statusOnlyCancellation
+                ? { paymentStatus: "cancelled" }
+                : editingLinkedRefund
+                  ? {
+                      categoryId,
+                      counterpartyName: counterpartyName.trim() || null,
+                      note: note || null,
+                      tagIds: tagId ? [tagId] : [],
+                      goalIds: goalAssociations.map((item) => item.goalId),
+                      goalAssociations,
+                    }
+                  : { ...nextRecord!, creditCardId: creditCardId || null },
             ),
           {
             processing: "Saving record...",
@@ -908,36 +918,12 @@ export function RecordsView() {
         });
       }
     } catch {
-      if (!editingId && revision === templateDraftRevision.current) {
-        recordCreateNeedsReview.current = true;
-        setRecordCreateUncertain(true);
-      }
       return;
     } finally {
       recordSubmission.current = false;
     }
 
-    if (revision === templateDraftRevision.current) closeRecordDialog();
-  }
-
-  async function reviewUncertainRecord() {
-    if (recordSubmission.current) return;
-    const revision = templateDraftRevision.current;
-    recordSubmission.current = true;
-    try {
-      await getCompleteDataset();
-      if (revision !== templateDraftRevision.current) return;
-      clearRecordFilters();
-      setAllPeriod();
-      closeRecordDialog();
-    } catch {
-      if (revision === templateDraftRevision.current)
-        setMoneyError(
-          "Could not reload the wallet. Review the outcome before creating this movement again.",
-        );
-    } finally {
-      recordSubmission.current = false;
-    }
+    if (revision === recordDraftRevision.current) closeRecordDialog();
   }
 
   async function handleDeleteEditingRecord() {
@@ -971,6 +957,7 @@ export function RecordsView() {
           variant="outline"
           onClick={openReviewQueue}
           aria-label="Open review queue"
+          aria-pressed={recordFilters.paymentStatus === "needs_review"}
         >
           Needs review{" "}
           {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
@@ -984,8 +971,8 @@ export function RecordsView() {
       {selectedPeriodMode === "all" &&
         recordFilters.paymentStatus === "needs_review" && (
           <p className="mb-4 text-sm text-muted-foreground" role="status">
-            Review queue · All dates. Review each draft before it affects your
-            balances.
+            Review queue · All dates. Check the details and mark reviewed
+            movements as cleared.
           </p>
         )}
 
@@ -1015,21 +1002,11 @@ export function RecordsView() {
             </DialogDescription>
           </DialogHeader>
           <form className="space-y-4" onSubmit={handleSubmit}>
-            {recordCreateUncertain && (
-              <div className="rounded-md border p-3 space-y-2">
-                <p role="alert" className="text-sm">
-                  The save outcome is uncertain; this movement may already
-                  exist. Reload and review your records before creating it
-                  again.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void reviewUncertainRecord()}
-                >
-                  Reload and review records
-                </Button>
-              </div>
+            {statusOnlyCancellation && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Al cancelar se conservan los datos originales del movimiento y
+                se lo excluye de los saldos.
+              </p>
             )}
             {templateNotice && (
               <p role="status" className="text-sm text-muted-foreground">
@@ -1579,10 +1556,7 @@ export function RecordsView() {
                   Cancel
                 </Button>
               )}
-              <Button
-                type="submit"
-                disabled={!canSubmit || (!editingId && recordCreateUncertain)}
-              >
+              <Button type="submit" disabled={!canSubmit}>
                 {editingId ? (
                   <Save className="h-4 w-4" />
                 ) : (
