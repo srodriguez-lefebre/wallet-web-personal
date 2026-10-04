@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "sandbox": "tsx scripts/sandbox/start.ts",
+    "sandbox:setup": "tsx scripts/sandbox/setup.ts",
+    "sandbox:stop": "tsx scripts/sandbox/stop.ts",
+    "sandbox:check": "vitest run scripts/sandbox",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
@@ -48,6 +52,7 @@
     "zod": "^4.1.13"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.1",
     "@types/node": "^24.10.2",
     "@types/react": "^19.2.7",
