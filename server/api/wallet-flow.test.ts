@@ -28,6 +28,26 @@ async function request(path:string,method="GET",input?:unknown){
   if(response.ok){const operation=findApiOperation(method,path.split("?")[0]);expect(operation).toBeDefined();const parsed=operation!.response.safeParse(payload.data);expect(parsed.success,JSON.stringify(parsed.error?.issues)).toBe(true);expect(payload.error).toBeNull();}
   return {response,payload};
 }
+
+test("authenticated template CRUD persists through HTTP reload and never creates financial records",async()=>{
+  const before=(await getWalletDataset()).records.length;
+  const template={name:"Template groceries",type:"expense",amount:25,currency:"UYU",accountId,categoryId,paymentType:"debit"};
+  const created=await request("/api/record-templates","POST",template);
+  expect(created.response.status).toBe(201);
+  const id=created.payload.data.id;
+  expect((await request("/api/record-templates")).payload.data).toContainEqual(expect.objectContaining({...template,id}));
+  expect((await request(`/api/record-templates/${id}`,"PATCH",{note:"Test"})).payload.data).toMatchObject({...template,id,note:"Test"});
+  expect((await request("/api/wallet")).payload.data.recordTemplates).toContainEqual(expect.objectContaining({id,note:"Test"}));
+  expect((await getWalletDataset()).records).toHaveLength(before);
+  const duplicate=await request("/api/record-templates","POST",{...template,name:" template GROCERIES "});
+  expect(duplicate.response.status).toBe(409);
+  expect(duplicate.payload.error).toMatchObject({code:"CONFLICT",message:expect.stringMatching(/template.*name/i)});
+  expect((await request(`/api/record-templates/${id}`,"PATCH",{accountId:randomUUID()})).response.status).toBe(422);
+  expect((await request(`/api/record-templates/invalid`,"PATCH",{note:"Test"})).response.status).toBe(400);
+  expect((await request(`/api/record-templates/${id}`,"DELETE")).response.status).toBe(200);
+  expect((await request(`/api/record-templates/${id}`,"PATCH",{note:"Test"})).response.status).toBe(404);
+  const anonymous=await fetch(url+"/api/record-templates");expect(anonymous.status).toBe(401);
+});
 test("authenticated real HTTP routes match concrete response contracts",async()=>{
   expect((await request("/api/health")).response.status).toBe(200);
   const created=await request("/api/records","POST",{type:"expense",amount:25,currency:"UYU",accountId,categoryId,paymentType:"debit",paymentStatus:"cleared",exchangeRateToPrimary:1,occurredAt:"2026-02-01T12:00:00Z",tagIds:[]});

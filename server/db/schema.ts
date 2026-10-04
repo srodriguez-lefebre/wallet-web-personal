@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   date,
   type AnyPgColumn,
   index,
@@ -97,6 +98,27 @@ export const categories = pgTable("categories", {
     .defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+export const recordTemplates = pgTable("record_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  type: recordTypeEnum("type").notNull(),
+  amount: numeric("amount").notNull(),
+  currency: text("currency").notNull(),
+  accountId: uuid("account_id").references(() => accounts.id),
+  creditCardId: uuid("credit_card_id").references(() => creditCards.id),
+  destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
+  categoryId: uuid("category_id").references(() => categories.id),
+  tagId: uuid("tag_id").references(() => tags.id,{onDelete:"set null"}),
+  counterpartyName: text("counterparty_name"),
+  note: text("note"),
+  paymentType: paymentTypeEnum("payment_type").notNull(),
+}, (table) => [
+  uniqueIndex("record_templates_name_idx").on(sql`lower(btrim(${table.name}))`),
+  check("record_templates_name_check", sql`length(btrim(${table.name})) BETWEEN 1 AND 80`),
+  check("record_templates_amount_check", sql`${table.amount} > 0 AND ${table.amount} NOT IN ('Infinity'::numeric,'NaN'::numeric)`),
+  check("record_templates_currency_check", sql`${table.currency} IN ('UYU','USD','EUR','BRL','ARS')`),
+]);
 
 export const merchants = pgTable(
   "merchants",

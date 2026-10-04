@@ -43,16 +43,38 @@ describe("wallet calculations", () => {
     expect(calculateBudgetProgress(goalDataset,"2026-06")[0].spent).toBe(2);
     expect(calculateBudgetProgress({...goalDataset,budgets:[{...budget,goalId:"different-goal"}]},"2026-06")[0].spent).toBe(0);
   });
-  it("keeps unvalidated records out of bank balances, goals, budgets and reports", () => {
+  it("includes valid review records in bank balances, goals, budgets and reports", () => {
     const base={...mockWalletData,records:[],creditCardRecords:[],creditCardPayments:[],goalReservations:[],goalReservationMovements:[]};
     const dataset={...base,records:mockWalletData.records.map(record=>({...record,paymentStatus:"needs_review" as const}))};
-    expect(calculateAccountBalances(dataset)).toEqual(calculateAccountBalances(base));
-    expect(calculateAccountBalanceAtDate(dataset,"acc-bank","2026-06-30")).toBe(calculateAccountBalanceAtDate(base,"acc-bank","2026-06-30"));
-    expect(calculateSummary(dataset,"2026-06")).toEqual(calculateSummary(base,"2026-06"));
-    expect(calculateCategoryExpenses(dataset,"2026-06")).toEqual(calculateCategoryExpenses(base,"2026-06"));
-    expect(calculateCategoryIncome(dataset,"2026-06")).toEqual(calculateCategoryIncome(base,"2026-06"));
-    expect(calculateGoalProgress(dataset)).toEqual(calculateGoalProgress(base));
-    expect(calculateBudgetProgress(dataset,"2026-06")).toEqual(calculateBudgetProgress(base,"2026-06"));
+    const validated={...base,records:mockWalletData.records.map(record=>({...record,paymentStatus:"pending" as const}))};
+    expect(calculateAccountBalances(dataset)).toEqual(calculateAccountBalances(validated));
+    expect(calculateAccountBalanceAtDate(dataset,"acc-bank","2026-06-30")).toBe(calculateAccountBalanceAtDate(validated,"acc-bank","2026-06-30"));
+    expect(calculateSummary(dataset,"2026-06").expenses).toBe(35030);
+    expect(calculateCategoryExpenses(dataset,"2026-06")).toEqual(calculateCategoryExpenses(validated,"2026-06"));
+    expect(calculateCategoryIncome(dataset,"2026-06")).toEqual(calculateCategoryIncome(validated,"2026-06"));
+    expect(calculateGoalProgress(dataset)).toEqual(calculateGoalProgress(validated));
+    expect(calculateBudgetProgress(dataset,"2026-06")).toEqual(calculateBudgetProgress(validated,"2026-06"));
+  });
+  it("never treats an unresolved foreign account amount as native money",()=>{
+    const base={...mockWalletData,records:[],creditCardRecords:[],creditCardPayments:[],goalReservations:[],goalReservationMovements:[]};
+    const account=base.accounts.find(item=>item.id==="acc-bank")!;
+    const record={...mockWalletData.records[0],type:"expense" as const,accountId:account.id,amount:10,currency:"USD" as const,accountAmount:undefined,paymentStatus:"needs_review" as const,exchangeRateToPrimary:40,occurredAt:"2026-06-10T12:00:00Z"};
+    const dataset={...base,records:[record]};
+    expect(calculateAccountBalances(dataset).find(item=>item.account.id===account.id)!.totalBalance).toBe(account.initialBalance);
+    expect(calculateAccountBalanceAtDate(dataset,account.id,"2026-06-30")).toBe(account.initialBalance);
+    expect(calculateSummary(dataset,"2026-06").expenses).toBe(400);
+    const converted={...base,records:[{...record,accountAmount:400}]};
+    expect(calculateAccountBalances(converted).find(item=>item.account.id===account.id)!.totalBalance).toBe(account.initialBalance-400);
+    expect(calculateAccountBalanceAtDate(converted,account.id,"2026-06-30")).toBe(account.initialBalance-400);
+  });
+  it("omits unknown primary conversions from reports while keeping known account amounts",()=>{
+    const base={...mockWalletData,records:[],creditCardRecords:[],creditCardPayments:[],goalReservations:[],goalReservationMovements:[]};
+    const account=base.accounts.find(item=>item.id==="acc-bank")!;
+    const record={...mockWalletData.records[0],type:"expense" as const,accountId:account.id,amount:10,currency:"USD" as const,accountAmount:400,paymentStatus:"needs_review" as const,exchangeRateToPrimary:0,occurredAt:"2026-06-10T12:00:00Z"};
+    const dataset={...base,records:[record]};
+    expect(calculateAccountBalances(dataset).find(item=>item.account.id===account.id)!.totalBalance).toBe(account.initialBalance-400);
+    expect(calculateSummary(dataset,"2026-06").expenses).toBe(0);
+    expect(calculateCategoryExpenses(dataset,"2026-06")).toEqual([]);
   });
   it("calculates monthly income, expenses and cash flow without counting transfers", () => {
     const summary = calculateSummary(mockWalletData, "2026-06");
@@ -65,6 +87,27 @@ describe("wallet calculations", () => {
   it("formats money with up to two decimal places", () => {
     expect(formatMoney(1234.567, "UYU")).toBe("$\u00a01.234,57");
     expect(formatMoney(1234, "UYU")).toBe("$\u00a01.234");
+  });
+  it("legacy card summaries count valid review purchases without resurrecting cancelled or unknown conversions",()=>{
+    const card={id:"review-card",name:"Review card",issuer:"Bank",lastFour:"1234",creditLimit:1000,limitCurrency:"UYU" as const,closingDay:20,dueDay:5,color:"blue",icon:"bank",isActive:true};
+    const record={...mockWalletData.records[0],type:"expense" as const,creditCardId:card.id,amount:100,currency:"UYU" as const,paymentStatus:"needs_review" as const,amountInLimitCurrency:100,exchangeRateToLimitCurrency:1,occurredAt:"2026-06-10T12:00:00Z"};
+    const dataset={...mockWalletData,creditCards:[card],creditCardRecords:[],creditCardPayments:[],records:[record,{...record,id:"cancelled",paymentStatus:"cancelled" as const},{...record,id:"unresolved",currency:"USD" as const,amountInLimitCurrency:undefined,exchangeRateToLimitCurrency:undefined}]};
+    expect(calculateCreditCardSummary(dataset,card,new Date("2026-06-30T12:00:00Z")).usedLimit).toBe(100);
+    expect(calculateCreditCardCategoryUsage(dataset,card,new Date("2026-06-30T12:00:00Z")).reduce((total,item)=>total+item.amount,0)).toBe(100);
+  });
+
+  it("combines uncategorized review liabilities with card history without counting linked purchases twice", () => {
+    const card = { id: "mixed-card", name: "Mixed card", issuer: "Bank", lastFour: "1234", closingDay: 20, dueDay: 5, color: "blue", icon: "bank", isActive: true, limitCurrency: "UYU" as const, creditLimit: 1000 };
+    const review = { ...mockWalletData.records[0], id: "review", type: "expense" as const, categoryId: undefined, creditCardId: card.id,
+      amount: 100, currency: "UYU" as const, paymentStatus: "needs_review" as const, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1, occurredAt: "2026-06-10T12:00:00Z" };
+    const ledger = { id: "linked-ledger", walletRecordId: "linked-wallet", creditCardId: card.id, kind: "purchase" as const,
+      amount: 50, currency: "UYU" as const, amountInLimitCurrency: 50, exchangeRateToLimitCurrency: 1, categoryId: "", accountImpactAtCreation: false, occurredAt: review.occurredAt };
+    const dataset = { ...mockWalletData, creditCards: [card], creditCardRecords: [ledger], creditCardPayments: [], creditCardPaymentAllocations: [], records: [review, { ...review, id: "linked-wallet", amount: 50, amountInLimitCurrency: 50 }, { ...review, id: "cancelled", paymentStatus: "cancelled" as const }] };
+    const asOf = new Date("2026-06-30T12:00:00Z");
+    expect(calculateCreditCardSummary(dataset, card, asOf).usedLimit).toBe(150);
+    expect(calculateCreditCardSummary(dataset, card, asOf).outstanding).toEqual([{ currency: "UYU", amount: 150 }]);
+    expect(calculateCreditCardCategoryUsage(dataset, card, asOf).reduce((sum, item) => sum + item.amount, 0)).toBe(150);
+    expect(calculateCreditCardSummary({ ...dataset, creditCardRecords: [{ ...ledger, creditCardId: "other-card", walletRecordId: undefined }], records: [review] }, card, asOf).usedLimit).toBe(100);
   });
 
   it("calculates the savings rate and emergency runway from free balance", () => {

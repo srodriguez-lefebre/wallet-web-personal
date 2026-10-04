@@ -1,5 +1,5 @@
 import { type FormEvent, useMemo, useRef, useState } from "react";
-import { format } from "date-fns";
+import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import {
   ArrowLeft,
   Pencil,
@@ -8,9 +8,14 @@ import {
   RotateCcw,
   Trash2,
 } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { CategoryPicker } from "@/components/wallet/category-picker";
+import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
+import {
+  cardStatementBalanceAsOf,
+  selectCardStatement,
+} from "@/lib/cards-presentation";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,11 +30,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
-import {
-  calculateCreditCardStatementBalance,
-  calculateCreditCardSummary,
-  formatMoney,
-} from "@shared/calculations";
+import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
 import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
 const field =
@@ -46,6 +47,7 @@ function formatCategoryName(categories: Category[], category: Category) {
 export function CardDetailView() {
   const { cardId = "" } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const {
     dataset,
     addCreditCardRecord,
@@ -54,6 +56,7 @@ export function CardDetailView() {
     deleteCreditCardRecord,
     payCreditCardStatement,
     deleteCreditCardPayment,
+    isAllHistoryComplete,
   } = useWallet();
   const card = dataset.creditCards.find((item) => item.id === cardId);
   const summary = useMemo(
@@ -69,11 +72,13 @@ export function CardDetailView() {
   const payments = dataset.creditCardPayments.filter(
     (item) => item.creditCardId === cardId,
   );
-  const payableStatement = statements.find((item) => item.status !== "paid");
+  const payableStatement = isAllHistoryComplete
+    ? selectCardStatement(dataset, cardId, searchParams.get("statementId"))
+    : undefined;
   const payableStatementBalance = useMemo(
     () =>
       payableStatement
-        ? calculateCreditCardStatementBalance(dataset, payableStatement)
+        ? cardStatementBalanceAsOf(dataset, payableStatement)
         : null,
     [dataset, payableStatement],
   );
@@ -97,7 +102,11 @@ export function CardDetailView() {
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentAccountAmount, setPaymentAccountAmount] = useState("");
   const { toast, runAction } = useActionToast();
-  const paymentRequest = useRef<{ fingerprint: string; idempotencyKey: string; occurredAt: string } | null>(null);
+  const paymentRequest = useRef<{
+    fingerprint: string;
+    idempotencyKey: string;
+    occurredAt: string;
+  } | null>(null);
 
   if (!card || !summary) {
     return (
@@ -221,11 +230,26 @@ export function CardDetailView() {
 
   async function submitPayment(event: FormEvent) {
     event.preventDefault();
-    if (!payableStatement || Number(paymentAmount) <= 0) return;
-    const fingerprint = JSON.stringify([payableStatement.id, Number(paymentAmount), paymentAccountId, Number(paymentAccountAmount)]);
-    if (paymentRequest.current?.fingerprint !== fingerprint) paymentRequest.current = {
-      fingerprint, idempotencyKey: crypto.randomUUID(), occurredAt: new Date().toISOString(),
-    };
+    if (
+      !payableStatement ||
+      !payableStatementBalance ||
+      payableStatementBalance.dueAmountInLimitCurrency <= 0 ||
+      Number(paymentAmount) <= 0 ||
+      (paymentAccountId && !(Number(paymentAccountAmount) > 0))
+    )
+      return;
+    const fingerprint = JSON.stringify([
+      payableStatement.id,
+      Number(paymentAmount),
+      paymentAccountId,
+      Number(paymentAccountAmount),
+    ]);
+    if (paymentRequest.current?.fingerprint !== fingerprint)
+      paymentRequest.current = {
+        fingerprint,
+        idempotencyKey: crypto.randomUUID(),
+        occurredAt: new Date().toISOString(),
+      };
     const request = paymentRequest.current;
     await runAction(
       () =>
@@ -259,7 +283,9 @@ export function CardDetailView() {
     );
     const value = String(amount);
     setPaymentAmount(value);
-    const account = dataset.accounts.find((item) => item.id === paymentAccountId);
+    const account = dataset.accounts.find(
+      (item) => item.id === paymentAccountId,
+    );
     if (account?.currency === card!.limitCurrency) {
       setPaymentAccountAmount(value);
     }
@@ -404,7 +430,9 @@ export function CardDetailView() {
               />
             </label>
             <div className="flex items-end gap-2">
-              <Button type="submit" disabled={toast?.status === "processing"}>Save movement</Button>
+              <Button type="submit" disabled={toast?.status === "processing"}>
+                Save movement
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -427,6 +455,11 @@ export function CardDetailView() {
               {formatMoney(summary.usedLimit, card.limitCurrency)}
             </p>
             <Progress value={Math.min(100, summary.utilizationPercent)} />
+            {isAllHistoryComplete && (
+              <LimitUsageAlert
+                utilizationPercent={summary.utilizationPercent}
+              />
+            )}
             <p className="text-sm text-muted-foreground">
               {formatMoney(summary.availableLimit, card.limitCurrency)}{" "}
               available
@@ -451,10 +484,66 @@ export function CardDetailView() {
         <Card>
           <CardHeader>
             <CardTitle>Statement</CardTitle>
+            {isAllHistoryComplete && statements.length > 0 && (
+              <label className="block space-y-1 text-sm">
+                Select statement
+                <select
+                  aria-label="Select statement"
+                  className={field}
+                  value={payableStatement?.id ?? ""}
+                  onChange={(event) => {
+                    const next = new URLSearchParams(searchParams);
+                    next.set("statementId", event.target.value);
+                    setSearchParams(next);
+                    setPaymentAmount("");
+                    setPaymentAccountAmount("");
+                    paymentRequest.current = null;
+                  }}
+                >
+                  {!payableStatement && (
+                    <option value="">Select a closed statement</option>
+                  )}
+                  {[...statements]
+                    .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
+                    .map((statement) => (
+                      <option key={statement.id} value={statement.id}>
+                        Cycle {statement.cycleEnd.slice(0, 10)} · Due{" "}
+                        {new Date(statement.dueAt).toLocaleDateString()}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
           </CardHeader>
           <CardContent className="space-y-2">
-            <Badge variant={summary.status === "ok" ? "success" : "danger"}>
-              {payableStatement?.status ?? summary.status.replace("_", " ")}
+            <Badge
+              variant={
+                !payableStatementBalance ||
+                payableStatementBalance.dueAmountInLimitCurrency <= 0
+                  ? "success"
+                  : payableStatement &&
+                      differenceInCalendarDays(
+                        parseISO(payableStatement.dueAt),
+                        new Date(),
+                      ) < 0
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              {!isAllHistoryComplete
+                ? "Loading history..."
+                : !payableStatementBalance ||
+                    payableStatementBalance.dueAmountInLimitCurrency <= 0
+                  ? "Settled"
+                  : payableStatement &&
+                      differenceInCalendarDays(
+                        parseISO(payableStatement.dueAt),
+                        new Date(),
+                      ) < 0
+                    ? "Overdue"
+                    : payableStatementBalance.paidAmountInLimitCurrency > 0
+                      ? "Partially paid"
+                      : "Pending"}
             </Badge>
             {payableStatement && payableStatementBalance ? (
               <>
@@ -494,13 +583,17 @@ export function CardDetailView() {
             <p className="text-sm text-muted-foreground">
               {payableStatement
                 ? `Due ${payableStatement.dueAt.slice(0, 10)}`
-                : "No closed statement pending"}
+                : isAllHistoryComplete
+                  ? "No closed statement pending"
+                  : "Loading complete history..."}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      {payableStatement ? (
+      {payableStatement &&
+      payableStatementBalance &&
+      payableStatementBalance.dueAmountInLimitCurrency > 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>Pay statement</CardTitle>
@@ -559,7 +652,18 @@ export function CardDetailView() {
               ) : (
                 <div />
               )}
-              <Button type="submit" disabled={toast?.status === "processing"}>Pay</Button>
+              <Button
+                type="submit"
+                disabled={
+                  toast?.status === "processing" ||
+                  !(Number(paymentAmount) > 0) ||
+                  Boolean(
+                    paymentAccountId && !(Number(paymentAccountAmount) > 0),
+                  )
+                }
+              >
+                Pay
+              </Button>
             </form>
           </CardContent>
         </Card>

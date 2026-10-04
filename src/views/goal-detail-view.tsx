@@ -1,7 +1,7 @@
 ﻿import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useState } from "react";
-import { differenceInCalendarDays } from "date-fns";
+import { Check, Edit3 } from "lucide-react";
+import { useRef, useState } from "react";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,14 +9,23 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
+import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
+import { GoalEditDialog } from "@/components/wallet/goal-edit-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type { GoalPatch } from "@shared/schemas";
+import { calculateGoalFundingPlan } from "@shared/planning";
 import { calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
 
 export function GoalDetailView() {
   const { goalId } = useParams();
   const navigate = useNavigate();
-  const { dataset, setRecordFilters, releaseGoalReservation } = useWallet();
+  const { dataset, setRecordFilters, releaseGoalReservation, updateGoal } = useWallet();
   const [releaseAmounts, setReleaseAmounts] = useState<Record<string, string>>({});
+  const [isEditing, setIsEditing] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+  const [pending, setPending] = useState(false);
+  const mutationPending = useRef(false);
   const { toast, runAction } = useActionToast();
   const progress = calculateGoalProgress(dataset).find(
     (item) => item.goal.id === goalId,
@@ -46,9 +55,28 @@ export function GoalDetailView() {
   const reservations = dataset.goalReservations.filter(
     (reservation) => reservation.goalId === goalProgress.goal.id,
   );
-  const deadlineDays = goalProgress.goal.deadline
-    ? differenceInCalendarDays(new Date(goalProgress.goal.deadline), new Date())
-    : null;
+  const deadlineDays = calculateGoalFundingPlan(goalProgress).daysRemaining;
+
+  async function saveGoal(patch: GoalPatch, closing = false) {
+    if (mutationPending.current) return false;
+    mutationPending.current = true;
+    setPending(true);
+    try {
+      await runAction(() => updateGoal(goalProgress.goal.id, patch), {
+        processing: closing ? "Closing goal..." : "Saving goal...",
+        success: closing ? "Goal completed and reservations released" : "Goal updated",
+        error: closing ? "Could not close goal" : "Could not update goal",
+      });
+      setIsEditing(false);
+      setIsClosing(false);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      mutationPending.current = false;
+      setPending(false);
+    }
+  }
 
   function openRecords() {
     setRecordFilters({
@@ -74,7 +102,18 @@ export function GoalDetailView() {
           <ReceiptText className="h-4 w-4" />
           Ver records
         </Button>
+        <Button aria-label="Edit goal" variant="outline" disabled={pending} onClick={() => setIsEditing(true)}><Edit3 className="h-4 w-4" />Edit</Button>
+        <Button aria-label="Close goal" variant="outline" disabled={pending || goalProgress.goal.status === "completed"} onClick={() => setIsClosing(true)}><Check className="h-4 w-4" />Close goal</Button>
       </PageHeader>
+
+      {isEditing ? <GoalEditDialog goal={goalProgress.goal} accounts={dataset.accounts} pending={pending} onClose={() => setIsEditing(false)} onSave={saveGoal} /> : null}
+      <Dialog open={isClosing} onOpenChange={(open) => { if (!pending) setIsClosing(open); }}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Close {goalProgress.goal.name}</DialogTitle><DialogDescription>You can complete this goal before reaching its target. All remaining reserved funds become available in their original accounts. Account totals stay the same; this does not create income. Spent amounts, linked records, and reservation history are preserved. Automatic capture stops.</DialogDescription></DialogHeader>
+          {reservations.length ? <ul className="space-y-2 text-sm">{reservations.map((reservation) => <li key={reservation.id}>{dataset.accounts.find((account) => account.id === reservation.accountId)?.name ?? "Original account"}: {formatMoney(reservation.amount, reservation.currency)}</li>)}</ul> : <p className="text-sm text-muted-foreground">There are no remaining ledger reservations to release.</p>}
+          <div className="flex justify-end gap-2"><Button variant="outline" disabled={pending} onClick={() => setIsClosing(false)}>Cancel</Button><Button aria-label="Complete goal and release reservations" disabled={pending} onClick={() => saveGoal({ status: "completed" }, true)}>{pending ? "Closing..." : "Complete and release"}</Button></div>
+        </DialogContent>
+      </Dialog>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_420px]">
         <div className="space-y-4">
@@ -133,6 +172,7 @@ export function GoalDetailView() {
                 </div>
               </div>
               </>}
+              <GoalFundingPlan progress={goalProgress} />
               <div className="mt-4 flex flex-wrap gap-2">
                 {goalProgress.overTarget > 0 ? <Badge variant="warning">Excedido {formatMoney(goalProgress.overTarget, goalProgress.goal.currency)}</Badge> : null}
                 {goalProgress.goal.deadline ? (

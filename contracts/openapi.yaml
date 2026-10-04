@@ -4459,7 +4459,7 @@ paths:
                             type: number
                           exchangeRateToPrimary:
                             default: 1
-                            exclusiveMinimum: 0
+                            minimum: 0
                             type: number
                           goalAssociations:
                             default: []
@@ -6382,7 +6382,7 @@ paths:
                             - ARS
                           type: string
                         currentValue:
-                          exclusiveMinimum: 0
+                          minimum: 0
                           type: number
                         id:
                           format: uuid
@@ -6469,7 +6469,7 @@ paths:
                     - ARS
                   type: string
                 currentValue:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 isVisible:
                   default: true
@@ -6527,7 +6527,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       id:
                         format: uuid
@@ -6697,7 +6697,7 @@ paths:
                     - ARS
                   type: string
                 currentValue:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 isVisible:
                   type: boolean
@@ -6748,7 +6748,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       id:
                         format: uuid
@@ -6830,6 +6830,573 @@ paths:
       summary: Update an investment
       tags:
         - investments
+      x-stability: stable
+  /api/record-templates:
+    get:
+      operationId: recordTemplates.list
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        accountId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        amount:
+                          exclusiveMinimum: 0
+                          type: number
+                        categoryId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        counterpartyName:
+                          type: string
+                        creditCardId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        currency:
+                          enum:
+                            - UYU
+                            - USD
+                            - EUR
+                            - BRL
+                            - ARS
+                          type: string
+                        destinationAccountId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        id:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        name:
+                          maxLength: 80
+                          minLength: 1
+                          type: string
+                        note:
+                          type: string
+                        paymentType:
+                          enum:
+                            - cash
+                            - debit
+                            - credit
+                            - transfer
+                            - other
+                          type: string
+                        tagId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        type:
+                          enum:
+                            - expense
+                            - income
+                            - transfer
+                          type: string
+                      required:
+                        - name
+                        - type
+                        - amount
+                        - currency
+                        - paymentType
+                        - id
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: List reusable movement templates
+      tags:
+        - recordTemplates
+      x-stability: stable
+    post:
+      operationId: recordTemplates.create
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                accountId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                amount:
+                  exclusiveMinimum: 0
+                  type: number
+                categoryId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                counterpartyName:
+                  type: string
+                creditCardId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                currency:
+                  enum:
+                    - UYU
+                    - USD
+                    - EUR
+                    - BRL
+                    - ARS
+                  type: string
+                destinationAccountId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                name:
+                  maxLength: 80
+                  minLength: 1
+                  type: string
+                note:
+                  type: string
+                paymentType:
+                  enum:
+                    - cash
+                    - debit
+                    - credit
+                    - transfer
+                    - other
+                  type: string
+                tagId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+                type:
+                  enum:
+                    - expense
+                    - income
+                    - transfer
+                  type: string
+              required:
+                - name
+                - type
+                - amount
+                - currency
+                - paymentType
+              type: object
+        required: true
+      responses:
+        "201":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      accountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      amount:
+                        exclusiveMinimum: 0
+                        type: number
+                      categoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      counterpartyName:
+                        type: string
+                      creditCardId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      currency:
+                        enum:
+                          - UYU
+                          - USD
+                          - EUR
+                          - BRL
+                          - ARS
+                        type: string
+                      destinationAccountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      id:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      name:
+                        maxLength: 80
+                        minLength: 1
+                        type: string
+                      note:
+                        type: string
+                      paymentType:
+                        enum:
+                          - cash
+                          - debit
+                          - credit
+                          - transfer
+                          - other
+                        type: string
+                      tagId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      type:
+                        enum:
+                          - expense
+                          - income
+                          - transfer
+                        type: string
+                    required:
+                      - name
+                      - type
+                      - amount
+                      - currency
+                      - paymentType
+                      - id
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 409
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 422
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Create a template without writing a movement
+      tags:
+        - recordTemplates
+      x-stability: stable
+  /api/record-templates/{id}:
+    delete:
+      operationId: recordTemplates.delete
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      deleted:
+                        const: true
+                        type: boolean
+                    required:
+                      - deleted
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 404
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Delete a template while preserving movements
+      tags:
+        - recordTemplates
+      x-stability: stable
+    patch:
+      operationId: recordTemplates.patch
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                accountId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
+                amount:
+                  exclusiveMinimum: 0
+                  type: number
+                categoryId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
+                counterpartyName:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                creditCardId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
+                currency:
+                  enum:
+                    - UYU
+                    - USD
+                    - EUR
+                    - BRL
+                    - ARS
+                  type: string
+                destinationAccountId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
+                name:
+                  maxLength: 80
+                  minLength: 1
+                  type: string
+                note:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                paymentType:
+                  enum:
+                    - cash
+                    - debit
+                    - credit
+                    - transfer
+                    - other
+                  type: string
+                tagId:
+                  anyOf:
+                    - format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    - type: "null"
+                type:
+                  enum:
+                    - expense
+                    - income
+                    - transfer
+                  type: string
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      accountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      amount:
+                        exclusiveMinimum: 0
+                        type: number
+                      categoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      counterpartyName:
+                        type: string
+                      creditCardId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      currency:
+                        enum:
+                          - UYU
+                          - USD
+                          - EUR
+                          - BRL
+                          - ARS
+                        type: string
+                      destinationAccountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      id:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      name:
+                        maxLength: 80
+                        minLength: 1
+                        type: string
+                      note:
+                        type: string
+                      paymentType:
+                        enum:
+                          - cash
+                          - debit
+                          - credit
+                          - transfer
+                          - other
+                        type: string
+                      tagId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      type:
+                        enum:
+                          - expense
+                          - income
+                          - transfer
+                        type: string
+                    required:
+                      - name
+                      - type
+                      - amount
+                      - currency
+                      - paymentType
+                      - id
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 404
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 409
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 422
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Update selected template fields
+      tags:
+        - recordTemplates
       x-stability: stable
   /api/records:
     get:
@@ -6988,7 +7555,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -7179,7 +7746,7 @@ paths:
                   type: number
                 exchangeRateToPrimary:
                   default: 1
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 goalAssociations:
                   default: []
@@ -7326,7 +7893,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -7524,7 +8091,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -7678,7 +8245,7 @@ paths:
                           type: number
                         exchangeRateToPrimary:
                           default: 1
-                          exclusiveMinimum: 0
+                          minimum: 0
                           type: number
                         goalAssociations:
                           default: []
@@ -7953,7 +8520,7 @@ paths:
                   exclusiveMinimum: 0
                   type: number
                 exchangeRateToPrimary:
-                  exclusiveMinimum: 0
+                  minimum: 0
                   type: number
                 goalAssociations:
                   items:
@@ -8088,7 +8655,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -10364,7 +10931,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             id:
                               format: uuid
@@ -10404,6 +10971,78 @@ paths:
                             - startedAt
                             - id
                           type: object
+                        type: array
+                      recordTemplates:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            destinationAccountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            name:
+                              maxLength: 80
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            tagId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - amount
+                            - currency
+                            - paymentType
+                            - id
+                          type: object
+                        maxItems: 100
                         type: array
                       records:
                         items:
@@ -10456,7 +11095,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -10710,6 +11349,7 @@ paths:
                           type: object
                         type: array
                     required:
+                      - recordTemplates
                       - settings
                       - accounts
                       - categories
@@ -11838,7 +12478,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             deletedAt:
                               anyOf:
@@ -11961,6 +12601,92 @@ paths:
                             - isActive
                           type: object
                         type: array
+                      recordTemplates:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            createdAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            deletedAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - type: "null"
+                            destinationAccountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            name:
+                              maxLength: 80
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            tagId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                            updatedAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - amount
+                            - currency
+                            - paymentType
+                            - id
+                          type: object
+                        maxItems: 100
+                        type: array
                       records:
                         items:
                           additionalProperties: false
@@ -12022,7 +12748,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -12334,6 +13060,7 @@ paths:
                           type: object
                         type: array
                     required:
+                      - recordTemplates
                       - settings
                       - accounts
                       - categories
@@ -13216,7 +13943,7 @@ paths:
                                     - ARS
                                   type: string
                                 currentValue:
-                                  exclusiveMinimum: 0
+                                  minimum: 0
                                   type: number
                                 id:
                                   format: uuid
@@ -13256,6 +13983,78 @@ paths:
                                 - startedAt
                                 - id
                               type: object
+                            type: array
+                          recordTemplates:
+                            default: []
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                amount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  type: string
+                                creditCardId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                destinationAccountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                name:
+                                  maxLength: 80
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                paymentType:
+                                  enum:
+                                    - cash
+                                    - debit
+                                    - credit
+                                    - transfer
+                                    - other
+                                  type: string
+                                tagId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                type:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - transfer
+                                  type: string
+                              required:
+                                - name
+                                - type
+                                - amount
+                                - currency
+                                - paymentType
+                                - id
+                              type: object
+                            maxItems: 100
                             type: array
                           records:
                             items:
@@ -13308,7 +14107,7 @@ paths:
                                   type: number
                                 exchangeRateToPrimary:
                                   default: 1
-                                  exclusiveMinimum: 0
+                                  minimum: 0
                                   type: number
                                 goalAssociations:
                                   default: []
@@ -13562,6 +14361,7 @@ paths:
                               type: object
                             type: array
                         required:
+                          - recordTemplates
                           - settings
                           - accounts
                           - categories
@@ -14803,7 +15603,7 @@ paths:
                           - ARS
                         type: string
                       currentValue:
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       deletedAt:
                         anyOf:
@@ -14926,6 +15726,92 @@ paths:
                       - isActive
                     type: object
                   type: array
+                recordTemplates:
+                  default: []
+                  items:
+                    additionalProperties: false
+                    properties:
+                      accountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      amount:
+                        exclusiveMinimum: 0
+                        type: number
+                      categoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      counterpartyName:
+                        type: string
+                      createdAt:
+                        format: date-time
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                        type: string
+                      creditCardId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      currency:
+                        enum:
+                          - UYU
+                          - USD
+                          - EUR
+                          - BRL
+                          - ARS
+                        type: string
+                      deletedAt:
+                        anyOf:
+                          - format: date-time
+                            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                            type: string
+                          - type: "null"
+                      destinationAccountId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      id:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      name:
+                        maxLength: 80
+                        minLength: 1
+                        type: string
+                      note:
+                        type: string
+                      paymentType:
+                        enum:
+                          - cash
+                          - debit
+                          - credit
+                          - transfer
+                          - other
+                        type: string
+                      tagId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      type:
+                        enum:
+                          - expense
+                          - income
+                          - transfer
+                        type: string
+                      updatedAt:
+                        format: date-time
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                        type: string
+                    required:
+                      - name
+                      - type
+                      - amount
+                      - currency
+                      - paymentType
+                      - id
+                    type: object
+                  maxItems: 100
+                  type: array
                 records:
                   items:
                     additionalProperties: false
@@ -14987,7 +15873,7 @@ paths:
                         type: number
                       exchangeRateToPrimary:
                         default: 1
-                        exclusiveMinimum: 0
+                        minimum: 0
                         type: number
                       goalAssociations:
                         default: []
@@ -15299,6 +16185,7 @@ paths:
                     type: object
                   type: array
               required:
+                - recordTemplates
                 - settings
                 - accounts
                 - categories
@@ -16127,7 +17014,7 @@ paths:
                                 - ARS
                               type: string
                             currentValue:
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             id:
                               format: uuid
@@ -16167,6 +17054,78 @@ paths:
                             - startedAt
                             - id
                           type: object
+                        type: array
+                      recordTemplates:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            destinationAccountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            name:
+                              maxLength: 80
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            tagId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - amount
+                            - currency
+                            - paymentType
+                            - id
+                          type: object
+                        maxItems: 100
                         type: array
                       records:
                         items:
@@ -16219,7 +17178,7 @@ paths:
                               type: number
                             exchangeRateToPrimary:
                               default: 1
-                              exclusiveMinimum: 0
+                              minimum: 0
                               type: number
                             goalAssociations:
                               default: []
@@ -16473,6 +17432,7 @@ paths:
                           type: object
                         type: array
                     required:
+                      - recordTemplates
                       - settings
                       - accounts
                       - categories

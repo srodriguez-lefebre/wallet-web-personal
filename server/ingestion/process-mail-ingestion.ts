@@ -403,9 +403,8 @@ export async function processMailIngestion(
       !primary || (account && !accountConversion) || (card && !cardConversion);
     const requiresReview =
       accountWasInvalid || cardWasInvalid || !card || unavailableConversion;
-    const allowFinancialImpact = !accountWasInvalid && !unavailableConversion && Boolean(card);
-    const effectiveAccount = allowFinancialImpact ? account : undefined;
-    const effectiveCard = allowFinancialImpact ? card : undefined;
+    const effectiveAccount = !accountWasInvalid && card && accountConversion ? account : undefined;
+    const effectiveCard = cardConversion ? card : undefined;
     const noteParts = [
       input.transaction.sourceLabel ||
         `Imported from ${input.transaction.source}`,
@@ -437,21 +436,25 @@ export async function processMailIngestion(
         ? `Unknown account: ${input.destination.accountId}`
         : undefined,
       unavailableConversion
-        ? "Currency conversion unavailable; no financial impact was applied."
+        ? "Currency conversion unavailable; unresolved amounts remain under review."
         : undefined,
     ].filter(Boolean);
-    const note = [...new Set(noteParts)].join(" | ");
     const recordId =
-      effectiveAccount || !effectiveCard ? randomUUID() : undefined;
+      effectiveAccount || !effectiveCard || requiresReview ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
     const goalWrites=recordId?await prepareRecordGoalWrites(recordId,{
       type:"expense",amount:input.transaction.amount,currency:input.transaction.currency,
       accountId:effectiveAccount?.id,accountAmount:effectiveAccount?accountConversion?.amount:undefined,
       creditCardId:effectiveCard?.id,categoryId:category.categoryId,counterpartyName:category.merchantName,
       paymentType:effectiveCard?"credit":"cash",paymentStatus:requiresReview?"needs_review":"cleared",
-      exchangeRateToPrimary:primary?.frozen.rate??1,occurredAt:occurredAt.toISOString(),tagIds:[],
+      exchangeRateToPrimary:primary?.frozen.rate??0,occurredAt:occurredAt.toISOString(),tagIds:[],
       amountInLimitCurrency:effectiveCard?cardConversion?.amount:undefined,exchangeRateToLimitCurrency:effectiveCard?cardConversion?.frozen.rate:undefined,
     },db):null;
+    for (const warning of goalWrites?.warnings ?? []) {
+      if (!warnings.includes(warning)) warnings.push(warning);
+      noteParts.push(warning);
+    }
+    const note = [...new Set(noteParts)].join(" | ");
     const recordInsert = recordId
       ? db.insert(records).values({
           id: recordId,
@@ -468,7 +471,7 @@ export async function processMailIngestion(
           counterpartyName: category.merchantName,
           paymentType: effectiveCard ? "credit" : "cash",
           paymentStatus: requiresReview ? "needs_review" : "cleared",
-          exchangeRateToPrimary: rate(primary?.frozen.rate ?? 1),
+          exchangeRateToPrimary: rate(primary?.frozen.rate ?? 0),
           amountInLimitCurrency:
             effectiveCard && cardConversion
               ? money(cardConversion.amount)

@@ -100,6 +100,22 @@ export interface WalletRecord {
   debtId?: string;
 }
 
+export interface RecordTemplate {
+  id: string;
+  name: string;
+  type: RecordType;
+  amount: number;
+  currency: CurrencyCode;
+  accountId?: string;
+  creditCardId?: string;
+  destinationAccountId?: string;
+  categoryId?: string;
+  tagId?: string;
+  counterpartyName?: string;
+  note?: string;
+  paymentType: PaymentType;
+}
+
 export interface CreditCard {
   id: string;
   name: string;
@@ -361,6 +377,7 @@ export interface WalletSettings {
 }
 
 export interface WalletDataset {
+  recordTemplates?: RecordTemplate[];
   ingestionEvents?: Array<{id:string;idempotencyKey:string;source:string;status:string;action?:string;fingerprint?:string;targetKey?:string;merchantNormalized?:string;amount?:number;currency?:CurrencyCode;occurredAt?:string;recordId?:string;creditCardRecordId?:string;duplicateOfId?:string;completedAt?:string;createdAt:string;updatedAt:string}>;
   merchants?: Array<{ id: string; name: string; categoryId: string; priority: number; isActive: boolean; createdAt?: string; updatedAt?: string }>;
   merchantAliases?: Array<{ id: string; merchantId: string; alias: string; normalizedAlias: string; createdAt?: string }>;

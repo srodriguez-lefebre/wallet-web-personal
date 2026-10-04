@@ -67,6 +67,21 @@ export const tagSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
+export const recordTemplateSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  type: recordTypeSchema,
+  amount: z.number().finite().positive(),
+  currency: currencySchema,
+  accountId: uuidSchema.optional(),
+  creditCardId: uuidSchema.optional(),
+  destinationAccountId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+  tagId: uuidSchema.optional(),
+  counterpartyName: z.string().optional(),
+  note: z.string().optional(),
+  paymentType: paymentTypeSchema,
+}).strict();
+
 export const recordSchema = z
   .object({
     type: recordTypeSchema,
@@ -84,7 +99,7 @@ export const recordSchema = z
     goalAssociations: z.array(recordGoalAssociationSchema).default([]),
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
-    exchangeRateToPrimary: z.number().positive().default(1),
+    exchangeRateToPrimary: z.number().nonnegative().default(1),
     amountInLimitCurrency: z.number().positive().optional(),
     exchangeRateToLimitCurrency: z.number().positive().optional(),
     occurredAt: z.string().datetime(),
@@ -93,11 +108,17 @@ export const recordSchema = z
     debtId: uuidSchema.optional(),
   })
   .superRefine((value, ctx) => {
+    if (value.exchangeRateToPrimary === 0 && value.paymentStatus !== "needs_review" && value.paymentStatus !== "cancelled") {
+      ctx.addIssue({code:"custom",path:["exchangeRateToPrimary"],message:"An unresolved primary conversion requires review"});
+    }
     for (const [index, association] of value.goalAssociations.entries()) {
       if (association.allocatedAmount !== undefined && association.allocatedAmount > value.amount) {
         ctx.addIssue({ code: "custom", path: ["goalAssociations", index, "allocatedAmount"], message: "Goal allocation cannot exceed the record amount" });
       }
     }
+    // Cancellation preserves incomplete review history without requiring a
+    // financial assignment or an invented conversion to remove its impact.
+    if (value.paymentStatus === "cancelled") return;
     if (value.type !== "transfer") {
       if (
         !value.accountId &&
@@ -302,7 +323,7 @@ export const investmentSchema = z.object({
   name: z.string().min(1),
   type: z.enum(["stock", "fund", "crypto", "deposit", "other"]),
   amountInvested: z.number().positive(),
-  currentValue: z.number().positive(),
+  currentValue: z.number().nonnegative(),
   currency: currencySchema,
   isVisible: z.boolean().default(true),
   startedAt: z.string().datetime().or(z.string().date()),
@@ -422,6 +443,22 @@ function nonEmptyPatch<T extends z.ZodRawShape>(shape: T) {
   });
 }
 
+export const recordTemplatePatchSchema = nonEmptyPatch({
+  name: recordTemplateSchema.shape.name.optional(),
+  type: recordTypeSchema.optional(),
+  amount: recordTemplateSchema.shape.amount.optional(),
+  currency: currencySchema.optional(),
+  accountId: uuidSchema.nullable().optional(),
+  creditCardId: uuidSchema.nullable().optional(),
+  destinationAccountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.nullable().optional(),
+  tagId: uuidSchema.nullable().optional(),
+  counterpartyName: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  paymentType: paymentTypeSchema.optional(),
+});
+export type RecordTemplatePatch = z.infer<typeof recordTemplatePatchSchema>;
+
 export const accountPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
   type: accountSchema.shape.type.optional(),
@@ -450,7 +487,7 @@ export const recordPatchSchema = nonEmptyPatch({
   counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).max(1).optional(),
   goalIds: z.array(uuidSchema).optional(), goalAssociations: z.array(recordGoalAssociationSchema).optional(),
   paymentType: paymentTypeSchema.optional(), paymentStatus: paymentStatusSchema.optional(),
-  exchangeRateToPrimary: z.number().positive().optional(), amountInLimitCurrency: z.number().positive().optional(),
+  exchangeRateToPrimary: z.number().nonnegative().optional(), amountInLimitCurrency: z.number().positive().optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
   note: z.string().nullable().optional(), isFixed: z.boolean().optional(), debtId: uuidSchema.nullable().optional(),
 });
@@ -503,7 +540,7 @@ export const goalPatchSchema = nonEmptyPatch({
 });
 export const investmentPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(), type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
-  amountInvested: z.number().positive().optional(), currentValue: z.number().positive().optional(), currency: currencySchema.optional(),
+  amountInvested: z.number().positive().optional(), currentValue: z.number().nonnegative().optional(), currency: currencySchema.optional(),
   isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
 });
 export const budgetPatchSchema = nonEmptyPatch({
@@ -625,6 +662,7 @@ export const exchangeRateResponseSchema = z.object({ ...id,fromCurrency:currency
 export const paymentAllocationResponseSchema = z.object({ ...id,paymentId:uuidSchema,creditCardRecordId:uuidSchema,amount:z.number().nonnegative(),amountInLimitCurrency:z.number().nonnegative() });
 export const goalResponseSchema = goalSchema.safeExtend({...id,tagIds:z.array(uuidSchema).default([])});
 export const walletDatasetSchema = z.object({
+  recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
   settings:settingsSchema,
   accounts:z.array(accountSchema.extend(id)),categories:z.array(categorySchema.extend(id)),tags:z.array(tagSchema.extend(id)),records:z.array(walletRecordResponseSchema),
   creditCards:z.array(creditCardSchema.extend(id)),creditCardRecords:z.array(cardRecordResponseSchema),creditCardStatements:z.array(cardStatementResponseSchema),creditCardPayments:z.array(cardPaymentResponseSchema),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema),
@@ -634,6 +672,7 @@ export const walletDatasetSchema = z.object({
 const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
 const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
 export const walletBackupSchema = walletDatasetSchema.extend({
+  recordTemplates: z.array(recordTemplateSchema.extend({...id,...backupMetadata})).max(100).optional().default([]),
   ingestionEvents:z.array(z.object({...id,idempotencyKey:z.string().min(1),source:z.string(),status:z.string(),action:z.string().optional(),fingerprint:z.string().optional(),targetKey:z.string().optional(),merchantNormalized:z.string().optional(),amount:z.number().nonnegative().optional(),currency:currencySchema.optional(),occurredAt:z.string().datetime().optional(),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),completedAt:z.string().datetime().optional(),createdAt:z.string().datetime(),updatedAt:z.string().datetime()})).optional(),
   merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),isActive:z.boolean()})).optional(),
   merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
@@ -660,6 +699,12 @@ export const walletBackupSchema = walletDatasetSchema.extend({
   const reference=(collection:string,value:string|undefined,path:(string|number)[])=>{
     if(value&&!ids.get(collection)?.has(value))ctx.addIssue({code:"custom",path,message:`Missing ${collection} reference`});
   };
+  dataset.recordTemplates.forEach((template,index)=>{
+    for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",template[key],["recordTemplates",index,key]);
+    reference("creditCards",template.creditCardId,["recordTemplates",index,"creditCardId"]);
+    reference("categories",template.categoryId,["recordTemplates",index,"categoryId"]);
+    reference("tags",template.tagId,["recordTemplates",index,"tagId"]);
+  });
   dataset.records.forEach((record,index)=>{
     for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",record[key],["records",index,key]);
     reference("categories",record.categoryId,["records",index,"categoryId"]);

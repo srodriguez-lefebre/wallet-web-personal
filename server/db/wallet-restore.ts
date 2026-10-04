@@ -7,6 +7,7 @@ import { validationError } from "../api/errors.js";
 
 const collections: Array<[string, Table, string?]> = [
   ["accounts",schema.accounts],["categories",schema.categories,"parentId"],["tags",schema.tags],["creditCards",schema.creditCards],
+  ["recordTemplates",schema.recordTemplates],
   ["merchants",schema.merchants],["merchantAliases",schema.merchantAliases],
   ["goals",schema.goals],["recurringDebts",schema.recurringDebts],["debts",schema.debts],["creditCardStatements",schema.creditCardStatements],
   ["records",schema.records],["creditCardRecords",schema.creditCardRecords,"originalRecordId"],["creditCardPayments",schema.creditCardPayments],

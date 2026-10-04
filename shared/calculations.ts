@@ -32,7 +32,7 @@ import type {
   WalletRecord,
 } from "./types.js";
 import { findExchangeRate } from "./money.js";
-import { isFinancialRecord } from "./record-status.js";
+import { isFinancialRecord, isPrimaryReportingRecord } from "./record-status.js";
 
 export function toPrimaryCurrency(amount: number, recordRate = 1) {
   return amount * recordRate;
@@ -142,6 +142,12 @@ export function isRecordInRange(
   return afterFrom && beforeTo;
 }
 
+function recordAmountForAccount(record: WalletRecord, account: Account, destination: boolean) {
+  const frozenAmount = destination ? record.destinationAmount : record.accountAmount;
+  if (frozenAmount !== undefined) return Number.isFinite(frozenAmount) && frozenAmount > 0 ? frozenAmount : 0;
+  return record.currency === account.currency ? record.amount : 0;
+}
+
 export function calculateAccountBalances(
   dataset: WalletDataset,
 ): AccountBalance[] {
@@ -150,17 +156,17 @@ export function calculateAccountBalances(
       if (!isFinancialRecord(record)) return total;
 
       if (record.type === "income" && record.accountId === account.id) {
-        return total + (record.accountAmount ?? record.amount);
+        return total + recordAmountForAccount(record, account, false);
       }
 
       if (record.type === "expense" && record.accountId === account.id) {
-        return total - (record.accountAmount ?? record.amount);
+        return total - recordAmountForAccount(record, account, false);
       }
 
       if (record.type === "transfer") {
-        if (record.accountId === account.id) return total - (record.accountAmount ?? record.amount);
+        if (record.accountId === account.id) return total - recordAmountForAccount(record, account, false);
         if (record.destinationAccountId === account.id)
-          return total + (record.destinationAmount ?? record.amount);
+          return total + recordAmountForAccount(record, account, true);
       }
 
       return total;
@@ -285,17 +291,17 @@ function calculateAccountBalanceAtCutoff(
     if (isAfter(parseISO(record.occurredAt), cutoff)) return total;
 
     if (record.type === "income" && record.accountId === account.id) {
-      return total + (record.accountAmount ?? record.amount);
+      return total + recordAmountForAccount(record, account, false);
     }
 
     if (record.type === "expense" && record.accountId === account.id) {
-      return total - (record.accountAmount ?? record.amount);
+      return total - recordAmountForAccount(record, account, false);
     }
 
     if (record.type === "transfer") {
-      if (record.accountId === account.id) return total - (record.accountAmount ?? record.amount);
+      if (record.accountId === account.id) return total - recordAmountForAccount(record, account, false);
       if (record.destinationAccountId === account.id)
-        return total + (record.destinationAmount ?? record.amount);
+        return total + recordAmountForAccount(record, account, true);
     }
 
     return total;
@@ -452,22 +458,33 @@ function creditCardBankReservationRelease(
   return released;
 }
 
+function legacyCardFinancialRecords(dataset: WalletDataset, card: CreditCard) {
+  return dataset.records.filter(record=>record.creditCardId===card.id && isFinancialRecord(record)
+    && (record.currency===card.limitCurrency
+      || (record.amountInLimitCurrency!==undefined && Number.isFinite(record.amountInLimitCurrency) && record.amountInLimitCurrency>0)
+      || (record.exchangeRateToLimitCurrency!==undefined && Number.isFinite(record.exchangeRateToLimitCurrency) && record.exchangeRateToLimitCurrency>0)));
+}
+
+function cardFinancialMovements(dataset: WalletDataset, card: CreditCard) {
+  const linkedWalletIds = new Set(dataset.creditCardRecords.filter(record => record.creditCardId === card.id).map(record => record.walletRecordId));
+  const unlinked = legacyCardFinancialRecords(dataset, card).filter(record => !linkedWalletIds.has(record.id)).map(record => ({
+    ...record,
+    kind: record.type === "income" ? "refund" as const : "purchase" as const,
+    amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
+    exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
+    categoryId: record.categoryId ?? "",
+    accountImpactAtCreation: Boolean(record.accountId),
+  }));
+  return [...dataset.creditCardRecords.filter(record => record.creditCardId === card.id), ...unlinked];
+}
+
 export function calculateCreditCardSummary(
   dataset: WalletDataset,
   card: CreditCard,
   asOf: Date = new Date(),
 ): CreditCardSummary {
   const dates = creditCardCycleDates(card, asOf);
-  const movements = (dataset.creditCardRecords.length > 0
-    ? dataset.creditCardRecords
-    : dataset.records.filter((record) => record.creditCardId).map((record) => ({
-        ...record,
-        kind: record.type === "income" ? "refund" as const : "purchase" as const,
-        amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
-        exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
-        categoryId: record.categoryId ?? "",
-        accountImpactAtCreation: Boolean(record.accountId),
-      })))
+  const movements = cardFinancialMovements(dataset, card)
     .filter((record) => record.creditCardId === card.id && !isAfter(parseISO(record.occurredAt), asOf));
   const payments = dataset.creditCardPayments.filter(
     (payment) =>
@@ -605,14 +622,7 @@ export function calculateCreditCardCategoryUsage(
   card: CreditCard,
   asOf: Date = new Date(),
 ): CreditCardCategoryUsage[] {
-  const purchases = (dataset.creditCardRecords.length > 0
-    ? dataset.creditCardRecords
-    : dataset.records.filter((record) => record.creditCardId).map((record) => ({
-        ...record, kind: "purchase" as const,
-        amountInLimitCurrency: record.amountInLimitCurrency ?? record.amount * (record.exchangeRateToLimitCurrency ?? 1),
-        exchangeRateToLimitCurrency: record.exchangeRateToLimitCurrency ?? 1,
-        categoryId: record.categoryId ?? "", accountImpactAtCreation: Boolean(record.accountId),
-      }))).filter(
+  const purchases = cardFinancialMovements(dataset, card).filter(
     (record) =>
       record.creditCardId === card.id &&
       record.kind === "purchase" &&
@@ -845,7 +855,7 @@ export function calculateSummary(
   month = monthKey(new Date()),
 ): AnalyticsSummary {
   const records = recordsForMonth(dataset.records, month).filter(
-    (record) => isFinancialRecord(record),
+    (record) => isPrimaryReportingRecord(record),
   );
 
   const now = new Date();
@@ -867,7 +877,7 @@ export function calculateSummaryForDateRange(
   range: DateRange,
 ): AnalyticsSummary {
   const records = recordsForDateRange(dataset.records, range).filter(
-    (record) => isFinancialRecord(record),
+    (record) => isPrimaryReportingRecord(record),
   );
   const from = parseISO(`${range.from}T12:00:00.000Z`);
   const to = parseISO(`${range.to}T12:00:00.000Z`);
@@ -925,7 +935,7 @@ export function calculateCategoryExpenses(
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
     (record) =>
-      record.type === "expense" && isFinancialRecord(record),
+      record.type === "expense" && isPrimaryReportingRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -938,7 +948,7 @@ export function calculateCategoryExpensesForDateRange(
 ) {
   const records = recordsForDateRange(dataset.records, range).filter(
     (record) =>
-      record.type === "expense" && isFinancialRecord(record),
+      record.type === "expense" && isPrimaryReportingRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -951,7 +961,7 @@ export function calculateCategoryIncome(
 ) {
   const records = recordsForMonth(dataset.records, month).filter(
     (record) =>
-      record.type === "income" && isFinancialRecord(record),
+      record.type === "income" && isPrimaryReportingRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -964,7 +974,7 @@ export function calculateCategoryIncomeForDateRange(
 ) {
   const records = recordsForDateRange(dataset.records, range).filter(
     (record) =>
-      record.type === "income" && isFinancialRecord(record),
+      record.type === "income" && isPrimaryReportingRecord(record),
   );
 
   return calculateCategoryBreakdownFromRecords(dataset, records, parentId);
@@ -1030,10 +1040,14 @@ export function calculateGoalProgress(dataset: WalletDataset): GoalProgress[] {
       if (amount === 0 || currency === goal.currency) return amount;
       if (record) {
         const account = dataset.accounts.find((item) => item.id === record.accountId);
-        if (account?.currency === goal.currency && record.accountAmount !== undefined) {
+        if (account?.currency === goal.currency && record.accountAmount !== undefined && Number.isFinite(record.accountAmount) && record.accountAmount > 0) {
           return record.accountAmount * amount / record.amount;
         }
         if (goal.currency === dataset.settings.primaryCurrency) {
+          if (!Number.isFinite(record.exchangeRateToPrimary) || record.exchangeRateToPrimary <= 0) {
+            hasMissingExchangeRate = true;
+            return Number.NaN;
+          }
           return amount * record.exchangeRateToPrimary;
         }
       }
@@ -1091,7 +1105,7 @@ export function buildExpenseComparisonSeries(
   const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
     dateKeysForRange(range).map((date) =>
       recordsForDateRange(dataset.records, { from: range.from, to: date })
-        .filter((record) => record.type === "expense" && isFinancialRecord(record))
+        .filter((record) => record.type === "expense" && isPrimaryReportingRecord(record))
         .reduce((total, record) => total + toPrimaryCurrency(record.amount, record.exchangeRateToPrimary), 0),
     ),
   );
@@ -1111,7 +1125,7 @@ export function buildExpenseSequenceComparisonSeries(
   const [twoPeriodsAgo, previous, current] = ranges.map((range) => {
     let cumulative = 0;
     return recordsForDateRange(dataset.records, range)
-      .filter((record) => record.type === "expense" && isFinancialRecord(record))
+      .filter((record) => record.type === "expense" && isPrimaryReportingRecord(record))
       .sort((a, b) => a.occurredAt.localeCompare(b.occurredAt) || a.id.localeCompare(b.id))
       .map((record) => {
         cumulative += toPrimaryCurrency(record.amount, record.exchangeRateToPrimary);
@@ -1162,7 +1176,7 @@ function calculateBudgetProgressFromRecords(
         (total, record) => {
           const amount=budget.goalId?record.goalAssociations?.find(link=>link.goalId===budget.goalId)?.allocatedAmount??record.amount:record.amount;
           if(record.currency===budget.currency) return total+amount;
-          if(budget.currency===dataset.settings.primaryCurrency) return total+toPrimaryCurrency(amount,record.exchangeRateToPrimary);
+          if(budget.currency===dataset.settings.primaryCurrency) return total+(isPrimaryReportingRecord(record)?toPrimaryCurrency(amount,record.exchangeRateToPrimary):Number.NaN);
           const account=dataset.accounts.find(account=>account.id===record.accountId);
           if(account?.currency===budget.currency&&record.accountAmount!==undefined) return total+record.accountAmount*amount/record.amount;
           const rate=findExchangeRate(dataset.exchangeRates,record.currency,budget.currency,record.occurredAt);

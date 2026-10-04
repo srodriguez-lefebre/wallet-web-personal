@@ -20,6 +20,7 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/wallet/category-icon";
+import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
 import { categoryIconOptions } from "@/components/wallet/category-icons";
 import {
   Dialog,
@@ -61,10 +62,18 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { lock } = useAuth();
+  const { lock, expiresAt } = useAuth();
   const { toast, runAction } = useActionToast();
-  async function runSettingAction(work:()=>Promise<unknown>,options:ActionToastOptions){
-    try {await runAction(work,options);return true;} catch {return false;}
+  async function runSettingAction(
+    work: () => Promise<unknown>,
+    options: ActionToastOptions,
+  ) {
+    try {
+      await runAction(work, options);
+      return true;
+    } catch {
+      return false;
+    }
   }
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -117,37 +126,54 @@ export function SettingsView() {
   async function handleAddBudget(event: FormEvent) {
     event.preventDefault();
     const limitAmount = Number(newBudgetLimit);
-    if (!newBudgetName.trim() || !Number.isFinite(limitAmount) || limitAmount <= 0) return;
-    if(!await runSettingAction(
-      () =>
-        addBudget({
-          name: newBudgetName.trim(),
-          limitAmount,
-          currency: primaryCurrency,
-          period: "monthly",
-          categoryId: newBudgetCategoryId || undefined,
-          color: "#F59E0B",
-          isActive: true,
-        }),
-      {
-        singleFlight:"budget-create",
-        processing: "Creating budget...",
-        success: "Budget created",
-        error: "Could not create budget",
-      },
-    ))return;
+    if (
+      !newBudgetName.trim() ||
+      !Number.isFinite(limitAmount) ||
+      limitAmount <= 0
+    )
+      return;
+    if (
+      !(await runSettingAction(
+        () =>
+          addBudget({
+            name: newBudgetName.trim(),
+            limitAmount,
+            currency: primaryCurrency,
+            period: "monthly",
+            categoryId: newBudgetCategoryId || undefined,
+            color: "#F59E0B",
+            isActive: true,
+          }),
+        {
+          singleFlight: "budget-create",
+          processing: "Creating budget...",
+          success: "Budget created",
+          error: "Could not create budget",
+        },
+      ))
+    )
+      return;
     setNewBudgetName("");
     setNewBudgetLimit("");
     setNewBudgetCategoryId("");
   }
 
   async function saveRecordDefaults() {
-    await runSettingAction(()=>updateWalletSettings({
-      primaryCurrency,
-      defaultAccountId: defaultAccountId || null,
-      ...paymentDefaults(defaultPaymentMethod),
-      defaultPaymentStatus,
-    }),{singleFlight:"defaults",processing:"Saving defaults...",success:"Defaults saved",error:"Could not save defaults"});
+    await runSettingAction(
+      () =>
+        updateWalletSettings({
+          primaryCurrency,
+          defaultAccountId: defaultAccountId || null,
+          ...paymentDefaults(defaultPaymentMethod),
+          defaultPaymentStatus,
+        }),
+      {
+        singleFlight: "defaults",
+        processing: "Saving defaults...",
+        success: "Defaults saved",
+        error: "Could not save defaults",
+      },
+    );
   }
 
   function getCategoryDraft(category: Category): CategoryDraft {
@@ -211,12 +237,24 @@ export function SettingsView() {
     const name = newCategoryName.trim();
     if (!name) return;
 
-    if(!await runSettingAction(()=>addCategory({
-      name,
-      parentId: newCategoryParentId || undefined,
-      color: newCategoryColor,
-      icon: newCategoryIcon.trim() || "tag",
-    }),{singleFlight:"category-create",processing:"Creating category...",success:"Category created",error:"Could not create category"}))return;
+    if (
+      !(await runSettingAction(
+        () =>
+          addCategory({
+            name,
+            parentId: newCategoryParentId || undefined,
+            color: newCategoryColor,
+            icon: newCategoryIcon.trim() || "tag",
+          }),
+        {
+          singleFlight: "category-create",
+          processing: "Creating category...",
+          success: "Category created",
+          error: "Could not create category",
+        },
+      ))
+    )
+      return;
     setNewCategoryName("");
     setNewCategoryParentId("");
     setNewCategoryColor("#2563EB");
@@ -229,10 +267,22 @@ export function SettingsView() {
     const name = draft.name.trim();
     if (!name) return;
 
-    if(!await runSettingAction(()=>updateCategory(category.id, {
-      ...draft,
-      name,
-    }),{singleFlight:`category-save:${category.id}`,processing:"Saving category...",success:"Category saved",error:"Could not save category"}))return;
+    if (
+      !(await runSettingAction(
+        () =>
+          updateCategory(category.id, {
+            ...draft,
+            name,
+          }),
+        {
+          singleFlight: `category-save:${category.id}`,
+          processing: "Saving category...",
+          success: "Category saved",
+          error: "Could not save category",
+        },
+      ))
+    )
+      return;
     clearCategoryDraft(category.id);
   }
 
@@ -243,12 +293,15 @@ export function SettingsView() {
       )
     )
       return;
-    if(!await runSettingAction(() => deleteCategory(categoryId), {
-      singleFlight:`category-delete:${categoryId}`,
-      processing: "Reassigning category history...",
-      success: "Category eliminated and history reassigned",
-      error: "Could not eliminate category",
-    }))return;
+    if (
+      !(await runSettingAction(() => deleteCategory(categoryId), {
+        singleFlight: `category-delete:${categoryId}`,
+        processing: "Reassigning category history...",
+        success: "Category eliminated and history reassigned",
+        error: "Could not eliminate category",
+      }))
+    )
+      return;
     clearCategoryDraft(categoryId);
   }
 
@@ -298,11 +351,23 @@ export function SettingsView() {
     const name = newTagName.trim();
     if (!name) return;
 
-    if(!await runSettingAction(()=>addTag({
-      name,
-      color: newTagColor,
-      isActive: true,
-    }),{singleFlight:"tag-create",processing:"Creating tag...",success:"Tag created",error:"Could not create tag"}))return;
+    if (
+      !(await runSettingAction(
+        () =>
+          addTag({
+            name,
+            color: newTagColor,
+            isActive: true,
+          }),
+        {
+          singleFlight: "tag-create",
+          processing: "Creating tag...",
+          success: "Tag created",
+          error: "Could not create tag",
+        },
+      ))
+    )
+      return;
     setNewTagName("");
     setNewTagColor("#2563EB");
   }
@@ -312,15 +377,35 @@ export function SettingsView() {
     const name = draft.name.trim();
     if (!name) return;
 
-    if(!await runSettingAction(()=>updateTag(tag.id, {
-      ...draft,
-      name,
-    }),{singleFlight:`tag-save:${tag.id}`,processing:"Saving tag...",success:"Tag saved",error:"Could not save tag"}))return;
+    if (
+      !(await runSettingAction(
+        () =>
+          updateTag(tag.id, {
+            ...draft,
+            name,
+          }),
+        {
+          singleFlight: `tag-save:${tag.id}`,
+          processing: "Saving tag...",
+          success: "Tag saved",
+          error: "Could not save tag",
+        },
+      ))
+    )
+      return;
     clearTagDraft(tag.id);
   }
 
   async function handleDeleteTag(tagId: string) {
-    if(!await runSettingAction(()=>deleteTag(tagId),{singleFlight:`tag-delete:${tagId}`,processing:"Deleting tag...",success:"Tag deleted",error:"Could not delete tag"}))return;
+    if (
+      !(await runSettingAction(() => deleteTag(tagId), {
+        singleFlight: `tag-delete:${tagId}`,
+        processing: "Deleting tag...",
+        success: "Tag deleted",
+        error: "Could not delete tag",
+      }))
+    )
+      return;
     clearTagDraft(tagId);
   }
 
@@ -599,37 +684,22 @@ export function SettingsView() {
                 <option value="dark">Dark</option>
               </select>
             </div>
-            <label className="flex items-center justify-between rounded-md border p-3">
-              Include hidden accounts in reports
-              <input
-                type="checkbox"
-                checked={dataset.settings.includeHiddenAccountsInReports}
-                onChange={(event) =>
-                  void runSettingAction(
-                    () =>
-                      updateWalletSettings({
-                        includeHiddenAccountsInReports: event.target.checked,
-                      }),
-                    {
-                      processing: "Saving reports...",
-                      success: "Report preference saved",
-                      error: "Could not save preference",
-                    },
-                  )
-                }
-              />
-            </label>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
-                <p className="font-medium">Local token</p>
+                <p className="font-medium">Session</p>
                 <p className="text-sm text-muted-foreground">
-                  Locking removes the token saved in this browser.
+                  Locking clears the session and private cache in this browser.
                 </p>
               </div>
               <Button variant="outline" onClick={lock}>
                 Lock
               </Button>
             </div>
+            {expiresAt && (
+              <p className="text-sm text-muted-foreground">
+                Session expires: {new Date(expiresAt).toLocaleString("es-UY")}
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -1036,6 +1106,7 @@ export function SettingsView() {
           </CardContent>
         </Card>
       </div>
+      <RecordTemplateManager />
     </div>
   );
 }

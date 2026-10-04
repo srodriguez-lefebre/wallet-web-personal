@@ -11,6 +11,7 @@ import {
   installmentPlanSchema, installmentPlanPatchSchema,
   recordImportSchema,
   walletBackupSchema, walletDatasetSchema, walletRecordResponseSchema, cardStatementResponseSchema,
+  recordTemplateSchema, recordTemplatePatchSchema,
   cardPaymentResponseSchema, cardRecordResponseSchema, reservationMovementResponseSchema, goalResponseSchema,
 } from "./schemas.js";
 
@@ -38,6 +39,7 @@ const cardPaymentParams = z.object({ id: uuidSchema, paymentId: uuidSchema });
 const cardStatementParams = z.object({ id: uuidSchema, statementId: uuidSchema });
 
 const entities: Record<string,ZodType> = {
+  recordTemplates: recordTemplateSchema.extend({id:uuidSchema}),
   accounts: accountSchema.extend({id:uuidSchema}),categories: categorySchema.extend({id:uuidSchema}),
   records: walletRecordResponseSchema,cards: creditCardSchema.extend({id:uuidSchema}),
   cardRecords: cardRecordResponseSchema,cardPayments: cardPaymentResponseSchema,cardStatements: cardStatementResponseSchema,
@@ -73,6 +75,10 @@ function operationResponse(operationId:string):ZodType {
 const op = <T extends Omit<ApiOperation,"response">>(definition:T) => ({...definition,response:operationResponse(definition.operationId)});
 
 export const apiOperations = [
+  op({operationId:"recordTemplates.list",method:"GET",path:"/api/record-templates",auth:"session",stability:"stable",successStatus:200,errors:[401,500],summary:"List reusable movement templates"}),
+  op({operationId:"recordTemplates.create",method:"POST",path:"/api/record-templates",auth:"session",stability:"stable",body:recordTemplateSchema,successStatus:201,errors:[400,401,409,422,500],summary:"Create a template without writing a movement"}),
+  op({operationId:"recordTemplates.patch",method:"PATCH",path:"/api/record-templates/{id}",auth:"session",stability:"stable",params:idParams,body:recordTemplatePatchSchema,successStatus:200,errors:[400,401,404,409,422,500],summary:"Update selected template fields"}),
+  op({operationId:"recordTemplates.delete",method:"DELETE",path:"/api/record-templates/{id}",auth:"session",stability:"stable",params:idParams,successStatus:200,errors:[400,401,404,500],summary:"Delete a template while preserving movements"}),
   op({operationId:"wallet.backup",method:"GET",path:"/api/wallet/backup",auth:"session",stability:"stable",successStatus:200,errors:[401,500],summary:"Export a consistent complete snapshot including archived financial history"}),
   op({ operationId: "wallet.restore", method: "POST", path: "/api/wallet/restore", auth: "session", stability: "stable", body: walletBackupSchema, successStatus: 200, errors: [400,401,409,422,500], summary: "Atomically replace a complete wallet backup" }),
   op({ operationId: "auth.unlock", method: "POST", path: "/api/auth/unlock", auth: "none", stability: "stable", body: unlockSchema, successStatus: 200, errors: [400, 401, 429, 500], summary: "Unlock the wallet and issue a signed session" }),

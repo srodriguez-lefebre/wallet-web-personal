@@ -17,9 +17,10 @@ import type {
   WalletBootstrap,
   RecordPage,
   WalletRecord,
+  RecordTemplate,
   WalletSettings,
 } from "@shared/types";
-import type { AccountPatch, BudgetPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, GoalPatch, InstallmentPlanPatch, InvestmentPatch, RecordPatch, RecurringDebtPatch, SettingsPatch, TagPatch } from "@shared/schemas";
+import type { AccountPatch, BudgetPatch, CategoryPatch, CreditCardPatch, CreditCardRecordPatch, DebtPatch, GoalPatch, InstallmentPlanPatch, InvestmentPatch, RecordPatch, RecordTemplatePatch, RecurringDebtPatch, SettingsPatch, TagPatch } from "@shared/schemas";
 import type { ApiOperationId } from "@shared/api-contract";
 
 interface ApiResponse<T> {
@@ -63,6 +64,11 @@ function body(value: unknown): RequestInit {
     body: JSON.stringify(value),
   };
 }
+
+export const listRecordTemplates = (token:string) => requestApi<RecordTemplate[]>(token,"recordTemplates.list","/api/record-templates");
+export const createRecordTemplate = (token:string,value:Omit<RecordTemplate,"id">) => requestApi<RecordTemplate>(token,"recordTemplates.create","/api/record-templates",{method:"POST",...body(value)});
+export const updateRecordTemplate = (token:string,id:string,value:RecordTemplatePatch) => requestApi<RecordTemplate>(token,"recordTemplates.patch",`/api/record-templates/${id}`,{method:"PATCH",...body(value)});
+export const deleteRecordTemplate = (token:string,id:string) => requestApi<{deleted:true}>(token,"recordTemplates.delete",`/api/record-templates/${id}`,{method:"DELETE"});
 
 export function getWallet(token: string) {
   return requestApi<WalletDataset>(token, "wallet.get", "/api/wallet");

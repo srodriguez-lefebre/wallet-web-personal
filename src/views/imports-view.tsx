@@ -1,13 +1,21 @@
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
+import { useNavigate } from "react-router-dom";
+import { DataHealthPanel } from "@/components/wallet/data-health-panel";
+import {
+  backupFilename,
+  readBackupReceipt,
+  rememberBackupExport,
+  summarizeCsvPreview,
+} from "@/lib/data-health";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWallet } from "@/providers/wallet-provider";
 import { useActionToast } from "@/lib/use-action-toast";
 import { prepareCsvRecords, recordsCsv } from "@/lib/record-import";
-import { recordsForDateRange } from "@shared/calculations";
+import { formatMoney, recordsForDateRange } from "@shared/calculations";
 import { walletBackupSchema } from "@shared/wallet-backup-schema";
 import type { WalletDataset } from "@shared/types";
 
@@ -23,6 +31,7 @@ const sample =
   "date,description,amount,type,currency\n2026-06-15,Coffee,180,expense,UYU";
 
 export function ImportsView() {
+  const navigate = useNavigate();
   const {
     dataset,
     importRecords,
@@ -32,6 +41,9 @@ export function ImportsView() {
     selectedDateRange,
     selectedPeriodMode,
     isAllHistoryComplete,
+    clearRecordFilters,
+    setRecordFilters,
+    setAllPeriod,
   } = useWallet();
   const { toast, runAction } = useActionToast();
   const [csv, setCsv] = useState(sample);
@@ -39,6 +51,8 @@ export function ImportsView() {
   const [expenseId, setExpenseId] = useState("");
   const [incomeId, setIncomeId] = useState("");
   const [busy, setBusy] = useState(false);
+  const running = useRef(false);
+  const [receipt, setReceipt] = useState(readBackupReceipt);
   const [message, setMessage] = useState("");
   const [backup, setBackup] = useState<WalletDataset | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -68,8 +82,17 @@ export function ImportsView() {
       };
     }
   }, [csv, dataset, activeAccountId, expenseCategoryId, incomeCategoryId]);
+  const previewSummary = summarizeCsvPreview(preview.rows);
+  function openRecords(review = false) {
+    clearRecordFilters();
+    setAllPeriod();
+    if (review) setRecordFilters({ paymentStatus: "needs_review" });
+    navigate("/records");
+  }
 
   async function action(work: () => Promise<void>, label: string) {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setMessage("");
     try {
@@ -93,20 +116,26 @@ export function ImportsView() {
     } catch {
       /* Feedback is retained in the toast and message. */
     } finally {
+      running.current = false;
       setBusy(false);
     }
   }
 
   async function exportData(format: "json" | "csv" | "period") {
     await action(async () => {
-      const complete = format==="json" ? await getBackupDataset() : await getCompleteDataset();
-      if (format === "json")
+      const complete =
+        format === "json"
+          ? await getBackupDataset()
+          : await getCompleteDataset();
+      if (format === "json") {
+        const requestedAt = new Date();
         downloadText(
-          "wallet-backup.json",
+          backupFilename(requestedAt),
           JSON.stringify(complete, null, 2),
           "application/json",
         );
-      else {
+        setReceipt(rememberBackupExport(complete, requestedAt));
+      } else {
         const records =
           format === "period" && selectedPeriodMode !== "all"
             ? recordsForDateRange(complete.records, selectedDateRange)
@@ -188,6 +217,17 @@ export function ImportsView() {
           Selected period CSV
         </Button>
       </PageHeader>
+      <p className="mb-4 text-sm text-muted-foreground">
+        {receipt
+          ? `Last JSON export requested: ${new Date(receipt.requestedAt).toLocaleString("es-UY")} · ${receipt.records} records · ${receipt.cardRecords} card records. Verify the downloaded file before relying on it.`
+          : "No JSON export recorded in this browser."}
+      </p>
+      <DataHealthPanel
+        getSnapshot={getBackupDataset}
+        onReview={() => openRecords(true)}
+        onRecords={() => openRecords()}
+        onCards={() => navigate("/cards")}
+      />
       {!isAllHistoryComplete ? (
         <p className="mb-4 text-sm text-muted-foreground">
           Complete history will be fetched before import, export, or duplicate
@@ -300,6 +340,24 @@ export function ImportsView() {
             <CardTitle>Preview</CardTitle>
           </CardHeader>
           <CardContent>
+            <p className="mb-3 text-sm">
+              {previewSummary.ready} ready · {previewSummary.skipped} invalid or
+              duplicate rows
+              {!isAllHistoryComplete
+                ? " (preliminary until complete history is checked)"
+                : ""}
+            </p>
+            {previewSummary.totals.map((total) => (
+              <p
+                key={total.currency}
+                className="mb-2 text-sm text-muted-foreground"
+              >
+                {total.currency}: income{" "}
+                {formatMoney(total.income, total.currency)} · expenses{" "}
+                {formatMoney(total.expenses, total.currency)} · transfers{" "}
+                {formatMoney(total.transfers, total.currency)}
+              </p>
+            ))}
             <div className="overflow-auto">
               <table className="w-full text-sm">
                 <thead>

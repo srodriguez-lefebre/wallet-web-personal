@@ -7,6 +7,8 @@ import { createGoal,createGoalReservation,getWalletDataset } from "../db/wallet-
 import type { MailIngestionInput } from "../../shared/schemas.js";
 import { resolveFrozenRate } from "./exchange-rates.js";
 import { createDb } from "../db/client.js";
+import { calculateAccountBalances, calculateCreditCardSummary, calculateSummary } from "../../shared/calculations.js";
+import { walletDataHealth } from "../../shared/data-quality.js";
 
 let fixture:Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId=randomUUID(),cardId=randomUUID();
@@ -28,6 +30,20 @@ test("unknown cards stay under review without changing a valid account balance",
   const event=input();event.destination.creditCardId=randomUUID();
   const result=await processMailIngestion(event);expect(result.status).toBe("needs_review");
   const dataset=await getWalletDataset();expect(dataset.records[0].accountId).toBeUndefined();expect(dataset.creditCardRecords).toHaveLength(0);
+});
+
+test("missing primary FX remains reviewable while known bank and card currency amounts count",async()=>{
+  await fixture.pool.query("UPDATE settings SET primary_currency='EUR'");
+  vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("Offline"));
+  const result=await processMailIngestion(input());
+  expect(result.status).toBe("needs_review");
+  const dataset=await getWalletDataset();
+  expect(dataset.records[0]).toMatchObject({paymentStatus:"needs_review",accountId,accountAmount:50,creditCardId:cardId,exchangeRateToPrimary:0});
+  expect(dataset.creditCardRecords).toHaveLength(1);
+  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
+  expect(calculateCreditCardSummary(dataset,dataset.creditCards.find(row=>row.id===cardId)!).usedLimit).toBe(50);
+  expect(calculateSummary(dataset,"2026-02").expenses).toBe(0);
+  expect(walletDataHealth(dataset).conversions).toBe(1);
 });
 test("zero-amount notifications are ignored without financial writes",async()=>{
   const event=input();event.transaction.amount=0;

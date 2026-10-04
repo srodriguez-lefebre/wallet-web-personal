@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { buildGoalUpdatePayload } from "@/lib/goal-update";
+import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
@@ -671,6 +672,7 @@ export function GoalsView() {
                     </div>
                   </div>
                   </>}
+                  <GoalFundingPlan progress={item} />
                   <div className="mt-4 flex flex-wrap gap-2">
                     {item.goal.autoCaptureEnabled ? <Badge variant="info">Captura automática</Badge> : null}
                     {item.goal.deadline ? (

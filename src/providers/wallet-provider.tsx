@@ -13,7 +13,13 @@ import * as walletApi from "@/services/wallet-api";
 import { WalletSync } from "@/lib/wallet-sync";
 import { importRecordBatches } from "@/lib/record-import";
 import { useTheme } from "@/providers/theme-provider";
-import type { GoalPatch, RecordPatch, SettingsPatch } from "@shared/schemas";
+import type {
+  GoalPatch,
+  InvestmentPatch,
+  RecordPatch,
+  RecordTemplatePatch,
+  SettingsPatch,
+} from "@shared/schemas";
 import {
   availableMonthKeys,
   dateKey,
@@ -39,6 +45,7 @@ import type {
   WalletDataset,
   RecordPage,
   WalletRecord,
+  RecordTemplate,
 } from "@shared/types";
 
 type PeriodMode = "month" | "custom" | "all";
@@ -53,7 +60,8 @@ interface WalletContextValue {
   customDateRange: DateRange;
   setCustomDateRange: (range: DateRange) => void;
   newRecordRequestId: number;
-  requestNewRecord: () => void;
+  newRecordTemplateId: string | null;
+  requestNewRecord: (templateId?: string) => void;
   consumeNewRecordRequest: () => void;
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
@@ -66,11 +74,14 @@ interface WalletContextValue {
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
-  updateRecord: (
-    recordId: string,
-    record: RecordPatch,
-  ) => Promise<void>;
+  updateRecord: (recordId: string, record: RecordPatch) => Promise<void>;
   deleteRecord: (recordId: string) => Promise<void>;
+  addRecordTemplate: (template: Omit<RecordTemplate, "id">) => Promise<string>;
+  updateRecordTemplate: (
+    templateId: string,
+    template: RecordTemplatePatch,
+  ) => Promise<void>;
+  deleteRecordTemplate: (templateId: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<string>;
   updateCategory: (
     categoryId: string,
@@ -139,7 +150,7 @@ interface WalletContextValue {
   addInvestment: (investment: Omit<Investment, "id">) => Promise<string>;
   updateInvestment: (
     investmentId: string,
-    investment: Omit<Investment, "id">,
+    investment: InvestmentPatch,
   ) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
   addInstallmentPlan: (plan: Omit<InstallmentPlan, "id">) => Promise<string>;
@@ -189,6 +200,7 @@ const cacheSchemaVersion = 2;
 const cacheMaxAgeMs = 24 * 60 * 60 * 1000;
 
 const emptyDataset: WalletDataset = {
+  recordTemplates: [],
   settings: {
     primaryCurrency: "UYU",
     theme: "system",
@@ -302,7 +314,7 @@ function allHistoryDateRange(records: WalletRecord[]): DateRange {
   const today = dateKey(new Date());
   if (records.length === 0) return { from: today, to: today };
 
-  const dates = records.map((record) => record.occurredAt.slice(0, 10));
+  const dates = records.map((record) => dateKey(record.occurredAt));
   return {
     from: dates.reduce((oldest, current) =>
       current < oldest ? current : oldest,
@@ -332,9 +344,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const { setTheme } = useTheme();
   const [initialCache] = useState(() => readCachedDataset(token));
   const [hasCachedDataset] = useState(() => Boolean(initialCache));
-  const [dataset, setDataset] = useState<WalletDataset>(
-    () => initialCache?.dataset ?? emptyDataset,
-  );
+  const [dataset, setDataset] = useState<WalletDataset>(() => ({
+    ...(initialCache?.dataset ?? emptyDataset),
+    recordTemplates: initialCache?.dataset.recordTemplates ?? [],
+  }));
   const [recordsPage, setRecordsPage] = useState<Omit<RecordPage, "items">>(
     () => initialCache?.recordsPage ?? { nextCursor: null, hasMore: false },
   );
@@ -361,6 +374,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
     [customDateRange, dataset.records, selectedMonth, selectedPeriodMode],
   );
   const [newRecordRequestId, setNewRecordRequestId] = useState(0);
+  const [newRecordTemplateId, setNewRecordTemplateId] = useState<string | null>(
+    null,
+  );
   const [recordFilters, setRecordFiltersState] = useState<RecordFilters>(
     () => ({
       type: "all",
@@ -390,7 +406,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [sync] = useState(
     () =>
       new WalletSync<WalletDataset>((next) => {
-        setDataset(next);
+        setDataset({ ...next, recordTemplates: next.recordTemplates ?? [] });
         setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
         if (token)
@@ -465,10 +481,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
       setPendingReads((count) => Math.max(0, count - 1));
     }
   }
-  async function getBackupDataset(){
-    setPendingReads(count=>count+1);
-    try{return await sync.snapshot(()=>walletApi.getWalletBackup(requireToken()));}
-    finally{setPendingReads(count=>Math.max(0,count-1));}
+  async function getBackupDataset() {
+    setPendingReads((count) => count + 1);
+    try {
+      return await sync.snapshot(() =>
+        walletApi.getWalletBackup(requireToken()),
+      );
+    } finally {
+      setPendingReads((count) => Math.max(0, count - 1));
+    }
   }
 
   async function reloadWallet() {
@@ -523,16 +544,18 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setRecordFiltersState({ type: "all" });
   }
 
-  function requestNewRecord() {
+  function requestNewRecord(templateId?: string) {
     setRecordFiltersState({
       type: "all",
       accountId: defaultRecordAccountId(dataset),
     });
     setNewRecordRequestId(Date.now());
+    setNewRecordTemplateId(templateId ?? null);
   }
 
   function consumeNewRecordRequest() {
     setNewRecordRequestId(0);
+    setNewRecordTemplateId(null);
   }
 
   async function addAccount(value: Omit<Account, "id">) {
@@ -601,6 +624,19 @@ export function WalletProvider({ children }: PropsWithChildren) {
     return (await mutate(() => walletApi.createBudget(requireToken(), value)))
       .id;
   }
+  async function addRecordTemplate(value: Omit<RecordTemplate, "id">) {
+    return (
+      await mutate(() => walletApi.createRecordTemplate(requireToken(), value))
+    ).id;
+  }
+  async function updateRecordTemplate(id: string, value: RecordTemplatePatch) {
+    await mutate(() =>
+      walletApi.updateRecordTemplate(requireToken(), id, value),
+    );
+  }
+  async function deleteRecordTemplate(id: string) {
+    await mutate(() => walletApi.deleteRecordTemplate(requireToken(), id));
+  }
   async function updateBudget(id: string, value: Omit<Budget, "id">) {
     await mutate(() => walletApi.updateBudget(requireToken(), id, value));
   }
@@ -612,7 +648,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       await mutate(() => walletApi.createInvestment(requireToken(), value))
     ).id;
   }
-  async function updateInvestment(id: string, value: Omit<Investment, "id">) {
+  async function updateInvestment(id: string, value: InvestmentPatch) {
     await mutate(() => walletApi.updateInvestment(requireToken(), id, value));
   }
   async function deleteInvestment(id: string) {
@@ -822,6 +858,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         customDateRange,
         setCustomDateRange,
         newRecordRequestId,
+        newRecordTemplateId,
         requestNewRecord,
         consumeNewRecordRequest,
         recordFilters,
@@ -858,6 +895,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
         deleteGoalReservation,
         releaseGoalReservation,
         addBudget,
+        addRecordTemplate,
+        updateRecordTemplate,
+        deleteRecordTemplate,
         updateBudget,
         deleteBudget,
         addInvestment,
