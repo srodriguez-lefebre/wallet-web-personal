@@ -1,3 +1,4 @@
+import { neonConfig } from "@neondatabase/serverless";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { recordSchema } from "../../shared/schemas.js";
@@ -121,15 +122,39 @@ test("independent full release and expense transactions never overdraw", async (
   expect(await balance()).toBe(0);
 });
 
-test("record edits recompute compensation after the previous transaction", async () => {
+test("a stale concurrent edit returns a conflict and leaves the committed record and reserve consistent", async () => {
   await reserve();
   const record = await createRecord(input(40));
-  await Promise.all([
-    updateRecord(record.id, { amount: 20 }),
-    updateRecord(record.id, { amount: 30 }),
-  ]);
+  const transport = neonConfig.fetchFunction!;
+  let arrivals = 0;
+  let release!: () => void;
+  const ready = new Promise<void>((resolve) => { release = resolve; });
+  // Hold both prepared mutation batches so each read the same initial record.
+  // The real PostgreSQL row lock and snapshot guard decide which one commits.
+  neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
+    const body = JSON.parse(String(options?.body)) as { queries?: { query: string }[] };
+    if (body.queries?.some((query) => query.query.includes("date_trunc('milliseconds'"))) {
+      arrivals += 1;
+      if (arrivals === 2) release();
+      await ready;
+    }
+    return transport(url, options);
+  };
+  try {
+    const outcomes = await Promise.allSettled([
+      updateRecord(record.id, { amount: 20 }),
+      updateRecord(record.id, { amount: 30 }),
+    ]);
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0].reason).toMatchObject({ status: 409, code: "CONFLICT" });
+  } finally {
+    neonConfig.fetchFunction = transport;
+  }
   const saved = (await getWalletDataset()).records.find(
     (item) => item.id === record.id,
   )!;
+  expect([20, 30]).toContain(saved.amount);
   expect(await balance()).toBe(100 - saved.amount);
 });
