@@ -309,6 +309,20 @@ categorías inválidas mantienen el gasto bajo revisión. Una categoría descono
 también queda como `needs_review`; los importes válidos conservan su efecto en
 saldos e informes.
 
+Una clasificación válida de GPT se aprende en el catálogo persistente de
+comercios y aliases. Las próximas entradas con ese descriptor usan la regla sin
+consultar al modelo. Para comercios nuevos se conserva el descriptor completo
+normalizado, sin recortarlo a términos generales; una regla existente con
+categoría desconocida se actualiza conservando su identidad. No se aprenden
+resultados desconocidos ni fallidos, y una corrección simultánea de una regla
+existente prevalece sobre la inferencia pendiente. El aprendizaje se confirma en
+la misma transacción que el movimiento: los reintentos, duplicados y fallos no
+crean reglas adicionales. Las reglas aprendidas se incluyen en el respaldo JSON
+junto con el catálogo y se recuperan al restaurarlo.
+Los comercios nuevos aprendidos usan prioridad interna `-1` y coincidencia exacta
+del descriptor normalizado. Las reglas explícitas conservan la coincidencia por
+aliases y prevalecen sobre esa caché, incluso si se agregan más tarde.
+
 Los logs de Vercel incluyen el evento `mail_category_classification`, el ID de
 ingesta, origen de la categoría y diagnóstico de la llamada: modelo, motivo,
 HTTP, request ID, duración y tokens. No registran claves, cuerpos de error ni
