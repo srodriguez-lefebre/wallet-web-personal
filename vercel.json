@@ -3,6 +3,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api?path=$1"
+    },
+    {
+      "source": "/((?!api(?:/|$)).*)",
+      "destination": "/index.html"
     }
   ],
   "headers": [
