@@ -51,6 +51,8 @@ comparan sin diferencias de mayúsculas ni tildes. El consumo de débito admite 
 Automation Wallet conserva su reconocimiento por campos y el mapeo de crédito por alias.
 Las transferencias incluyen referencias para el mapeo, pero la descripción del movimiento
 solo muestra los últimos cuatro dígitos de destino. La API enmascara los metadatos persistidos.
+El parser admite los saltos de línea y los asteriscos de negrita que Gmail agrega al convertir
+los avisos de Itaú a texto plano, conservando los asteriscos del nombre del comercio.
 
 Crear un trigger periódico para `processPendingEmails`. Cada mensaje ingresado con respuesta
 2xx o sin formato soportado se marca leído. Los mensajes no soportados, incluidas devoluciones

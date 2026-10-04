@@ -39,30 +39,32 @@ function parseItauConsumptionEmail(message, body) {
 }
 
 function parseItauDebitEmail(message, body) {
-  const approved = /Se aprob[oó] un consumo de su tarjeta/i.test(body);
-  const card = body.match(/tarjeta\s+(VISA|MASTER(?:CARD)?|AMEX)\s+terminada en\s+(\d{4})\b/i);
-  const merchant = body.match(/Realizado en\s+(.+?)\s+Monto\s*:/i);
+  const approved = /Se\s+aprob[oó]\s+un\s+consumo\s+de\s+su\s+tarjeta/i.test(body);
+  const card = body.match(/tarjeta\s+(VISA|MASTER(?:CARD)?|AMEX)\s+terminada\s+en\s+(\d{4})\b/i);
+  const merchant = body.match(/Realizado\s+en\s+([\s\S]+?)\s+Monto\s*:/i);
   const amount = body.match(/Monto\s*:\s*([0-9][0-9.,]*)\s+(D[oó]lares|Pesos|USD|UYU)\b/i);
   if (!approved || !card || !merchant || !amount) throw new Error('Aviso de débito Itaú incompleto.');
   return {
     source: 'itau_debit_card', sourceLabel: 'Auto Itaú', paymentType: 'debit',
     amount: parseAmount(amount[1]), currency: parseBankCurrency(amount[2]),
-    merchant: merchant[1].trim(), cardBrand: card[1].toUpperCase(),
+    merchant: merchant[1].replace(/\s+/g, ' ').trim(), cardBrand: card[1].toUpperCase(),
     cardNumber: `****${card[2]}`, cardAlias: '', date: message.getDate()
   };
 }
 
 function parseItauTransferEmail(message, body) {
-  const origin = body.match(/Transferencia realizada desde la cuenta\s+(\*{4}\d{4})\b/i);
+  const origin = body.match(/Transferencia\s+realizada\s+desde\s+la\s+cuenta\s+\*?(\*{4}\d{4})\b\*?/i);
   const amountLine = body.match(/(?:^|\n)Importe\s*:\s*([^\n]+)/i);
-  const destination = body.match(/(?:^|\n)Cuenta destino\s*:\s*(\d+)\s*(?:\n|$)/i);
+  const destination = body.match(/(?:^|\n)Cuenta destino\s*:\s*\*?(\d+)\*?\s*(?:\n|$)/i);
   const bank = body.match(/(?:^|\n)Banco\s*\/\s*Instituci[oó]n destino\s*:\s*([^\n]+)/i);
   if (!origin || !amountLine || !destination || !bank || !bank[1].trim()) throw new Error('Aviso de transferencia Itaú incompleto.');
-  const amount = amountLine[1].trim().match(/^(?:([A-Z]{3}|\$)\s*)?([0-9][0-9.,]*)(?:\s*([A-Z]{3}|\$))?$/i);
+  const amountText = amountLine[1].trim().replace(/^\*([^*\n]+)\*$/, '$1')
+    .replace(/\*([0-9][0-9.,]*|[A-Z]{3}|\$)\*/gi, '$1');
+  const amount = amountText.match(/^(?:([A-Z]{3}|\$)\s*)?([0-9][0-9.,]*)(?:\s*([A-Z]{3}|\$))?$/i);
   if (!amount || !(amount[1] || amount[3]) || (amount[1] && amount[3] && parseBankCurrency(amount[1]) !== parseBankCurrency(amount[3]))) {
     throw new Error('Importe o moneda de transferencia Itaú inválidos.');
   }
-  const destinationBank = bank[1].trim();
+  const destinationBank = bank[1].trim().replace(/^\*([^\n]+)\*$/, '$1').trim();
   return {
     source: 'itau_transfer', sourceLabel: 'Auto Itaú', paymentType: 'transfer',
     amount: parseAmount(amount[2]), currency: parseBankCurrency(amount[1] || amount[3]),
