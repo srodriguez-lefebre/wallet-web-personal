@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdir,
   open,
   readFile,
@@ -40,7 +41,8 @@ export function configureLocalEnvironment() {
 }
 
 export async function acquireWorkspaceLock(directory = workspace) {
-  await mkdir(directory, { recursive: true });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  if (process.platform !== "win32") await chmod(directory, 0o700);
   const lockPath = path.join(directory, "process.lock");
   const owner = JSON.stringify({ pid: process.pid, owner: randomUUID() });
   const lock = await open(lockPath, "wx").catch(
