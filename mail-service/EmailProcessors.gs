@@ -58,7 +58,8 @@ function parseItauTransferEmail(message, body) {
   const destination = body.match(/(?:^|\n)Cuenta destino\s*:\s*\*?(\d+)\*?\s*(?:\n|$)/i);
   const bank = body.match(/(?:^|\n)Banco\s*\/\s*Instituci[oó]n destino\s*:\s*([^\n]+)/i);
   if (!origin || !amountLine || !destination || !bank || !bank[1].trim()) throw new Error('Aviso de transferencia Itaú incompleto.');
-  const amountText = amountLine[1].trim().replace(/\*([0-9][0-9.,]*|[A-Z]{3}|\$)\*/gi, '$1');
+  const amountText = amountLine[1].trim().replace(/^\*([^*\n]+)\*$/, '$1')
+    .replace(/\*([0-9][0-9.,]*|[A-Z]{3}|\$)\*/gi, '$1');
   const amount = amountText.match(/^(?:([A-Z]{3}|\$)\s*)?([0-9][0-9.,]*)(?:\s*([A-Z]{3}|\$))?$/i);
   if (!amount || !(amount[1] || amount[3]) || (amount[1] && amount[3] && parseBankCurrency(amount[1]) !== parseBankCurrency(amount[3]))) {
     throw new Error('Importe o moneda de transferencia Itaú inválidos.');

@@ -424,10 +424,10 @@ test("Gmail wraps the approved debit sentence and merchant without changing the 
   expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
 });
 
-test("Gmail bold formatting around transfer fields preserves the masked account and amount", () => {
+test.each(["*44.00* *USD*", "*44.00 USD*", "*USD 44.00*"])("Gmail transfer amount %s preserves the masked account and amount", (formattedAmount) => {
   const value = mail({
     ...transfer,
-    body: "*Aviso de transferencia realizada*\nTransferencia realizada desde la cuenta *****1357*\nImporte: *44.00* *USD*\nCuenta destino: *9876540*\nBanco/Institución destino: *Banco Itau*",
+    body: `*Aviso de transferencia realizada*\nTransferencia realizada desde la cuenta *****1357*\nImporte: ${formattedAmount}\nCuenta destino: *9876540*\nBanco/Institución destino: *Banco Itau*`,
   });
   value.targets.bankAccounts = {
     "1357:USD": { accountId: "origin-account" },
