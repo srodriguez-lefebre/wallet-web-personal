@@ -32,6 +32,8 @@ const targetsSchema = z.object({
       accountId: z.uuid().optional(),
     }),
   ),
+  debitCards: z.record(z.string().max(200), z.object({ accountId: z.uuid() })).optional(),
+  bankAccounts: z.record(z.string().max(200), z.object({ accountId: z.uuid() })).optional(),
 });
 interface Mailbox {
   threads: SimulatedThread[];
@@ -138,7 +140,9 @@ export async function createSandboxServer(options: {
             date: parsed.date,
             body: parsed.body,
             html: parsed.html,
+            isRead: false,
           });
+          if (!thread.labels.includes("Wallet/Pendiente")) thread.labels.push("Wallet/Pendiente");
           await save();
           json(res, thread, 201);
           return;

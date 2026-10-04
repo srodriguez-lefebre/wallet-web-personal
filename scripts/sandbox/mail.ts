@@ -5,6 +5,7 @@ export interface SimulatedMessage {
   date: string;
   body: string;
   html?: string;
+  isRead?: boolean;
 }
 export interface SimulatedThread {
   id: string;
@@ -14,6 +15,8 @@ export interface SimulatedThread {
 export interface MailTargets {
   defaultAccountId?: string;
   cards: Record<string, { creditCardId?: string; accountId?: string }>;
+  debitCards?: Record<string, { accountId: string }>;
+  bankAccounts?: Record<string, { accountId: string }>;
 }
 export interface MailRunInput {
   threads: SimulatedThread[];
@@ -37,6 +40,9 @@ export function runMailAutomation(
   send: (url: string, options: Record<string, unknown>) => MailResponse,
 ): MailRunResult {
   const threads = structuredClone(input.threads);
+  for (const thread of threads) {
+    for (const message of thread.messages) message.isRead ??= false;
+  }
   const logs: string[] = [];
   const deliveries: MailRunResult["deliveries"] = [];
   const label = (name: string) => ({ name });
@@ -60,13 +66,29 @@ export function runMailAutomation(
     GmailApp: {
       getUserLabelByName: label,
       createLabel: label,
-      search: (_query: string, start: number, limit: number) =>
+      search: (query: string, start: number, limit: number) =>
         threads
-          .filter(
-            (thread) =>
-              thread.labels.includes("Wallet/Pendiente") &&
-              !thread.labels.includes("Wallet/Procesado"),
-          )
+          .filter((thread) => {
+            const labels = [...query.matchAll(/(-?)label:"([^"]+)"/g)];
+            if (
+              !labels.every(([, excluded, name]) =>
+                excluded
+                  ? !thread.labels.includes(name)
+                  : thread.labels.includes(name),
+              )
+            )
+              return false;
+            const age = query.match(/newer_than:(\d+)d/);
+            return (
+              !age ||
+              thread.messages.some(
+                (message) =>
+                  new Date(message.date).getTime() >
+                  new Date(input.now ?? new Date().toISOString()).getTime() -
+                    Number(age[1]) * 86_400_000,
+              )
+            );
+          })
           .slice(start, start + limit)
           .map((thread) => ({
             getId: () => thread.id,
@@ -79,6 +101,9 @@ export function runMailAutomation(
                 getDate: () => new Date(message.date),
                 getPlainBody: () => message.body,
                 getBody: () => message.html ?? message.body,
+                markRead: () => {
+                  message.isRead = true;
+                },
               })),
             addLabel: (value: { name: string }) => {
               if (!thread.labels.includes(value.name))

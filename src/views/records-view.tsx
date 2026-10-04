@@ -60,6 +60,14 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
+const paymentMethodClasses: Record<PaymentType, string> = {
+  cash: "bg-muted text-muted-foreground",
+  debit: "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  credit: "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  transfer: "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  other: "bg-muted text-muted-foreground",
+};
+
 function formatCategoryName(categories: Category[], category: Category) {
   const parent = category.parentId
     ? categories.find((candidate) => candidate.id === category.parentId)
@@ -1815,9 +1823,11 @@ export function RecordsView() {
                             </Badge>
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">
-                            {creditCard
-                              ? `${creditCard.name} **** ${creditCard.lastFour}`
-                              : account?.name}
+                            <span className="font-medium text-foreground">
+                              {creditCard
+                                ? `${creditCard.name} **** ${creditCard.lastFour}`
+                                : account?.name}
+                            </span>
                             {record.counterpartyName
                               ? ` - ${record.counterpartyName}`
                               : " - No counterparty"}
@@ -1831,7 +1841,10 @@ export function RecordsView() {
                                 </Badge>
                               ) : null,
                             )}
-                            <Badge variant="muted">
+                            <Badge
+                              variant="muted"
+                              className={`font-semibold ${paymentMethodClasses[record.paymentType]}`}
+                            >
                               {paymentTypeLabels[record.paymentType]}
                             </Badge>
                           </div>

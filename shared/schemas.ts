@@ -638,14 +638,30 @@ export const mailIngestionSchema = z.object({
     cardAlias: z.string().max(200).default(""),
     cardBrand: z.string().max(100).default(""),
     cardNumber: z.string().max(100).default(""),
-    paymentType: z.literal("credit_card"),
+    paymentType: z.enum(["credit_card", "debit", "transfer"]),
+    accountNumber: z.string().max(100).optional(),
+    destinationAccountNumber: z.string().max(100).optional(),
+    destinationBank: z.string().max(200).optional(),
   }),
   destination: z
     .object({
       accountId: optionalUuidSchema,
       creditCardId: optionalUuidSchema,
+      destinationAccountId: optionalUuidSchema,
     })
     .default({}),
+}).superRefine((value, context) => {
+  if (value.transaction.paymentType !== "credit_card" && value.destination.creditCardId) {
+    context.addIssue({ code: "custom", path: ["destination", "creditCardId"], message: "Bank notices cannot be assigned to a credit card" });
+  }
+  if (value.destination.destinationAccountId) {
+    if (value.transaction.paymentType !== "transfer" || !value.destination.accountId) {
+      context.addIssue({ code: "custom", path: ["destination", "destinationAccountId"], message: "An owned transfer requires a source bank account" });
+    }
+    if (value.destination.destinationAccountId === value.destination.accountId) {
+      context.addIssue({ code: "custom", path: ["destination", "destinationAccountId"], message: "Transfer accounts must be different" });
+    }
+  }
 });
 
 export type MailIngestionInput = z.infer<typeof mailIngestionSchema>;

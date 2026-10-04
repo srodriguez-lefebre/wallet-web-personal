@@ -92,10 +92,11 @@ function pickGenericMerchantCategory(
 }
 
 function sanitizedPayload(input: MailIngestionInput) {
+  const mask = (value: string | undefined) => value ? `****${value.replace(/\D/g, "").slice(-4)}` : undefined;
   return {
     integration: input.integration,
     email: { ...input.email },
-    transaction: { ...input.transaction },
+    transaction: { ...input.transaction, accountNumber: mask(input.transaction.accountNumber), destinationAccountNumber: mask(input.transaction.destinationAccountNumber) },
     destination: { ...input.destination },
   };
 }
@@ -273,6 +274,8 @@ export async function processMailIngestion(
       return { status: "ignored" };
     }
 
+    const isCredit = input.transaction.paymentType === "credit_card";
+    const isTransfer = input.transaction.paymentType === "transfer";
     const [account] = input.destination.accountId
       ? await db
           .select()
@@ -281,11 +284,21 @@ export async function processMailIngestion(
             and(
               eq(accounts.id, input.destination.accountId),
               isNull(accounts.deletedAt),
+              eq(accounts.isActive, true),
             ),
           )
           .limit(1)
       : [];
-    let [card] = input.destination.creditCardId
+    const [destinationAccount] = isTransfer && input.destination.destinationAccountId
+      ? await db.select().from(accounts).where(and(eq(accounts.id, input.destination.destinationAccountId), isNull(accounts.deletedAt), eq(accounts.isActive, true))).limit(1)
+      : [];
+    if (isTransfer && input.destination.destinationAccountId && (!account || !destinationAccount || destinationAccount.id === account.id)) {
+      throw new Error("Invalid owned transfer destination or source account");
+    }
+    const isOwnedTransfer = Boolean(isTransfer && destinationAccount);
+    const recordType = isOwnedTransfer ? "transfer" : "expense";
+    const paymentType = input.transaction.paymentType === "credit_card" ? "credit" : input.transaction.paymentType;
+    let [card] = isCredit && input.destination.creditCardId
       ? await db
           .select()
           .from(creditCards)
@@ -297,7 +310,7 @@ export async function processMailIngestion(
           )
           .limit(1)
       : [];
-    if (!input.destination.creditCardId) {
+    if (isCredit && !input.destination.creditCardId) {
       const lastFour = cardLastFour(input.transaction.cardNumber);
       if (lastFour) {
         [card] = await db
@@ -314,12 +327,15 @@ export async function processMailIngestion(
     }
 
     const accountWasInvalid = Boolean(input.destination.accountId && !account);
-    const cardWasInvalid = Boolean(input.destination.creditCardId && !card);
-    const category = await resolveCategory(db, input.transaction.merchantRaw);
+    const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
+    const category = isOwnedTransfer
+      ? { categoryId: undefined, merchantName: input.transaction.merchantRaw }
+      : await resolveCategory(db, input.transaction.merchantRaw);
     const canonicalMerchantNormalized = normalizeMerchantTerm(
       category.merchantName,
     );
-    const targetKey = `account:${account?.id ?? "none"}|card:${card?.id ?? "none"}`;
+    // Keep existing credit fingerprints stable; bank methods cannot collide with them.
+    const targetKey = `account:${account?.id ?? "none"}|card:${card?.id ?? "none"}${isCredit ? "" : `|method:${paymentType}|destination:${destinationAccount?.id ?? "none"}`}`;
     const fingerprint = [
       input.transaction.currency,
       money(input.transaction.amount),
@@ -390,20 +406,28 @@ export async function processMailIngestion(
           occurredAt,
         )
       : null;
+    const destinationConversion = destinationAccount
+      ? await convert(db, input.transaction.amount, input.transaction.currency, destinationAccount.currency as CurrencyCode, occurredAt)
+      : null;
     [
       primary?.frozen,
       accountConversion?.frozen,
       cardConversion?.frozen,
+      destinationConversion?.frozen,
     ].forEach((item) => {
       if (item?.warning && !warnings.includes(item.warning))
         warnings.push(item.warning);
     });
 
     const unavailableConversion =
-      !primary || (account && !accountConversion) || (card && !cardConversion);
+      !primary || (account && !accountConversion) || (card && !cardConversion) || (destinationAccount && !destinationConversion);
+    if (isTransfer && !isOwnedTransfer) {
+      warnings.push("Transfer destination ownership is unconfirmed; review whether it belongs to another Wallet account.");
+    }
+    if (!isCredit && !account) warnings.push("Bank account mapping unavailable; assign the correct account before confirming this notice.");
     const requiresReview =
-      accountWasInvalid || cardWasInvalid || !card || unavailableConversion;
-    const effectiveAccount = !accountWasInvalid && card && accountConversion ? account : undefined;
+      accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || (isTransfer && !isOwnedTransfer) || unavailableConversion;
+    const effectiveAccount = isOwnedTransfer ? account : !accountWasInvalid && (isCredit ? Boolean(card) : true) && accountConversion ? account : undefined;
     const effectiveCard = cardConversion ? card : undefined;
     const noteParts = [
       input.transaction.sourceLabel ||
@@ -429,11 +453,17 @@ export async function processMailIngestion(
           cardConversion.frozen,
         ),
       ...warnings,
-      cardWasInvalid || (!card && input.transaction.cardNumber)
+      isCredit && (cardWasInvalid || (!card && input.transaction.cardNumber))
         ? `Unknown card: ${input.transaction.cardAlias || input.transaction.cardNumber}`
         : undefined,
       accountWasInvalid
         ? `Unknown account: ${input.destination.accountId}`
+        : undefined,
+      destinationConversion && destinationAccount
+        ? conversionNote(input.transaction.currency, destinationAccount.currency as CurrencyCode, destinationConversion.frozen)
+        : undefined,
+      isTransfer && input.transaction.destinationAccountNumber
+        ? `Destination: ${input.transaction.destinationBank || "bank"} ****${input.transaction.destinationAccountNumber.replace(/\D/g, "").slice(-4)}`
         : undefined,
       unavailableConversion
         ? "Currency conversion unavailable; unresolved amounts remain under review."
@@ -443,10 +473,11 @@ export async function processMailIngestion(
       effectiveAccount || !effectiveCard || requiresReview ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
     const goalWrites=recordId?await prepareRecordGoalWrites(recordId,{
-      type:"expense",amount:input.transaction.amount,currency:input.transaction.currency,
+      type:recordType,amount:input.transaction.amount,currency:input.transaction.currency,
       accountId:effectiveAccount?.id,accountAmount:effectiveAccount?accountConversion?.amount:undefined,
+      destinationAccountId:destinationAccount?.id,destinationAmount:destinationConversion?.amount,
       creditCardId:effectiveCard?.id,categoryId:category.categoryId,counterpartyName:category.merchantName,
-      paymentType:effectiveCard?"credit":"cash",paymentStatus:requiresReview?"needs_review":"cleared",
+      paymentType,paymentStatus:requiresReview?"needs_review":"cleared",
       exchangeRateToPrimary:primary?.frozen.rate??0,occurredAt:occurredAt.toISOString(),tagIds:[],
       amountInLimitCurrency:effectiveCard?cardConversion?.amount:undefined,exchangeRateToLimitCurrency:effectiveCard?cardConversion?.frozen.rate:undefined,
     },db):null;
@@ -458,7 +489,7 @@ export async function processMailIngestion(
     const recordInsert = recordId
       ? db.insert(records).values({
           id: recordId,
-          type: "expense",
+          type: recordType,
           amount: money(input.transaction.amount),
           currency: input.transaction.currency,
           accountId: effectiveAccount?.id ?? null,
@@ -467,9 +498,11 @@ export async function processMailIngestion(
               ? money(accountConversion.amount)
               : null,
           creditCardId: effectiveCard?.id ?? null,
+          destinationAccountId: destinationAccount?.id ?? null,
+          destinationAmount: destinationConversion ? money(destinationConversion.amount) : null,
           categoryId: category.categoryId,
           counterpartyName: category.merchantName,
-          paymentType: effectiveCard ? "credit" : "cash",
+          paymentType,
           paymentStatus: requiresReview ? "needs_review" : "cleared",
           exchangeRateToPrimary: rate(primary?.frozen.rate ?? 0),
           amountInLimitCurrency:
@@ -485,7 +518,7 @@ export async function processMailIngestion(
         })
       : null;
     const cardInsert =
-      cardRecordId && effectiveCard && cardConversion
+      cardRecordId && effectiveCard && cardConversion && category.categoryId
         ? db.insert(creditCardRecords).values({
             id: cardRecordId,
             creditCardId: effectiveCard.id,
@@ -524,6 +557,12 @@ export async function processMailIngestion(
     const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
     const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
     const cardLocks=effectiveCard?[db.update(creditCards).set({updatedAt:new Date()}).where(eq(creditCards.id,effectiveCard.id))]:[];
+    const bankAccountIds = isCredit ? [] : [...new Set([effectiveAccount?.id, destinationAccount?.id].filter((id): id is string => Boolean(id)))].sort();
+    const bankReferences = bankAccountIds.length ? [
+      db.execute(sql`SELECT id FROM ${accounts} WHERE id IN (${sql.join(bankAccountIds.map(id => sql`${id}::uuid`), sql`, `)}) ORDER BY id FOR UPDATE`),
+      db.execute(sql`SELECT 1 / CASE WHEN count(*) = ${bankAccountIds.length} THEN 1 ELSE 0 END AS valid_bank_accounts
+        FROM ${accounts} WHERE id IN (${sql.join(bankAccountIds.map(id => sql`${id}::uuid`), sql`, `)}) AND is_active AND deleted_at IS NULL`),
+    ] : [];
     // Serialize matching cross-source notifications before rechecking the window.
     // Separate statements let READ COMMITTED see the prior worker's commit after
     // the advisory lock wait; no financial query runs if the guard finds a match.
@@ -532,7 +571,7 @@ export async function processMailIngestion(
       SELECT 1 FROM ${ingestionEvents} WHERE ${duplicateWhere}
     ) THEN 0 ELSE 1 END AS unique_notification`);
     try {
-      await db.batch([fingerprintLock,...cardLocks,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+      await db.batch([fingerprintLock,...cardLocks,...bankReferences,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
     } catch (error) {
       const failure = error as { code?: string; cause?: { code?: string } };
       if (failure.code === "22012" || failure.cause?.code === "22012") {
