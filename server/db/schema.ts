@@ -129,6 +129,7 @@ export const merchants = pgTable(
       .notNull()
       .references(() => categories.id),
     priority: integer("priority").notNull().default(0),
+    matchMode: text("match_mode", { enum: ["alias", "exact"] }).notNull().default("alias"),
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -137,7 +138,10 @@ export const merchants = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => ({ nameIdx: uniqueIndex("merchants_name_idx").on(table.name) }),
+  (table) => ({
+    nameIdx: uniqueIndex("merchants_name_idx").on(table.name),
+    matchModeCheck: check("merchants_match_mode_check", sql`${table.matchMode} IN ('alias','exact')`),
+  }),
 );
 
 export const merchantAliases = pgTable(

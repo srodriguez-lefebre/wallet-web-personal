@@ -683,7 +683,7 @@ export async function getWalletDataset(
   return {
     recordTemplates: templateRows.map(mapRecordTemplate),
     ...(options.includeArchived ? {
-      merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,isActive:row.isActive},row)),
+      merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,matchMode:row.matchMode,isActive:row.isActive},row)),
       merchantAliases: merchantAliasRows.map(row=>withMetadata({id:row.id,merchantId:row.merchantId,alias:row.alias,normalizedAlias:row.normalizedAlias},row)),
       ingestionEvents:ingestionRows.map(row=>({
         id:row.id,idempotencyKey:row.idempotencyKey,source:row.source,status:row.status,action:optional(row.action),

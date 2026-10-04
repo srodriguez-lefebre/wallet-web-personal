@@ -319,9 +319,12 @@ existente prevalece sobre la inferencia pendiente. El aprendizaje se confirma en
 la misma transacción que el movimiento: los reintentos, duplicados y fallos no
 crean reglas adicionales. Las reglas aprendidas se incluyen en el respaldo JSON
 junto con el catálogo y se recuperan al restaurarlo.
-Los comercios nuevos aprendidos usan prioridad interna `-1` y coincidencia exacta
-del descriptor normalizado. Las reglas explícitas conservan la coincidencia por
-aliases y prevalecen sobre esa caché, incluso si se agregan más tarde.
+Los comercios nuevos aprendidos usan `matchMode: "exact"` para el descriptor
+normalizado. Las reglas explícitas conservan `matchMode: "alias"` y prevalecen
+sobre esa caché, incluso si se agregan más tarde. Los respaldos anteriores sin
+ese campo mantienen el comportamiento por aliases, sin reinterpretar prioridades.
+La migración aditiva `0020_merchant_match_mode` debe aplicarse al publicar esta
+funcionalidad; no modifica registros financieros.
 
 Los logs de Vercel incluyen el evento `mail_category_classification`, el ID de
 ingesta, origen de la categoría y diagnóstico de la llamada: modelo, motivo,

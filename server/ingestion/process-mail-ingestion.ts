@@ -17,7 +17,7 @@ import {
 import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
 import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
-import { LEARNED_MERCHANT_PRIORITY, prepareMerchantLearning, type MerchantRuleLearning } from "./learned-merchant.js";
+import { prepareMerchantLearning, type MerchantRuleLearning } from "./learned-merchant.js";
 import {
   cardLastFour,
   normalizeMerchantTerm,
@@ -160,6 +160,7 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
       merchantName: merchants.name,
       categoryId: merchants.categoryId,
       priority: merchants.priority,
+      matchMode: merchants.matchMode,
     })
     .from(merchantAliases)
     .innerJoin(
@@ -169,8 +170,8 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
         eq(merchants.isActive, true),
       ),
     );
-  const explicit = pickLongestMerchantMatch(merchantRaw, aliasRows.filter(alias => alias.priority !== LEARNED_MERCHANT_PRIORITY));
-  const learned = aliasRows.find(alias => alias.priority === LEARNED_MERCHANT_PRIORITY
+  const explicit = pickLongestMerchantMatch(merchantRaw, aliasRows.filter(alias => alias.matchMode === "alias"));
+  const learned = aliasRows.find(alias => alias.matchMode === "exact"
     && normalizeMerchantTerm(alias.normalizedAlias) === normalizeMerchantTerm(merchantRaw));
   const local = explicit ?? learned;
   // Classification may change, but the identity used to deduplicate must stay stable.

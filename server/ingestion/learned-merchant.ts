@@ -4,9 +4,6 @@ import type { DbClient } from "../db/client.js";
 import { merchantAliases, merchants } from "../db/schema.js";
 import { normalizeMerchantTerm } from "./normalization.js";
 
-// Learned descriptors are exact cache entries; explicit aliases retain broad matching.
-export const LEARNED_MERCHANT_PRIORITY = -1;
-
 export interface MerchantRuleLearning {
   merchantName: string;
   merchantRaw: string;
@@ -30,12 +27,12 @@ export function prepareMerchantLearning(db: DbClient, learning?: MerchantRuleLea
   if (!normalizedAlias) return [];
   return [
     db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${'merchant-learning:' + normalizedAlias}, 0))`),
-    db.execute(sql`INSERT INTO ${merchants} (id, name, category_id, priority)
-      SELECT ${randomUUID()}::uuid, ${learning.merchantName}, ${learning.categoryId}::uuid, ${LEARNED_MERCHANT_PRIORITY}
+    db.execute(sql`INSERT INTO ${merchants} (id, name, category_id, match_mode)
+      SELECT ${randomUUID()}::uuid, ${learning.merchantName}, ${learning.categoryId}::uuid, 'exact'
       WHERE NOT EXISTS (SELECT 1 FROM ${merchantAliases} WHERE normalized_alias = ${normalizedAlias})
         AND NOT EXISTS (
           SELECT 1 FROM ${merchantAliases} a JOIN ${merchants} m ON m.id = a.merchant_id
-          WHERE m.is_active AND m.priority <> ${LEARNED_MERCHANT_PRIORITY}
+          WHERE m.is_active AND m.match_mode = 'alias'
             AND btrim(a.normalized_alias) <> ''
             AND strpos(${' ' + normalizedAlias + ' '}, ' ' || btrim(regexp_replace(upper(a.normalized_alias), '[^A-Z0-9]+', ' ', 'g')) || ' ') > 0
         )

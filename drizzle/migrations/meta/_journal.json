@@ -141,6 +141,13 @@
       "when": 1791068400000,
       "tag": "0019_review_activity_accounting",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1791141379148,
+      "tag": "0020_merchant_match_mode",
+      "breakpoints": true
     }
   ]
 }

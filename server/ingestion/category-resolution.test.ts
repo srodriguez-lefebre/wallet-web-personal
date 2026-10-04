@@ -7,6 +7,8 @@ import type { MailIngestionInput } from "../../shared/schemas";
 import { createDb } from "../db/client";
 import { getWalletDataset } from "../db/wallet-repository";
 import { resolveCategory } from "./process-mail-ingestion";
+import { walletBackupSchema } from "../../shared/schemas";
+import { restoreWalletBackup } from "../db/wallet-restore";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
@@ -262,7 +264,7 @@ test("a successful GPT category becomes a persistent rule available in JSON back
   await processMailIngestion(next, createDb());
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
   const backup = await getWalletDataset(createDb(), { includeArchived: true });
-  expect(backup.merchants).toEqual([expect.objectContaining({name: "HDP HURBAN FOOD MONTE", categoryId: foodId})]);
+  expect(backup.merchants).toEqual([expect.objectContaining({name: "HDP HURBAN FOOD MONTE", categoryId: foodId, matchMode: "exact"})]);
   expect(backup.merchantAliases).toEqual([expect.objectContaining({normalizedAlias: "HDP HURBAN FOOD MONTE"})]);
   expect((await fixture.pool.query("SELECT category_id FROM records")).rows).toEqual([{category_id: foodId}, {category_id: foodId}]);
 });
@@ -349,4 +351,27 @@ test("a manual rule takes precedence over an older exact learned descriptor", as
   await processMailIngestion(input("SHOP MONTE"));
   await rule("Shop", tvId);
   expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId: tvId, merchantName: "Shop"});
+});
+
+test("an existing explicit rule with negative priority keeps broad alias matching", async () => {
+  await rule("Shop", foodId);
+  await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({merchantName:"Shop", categoryId:foodId, source:"merchant_rule"});
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+});
+
+test("JSON restore retains exact learned rules and defaults legacy negative-priority rules to alias matching", async () => {
+  await rule("Shop", tvId);
+  await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  await processMailIngestion(input("HDP HURBAN FOOD MONTE"));
+  const backup = await getWalletDataset(createDb(), {includeArchived:true});
+  for (const merchant of backup.merchants ?? []) if(merchant.name === "Shop") delete merchant.matchMode;
+  const parsed = walletBackupSchema.parse(JSON.parse(JSON.stringify(backup)));
+  await restoreWalletBackup(parsed);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId:tvId, merchantName:"Shop"});
+  expect(await resolveCategory(createDb(), "HDP HURBAN FOOD MONTE")).toMatchObject({categoryId:foodId, source:"merchant_rule"});
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect((await fixture.pool.query("SELECT match_mode FROM merchants WHERE name='HDP HURBAN FOOD MONTE'")).rows).toEqual([{match_mode:"exact"}]);
 });
