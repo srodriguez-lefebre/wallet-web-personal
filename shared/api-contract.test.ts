@@ -13,6 +13,7 @@ describe("API contract manifest", () => {
     for (const operation of apiOperations) {
       expect(findApiOperation(operation.method, samplePath(operation.path))?.operationId).toBe(operation.operationId);
       expect(operation.response).toBeDefined();
+      expect(operation.response.safeParse(undefined).success).toBe(false);
       expect(operation.errors.length).toBeGreaterThan(0);
     }
   });

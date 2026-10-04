@@ -1,4 +1,4 @@
-import { and, eq, gte, isNotNull, isNull, lt, lte, ne } from "drizzle-orm";
+import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 import type { MailIngestionInput } from "../../shared/schemas.js";
@@ -14,6 +14,7 @@ import {
   records,
   settings,
 } from "../db/schema.js";
+import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
 import { inferCategoryWithOpenAi } from "./openai-category.js";
 import {
@@ -220,6 +221,8 @@ export async function processMailIngestion(
   const merchantNormalized = normalizeMerchantTerm(
     input.transaction.merchantRaw,
   );
+  // An abandoned worker may be retried after its lease; its old event ID cannot write again.
+  await db.delete(ingestionEvents).where(and(eq(ingestionEvents.idempotencyKey,input.idempotencyKey),eq(ingestionEvents.status,"processing"),lt(ingestionEvents.updatedAt,new Date(now.getTime()-5*60_000))));
   const [claimed] = await db
     .insert(ingestionEvents)
     .values({
@@ -325,35 +328,38 @@ export async function processMailIngestion(
     ].join("|");
     const duplicateWindowStart = new Date(occurredAt.getTime() - 10 * 60_000);
     const duplicateWindowEnd = new Date(occurredAt.getTime() + 10 * 60_000);
-    const [duplicate] = await db
+    const duplicateWhere = and(
+      eq(ingestionEvents.fingerprint, fingerprint),
+      ne(ingestionEvents.source, input.transaction.source),
+      eq(ingestionEvents.status, "completed"),
+      gte(ingestionEvents.occurredAt, duplicateWindowStart),
+      lte(ingestionEvents.occurredAt, duplicateWindowEnd),
+    );
+    const findDuplicate = () => db
       .select()
       .from(ingestionEvents)
-      .where(
-        and(
-          eq(ingestionEvents.fingerprint, fingerprint),
-          ne(ingestionEvents.source, input.transaction.source),
-          eq(ingestionEvents.status, "completed"),
-          gte(ingestionEvents.occurredAt, duplicateWindowStart),
-          lte(ingestionEvents.occurredAt, duplicateWindowEnd),
-        ),
-      )
+      .where(duplicateWhere)
       .limit(1);
-    if (duplicate) {
-      await db
+    const completeDuplicate = async (duplicateId: string): Promise<MailIngestionResult> => {
+      const completed = await db
         .update(ingestionEvents)
         .set({
           status: "completed",
           action: "duplicate",
-          duplicateOfId: duplicate.id,
+          duplicateOfId: duplicateId,
           fingerprint,
           targetKey,
           merchantNormalized: canonicalMerchantNormalized,
           completedAt: now,
           updatedAt: now,
         })
-        .where(eq(ingestionEvents.id, eventId));
-      return { status: "duplicate", duplicateOfId: duplicate.id };
-    }
+        .where(and(eq(ingestionEvents.id, eventId), eq(ingestionEvents.status, "processing")))
+        .returning({ id: ingestionEvents.id });
+      if (!completed.length) throw new IngestionInProgressError("Ingestion claim expired");
+      return { status: "duplicate", duplicateOfId: duplicateId };
+    };
+    const [duplicate] = await findDuplicate();
+    if (duplicate) return await completeDuplicate(duplicate.id);
 
     const [settingsRow] = await db.select().from(settings).limit(1);
     const primaryCurrency = (settingsRow?.primaryCurrency ??
@@ -397,7 +403,7 @@ export async function processMailIngestion(
       !primary || (account && !accountConversion) || (card && !cardConversion);
     const requiresReview =
       accountWasInvalid || cardWasInvalid || !card || unavailableConversion;
-    const allowFinancialImpact = !accountWasInvalid && !unavailableConversion;
+    const allowFinancialImpact = !accountWasInvalid && !unavailableConversion && Boolean(card);
     const effectiveAccount = allowFinancialImpact ? account : undefined;
     const effectiveCard = allowFinancialImpact ? card : undefined;
     const noteParts = [
@@ -438,6 +444,14 @@ export async function processMailIngestion(
     const recordId =
       effectiveAccount || !effectiveCard ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
+    const goalWrites=recordId?await prepareRecordGoalWrites(recordId,{
+      type:"expense",amount:input.transaction.amount,currency:input.transaction.currency,
+      accountId:effectiveAccount?.id,accountAmount:effectiveAccount?accountConversion?.amount:undefined,
+      creditCardId:effectiveCard?.id,categoryId:category.categoryId,counterpartyName:category.merchantName,
+      paymentType:effectiveCard?"credit":"cash",paymentStatus:requiresReview?"needs_review":"cleared",
+      exchangeRateToPrimary:primary?.frozen.rate??1,occurredAt:occurredAt.toISOString(),tagIds:[],
+      amountInLimitCurrency:effectiveCard?cardConversion?.amount:undefined,exchangeRateToLimitCurrency:effectiveCard?cardConversion?.frozen.rate:undefined,
+    },db):null;
     const recordInsert = recordId
       ? db.insert(records).values({
           id: recordId,
@@ -504,11 +518,26 @@ export async function processMailIngestion(
         updatedAt: now,
       })
       .where(eq(ingestionEvents.id, eventId));
-    if (recordInsert && cardInsert)
-      await db.batch([recordInsert, cardInsert, eventUpdate]);
-    else if (recordInsert) await db.batch([recordInsert, eventUpdate]);
-    else if (cardInsert) await db.batch([cardInsert, eventUpdate]);
-    else await eventUpdate;
+    const claimLock=db.update(ingestionEvents).set({updatedAt:new Date()}).where(and(eq(ingestionEvents.id,eventId),eq(ingestionEvents.status,"processing")));
+    const claimGuard=db.execute(sql`SELECT 1 / count(*)::int AS owned FROM ${ingestionEvents} WHERE id = ${eventId}::uuid AND status = 'processing'`);
+    const cardLocks=effectiveCard?[db.update(creditCards).set({updatedAt:new Date()}).where(eq(creditCards.id,effectiveCard.id))]:[];
+    // Serialize matching cross-source notifications before rechecking the window.
+    // Separate statements let READ COMMITTED see the prior worker's commit after
+    // the advisory lock wait; no financial query runs if the guard finds a match.
+    const fingerprintLock = db.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${fingerprint}, 0))`);
+    const duplicateGuard = db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
+      SELECT 1 FROM ${ingestionEvents} WHERE ${duplicateWhere}
+    ) THEN 0 ELSE 1 END AS unique_notification`);
+    try {
+      await db.batch([fingerprintLock,...cardLocks,claimLock,claimGuard,duplicateGuard,...(goalWrites?.lockQueries??[]),...(recordInsert?[recordInsert]:[]),...(cardInsert?[cardInsert]:[]),...(goalWrites?.queries??[]),eventUpdate] as unknown as Parameters<DbClient["batch"]>[0]);
+    } catch (error) {
+      const failure = error as { code?: string; cause?: { code?: string } };
+      if (failure.code === "22012" || failure.cause?.code === "22012") {
+        const [concurrentDuplicate] = await findDuplicate();
+        if (concurrentDuplicate) return await completeDuplicate(concurrentDuplicate.id);
+      }
+      throw error;
+    }
     return {
       status: requiresReview ? "needs_review" : "created",
       recordId,

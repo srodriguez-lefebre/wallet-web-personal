@@ -1,4 +1,5 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState, useRef } from "react";
+import { localDateInput,dateInputToIso } from "@/lib/date-input";
 import {
   Banknote,
   CheckCircle2,
@@ -82,25 +83,15 @@ const textareaClassName =
   "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
 function todayDate() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateInput();
 }
 
 function toDateInput(value?: string) {
-  return value ? value.slice(0, 10) : "";
+  return value ? localDateInput(value) : "";
 }
 
 function dateToIso(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  const now = new Date();
-  return new Date(
-    year,
-    month - 1,
-    day,
-    now.getHours(),
-    now.getMinutes(),
-    now.getSeconds(),
-    now.getMilliseconds(),
-  ).toISOString();
+  return dateInputToIso(value);
 }
 
 function defaultDebtForm(categoryId = "", accountId = ""): DebtFormState {
@@ -289,6 +280,16 @@ export function DebtsView() {
       defaultRecurringForm("", defaultAccountId(dataset)),
     );
   const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentAccountAmount,setPaymentAccountAmount] = useState("");
+  const paymentRequests = useRef(new Map<string, string>());
+  function paymentKey(fingerprint: string) {
+    let key = paymentRequests.current.get(fingerprint);
+    if (!key) {
+      key = crypto.randomUUID();
+      paymentRequests.current.set(fingerprint, key);
+    }
+    return key;
+  }
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentDate, setPaymentDate] = useState(todayDate());
   const [paymentNote, setPaymentNote] = useState("");
@@ -344,6 +345,7 @@ export function DebtsView() {
     );
     setPaymentAccountId(debt.accountId ?? defaultAccountId(dataset));
     setPaymentDate(todayDate());
+    setPaymentAccountAmount("");
     setPaymentNote("");
     setSaveAccountToDebt(!debt.accountId);
     setFormError("");
@@ -500,15 +502,20 @@ export function DebtsView() {
       return;
     }
 
-    await runAction(
-      () =>
-        recordDebtPayment(activePaymentDebt.id, {
+    const fingerprint = JSON.stringify([activePaymentDebt.id, [amount, paymentAccountAmount, paymentAccountId, paymentDate, paymentNote, saveAccountToDebt]]);
+    const succeeded = await runAction(
+      async () => {
+        await recordDebtPayment(activePaymentDebt.id, {
           amount,
+          accountAmount: paymentAccountAmount ? Number(paymentAccountAmount) : undefined,
           accountId: paymentAccountId,
           occurredAt: dateToIso(paymentDate),
           note: paymentNote.trim() || undefined,
           saveAccountToDebt,
-        }),
+          idempotencyKey: paymentKey(fingerprint),
+        });
+        return true;
+      },
       {
         processing:
           activePaymentDebt.direction === "receivable"
@@ -521,15 +528,19 @@ export function DebtsView() {
         error: "Could not save payment",
       },
     );
-    setPaymentDialogOpen(false);
+    if (succeeded) {
+      paymentRequests.current.delete(fingerprint);
+      setPaymentDialogOpen(false);
+    }
   }
 
   async function settleDebt(debt: Debt) {
     if (!debt.accountId || debt.pendingAmount === undefined) return;
 
-    await runAction(
-      () =>
-        recordDebtPayment(debt.id, {
+    const fingerprint = JSON.stringify([debt.id, [debt.pendingAmount, debt.accountId, todayDate(), "settle"]]);
+    const succeeded = await runAction(
+      async () => {
+        await recordDebtPayment(debt.id, {
           amount: debt.pendingAmount ?? 0,
           accountId: debt.accountId ?? "",
           occurredAt: dateToIso(todayDate()),
@@ -538,7 +549,10 @@ export function DebtsView() {
               ? `Full debt received: ${debt.name}`
               : `Full debt paid: ${debt.name}`,
           saveAccountToDebt: true,
-        }),
+          idempotencyKey: paymentKey(fingerprint),
+        });
+        return true;
+      },
       {
         processing:
           debt.direction === "receivable"
@@ -549,6 +563,7 @@ export function DebtsView() {
         error: "Could not close debt",
       },
     );
+    if (succeeded) paymentRequests.current.delete(fingerprint);
   }
 
   function renderDebtList(debts: Debt[]) {
@@ -1371,6 +1386,7 @@ export function DebtsView() {
                 className={inputClassName}
               />
             </label>
+            {activePaymentDebt && dataset.accounts.find(account=>account.id===paymentAccountId)?.currency !== activePaymentDebt.currency && <label className="space-y-1 text-sm"><span>Importe en cuenta ({dataset.accounts.find(account=>account.id===paymentAccountId)?.currency})</span><input value={paymentAccountAmount} onChange={event=>setPaymentAccountAmount(limitDecimalPlaces(event.target.value))} className={inputClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
             <label className="space-y-1 text-sm">
               <span>Note</span>
               <textarea

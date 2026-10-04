@@ -651,6 +651,7 @@ export function GoalsView() {
                   </div>
                 </CardHeader>
                 <CardContent>
+                  {item.hasMissingExchangeRate ? <p className="text-sm text-muted-foreground">Falta una cotización para calcular el progreso.</p> : <>
                   <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted" aria-label={`${item.percentage.toFixed(1)}% committed`}>
                     <span style={{ width: `${Math.min(100, (item.spent / item.goal.targetAmount) * 100)}%`, backgroundColor: item.goal.color }} />
                     <span className="bg-emerald-400" style={{ width: `${Math.min(Math.max(0, 100 - (item.spent / item.goal.targetAmount) * 100), (item.reserved / item.goal.targetAmount) * 100)}%` }} />
@@ -669,6 +670,7 @@ export function GoalsView() {
                       </p>
                     </div>
                   </div>
+                  </>}
                   <div className="mt-4 flex flex-wrap gap-2">
                     {item.goal.autoCaptureEnabled ? <Badge variant="info">Captura automática</Badge> : null}
                     {item.goal.deadline ? (

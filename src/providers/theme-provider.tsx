@@ -7,8 +7,9 @@ import {
   useState,
 } from "react";
 import { readStorage, writeStorage } from "@/lib/storage";
+import { resolveTheme } from "@/lib/preferences";
 
-type Theme = "light" | "dark";
+type Theme = "light" | "dark" | "system";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -22,28 +23,35 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 export function ThemeProvider({ children }: PropsWithChildren) {
   const [theme, setThemeState] = useState<Theme>(() => {
     const stored = readStorage(themeKey);
-    return stored === "dark" ? "dark" : "light";
+    return stored === "dark" || stored === "light" ? stored : "system";
   });
 
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const apply = () =>
+      document.documentElement.classList.toggle(
+        "dark",
+        resolveTheme(theme, media.matches) === "dark",
+      );
+    apply();
+    media.addEventListener("change", apply);
     writeStorage(themeKey, theme);
+    return () => media.removeEventListener("change", apply);
   }, [theme]);
 
-  function setTheme(nextTheme: Theme) {
-    setThemeState(nextTheme);
-  }
-
-  function toggleTheme() {
-    setThemeState((current) => (current === "dark" ? "light" : "dark"));
-  }
-
   const value = useMemo(
-    () => ({ theme, toggleTheme, setTheme }),
+    () => ({
+      theme,
+      toggleTheme: () =>
+        setThemeState((current) => (current === "dark" ? "light" : "dark")),
+      setTheme: setThemeState,
+    }),
     [theme],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme() {

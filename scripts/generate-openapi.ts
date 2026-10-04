@@ -84,7 +84,7 @@ const document = {
 const yaml = stringify(document, { lineWidth: 0, sortMapEntries: true });
 if (process.argv.includes("--check")) {
   const current = await readFile(outputPath, "utf8").catch(() => "");
-  if (current !== yaml) {
+  if (current.replaceAll("\r\n", "\n") !== yaml) {
     console.error("OpenAPI contract is stale. Run npm run api:spec.");
     process.exitCode = 1;
   }

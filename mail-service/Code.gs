@@ -12,8 +12,7 @@ function processPendingEmails() {
   const context = buildRuntimeContext();
   const threads = GmailApp.search([
     `label:"${CONFIG.pendingLabelName}"`,
-    `-label:"${CONFIG.processedLabelName}"`,
-    'newer_than:30d'
+    `-label:"${CONFIG.processedLabelName}"`
   ].join(' '), 0, CONFIG.maxThreads);
   console.log(`Se encontraron ${threads.length} thread(s) pendientes.`);
 
@@ -22,7 +21,13 @@ function processPendingEmails() {
     let succeeded = 0;
     console.log(`Procesando thread ${thread.getId()} con ${thread.getMessageCount()} mensaje(s).`);
     thread.getMessages().forEach(message => {
-      const consumption = parseConsumptionEmail(message);
+      let consumption;
+      try { consumption = parseConsumptionEmail(message); }
+      catch (error) {
+        processable += 1;
+        console.error(`El mensaje ${message.getId()} queda pendiente: ${error.message}`);
+        return;
+      }
       if (!consumption) {
         console.log(`Mensaje ${message.getId()} ignorado: formato no reconocido.`);
         return;

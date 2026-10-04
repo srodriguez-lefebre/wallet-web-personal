@@ -136,6 +136,7 @@ export function CardsView() {
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (isSaving) return;
     const creditLimit = Number(draft.creditLimit);
     const closingDay = Number(draft.closingDay);
     const dueDay = Number(draft.dueDay);
@@ -172,12 +173,14 @@ export function CardsView() {
     try {
       if (editingId) {
         await runAction(() => updateCreditCard(editingId, payload), {
+          singleFlight: "save-card",
           processing: "Saving card...",
           success: "Card saved",
           error: "Could not save card",
         });
       } else {
         await runAction(() => addCreditCard(payload), {
+          singleFlight: "save-card",
           processing: "Creating card...",
           success: "Card created",
           error: "Could not create card",

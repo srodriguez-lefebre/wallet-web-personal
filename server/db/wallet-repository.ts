@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
 import {
@@ -18,6 +18,8 @@ import {
   installmentPlans,
   investments,
   merchants,
+  merchantAliases,
+  ingestionEvents,
   records,
   recordGoals,
   recordTags,
@@ -78,7 +80,8 @@ import {
 } from "../../shared/schemas.js";
 import { conflictError, validationError } from "../api/errors.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
-import { creditCardStatementStatusAfterPaymentChange } from "../../shared/calculations.js";
+import { findExchangeRate } from "../../shared/money.js";
+import { isFinancialRecord } from "../../shared/record-status.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -93,6 +96,7 @@ type NewCreditCardRecord = Omit<
 >;
 type NewGoal = Omit<Goal, "id" | "tagIds">;
 type NewGoalReservation = Omit<GoalReservation, "id">;
+type ReservationMovementWrite = Omit<typeof goalReservationMovements.$inferInsert, "amount"> & { amount: string | SQL };
 type NewBudget = Omit<Budget, "id">;
 type NewInstallmentPlan = Omit<InstallmentPlan, "id">;
 type NewInvestment = Omit<Investment, "id" | "startedAt"> & {
@@ -202,6 +206,7 @@ function mapRecord(
       row.accountAmount === null ? undefined : asNumber(row.accountAmount),
     creditCardId: optional(row.creditCardId),
     destinationAccountId: optional(row.destinationAccountId),
+    destinationAmount: row.destinationAmount === null ? undefined : asNumber(row.destinationAmount),
     categoryId: optional(row.categoryId),
     counterpartyName: optional(row.counterpartyName),
     tagIds: tagIdsByRecord[row.id] ?? [],
@@ -248,6 +253,7 @@ function mapCreditCardPayment(
   return {
     id: row.id,
     creditCardId: row.creditCardId,
+    idempotencyKey: optional(row.idempotencyKey),
     statementId: optional(row.statementId),
     amount: asNumber(row.amount),
     currency: row.currency as CreditCardPayment["currency"],
@@ -314,6 +320,7 @@ function mapCreditCardPaymentAllocation(
 
 function mapGoal(
   row: typeof goals.$inferSelect,
+  tagIds: string[] = [],
 ): Goal {
   return {
     id: row.id,
@@ -325,7 +332,7 @@ function mapGoal(
     isVisible: row.isVisible,
     deadline: asIso(row.deadline),
     status: row.status,
-    tagIds: [],
+    tagIds,
     accountId: optional(row.accountId),
     autoCaptureEnabled: row.autoCaptureEnabled,
     autoCaptureStart: optional(row.autoCaptureStart),
@@ -509,10 +516,11 @@ function mapSettings(
 
 export async function getWalletDataset(
   db: Db = createDb(),
-  options: { recordsOverride?: WalletRecord[] } = {},
+  options: { recordsOverride?: WalletRecord[]; includeArchived?: boolean } = {},
 ): Promise<WalletDataset> {
-  await ensureCreditCardStatements(db);
+  if (!options.includeArchived) await ensureCreditCardStatements(db);
   const [
+    ,
     settingsRows,
     accountRows,
     categoryRows,
@@ -526,6 +534,7 @@ export async function getWalletDataset(
     recordTagRows,
     recordGoalRows,
     goalRows,
+    goalTagRows,
     goalReservationMovementRows,
     budgetRows,
     exchangeRateRows,
@@ -533,10 +542,14 @@ export async function getWalletDataset(
     debtRows,
     recurringDebtRows,
     installmentPlanRows,
+    merchantRows,
+    merchantAliasRows,
+    ingestionRows,
   ] = await db.batch([
+    db.execute(sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`),
     db.select().from(settings).limit(1),
-    db.select().from(accounts).where(isNull(accounts.deletedAt)),
-    db.select().from(categories).where(isNull(categories.deletedAt)),
+    db.select().from(accounts).where(options.includeArchived ? undefined : isNull(accounts.deletedAt)),
+    db.select().from(categories).where(options.includeArchived ? undefined : isNull(categories.deletedAt)),
     db.select().from(tags),
     db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
     db
@@ -546,7 +559,7 @@ export async function getWalletDataset(
     db
       .select()
       .from(creditCardRecords)
-      .where(isNull(creditCardRecords.deletedAt))
+      .where(options.includeArchived ? undefined : isNull(creditCardRecords.deletedAt))
       .orderBy(desc(creditCardRecords.occurredAt)),
     db
       .select()
@@ -558,7 +571,7 @@ export async function getWalletDataset(
       : db
           .select()
           .from(records)
-          .where(isNull(records.deletedAt))
+          .where(options.includeArchived ? undefined : isNull(records.deletedAt))
           .orderBy(desc(records.occurredAt), desc(records.id)),
     options.recordsOverride
       ? db.select().from(recordTags).where(sql`false`).limit(0)
@@ -566,7 +579,8 @@ export async function getWalletDataset(
     options.recordsOverride
       ? db.select().from(recordGoals).where(sql`false`).limit(0)
       : db.select().from(recordGoals),
-    db.select().from(goals).where(isNull(goals.deletedAt)),
+    db.select().from(goals).where(options.includeArchived ? undefined : isNull(goals.deletedAt)),
+    db.select().from(goalTags),
     db
       .select()
       .from(goalReservationMovements)
@@ -577,34 +591,59 @@ export async function getWalletDataset(
     db.select().from(debts),
     db.select().from(recurringDebts).orderBy(desc(recurringDebts.startedAt)),
     db.select().from(installmentPlans),
+    db.select().from(merchants).where(options.includeArchived ? undefined : sql`false`),
+    db.select().from(merchantAliases).where(options.includeArchived ? undefined : sql`false`),
+    db.select().from(ingestionEvents).where(options.includeArchived ? undefined : sql`false`),
   ]);
 
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
   const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
+  const withMetadata = <T>(mapped: T, row: Record<string, unknown> | undefined): T => {
+    if (!options.includeArchived || !row) return mapped;
+    const keys = new Set(["deletedAt", "createdAt", "updatedAt", "idempotencyKey", "requestHash"]);
+    const metadata = Object.fromEntries(Object.entries(row)
+      .filter(([key, value]) => keys.has(key) && value !== null && value !== undefined)
+      .map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]));
+    return { ...mapped, ...metadata };
+  };
 
   return {
-    settings: mapSettings(settingsRows[0]),
-    accounts: accountRows.map(mapAccount),
-    categories: categoryRows.map(mapCategory),
-    tags: tagRows.map(mapTag),
-    creditCards: creditCardRows.map(mapCreditCard),
-    creditCardRecords: creditCardRecordRows.map(mapCreditCardRecord),
-    creditCardStatements: creditCardStatementRows.map(mapCreditCardStatement),
-    creditCardPayments: creditCardPaymentRows.map(mapCreditCardPayment),
-    creditCardPaymentAllocations: creditCardAllocationRows.map(
-      mapCreditCardPaymentAllocation,
-    ),
-    records: options.recordsOverride ?? recordRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
-    goals: goalRows.map((goal) => mapGoal(goal)),
+    ...(options.includeArchived ? {
+      merchants: merchantRows.map(row=>withMetadata({id:row.id,name:row.name,categoryId:row.categoryId,priority:row.priority,isActive:row.isActive},row)),
+      merchantAliases: merchantAliasRows.map(row=>withMetadata({id:row.id,merchantId:row.merchantId,alias:row.alias,normalizedAlias:row.normalizedAlias},row)),
+      ingestionEvents:ingestionRows.map(row=>({
+        id:row.id,idempotencyKey:row.idempotencyKey,source:row.source,status:row.status,action:optional(row.action),
+        fingerprint:optional(row.fingerprint),targetKey:optional(row.targetKey),merchantNormalized:optional(row.merchantNormalized),
+        amount:row.amount===null?undefined:asNumber(row.amount),currency:optional(row.currency) as WalletRecord["currency"]|undefined,
+        occurredAt:asIso(row.occurredAt),recordId:optional(row.recordId),creditCardRecordId:optional(row.creditCardRecordId),
+        duplicateOfId:optional(row.duplicateOfId),completedAt:asIso(row.completedAt),createdAt:asRequiredIso(row.createdAt),updatedAt:asRequiredIso(row.updatedAt),
+      })),
+    } : {}),
+    settings: withMetadata(mapSettings(settingsRows[0]), settingsRows[0]),
+    accounts: accountRows.map((row) => withMetadata(mapAccount(row), row)),
+    categories: categoryRows.map((row) => withMetadata(mapCategory(row), row)),
+    tags: tagRows.map((row) => withMetadata(mapTag(row), row)),
+    creditCards: creditCardRows.map((row) => withMetadata(mapCreditCard(row), row)),
+    creditCardRecords: creditCardRecordRows.map((row) => withMetadata(mapCreditCardRecord(row), row)),
+    creditCardStatements: creditCardStatementRows.map((row) => withMetadata(mapCreditCardStatement(row), row)),
+    creditCardPayments: creditCardPaymentRows.map((row) => withMetadata(mapCreditCardPayment(row), row)),
+    creditCardPaymentAllocations: creditCardAllocationRows.map((row) => withMetadata(mapCreditCardPaymentAllocation(row), row)),
+    records: options.recordsOverride ?? recordRows.map((record) => withMetadata(mapRecord(record, tagIdsByRecord, goalAssociationsByRecord), record)),
+    goals: goalRows.map((goal) => withMetadata(mapGoal(goal, goalTagRows.filter((link) => link.goalId === goal.id).map((link) => link.tagId)), goal)),
     goalReservations: deriveGoalReservations(goalReservationMovementRows),
-    goalReservationMovements: goalReservationMovementRows.map(mapGoalReservationMovement),
-    budgets: budgetRows.map(mapBudget),
-    exchangeRates: exchangeRateRows.map(mapExchangeRate),
-    investments: investmentRows.map(mapInvestment),
-    debts: debtRows.map(mapDebt),
-    recurringDebts: recurringDebtRows.map(mapRecurringDebt),
-    installmentPlans: installmentPlanRows.map(mapInstallmentPlan),
+    goalReservationMovements: goalReservationMovementRows.map((row) => withMetadata(mapGoalReservationMovement(row), row)),
+    budgets: budgetRows.map((row) => withMetadata(mapBudget(row), row)),
+    exchangeRates: exchangeRateRows.map((row) => withMetadata(mapExchangeRate(row), row)),
+    investments: investmentRows.map((row) => withMetadata(mapInvestment(row), row)),
+    debts: debtRows.map((row) => withMetadata(mapDebt(row), row)),
+    recurringDebts: recurringDebtRows.map((row) => withMetadata(mapRecurringDebt(row), row)),
+    installmentPlans: installmentPlanRows.map((row) => withMetadata(mapInstallmentPlan(row), row)),
   };
+}
+
+/** Complete, consistent financial history for backup; archived rows stay hidden in ordinary wallet reads. */
+export async function getWalletBackup(db: Db = createDb()): Promise<WalletDataset> {
+  return getWalletDataset(db, { includeArchived: true });
 }
 
 export async function bootstrapWallet(
@@ -708,21 +747,113 @@ export async function createCreditCardPayment(
   input: NewCreditCardPayment,
   db: Db = createDb(),
 ) {
-  const [row] = await db
-    .insert(creditCardPayments)
-    .values({
-      creditCardId,
-      amount: decimal(input.amount),
-      currency: input.currency,
-      amountInLimitCurrency: decimal(input.amountInLimitCurrency),
-      accountId: input.accountId ?? null,
-      accountAmount:
-        input.accountAmount === undefined ? null : decimal(input.accountAmount),
-      occurredAt: new Date(input.occurredAt),
-      note: input.note ?? null,
-    })
-    .returning();
-  return mapCreditCardPayment(row);
+  if (!input.statementId) throw validationError("Select a statement before making a card payment");
+  return payCreditCardStatement(creditCardId, input.statementId, input, db);
+}
+
+function lockCreditCard(db: Db, creditCardId: string) {
+  return db.update(creditCards).set({ updatedAt: new Date() }).where(eq(creditCards.id, creditCardId));
+}
+
+// All card mutations use the same lock and refresh balances in their atomic batch.
+function refreshCreditCardStatements(db: Db, creditCardId?: string) {
+  return db.execute(sql`
+    WITH balances AS (
+      SELECT s.id, s.due_at,
+        coalesce((SELECT sum(p.amount_in_limit_currency - coalesce((
+          SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r
+          WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL
+        ), 0)) FROM credit_card_records p
+          WHERE p.statement_id = s.id AND p.kind = 'purchase' AND p.deleted_at IS NULL), 0) AS total,
+        coalesce((SELECT sum(amount_in_limit_currency) FROM credit_card_payments WHERE statement_id = s.id), 0) AS paid
+      FROM credit_card_statements s ${creditCardId ? sql`WHERE s.credit_card_id = ${creditCardId}` : sql``}
+    ) UPDATE credit_card_statements s SET
+      status = CASE WHEN b.total - b.paid <= 0 THEN 'paid' WHEN b.due_at < now() THEN 'overdue'
+        WHEN b.paid > 0 THEN 'partial' ELSE 'pending' END,
+      paid_at = CASE WHEN b.total - b.paid <= 0 THEN coalesce(s.paid_at, now()) ELSE NULL END,
+      updated_at = now()
+    FROM balances b WHERE s.id = b.id
+  `);
+}
+
+function creditCardRecordGuard(db: Db, creditCardId: string, input: NewCreditCardRecord, recordId?: string) {
+  // A division by zero aborts the entire Neon batch, including any bank refund.
+  // Keep comparisons in PostgreSQL numeric and exclude the edited refund itself.
+  return db.execute(sql`
+    SELECT 1 / CASE WHEN (
+      ${input.kind} = 'purchase' AND ${input.originalRecordId ?? null}::uuid IS NULL
+      AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) = round(${decimal(input.amount)}::numeric * ${decimal(input.exchangeRateToLimitCurrency)}::numeric, 2)
+      AND NOT EXISTS (
+        SELECT 1 FROM credit_card_records p WHERE p.id = ${recordId ?? null}::uuid
+          AND (EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL)
+            OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id))
+          AND (p.account_id IS DISTINCT FROM ${input.accountId ?? null}::uuid
+            OR p.account_amount IS DISTINCT FROM ${input.accountAmount === undefined ? null : decimal(input.accountAmount)}::numeric
+            OR p.account_impact_at_creation IS DISTINCT FROM ${input.accountImpactAtCreation})
+      )
+      AND NOT EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = ${recordId ?? null}::uuid AND r.deleted_at IS NULL
+        AND (r.currency <> ${input.currency} OR r.exchange_rate_to_limit_currency <> ${decimal(input.exchangeRateToLimitCurrency)}::numeric))
+      AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) >= coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r
+        WHERE r.original_record_id = ${recordId ?? null}::uuid AND r.deleted_at IS NULL AND r.kind = 'refund'), 0)
+    ) OR (
+      ${input.kind} = 'refund' AND EXISTS (
+        SELECT 1 FROM credit_card_records p WHERE p.id = ${input.originalRecordId ?? null}::uuid
+          AND p.credit_card_id = ${creditCardId}::uuid AND p.kind = 'purchase' AND p.deleted_at IS NULL
+          AND p.currency = ${input.currency}
+          AND p.exchange_rate_to_limit_currency = ${decimal(input.exchangeRateToLimitCurrency)}::numeric
+          AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) = round(${decimal(input.amount)}::numeric * p.exchange_rate_to_limit_currency, 2)
+          AND ${decimal(input.amount)}::numeric <= p.amount - coalesce((SELECT sum(r.amount) FROM credit_card_records r
+            WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.id <> coalesce(${recordId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0)
+          AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) <= p.amount_in_limit_currency - coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r
+            WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.id <> coalesce(${recordId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0)
+      )
+    ) THEN 1 ELSE 0 END AS valid
+  `);
+}
+
+// Bank impact at creation is an unpaid reservation. Refund only that remaining
+// reservation; settled money stays on the card and can fund another purchase.
+// The last refund returns the remainder so proportional rounding loses no cent.
+function creditCardBankRefundAmount(originalId: string, amountInLimitCurrency: number, editedRefundId?: string) {
+  return sql`coalesce((
+    SELECT CASE WHEN round(${decimal(amountInLimitCurrency)}::numeric, 2) >= b.unpaid_limit THEN b.unpaid_bank
+      ELSE least(b.unpaid_bank, round(p.account_amount * round(${decimal(amountInLimitCurrency)}::numeric, 2)
+        / nullif(p.amount_in_limit_currency, 0), 2)) END
+    FROM credit_card_records p
+    CROSS JOIN LATERAL (
+      SELECT coalesce((SELECT sum(a.amount_in_limit_currency) FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id), 0) AS paid,
+        coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.id <> coalesce(${editedRefundId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0) AS refunded,
+        coalesce((SELECT sum(coalesce(w.account_amount, w.amount, r.account_amount, 0)) FROM credit_card_records r
+          LEFT JOIN records w ON w.id = r.wallet_record_id
+          WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.account_impact_at_creation AND r.id <> coalesce(${editedRefundId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0) AS refunded_bank
+    ) prior
+    CROSS JOIN LATERAL (
+      SELECT greatest(0, p.amount_in_limit_currency - prior.paid - prior.refunded) AS unpaid_limit,
+        greatest(0, p.account_amount - round(p.account_amount * least(p.amount_in_limit_currency, prior.paid)
+          / nullif(p.amount_in_limit_currency, 0), 2) - prior.refunded_bank) AS unpaid_bank
+    ) b
+    WHERE p.id = ${originalId}::uuid AND p.account_impact_at_creation AND p.account_id IS NOT NULL AND p.account_amount IS NOT NULL
+  ), 0)`;
+}
+
+function cardMutationError(error: unknown): never {
+  const failure = error as { code?: string; cause?: { code?: string } };
+  if (failure.code === "22012" || failure.cause?.code === "22012") {
+    throw validationError("Refund exceeds its purchase or movement currency/conversion is invalid");
+  }
+  throw error;
+}
+
+async function creditCardCycleQueries(db: Db, creditCardId: string, recordId: string, occurredAt: string) {
+  const [card] = await db.select().from(creditCards).where(eq(creditCards.id, creditCardId));
+  if (!card) throw validationError("Card not found");
+  const cycle = cardCycle(mapCreditCard(card), new Date(occurredAt));
+  const sameMovement = and(eq(creditCardRecords.id, recordId), eq(creditCardRecords.occurredAt, new Date(occurredAt)), isNull(creditCardRecords.deletedAt));
+  if (cycle.cycleEnd > new Date()) return [db.update(creditCardRecords).set({ statementId: null }).where(sameMovement)];
+  return [
+    db.insert(creditCardStatements).values({ creditCardId, ...cycle, closedAt: cycle.cycleEnd }).onConflictDoNothing(),
+    db.update(creditCardRecords).set({ statementId: sql`(SELECT id FROM credit_card_statements WHERE credit_card_id = ${creditCardId} AND cycle_start = ${cycle.cycleStart.toISOString()}::timestamptz AND cycle_end = ${cycle.cycleEnd.toISOString()}::timestamptz)` }).where(sameMovement),
+  ];
 }
 
 function dayInMonth(year: number, month: number, day: number) {
@@ -772,54 +903,17 @@ export async function ensureCreditCardStatements(db: Db = createDb()) {
         ),
       ),
   ]);
-  const now = new Date();
   for (const movement of movementRows) {
-    const card = cardRows.find((item) => item.id === movement.creditCardId);
-    if (!card) continue;
-    const cycle = cardCycle(mapCreditCard(card), movement.occurredAt);
-    if (cycle.cycleEnd > now) continue;
-    let [statement] = await db
-      .select()
-      .from(creditCardStatements)
-      .where(
-        and(
-          eq(creditCardStatements.creditCardId, card.id),
-          eq(creditCardStatements.cycleStart, cycle.cycleStart),
-          eq(creditCardStatements.cycleEnd, cycle.cycleEnd),
-        ),
-      )
-      .limit(1);
-    if (!statement) {
-      [statement] = await db
-        .insert(creditCardStatements)
-        .values({
-          creditCardId: card.id,
-          ...cycle,
-          closedAt: cycle.cycleEnd,
-        })
-        .returning();
-    }
-    await db
-      .update(creditCardRecords)
-      .set({ statementId: statement.id, updatedAt: now })
-      .where(
-        and(
-          eq(creditCardRecords.creditCardId, card.id),
-          isNull(creditCardRecords.statementId),
-          // Records are assigned individually so a future movement never leaks into this statement.
-          eq(creditCardRecords.id, movement.id),
-        ),
-      );
+    const card = cardRows.find(card => card.id === movement.creditCardId);
+    if (!card || cardCycle(mapCreditCard(card), movement.occurredAt).cycleEnd > new Date()) continue;
+    const queries = await creditCardCycleQueries(db, movement.creditCardId, movement.id, movement.occurredAt.toISOString());
+    await db.batch([lockCreditCard(db, movement.creditCardId), ...queries, refreshCreditCardStatements(db, movement.creditCardId)]);
   }
-  await db
-    .update(creditCardStatements)
-    .set({ status: "overdue", updatedAt: now })
-    .where(
-      and(
-        lt(creditCardStatements.dueAt, now),
-        eq(creditCardStatements.status, "pending"),
-      ),
-    );
+  // Status is derived from current balances, including retroactive wallet activity.
+  // Serialize this refresh with every card payment and refund.
+  for (const card of cardRows) await db.batch([
+    lockCreditCard(db, card.id), refreshCreditCardStatements(db, card.id),
+  ]);
 }
 
 export async function listCreditCardRecords(
@@ -846,6 +940,9 @@ export async function createCreditCardRecord(
 ) {
   let walletRecordId: string | null = null;
   let walletRefundValues: typeof records.$inferInsert | undefined;
+  let walletRefundAmount: ReturnType<typeof sql> | undefined;
+  let originalMovement: typeof creditCardRecords.$inferSelect | undefined;
+  let refundBankRateMissing = false;
   if (input.kind === "refund" && input.originalRecordId) {
     const [[original], previousRefunds] = await db.batch([
       db
@@ -870,6 +967,8 @@ export async function createCreditCardRecord(
         )),
     ]);
     if (!original) throw validationError("Original movement not found");
+    originalMovement = original;
+    walletRefundAmount = creditCardBankRefundAmount(original.id, input.amountInLimitCurrency);
     const alreadyRefunded = previousRefunds.reduce((sum, refund) => sum + asNumber(refund.amount), 0);
     if (
       input.amountInLimitCurrency >
@@ -883,6 +982,18 @@ export async function createCreditCardRecord(
         .from(accounts)
         .where(eq(accounts.id, original.accountId))
         .limit(1);
+      if (!account || original.accountAmount === null) throw validationError("Original account amount is required for a bank refund");
+      const [[walletOriginal], [walletSettings], rateRows] = await db.batch([
+        db.select().from(records).where(eq(records.id, original.walletRecordId)).limit(1),
+        db.select().from(settings).limit(1),
+        db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)),
+      ]);
+      const primaryCurrency = (walletSettings?.primaryCurrency ?? "UYU") as WalletSettings["primaryCurrency"];
+      const refundCurrency = account.currency as CreditCardRecord["currency"];
+      const primaryRate = refundCurrency === primaryCurrency ? 1
+        : walletOriginal?.currency === refundCurrency ? asNumber(walletOriginal.exchangeRateToPrimary)
+        : findExchangeRate(rateRows.map(mapExchangeRate), refundCurrency, primaryCurrency, input.occurredAt);
+      refundBankRateMissing = primaryRate === null;
       walletRecordId = randomUUID();
       walletRefundValues = {
         id: walletRecordId,
@@ -895,7 +1006,7 @@ export async function createCreditCardRecord(
         counterpartyName: input.counterpartyName ?? null,
         paymentType: "credit",
         paymentStatus: "cleared",
-        exchangeRateToPrimary: "1",
+        exchangeRateToPrimary: decimal(primaryRate ?? 0),
         amountInLimitCurrency: decimal(input.amountInLimitCurrency),
         exchangeRateToLimitCurrency: decimal(input.exchangeRateToLimitCurrency),
         occurredAt: new Date(input.occurredAt),
@@ -922,16 +1033,48 @@ export async function createCreditCardRecord(
     accountImpactAtCreation: input.accountImpactAtCreation,
     occurredAt: new Date(input.occurredAt),
   };
-  const row = walletRefundValues
-    ? (
-        await db.batch([
-          db.insert(records).values(walletRefundValues),
-          db.insert(creditCardRecords).values(movementValues).returning(),
-        ])
-      )[1][0]
-    : (
-        await db.insert(creditCardRecords).values(movementValues).returning()
-      )[0];
+  const cycleQueries = await creditCardCycleQueries(db, creditCardId, movementValues.id, input.occurredAt);
+  const walletRefundInsert = walletRefundValues ? db.execute(sql`
+    INSERT INTO records (id, type, amount, currency, account_id, credit_card_id, category_id, counterparty_name,
+      payment_type, payment_status, exchange_rate_to_primary, amount_in_limit_currency, exchange_rate_to_limit_currency, occurred_at, note)
+    SELECT ${walletRefundValues.id}::uuid, 'income', ${walletRefundAmount!}, ${walletRefundValues.currency},
+      ${walletRefundValues.accountId}::uuid, ${creditCardId}::uuid, ${walletRefundValues.categoryId}::uuid, ${walletRefundValues.counterpartyName},
+      'credit', 'cleared', ${walletRefundValues.exchangeRateToPrimary}::numeric,
+      ${walletRefundValues.amountInLimitCurrency}::numeric, ${walletRefundValues.exchangeRateToLimitCurrency}::numeric,
+      ${input.occurredAt}::timestamptz, ${walletRefundValues.note}
+    WHERE ${walletRefundAmount!} > 0
+  `) : undefined;
+  const authoritativeRefund = originalMovement && walletRefundAmount ? {
+    walletRecordId: walletRecordId ? sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${walletRecordId}::uuid ELSE NULL END` : null,
+    accountId: sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${originalMovement.accountId}::uuid ELSE NULL END`,
+    accountAmount: sql`CASE WHEN ${walletRefundAmount} > 0 THEN ${walletRefundAmount} ELSE NULL END`,
+    accountImpactAtCreation: sql`${walletRefundAmount} > 0`,
+  } : {};
+  try {
+    await db.batch([
+      lockCreditCard(db, creditCardId),
+      creditCardRecordGuard(db, creditCardId, input),
+      // Bank and FX metadata was read before entering the batch. Reject a stale
+      // source rather than crediting the previously observed bank account.
+      ...(originalMovement ? [db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
+        SELECT 1 FROM credit_card_records p WHERE p.id = ${originalMovement.id}::uuid
+          AND p.account_id IS NOT DISTINCT FROM ${originalMovement.accountId}::uuid
+          AND p.account_amount IS NOT DISTINCT FROM ${originalMovement.accountAmount}::numeric
+          AND p.account_impact_at_creation = ${originalMovement.accountImpactAtCreation}
+          AND p.wallet_record_id IS NOT DISTINCT FROM ${originalMovement.walletRecordId}::uuid
+      ) THEN 1 ELSE 0 END AS valid`)] : []),
+      ...(refundBankRateMissing ? [db.execute(sql`SELECT 1 / CASE WHEN ${walletRefundAmount!} <= 0 THEN 1 ELSE 0 END AS valid`)] : []),
+      ...(walletRefundInsert ? [walletRefundInsert] : []),
+      db.insert(creditCardRecords).values({ ...movementValues, ...authoritativeRefund }),
+      ...cycleQueries,
+      refreshCreditCardStatements(db, creditCardId),
+    ]);
+  } catch (error) {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if (refundBankRateMissing && (failure.code === "22012" || failure.cause?.code === "22012")) throw validationError("Exchange rate is required for the bank refund");
+    cardMutationError(error);
+  }
+  const [row] = await db.select().from(creditCardRecords).where(eq(creditCardRecords.id, movementValues.id));
   return mapCreditCardRecord(row);
 }
 
@@ -944,7 +1087,7 @@ export async function updateCreditCardRecord(
   const [current] = await db.select().from(creditCardRecords).where(and(
     eq(creditCardRecords.id, id),
     eq(creditCardRecords.creditCardId, creditCardId),
-    isNull(creditCardRecords.walletRecordId),
+    isNull(creditCardRecords.walletRecordId), isNull(creditCardRecords.deletedAt),
   )).limit(1);
   if (!current) return null;
   const mapped = mapCreditCardRecord(current);
@@ -971,17 +1114,23 @@ export async function updateCreditCardRecord(
   if (hasOwn(input, "accountAmount")) values.accountAmount = merged.accountAmount === undefined ? null : decimal(merged.accountAmount);
   if (hasOwn(input, "accountImpactAtCreation")) values.accountImpactAtCreation = merged.accountImpactAtCreation;
   if (hasOwn(input, "occurredAt")) values.occurredAt = new Date(merged.occurredAt);
-  const [row] = await db
-    .update(creditCardRecords)
-    .set(values)
-    .where(
-      and(
-        eq(creditCardRecords.id, id),
-        eq(creditCardRecords.creditCardId, creditCardId),
-        isNull(creditCardRecords.walletRecordId),
-      ),
-    )
-    .returning();
+  if (merged.kind !== mapped.kind) throw validationError("Movement kind cannot be changed");
+  const cycleQueries = await creditCardCycleQueries(db, creditCardId, id, merged.occurredAt);
+  const refundBankAmount = merged.kind === "refund" && merged.originalRecordId
+    ? creditCardBankRefundAmount(merged.originalRecordId, merged.amountInLimitCurrency, id) : undefined;
+  const authoritativeRefund = refundBankAmount ? {
+    accountId: sql`CASE WHEN ${refundBankAmount} > 0 THEN (SELECT account_id FROM credit_card_records WHERE id = ${merged.originalRecordId!}::uuid) ELSE NULL END`,
+    accountAmount: sql`CASE WHEN ${refundBankAmount} > 0 THEN ${refundBankAmount} ELSE NULL END`,
+    accountImpactAtCreation: sql`${refundBankAmount} > 0`,
+  } : {};
+  try {
+    await db.batch([
+      lockCreditCard(db, creditCardId), creditCardRecordGuard(db, creditCardId, merged, id),
+      db.update(creditCardRecords).set({ ...values, ...authoritativeRefund }).where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId))),
+      ...cycleQueries, refreshCreditCardStatements(db, creditCardId),
+    ]);
+  } catch (error) { cardMutationError(error); }
+  const [row] = await db.select().from(creditCardRecords).where(eq(creditCardRecords.id, id));
   return row ? mapCreditCardRecord(row) : null;
 }
 
@@ -990,18 +1139,25 @@ export async function deleteCreditCardRecord(
   id: string,
   db: Db = createDb(),
 ) {
-  const [row] = await db
-    .update(creditCardRecords)
-    .set({ deletedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(creditCardRecords.id, id),
-        eq(creditCardRecords.creditCardId, creditCardId),
-        isNull(creditCardRecords.walletRecordId),
-      ),
-    )
-    .returning();
-  return Boolean(row);
+  try {
+    const [, , deleted] = await db.batch([
+      lockCreditCard(db, creditCardId),
+      db.execute(sql`SELECT 1 / CASE WHEN NOT EXISTS (
+        SELECT 1 FROM credit_card_records WHERE original_record_id = ${id}::uuid AND deleted_at IS NULL
+      ) AND NOT EXISTS (
+        SELECT 1 FROM credit_card_payment_allocations WHERE credit_card_record_id = ${id}::uuid
+      ) THEN 1 ELSE 0 END AS valid`),
+      db.update(creditCardRecords).set({ deletedAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(creditCardRecords.id, id), eq(creditCardRecords.creditCardId, creditCardId), isNull(creditCardRecords.walletRecordId), isNull(creditCardRecords.deletedAt)))
+        .returning({ id: creditCardRecords.id }),
+      refreshCreditCardStatements(db, creditCardId),
+    ]);
+    return deleted.length > 0;
+  } catch (error) {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if (failure.code === "22012" || failure.cause?.code === "22012") throw conflictError("Movement has linked refunds or payments");
+    throw error;
+  }
 }
 
 export async function listCreditCardStatements(
@@ -1023,136 +1179,84 @@ export async function payCreditCardStatement(
   input: NewCreditCardPayment,
   db: Db = createDb(),
 ) {
-  const purchases = await db
-    .select()
-    .from(creditCardRecords)
-    .where(
-      and(
-        eq(creditCardRecords.creditCardId, creditCardId),
-        eq(creditCardRecords.statementId, statementId),
-        eq(creditCardRecords.kind, "purchase"),
-        isNull(creditCardRecords.deletedAt),
-      ),
-    )
-    .orderBy(creditCardRecords.occurredAt);
-  const existing = await db
-    .select({
-      recordId: creditCardPaymentAllocations.creditCardRecordId,
-      amount: creditCardPaymentAllocations.amountInLimitCurrency,
-    })
-    .from(creditCardPaymentAllocations)
-    .innerJoin(
-      creditCardPayments,
-      eq(creditCardPayments.id, creditCardPaymentAllocations.paymentId),
-    )
-    .where(eq(creditCardPayments.statementId, statementId));
-  const paidByRecord = new Map<string, number>();
-  existing.forEach((item) =>
-    paidByRecord.set(
-      item.recordId,
-      (paidByRecord.get(item.recordId) ?? 0) + asNumber(item.amount),
-    ),
-  );
-  const refunds = await db
-    .select()
-    .from(creditCardRecords)
-    .where(
-      and(
-        eq(creditCardRecords.creditCardId, creditCardId),
-        eq(creditCardRecords.kind, "refund"),
-        isNull(creditCardRecords.deletedAt),
-      ),
-    );
-  const refundedByRecord = new Map<string, number>();
-  refunds.forEach((item) => {
-    if (item.originalRecordId)
-      refundedByRecord.set(
-        item.originalRecordId,
-        (refundedByRecord.get(item.originalRecordId) ?? 0) +
-          asNumber(item.amountInLimitCurrency),
-      );
-  });
-  const availableFor = (row: (typeof purchases)[number]) =>
-    Math.max(
-      0,
-      asNumber(row.amountInLimitCurrency) -
-        (paidByRecord.get(row.id) ?? 0) -
-        (refundedByRecord.get(row.id) ?? 0),
-    );
-  const outstanding = purchases.reduce(
-    (sum, row) => sum + availableFor(row),
-    0,
-  );
-  if (input.amountInLimitCurrency > outstanding + 0.005)
-    throw validationError("Payment exceeds statement balance");
-  let remaining = input.amountInLimitCurrency;
-  const drafts: Array<{
-    purchase: (typeof purchases)[number];
-    allocated: number;
-  }> = [];
-  for (const purchase of purchases) {
-    const allocated = Math.min(availableFor(purchase), remaining);
-    if (allocated > 0) drafts.push({ purchase, allocated });
-    remaining -= allocated;
-    if (remaining <= 0.005) break;
-  }
-  const unaccountedLimitAmount = drafts
-    .filter(({ purchase }) => !purchase.accountImpactAtCreation)
-    .reduce((sum, item) => sum + item.allocated, 0);
-  const accountRatio =
-    input.amountInLimitCurrency > 0
-      ? unaccountedLimitAmount / input.amountInLimitCurrency
-      : 0;
-  const effectiveAccountAmount =
-    input.accountId && input.accountAmount !== undefined && accountRatio > 0
-      ? input.accountAmount * accountRatio
-      : undefined;
   const paymentId = randomUUID();
-  const paymentValues = {
-    id: paymentId,
-    creditCardId,
-    statementId,
-    amount: decimal(input.amount),
-    currency: input.currency,
-    amountInLimitCurrency: decimal(input.amountInLimitCurrency),
-    accountId: effectiveAccountAmount === undefined ? null : input.accountId,
-    accountAmount:
-      effectiveAccountAmount === undefined
-        ? null
-        : decimal(effectiveAccountAmount),
-    occurredAt: new Date(input.occurredAt),
-    note: input.note ?? null,
-  };
-  const allocations = drafts.map(({ purchase, allocated }) => ({
-    paymentId,
-    creditCardRecordId: purchase.id,
-    amount: decimal(allocated / asNumber(purchase.exchangeRateToLimitCurrency)),
-    amountInLimitCurrency: decimal(allocated),
-  }));
-  const nextStatus =
-    input.amountInLimitCurrency >= outstanding - 0.005 ? "paid" : "partial";
-  const statementUpdate = db
-    .update(creditCardStatements)
-    .set({
-      status: nextStatus,
-      paidAt: nextStatus === "paid" ? new Date(input.occurredAt) : null,
-      updatedAt: new Date(),
-    })
-    .where(eq(creditCardStatements.id, statementId));
-  const payment = allocations.length
-    ? (
-        await db.batch([
-          db.insert(creditCardPayments).values(paymentValues).returning(),
-          db.insert(creditCardPaymentAllocations).values(allocations),
-          statementUpdate,
-        ])
-      )[0][0]
-    : (
-        await db.batch([
-          db.insert(creditCardPayments).values(paymentValues).returning(),
-          statementUpdate,
-        ])
-      )[0][0];
+  const idempotencyKey = input.idempotencyKey ?? randomUUID();
+  const requestHash = createHash("sha256").update(JSON.stringify({
+    creditCardId, statementId, amount: input.amount, currency: input.currency,
+    amountInLimitCurrency: input.amountInLimitCurrency, accountId: input.accountId ?? null,
+    accountAmount: input.accountAmount ?? null, occurredAt: input.occurredAt, note: input.note ?? null,
+  })).digest("hex");
+  // The first query acquires the card lock. The following query gets a fresh
+  // READ COMMITTED snapshot after any concurrent payment has committed.
+  let result;
+  try {
+    const batch = await db.batch([
+      lockCreditCard(db, creditCardId),
+      db.execute(sql`SELECT 1 / CASE WHEN NOT EXISTS (
+        SELECT 1 FROM credit_card_payments WHERE idempotency_key = ${idempotencyKey} AND request_hash IS DISTINCT FROM ${requestHash}
+      ) THEN 1 ELSE 0 END AS valid`),
+      db.execute(sql`
+      WITH net_purchases AS (
+        SELECT p.*, greatest(0, p.amount_in_limit_currency - coalesce((
+          SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r
+          WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL
+        ), 0)) AS net
+        FROM credit_card_records p
+        WHERE p.credit_card_id = ${creditCardId} AND p.statement_id = ${statementId}
+          AND p.kind = 'purchase' AND p.deleted_at IS NULL
+      ), totals AS (
+        SELECT coalesce((SELECT sum(net) FROM net_purchases), 0) AS total,
+          coalesce((SELECT sum(amount_in_limit_currency) FROM credit_card_payments
+            WHERE credit_card_id = ${creditCardId} AND statement_id = ${statementId}), 0) AS paid
+      ), ordered AS (
+        SELECT p.*, coalesce(sum(net) OVER (ORDER BY occurred_at, id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS prior
+        FROM net_purchases p
+      ), drafts AS (
+        SELECT p.*, least(net, greatest(0, t.paid + round(${decimal(input.amountInLimitCurrency)}::numeric, 2) - prior))
+          - least(net, greatest(0, t.paid - prior)) AS allocated
+        FROM ordered p CROSS JOIN totals t
+      ), payment AS (
+        INSERT INTO credit_card_payments
+          (id, credit_card_id, statement_id, amount, currency, amount_in_limit_currency, account_id, account_amount, occurred_at, note, idempotency_key, request_hash)
+        SELECT ${paymentId}::uuid, ${creditCardId}::uuid, s.id,
+          ${decimal(input.amount)}::numeric, ${input.currency}, round(${decimal(input.amountInLimitCurrency)}::numeric, 2),
+          CASE WHEN ${input.accountId ?? null}::uuid IS NOT NULL AND coalesce((SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation), 0) > 0
+            THEN ${input.accountId ?? null}::uuid END,
+          CASE WHEN ${input.accountId ?? null}::uuid IS NOT NULL AND coalesce((SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation), 0) > 0
+            THEN ${input.accountAmount === undefined ? null : decimal(input.accountAmount)}::numeric
+              * (SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation)
+              / round(${decimal(input.amountInLimitCurrency)}::numeric, 2) END,
+          ${input.occurredAt}::timestamptz, ${input.note ?? null}, ${idempotencyKey}, ${requestHash}
+        FROM credit_card_statements s CROSS JOIN totals t
+        WHERE s.id = ${statementId}::uuid AND s.credit_card_id = ${creditCardId}::uuid
+          AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) > 0
+          AND round(${decimal(input.amountInLimitCurrency)}::numeric, 2) <= greatest(0, t.total - t.paid)
+          AND NOT EXISTS (SELECT 1 FROM credit_card_payments WHERE idempotency_key = ${idempotencyKey})
+        RETURNING id, statement_id
+      ), allocations AS (
+        INSERT INTO credit_card_payment_allocations
+          (payment_id, credit_card_record_id, amount, amount_in_limit_currency)
+        SELECT payment.id, d.id, d.allocated / d.exchange_rate_to_limit_currency, d.allocated
+        FROM drafts d CROSS JOIN payment WHERE d.allocated > 0 RETURNING id
+      ), status_update AS (
+        UPDATE credit_card_statements s SET
+          status = CASE WHEN t.total - t.paid - round(${decimal(input.amountInLimitCurrency)}::numeric, 2) <= 0 THEN 'paid'
+            WHEN s.due_at < now() THEN 'overdue' ELSE 'partial' END,
+          paid_at = CASE WHEN t.total - t.paid - round(${decimal(input.amountInLimitCurrency)}::numeric, 2) <= 0 THEN ${input.occurredAt}::timestamptz ELSE NULL END,
+          updated_at = now()
+        FROM totals t, payment WHERE s.id = payment.statement_id RETURNING s.id
+      ) SELECT id FROM payment UNION ALL
+        SELECT id FROM credit_card_payments WHERE idempotency_key = ${idempotencyKey} AND request_hash = ${requestHash}
+    `),
+    ]);
+    result = batch[2];
+  } catch (error) {
+    const failure = error as { code?: string; cause?: { code?: string } };
+    if (["22012", "23505"].includes(failure.code ?? failure.cause?.code ?? "")) throw conflictError("Payment key was already used with different details");
+    throw error;
+  }
+  if (!result.rows.length) throw validationError("Payment exceeds statement balance or statement not found");
+  const [payment] = await db.select().from(creditCardPayments).where(eq(creditCardPayments.id, String(result.rows[0].id)));
   return mapCreditCardPayment(payment);
 }
 
@@ -1172,41 +1276,12 @@ export async function deleteCreditCardPayment(
     )
     .limit(1);
   if (!payment) return false;
-  if (payment.statementId) {
-    const [purchaseRows, refundRows, remainingAllocationRows, [statement]] = await db.batch([
-      db.select({ id: creditCardRecords.id, amount: creditCardRecords.amountInLimitCurrency })
-        .from(creditCardRecords)
-        .where(and(eq(creditCardRecords.statementId, payment.statementId), eq(creditCardRecords.kind, "purchase"), isNull(creditCardRecords.deletedAt))),
-      db.select({ originalRecordId: creditCardRecords.originalRecordId, amount: creditCardRecords.amountInLimitCurrency })
-        .from(creditCardRecords)
-        .where(and(eq(creditCardRecords.creditCardId, creditCardId), eq(creditCardRecords.kind, "refund"), isNull(creditCardRecords.deletedAt))),
-      db.select({ amount: creditCardPaymentAllocations.amountInLimitCurrency })
-        .from(creditCardPaymentAllocations)
-        .innerJoin(creditCardPayments, eq(creditCardPayments.id, creditCardPaymentAllocations.paymentId))
-        .where(and(eq(creditCardPayments.statementId, payment.statementId), ne(creditCardPayments.id, paymentId))),
-      db.select().from(creditCardStatements).where(eq(creditCardStatements.id, payment.statementId)).limit(1),
-    ]);
-    const purchaseIds = new Set(purchaseRows.map((row) => row.id));
-    const total = purchaseRows.reduce((sum, row) => sum + asNumber(row.amount), 0) - refundRows
-      .filter((row) => row.originalRecordId && purchaseIds.has(row.originalRecordId))
-      .reduce((sum, row) => sum + asNumber(row.amount), 0);
-    const paid = remainingAllocationRows.reduce((sum, row) => sum + asNumber(row.amount), 0);
-    const status = creditCardStatementStatusAfterPaymentChange(
-      total,
-      paid,
-      statement?.dueAt ?? new Date(),
-    );
-    await db.batch([
-      db.delete(creditCardPayments).where(eq(creditCardPayments.id, paymentId)),
-      db
-        .update(creditCardStatements)
-        .set({ status, paidAt: status === "paid" ? statement?.paidAt ?? new Date() : null, updatedAt: new Date() })
-        .where(eq(creditCardStatements.id, payment.statementId)),
-    ]);
-  } else
-    await db
-      .delete(creditCardPayments)
-      .where(eq(creditCardPayments.id, paymentId));
+  const [, deleted] = await db.batch([
+    lockCreditCard(db, creditCardId),
+    db.delete(creditCardPayments).where(and(eq(creditCardPayments.id, paymentId), eq(creditCardPayments.creditCardId, creditCardId))).returning({ id: creditCardPayments.id }),
+    refreshCreditCardStatements(db, creditCardId),
+  ]);
+  if (!deleted.length) return false;
   return true;
 }
 
@@ -1441,7 +1516,7 @@ export async function listRecords(
   if (filters.type && filters.type !== "all") {
     clauses.push(eq(records.type, filters.type as WalletRecord["type"]));
   }
-  if (filters.accountId) clauses.push(eq(records.accountId, filters.accountId));
+  if (filters.accountId) clauses.push(or(eq(records.accountId, filters.accountId),eq(records.destinationAccountId,filters.accountId))!);
   if (filters.creditCardId)
     clauses.push(eq(records.creditCardId, filters.creditCardId));
   if (filters.categoryId)
@@ -1520,7 +1595,7 @@ function recordGoalValues(recordId: string, associations: RecordGoalAssociation[
   }));
 }
 
-async function resolveGoalAssociations(input: NewRecord, db: Db) {
+async function resolveGoalAssociations(input: NewRecord, db: Db, preservedGoalIds = new Set<string>(), captureAutomatic = true) {
   const associations = new Map(
     requestedGoalAssociations(input).map((association) => [association.goalId, association]),
   );
@@ -1531,11 +1606,11 @@ async function resolveGoalAssociations(input: NewRecord, db: Db) {
   }
   if (associations.size) {
     const selectedGoals = await db.select().from(goals).where(inArray(goals.id, [...associations.keys()]));
-    if (selectedGoals.length !== associations.size || selectedGoals.some((goal) => goal.deletedAt || goal.status !== "active")) {
+    if (selectedGoals.length !== associations.size || selectedGoals.some((goal) => !preservedGoalIds.has(goal.id) && (goal.deletedAt || goal.status !== "active"))) {
       throw validationError("New records can only be associated with active goals");
     }
   }
-  if (input.type === "expense") {
+  if (captureAutomatic && input.type === "expense") {
     const date = input.occurredAt.slice(0, 10);
     const automaticGoals = await db.select().from(goals).where(and(
       isNull(goals.deletedAt),
@@ -1562,77 +1637,181 @@ async function buildRecordReservationMovements(
   associations: RecordGoalAssociation[],
   db: Db,
 ) {
-  if (input.paymentStatus === "cancelled" || input.type === "transfer" || associations.length === 0) return [];
+  if (!isFinancialRecord(input) || input.type === "transfer" || associations.length === 0) return [];
   const goalRows = await db.select().from(goals).where(inArray(goals.id, associations.map((item) => item.goalId)));
   const accountRows = await db.select().from(accounts);
-  const movementRows = await db.select().from(goalReservationMovements).where(
-    inArray(goalReservationMovements.goalId, associations.map((item) => item.goalId)),
-  );
-  const available = new Map<string, number>();
-  for (const movement of movementRows) {
-    if (movement.recordId === recordId) continue;
-    const key = `${movement.goalId}:${movement.accountId}`;
-    const direction = movement.type === "reserve" || movement.type === "restore" ? 1 : -1;
-    available.set(key, (available.get(key) ?? 0) + direction * asNumber(movement.amount));
-  }
-  const values: Array<typeof goalReservationMovements.$inferInsert> = [];
+  const rateRows = await db.select().from(exchangeRates).where(sql`${exchangeRates.date} <= ${new Date(input.occurredAt).toISOString()}`).orderBy(desc(exchangeRates.date));
+  const values: ReservationMovementWrite[] = [];
   for (const association of associations) {
+    if ((input.type === "expense" && !association.useReserved) || (input.type === "income" && !association.reserveIncome)) continue;
     const goal = goalRows.find((item) => item.id === association.goalId);
-    if (!goal) continue;
+    if (!goal || goal.deletedAt) continue;
     const accountId = input.accountId ?? goal.autoReservationAccountId;
     const account = accountRows.find((item) => item.id === accountId);
     if (!accountId || !account) continue;
-    const fullRecordAmount = input.accountId === accountId
-      ? (input.accountAmount ?? input.amount)
-      : input.currency === account.currency
-        ? input.amount
-        : input.amount * input.exchangeRateToPrimary;
-    const allocationRatio = association.allocatedAmount === undefined
-      ? 1
-      : Math.min(1, association.allocatedAmount / input.amount);
-    const recordAmount = fullRecordAmount * allocationRatio;
+    const rate = findExchangeRate(rateRows.map(mapExchangeRate), input.currency, account.currency as Account["currency"], input.occurredAt);
+    const fullRecordAmount = input.accountId === accountId && input.accountAmount !== undefined
+      ? sql`${decimal(input.accountAmount)}::numeric`
+      : rate !== null ? sql`(${decimal(input.amount)}::numeric * ${decimal(rate)}::numeric)` : undefined;
+    if (fullRecordAmount === undefined) throw validationError("A dated exchange rate is required for the reservation account currency");
+    const recordAmount = association.allocatedAmount === undefined
+      ? fullRecordAmount
+      : sql`(${fullRecordAmount} * ${decimal(association.allocatedAmount)}::numeric / ${decimal(input.amount)}::numeric)`;
     if (input.type === "expense" && association.useReserved) {
-      const key = `${association.goalId}:${accountId}`;
-      const amount = Math.min(Math.max(0, available.get(key) ?? 0), recordAmount);
-      if (amount > 0) {
-        values.push({ goalId: association.goalId, accountId, type: "consume", amount: decimal(amount), currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:consume`, note: "Consumo de reserva por Record" });
-        available.set(key, (available.get(key) ?? 0) - amount);
-      }
+      values.push({ goalId: association.goalId, accountId, type: "consume", amount: recordAmount, currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:consume`, note: "Consumo de reserva por Record" });
     }
     if (input.type === "income" && association.reserveIncome) {
-      values.push({ goalId: association.goalId, accountId, type: "reserve", amount: decimal(recordAmount), currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:income-reserve`, note: "Ingreso vuelto a reservar" });
+      values.push({ goalId: association.goalId, accountId, type: "reserve", amount: recordAmount, currency: account.currency, recordId, idempotencyKey: `${recordId}:${association.goalId}:income-reserve`, note: "Ingreso vuelto a reservar" });
     }
   }
   return values;
+}
+
+// Neon HTTP has no interactive transactions. Acquire these locks first in the
+// same batch as every ledger change; subsequent statements get a fresh snapshot.
+export function goalReservationLockQueries(goalIds: string[], db: Db) {
+  return [...new Set(goalIds)].sort().map((id) => db.execute(sql`select id from goals where id = ${id}::uuid for update`));
+}
+
+function recordCardLockQueries(cardIds: Array<string | undefined | null>, db: Db) {
+  return [...new Set(cardIds.filter((id): id is string => Boolean(id)))].sort().map((id) => db.execute(sql`select id from credit_cards where id = ${id}::uuid for update`));
+}
+
+function recordCardDependencyGuard(db: Db, walletRecordId: string) {
+  return db.execute(sql`SELECT 1 / CASE WHEN NOT EXISTS (
+    SELECT 1 FROM credit_card_records p WHERE p.wallet_record_id = ${walletRecordId}::uuid AND p.kind = 'purchase'
+      AND (EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = p.id AND r.deleted_at IS NULL)
+        OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id))
+  ) THEN 1 ELSE 0 END AS valid`);
+}
+
+// Reads used to prepare a Neon HTTP batch happen before its row locks. Check the
+// observed financial state after locking so a concurrent reassignment cannot
+// bypass card locks or overwrite a different purchase with an outdated payload.
+function recordFinancialSnapshotGuard(
+  db: Db,
+  observed: typeof records.$inferSelect,
+  linked?: typeof creditCardRecords.$inferSelect,
+) {
+  return db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
+    SELECT 1 FROM records r WHERE r.id = ${observed.id}::uuid
+      AND date_trunc('milliseconds', r.updated_at) = ${observed.updatedAt.toISOString()}::timestamptz
+      AND r.deleted_at IS NOT DISTINCT FROM ${observed.deletedAt?.toISOString() ?? null}::timestamptz
+      AND r.type = ${observed.type} AND r.payment_status = ${observed.paymentStatus}
+      AND r.amount = ${observed.amount}::numeric AND r.currency = ${observed.currency}
+      AND r.account_id IS NOT DISTINCT FROM ${observed.accountId}::uuid
+      AND r.account_amount IS NOT DISTINCT FROM ${observed.accountAmount}::numeric
+      AND r.credit_card_id IS NOT DISTINCT FROM ${observed.creditCardId}::uuid
+      AND r.amount_in_limit_currency IS NOT DISTINCT FROM ${observed.amountInLimitCurrency}::numeric
+      AND r.exchange_rate_to_limit_currency IS NOT DISTINCT FROM ${observed.exchangeRateToLimitCurrency}::numeric
+  ) AND ${linked ? sql`EXISTS (
+    SELECT 1 FROM credit_card_records p WHERE p.id = ${linked.id}::uuid AND p.wallet_record_id = ${observed.id}::uuid
+      AND p.credit_card_id = ${linked.creditCardId}::uuid AND p.kind = ${linked.kind}
+      AND p.statement_id IS NOT DISTINCT FROM ${linked.statementId}::uuid
+      AND p.amount = ${linked.amount}::numeric AND p.currency = ${linked.currency}
+      AND p.amount_in_limit_currency = ${linked.amountInLimitCurrency}::numeric
+      AND p.exchange_rate_to_limit_currency = ${linked.exchangeRateToLimitCurrency}::numeric
+      AND p.account_id IS NOT DISTINCT FROM ${linked.accountId}::uuid
+      AND p.account_amount IS NOT DISTINCT FROM ${linked.accountAmount}::numeric
+      AND p.account_impact_at_creation = ${linked.accountImpactAtCreation}
+      AND p.deleted_at IS NOT DISTINCT FROM ${linked.deletedAt?.toISOString() ?? null}::timestamptz
+  )` : sql`NOT EXISTS (SELECT 1 FROM credit_card_records p WHERE p.wallet_record_id = ${observed.id}::uuid)`}
+  THEN 1 ELSE 0 END AS valid`);
+}
+
+function recordCardMutationError(error: unknown): never {
+  const failure = error as { code?: string; cause?: { code?: string } };
+  if (failure.code === "22012" || failure.cause?.code === "22012") throw conflictError("Record cannot be changed because its financial history would be invalid or changed concurrently");
+  throw error;
+}
+
+function reservationBalanceSql(goalId: string, accountId: string, currency: string) {
+  return sql`coalesce((select sum(case when type in ('reserve', 'restore') then amount else -amount end)
+    from goal_reservation_movements where goal_id = ${goalId}::uuid and account_id = ${accountId}::uuid and currency = ${currency}), 0)`;
+}
+
+function recordReservationWriteQueries(values: ReservationMovementWrite[], db: Db) {
+  return values.map((movement) => {
+    const balance = reservationBalanceSql(movement.goalId, movement.accountId, movement.currency);
+    const amount = movement.type === "consume"
+      ? sql`least(${movement.amount}::numeric, greatest(0, ${balance}))`
+      : sql`${movement.amount}::numeric`;
+    return db.execute(sql`insert into goal_reservation_movements
+      (goal_id, account_id, type, amount, currency, record_id, idempotency_key, note)
+      select ${movement.goalId}::uuid, ${movement.accountId}::uuid, ${movement.type}, ${amount},
+        ${movement.currency}, ${movement.recordId ?? null}::uuid, ${movement.idempotencyKey ?? null}, ${movement.note ?? null}
+      where ${amount} > 0 and exists (select 1 from goals where id = ${movement.goalId}::uuid and deleted_at is null)`);
+  });
+}
+
+export async function prepareRecordGoalWrites(recordId: string, input: NewRecord, db: Db) {
+  const associations = await resolveGoalAssociations(input, db);
+  const movements = await buildRecordReservationMovements(recordId, input, associations, db);
+  return {
+    associations,
+    lockQueries: goalReservationLockQueries(associations.map((item) => item.goalId), db),
+    queries: [
+      ...(associations.length ? [db.insert(recordGoals).values(recordGoalValues(recordId, associations))] : []),
+      ...recordReservationWriteQueries(movements, db),
+    ],
+  };
 }
 
 async function buildRecordMovementCompensations(recordId: string, db: Db) {
   const rows = await db.select().from(goalReservationMovements).where(
     eq(goalReservationMovements.recordId, recordId),
   );
-  const net = new Map<string, { goalId: string; accountId: string; currency: string; amount: number }>();
+  const net = new Map<string, { goalId: string; accountId: string; currency: string }>();
   for (const row of rows) {
     const key = `${row.goalId}:${row.accountId}:${row.currency}`;
-    const current = net.get(key) ?? { goalId: row.goalId, accountId: row.accountId, currency: row.currency, amount: 0 };
-    const direction = row.type === "reserve" || row.type === "restore" ? 1 : -1;
-    current.amount += direction * asNumber(row.amount);
-    net.set(key, current);
+    net.set(key, { goalId: row.goalId, accountId: row.accountId, currency: row.currency });
   }
-  return [...net.values()].filter((item) => Math.abs(item.amount) > 0.005).map((item) => ({
-    goalId: item.goalId,
-    accountId: item.accountId,
-    type: item.amount > 0 ? "release" : "restore",
-    amount: decimal(Math.abs(item.amount)),
-    currency: item.currency,
-    recordId,
-    idempotencyKey: `${recordId}:reconcile:${randomUUID()}`,
-    note: "Reconciliación de Record",
-  } satisfies typeof goalReservationMovements.$inferInsert));
+  return {
+    goalIds: [...net.values()].map((item) => item.goalId),
+    queries: [...net.values()].map((item) => {
+      const balance = reservationBalanceSql(item.goalId, item.accountId, item.currency);
+      return db.execute(sql`insert into goal_reservation_movements
+        (goal_id, account_id, type, amount, currency, record_id, idempotency_key, note)
+        select ${item.goalId}::uuid, ${item.accountId}::uuid,
+          case when net > 0 then 'release' else 'restore' end,
+          case when net > 0 and net > ${balance} then abs(net) / 0::numeric else abs(net) end,
+          ${item.currency}, ${recordId}::uuid, ${`${recordId}:reconcile:${randomUUID()}`}, 'Reconciliación de Record'
+        from (select coalesce(sum(case when type in ('reserve','restore') then amount else -amount end),0) as net
+          from goal_reservation_movements where record_id = ${recordId}::uuid and goal_id = ${item.goalId}::uuid
+            and account_id = ${item.accountId}::uuid and currency = ${item.currency}) ledger
+        where net <> 0 and exists (select 1 from goals where id = ${item.goalId}::uuid and deleted_at is null)`);
+    }),
+  };
+}
+
+function assertGenericCardRecord(input: NewRecord) {
+  if (input.creditCardId && input.type !== "expense") throw validationError("Use the Cards refund action for a credit-card refund; transfers cannot use a card.");
+}
+
+function genericCardPurchaseGuard(input: NewRecord, db: Db) {
+  return creditCardRecordGuard(db, input.creditCardId!, {
+    kind: "purchase", amount: input.amount, currency: input.currency,
+    amountInLimitCurrency: input.amountInLimitCurrency ?? input.amount,
+    exchangeRateToLimitCurrency: input.exchangeRateToLimitCurrency ?? 1,
+    categoryId: input.categoryId!, accountId: input.accountId,
+    accountAmount: input.accountId ? input.accountAmount ?? input.amount : undefined,
+    accountImpactAtCreation: Boolean(input.accountId), occurredAt: input.occurredAt,
+  });
+}
+
+function assertLinkedRefundMetadata(current: WalletRecord, merged: NewRecord) {
+  for (const key of ["type", "amount", "currency", "accountId", "accountAmount", "creditCardId", "destinationAccountId", "destinationAmount",
+    "paymentType", "paymentStatus", "exchangeRateToPrimary", "amountInLimitCurrency", "exchangeRateToLimitCurrency", "occurredAt", "debtId"] as const) {
+    if (current[key] !== merged[key]) throw validationError("Bank-linked card refund financial history cannot be changed here. Use the Cards refund workflow.");
+  }
 }
 
 export async function createRecord(input: NewRecord, db: Db = createDb()) {
+  assertGenericCardRecord(input);
+  if (input.debtId) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
   const recordId = randomUUID();
-  const associations = await resolveGoalAssociations(input, db);
+  const goalWrites = await prepareRecordGoalWrites(recordId, input, db);
+  const { associations } = goalWrites;
   const recordValues = {
     id: recordId,
     type: input.type,
@@ -1643,6 +1822,7 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
       input.accountAmount === undefined ? null : decimal(input.accountAmount),
     creditCardId: input.creditCardId ?? null,
     destinationAccountId: input.destinationAccountId ?? null,
+    destinationAmount: input.destinationAmount === undefined ? null : decimal(input.destinationAmount),
     categoryId: input.categoryId ?? null,
     counterpartyName: input.counterpartyName ?? null,
     paymentType: input.paymentType,
@@ -1672,27 +1852,35 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
     note: input.note ?? null, accountId: input.accountId ?? null,
     accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
     accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
+    deletedAt: input.paymentStatus === "cancelled" || input.paymentStatus === "needs_review" ? new Date() : null,
   }));
   if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId, tagId }))));
-  if (associations.length) queries.push(db.insert(recordGoals).values(recordGoalValues(recordId, associations)));
-  const movementValues = await buildRecordReservationMovements(recordId, input, associations, db);
-  if (movementValues.length) queries.push(db.insert(goalReservationMovements).values(movementValues));
-  const [rows] = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  queries.push(...goalWrites.queries);
+  const locks = [...recordCardLockQueries([input.creditCardId], db), ...goalWrites.lockQueries];
+  const guards = input.creditCardId && input.categoryId ? [genericCardPurchaseGuard(input, db)] : [];
+  let results;
+  try { results = await db.batch([...locks, ...guards, ...queries] as unknown as Parameters<Db["batch"]>[0]); }
+  catch (error) { cardMutationError(error); }
+  const rows = results[locks.length + guards.length];
   const row = rows[0];
   return mapRecord(row, { [row.id]: input.tagIds }, { [row.id]: associations });
 }
 
-export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()) {
-  const ids = inputs.map(() => randomUUID());
+export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb(), importIds?: string[]) {
+  inputs.forEach(assertGenericCardRecord);
+  if (inputs.some((input) => input.debtId)) throw validationError("Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.");
+  const ids = importIds ?? inputs.map(() => randomUUID());
   const associationsByInput = await Promise.all(inputs.map((input) => resolveGoalAssociations(input, db)));
   const queries: unknown[] = [];
   inputs.forEach((input, index) => {
     const id = ids[index];
+    if (input.creditCardId && input.categoryId) queries.push(genericCardPurchaseGuard(input, db));
     queries.push(db.insert(records).values({
       id, type: input.type, amount: decimal(input.amount), currency: input.currency,
       accountId: input.accountId ?? null,
       accountAmount: input.accountAmount === undefined ? null : decimal(input.accountAmount),
       creditCardId: input.creditCardId ?? null, destinationAccountId: input.destinationAccountId ?? null,
+      destinationAmount: input.destinationAmount === undefined ? null : decimal(input.destinationAmount),
       categoryId: input.categoryId ?? null, counterpartyName: input.counterpartyName ?? null,
       paymentType: input.paymentType, paymentStatus: input.paymentStatus,
       exchangeRateToPrimary: decimal(input.exchangeRateToPrimary),
@@ -1709,31 +1897,19 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
       categoryId: input.categoryId, counterpartyName: input.counterpartyName ?? null, note: input.note ?? null,
       accountId: input.accountId ?? null, accountAmount: input.accountId ? decimal(input.accountAmount ?? input.amount) : null,
       accountImpactAtCreation: Boolean(input.accountId), occurredAt: new Date(input.occurredAt),
+    deletedAt: input.paymentStatus === "cancelled" || input.paymentStatus === "needs_review" ? new Date() : null,
     }));
     if (input.tagIds.length) queries.push(db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId: id, tagId }))));
     const associations = associationsByInput[index];
     if (associations.length) queries.push(db.insert(recordGoals).values(recordGoalValues(id, associations)));
   });
   const movementsByInput = await Promise.all(inputs.map((input, index) => buildRecordReservationMovements(ids[index], input, associationsByInput[index], db)));
-  const existingMovementRows = await db.select().from(goalReservationMovements);
-  const runningBalances = new Map<string, number>();
-  for (const movement of existingMovementRows) {
-    const key = `${movement.goalId}:${movement.accountId}`;
-    const direction = movement.type === "reserve" || movement.type === "restore" ? 1 : -1;
-    runningBalances.set(key, (runningBalances.get(key) ?? 0) + direction * asNumber(movement.amount));
-  }
-  const movementValues = movementsByInput.flat().flatMap((movement) => {
-    const key = `${movement.goalId}:${movement.accountId}`;
-    if (movement.type === "consume") {
-      const amount = Math.min(asNumber(movement.amount), Math.max(0, runningBalances.get(key) ?? 0));
-      runningBalances.set(key, (runningBalances.get(key) ?? 0) - amount);
-      return amount > 0 ? [{ ...movement, amount: decimal(amount) }] : [];
-    }
-    if (movement.type === "reserve" || movement.type === "restore") runningBalances.set(key, (runningBalances.get(key) ?? 0) + asNumber(movement.amount));
-    return [movement];
-  });
-  if (movementValues.length) queries.push(db.insert(goalReservationMovements).values(movementValues));
-  await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
+  queries.push(...recordReservationWriteQueries(movementsByInput.flat(), db));
+  try { await db.batch([
+    ...recordCardLockQueries(inputs.map((input) => input.creditCardId), db),
+    ...goalReservationLockQueries(associationsByInput.flat().map((item) => item.goalId), db),
+    ...queries,
+  ] as unknown as Parameters<Db["batch"]>[0]); } catch (error) { cardMutationError(error); }
   const [rows, tagRows, goalRows] = await db.batch([
     db.select().from(records).where(inArray(records.id, ids)),
     db.select().from(recordTags).where(inArray(recordTags.recordId, ids)),
@@ -1743,6 +1919,72 @@ export async function createRecordsBulk(inputs: NewRecord[], db: Db = createDb()
   const associationsByRecord = groupGoalAssociations(goalRows);
   const byId = new Map(rows.map((row) => [row.id, mapRecord(row, tagIdsByRecord, associationsByRecord)]));
   return ids.map((id) => byId.get(id)).filter((record): record is WalletRecord => Boolean(record));
+}
+
+async function normalizeRecordMoneyPatch(current: WalletRecord, patch: RecordPatch, db: Db): Promise<RecordPatch> {
+  const amount = patch.amount ?? current.amount;
+  const currency = patch.currency ?? current.currency;
+  const accountId = patch.accountId ?? current.accountId;
+  const destinationAccountId = hasOwn(patch, "destinationAccountId") ? patch.destinationAccountId ?? undefined : current.destinationAccountId;
+  const cardId = hasOwn(patch, "creditCardId") ? patch.creditCardId ?? undefined : current.creditCardId;
+  const amountChanged = amount !== current.amount;
+  const currencyChanged = currency !== current.currency;
+  const sourceChanged = accountId !== current.accountId;
+  const destinationChanged = destinationAccountId !== current.destinationAccountId;
+  const cardChanged = cardId !== current.creditCardId;
+  const limitRateChanged = hasOwn(patch, "exchangeRateToLimitCurrency");
+  if (!amountChanged && !currencyChanged && !sourceChanged && !destinationChanged && !cardChanged && !limitRateChanged) return patch;
+
+  const normalized = { ...patch };
+  const accountIds = [accountId, destinationAccountId].filter((id): id is string => Boolean(id));
+  const [accountRows, rateRows, [settingsRow], [card]] = await db.batch([
+    db.select().from(accounts).where(inArray(accounts.id, accountIds)),
+    db.select().from(exchangeRates),
+    db.select().from(settings).limit(1),
+    db.select().from(creditCards).where(eq(creditCards.id, cardId ?? "00000000-0000-0000-0000-000000000000")).limit(1),
+  ]);
+  const rates = rateRows.map(mapExchangeRate);
+  const date = patch.occurredAt ?? current.occurredAt;
+  const convertedAmount = async (id: string | undefined, previousId: string | undefined, previousAmount: number | undefined) => {
+    if (!id) return undefined;
+    const account = accountRows.find((row) => row.id === id);
+    if (!account) throw validationError("Account does not exist");
+    if (account.currency === currency) return amount;
+    // Amount edits retain the conversion agreed when the transaction was recorded.
+    const expression = !currencyChanged && id === previousId && previousAmount !== undefined
+      ? sql`${decimal(amount)}::numeric * ${decimal(previousAmount)}::numeric / ${decimal(current.amount)}::numeric`
+      : (() => {
+        const rate = findExchangeRate(rates, currency, account.currency as Account["currency"], date);
+        if (rate === null) throw validationError("An exchange rate is required for the account currency");
+        return sql`${decimal(amount)}::numeric * ${decimal(rate)}::numeric`;
+      })();
+    const result = await db.execute(sql`select round(${expression}, 2) as amount`);
+    return Number((result.rows[0] as { amount: string }).amount);
+  };
+  if (!hasOwn(patch, "accountAmount") && (amountChanged || currencyChanged || sourceChanged)) {
+    normalized.accountAmount = await convertedAmount(accountId, current.accountId, current.accountAmount);
+  }
+  if (!hasOwn(patch, "destinationAmount") && (amountChanged || currencyChanged || destinationChanged)) {
+    normalized.destinationAmount = await convertedAmount(destinationAccountId, current.destinationAccountId, current.destinationAmount);
+  }
+  if (currencyChanged && !hasOwn(patch, "exchangeRateToPrimary")) {
+    const rate = findExchangeRate(rates, currency, (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"], date);
+    if (rate === null) throw validationError("An exchange rate is required for the primary currency");
+    normalized.exchangeRateToPrimary = rate;
+  }
+  if (cardId && (amountChanged || currencyChanged || cardChanged || limitRateChanged)) {
+    if (!card) throw validationError("Credit card does not exist");
+    const rate = patch.exchangeRateToLimitCurrency
+      ?? (!currencyChanged && !cardChanged ? current.exchangeRateToLimitCurrency : undefined)
+      ?? findExchangeRate(rates, currency, card.limitCurrency as WalletRecord["currency"], date);
+    if (rate === null) throw validationError("An exchange rate is required for the card limit currency");
+    const result = await db.execute(sql`select round(${decimal(rate)}::numeric, 6) as rate,
+      round(${decimal(amount)}::numeric * round(${decimal(rate)}::numeric, 6), 2) as amount`);
+    const converted = result.rows[0] as { rate: string; amount: string };
+    normalized.exchangeRateToLimitCurrency = Number(converted.rate);
+    if (!hasOwn(patch, "amountInLimitCurrency")) normalized.amountInLimitCurrency = Number(converted.amount);
+  }
+  return normalized;
 }
 
 export async function updateRecord(
@@ -1761,20 +2003,29 @@ export async function updateRecord(
     db.select().from(recordGoals).where(eq(recordGoals.recordId, id)),
   ]);
   if (!existingRecord) return null;
+  if (input.debtId !== undefined && (input.debtId ?? null) !== existingRecord.debtId) {
+    throw validationError("A record's debt association cannot be added, removed, or changed. Use the debt payment action.");
+  }
   const current = mapRecord(
     existingRecord,
     { [id]: existingTagRows.map((item) => item.tagId) },
     { [id]: groupGoalAssociations(existingGoalRows)[id] ?? [] },
   );
+  input = await normalizeRecordMoneyPatch(current, input, db);
   const merged = recordSchema.parse({
     ...current,
     ...input,
+    creditCardId: hasOwn(input, "creditCardId") ? input.creditCardId ?? undefined : current.creditCardId,
+    goalAssociations: hasOwn(input, "goalAssociations") ? input.goalAssociations : hasOwn(input, "goalIds") ? [] : current.goalAssociations,
     destinationAccountId: input.destinationAccountId === null ? undefined : (input.destinationAccountId ?? current.destinationAccountId),
     categoryId: input.categoryId === null ? undefined : (input.categoryId ?? current.categoryId),
     counterpartyName: input.counterpartyName === null ? undefined : (input.counterpartyName ?? current.counterpartyName),
     note: input.note === null ? undefined : (input.note ?? current.note),
     debtId: input.debtId === null ? undefined : (input.debtId ?? current.debtId),
   });
+  if (linked?.kind === "refund") assertLinkedRefundMetadata(current, merged);
+  if (merged.creditCardId && merged.type !== "expense"
+    && (merged.type !== current.type || merged.creditCardId !== current.creditCardId)) assertGenericCardRecord(merged);
   const resolveAsCardOnly = Boolean(
     existingRecord.paymentStatus === "needs_review" &&
     !existingRecord.accountId &&
@@ -1790,6 +2041,7 @@ export async function updateRecord(
   if (hasOwn(input, "accountAmount")) recordValues.accountAmount = merged.accountAmount === undefined ? null : decimal(merged.accountAmount);
   if (hasOwn(input, "creditCardId")) recordValues.creditCardId = merged.creditCardId ?? null;
   if (hasOwn(input, "destinationAccountId")) recordValues.destinationAccountId = merged.destinationAccountId ?? null;
+  if (hasOwn(input, "destinationAmount")) recordValues.destinationAmount = merged.destinationAmount === undefined ? null : decimal(merged.destinationAmount);
   if (hasOwn(input, "categoryId")) recordValues.categoryId = merged.categoryId ?? null;
   if (hasOwn(input, "counterpartyName")) recordValues.counterpartyName = merged.counterpartyName ?? null;
   if (hasOwn(input, "paymentType")) recordValues.paymentType = merged.paymentType;
@@ -1808,11 +2060,20 @@ export async function updateRecord(
     .where(eq(records.id, id))
     .returning();
   const sideQueries = [];
-  if (merged.creditCardId && merged.categoryId) {
+  if (linked?.kind === "refund") {
+    // Wallet refund currency/amount describe the bank credit. The card movement
+    // retains the original purchase currency, amount, bank destination and link.
+    sideQueries.push(db.update(creditCardRecords).set({
+      categoryId: merged.categoryId ?? linked.categoryId,
+      counterpartyName: merged.counterpartyName ?? null, note: merged.note ?? null,
+      updatedAt: new Date(),
+    }).where(eq(creditCardRecords.id, linked.id)));
+  } else if (merged.creditCardId && merged.categoryId && merged.type === "expense") {
     const values = {
       creditCardId: merged.creditCardId,
       walletRecordId: resolveAsCardOnly ? null : id,
-      kind: merged.type === "income" ? "refund" : "purchase",
+      statementId: hasOwn(input, "occurredAt") || hasOwn(input, "creditCardId") ? null : linked?.statementId ?? null,
+      kind: "purchase",
       amount: decimal(merged.amount), currency: merged.currency,
       amountInLimitCurrency: decimal(merged.amountInLimitCurrency ?? merged.amount),
       exchangeRateToLimitCurrency: decimal(merged.exchangeRateToLimitCurrency ?? 1),
@@ -1824,7 +2085,7 @@ export async function updateRecord(
       accountImpactAtCreation: Boolean(merged.accountId),
       occurredAt: new Date(merged.occurredAt),
       updatedAt: new Date(),
-      deletedAt: null,
+      deletedAt: merged.paymentStatus === "cancelled" || merged.paymentStatus === "needs_review" ? new Date() : null,
     };
     sideQueries.push(linked
       ? db.update(creditCardRecords).set(values).where(eq(creditCardRecords.id, linked.id))
@@ -1836,16 +2097,17 @@ export async function updateRecord(
     sideQueries.push(db.delete(recordTags).where(eq(recordTags.recordId, id)));
     if (merged.tagIds.length) sideQueries.push(db.insert(recordTags).values(merged.tagIds.map((tagId) => ({ recordId: id, tagId }))));
   }
-  const associations = merged.goalAssociations.length
-    ? merged.goalAssociations
-    : merged.goalIds.map((goalId) => ({ goalId, assignmentSource: "manual" as const, useReserved: true, reserveIncome: true }));
+  const currentAssociations = groupGoalAssociations(existingGoalRows)[id] ?? [];
+  let requested = hasOwn(input, "goalAssociations")
+    ? input.goalAssociations ?? []
+    : hasOwn(input, "goalIds")
+      ? (input.goalIds ?? []).map((goalId) => ({ goalId, assignmentSource: "manual" as const, useReserved: true, reserveIncome: true }))
+      : currentAssociations;
+  const refreshDateRules = hasOwn(input, "occurredAt") || hasOwn(input, "type");
+  if (refreshDateRules) requested = requested.filter((item) => item.assignmentSource !== "date_rule");
   const existingGoalIds = new Set(existingGoalRows.map((row) => row.goalId));
-  const addedGoalIds = associations.map((association) => association.goalId).filter((goalId) => !existingGoalIds.has(goalId));
-  if (addedGoalIds.length) {
-    const addedGoals = await db.select().from(goals).where(inArray(goals.id, addedGoalIds));
-    if (addedGoals.length !== addedGoalIds.length || addedGoals.some((goal) => goal.deletedAt || goal.status !== "active")) throw validationError("New records can only be associated with active goals");
-  }
-  if (hasOwn(input, "goalIds") || hasOwn(input, "goalAssociations")) {
+  const associations = await resolveGoalAssociations({ ...merged, goalIds: [], goalAssociations: requested }, db, existingGoalIds, refreshDateRules);
+  if (JSON.stringify(currentAssociations) !== JSON.stringify(associations)) {
     sideQueries.push(db.delete(recordGoals).where(eq(recordGoals.recordId, id)));
     if (associations.length) sideQueries.push(db.insert(recordGoals).values(recordGoalValues(id, associations)));
   }
@@ -1855,16 +2117,40 @@ export async function updateRecord(
     paymentStatus: record.paymentStatus,
     associations: items.map((item) => ({ goalId: item.goalId, useReserved: item.useReserved, reserveIncome: item.reserveIncome, allocatedAmount: item.allocatedAmount })).sort((a, b) => a.goalId.localeCompare(b.goalId)),
   });
-  const currentAssociations = groupGoalAssociations(existingGoalRows)[id] ?? [];
+  let compensationGoalIds: string[] = [];
   if (reservationFingerprint(current, currentAssociations) !== reservationFingerprint(merged, associations)) {
     const compensations = await buildRecordMovementCompensations(id, db);
-    if (compensations.length) sideQueries.push(db.insert(goalReservationMovements).values(compensations));
+    compensationGoalIds = compensations.goalIds;
+    sideQueries.push(...compensations.queries);
     const newMovements = await buildRecordReservationMovements(id, merged, associations, db);
-    if (newMovements.length) sideQueries.push(db.insert(goalReservationMovements).values(newMovements.map((movement) => ({ ...movement, idempotencyKey: `${movement.idempotencyKey}:${randomUUID()}` }))));
+    sideQueries.push(...recordReservationWriteQueries(newMovements.map((movement) => ({ ...movement, idempotencyKey: `${movement.idempotencyKey}:${randomUUID()}` })), db));
   }
-  const [rows] = sideQueries.length
-    ? await db.batch([recordUpdate, ...sideQueries] as unknown as Parameters<Db["batch"]>[0])
-    : await db.batch([recordUpdate]);
+  const locks = [
+    ...recordCardLockQueries([existingRecord.creditCardId, linked?.creditCardId, merged.creditCardId], db),
+    db.execute(sql`select id from records where id = ${id}::uuid for update`),
+    ...goalReservationLockQueries([...existingGoalIds, ...associations.map((item) => item.goalId), ...compensationGoalIds], db),
+  ];
+  const keepsPurchase = Boolean(merged.creditCardId && merged.categoryId && merged.type === "expense"
+    && merged.paymentStatus !== "cancelled" && merged.paymentStatus !== "needs_review"
+    && (!linked || linked.creditCardId === merged.creditCardId));
+  const guards = [
+    recordFinancialSnapshotGuard(db, existingRecord, linked),
+    ...(!keepsPurchase && linked ? [recordCardDependencyGuard(db, id)] : []),
+    ...(linked?.kind === "refund" && linked.originalRecordId ? [creditCardRecordGuard(db, linked.creditCardId, mapCreditCardRecord(linked), linked.id)] : []),
+    ...(keepsPurchase ? [creditCardRecordGuard(db, merged.creditCardId!, {
+      kind: "purchase", amount: merged.amount, currency: merged.currency,
+      amountInLimitCurrency: merged.amountInLimitCurrency ?? merged.amount,
+      exchangeRateToLimitCurrency: merged.exchangeRateToLimitCurrency ?? 1,
+      categoryId: merged.categoryId!, accountId: merged.accountId,
+      accountAmount: merged.accountId ? merged.accountAmount ?? merged.amount : undefined,
+      accountImpactAtCreation: Boolean(merged.accountId), occurredAt: merged.occurredAt,
+    }, linked?.id)] : []),
+  ];
+  let results;
+  try {
+    results = await db.batch([...locks, ...guards, recordUpdate, ...sideQueries] as unknown as Parameters<Db["batch"]>[0]);
+  } catch (error) { recordCardMutationError(error); }
+  const rows = results[locks.length + guards.length];
   const row = rows[0];
   return mapRecord(row, { [id]: merged.tagIds }, { [id]: associations });
 }
@@ -1872,25 +2158,42 @@ export async function updateRecord(
 export async function deleteRecord(id: string, db: Db = createDb()) {
   const now = new Date();
   const compensations = await buildRecordMovementCompensations(id, db);
-  const [recordResult] = await db.batch([
-    db
-      .update(records)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(eq(records.id, id))
-      .returning(),
-    db
-      .update(creditCardRecords)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(eq(creditCardRecords.walletRecordId, id)),
-    ...(compensations.length ? [db.insert(goalReservationMovements).values(compensations)] : []),
+  const [recordRows, linkedRows] = await db.batch([
+    db.select().from(records).where(eq(records.id, id)),
+    db.select().from(creditCardRecords).where(eq(creditCardRecords.walletRecordId, id)),
   ]);
+  if (!recordRows[0]) return false;
+  if (linkedRows.some(row => row.kind === "refund")) throw validationError("Bank-linked card refund financial history cannot be deleted here. Use the Cards refund workflow.");
+  const locks = [
+    ...recordCardLockQueries([...recordRows, ...linkedRows].map((row) => row.creditCardId), db),
+    db.execute(sql`select id from records where id = ${id}::uuid for update`),
+    ...goalReservationLockQueries(compensations.goalIds, db),
+  ];
+  const guards = [recordFinancialSnapshotGuard(db, recordRows[0], linkedRows[0]), recordCardDependencyGuard(db, id)];
+  let results;
+  try {
+    results = await db.batch([
+      ...locks, ...guards,
+      db
+        .update(records)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(records.id, id))
+        .returning(),
+      db
+        .update(creditCardRecords)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(creditCardRecords.walletRecordId, id)),
+      ...compensations.queries,
+    ] as unknown as Parameters<Db["batch"]>[0]);
+  } catch (error) { recordCardMutationError(error); }
+  const recordResult = results[locks.length + guards.length] as Array<typeof records.$inferSelect>;
   const row = recordResult[0];
   return Boolean(row);
 }
 
 export async function listGoals(db: Db = createDb()) {
-  const rows = await db.select().from(goals).where(isNull(goals.deletedAt));
-  return rows.map((goal) => mapGoal(goal));
+  const [rows, links] = await db.batch([db.select().from(goals).where(isNull(goals.deletedAt)), db.select().from(goalTags)]);
+  return rows.map((goal) => mapGoal(goal, links.filter((link) => link.goalId === goal.id).map((link) => link.tagId)));
 }
 
 async function assertNoAutoCaptureOverlap(input: NewGoal, excludedId: string | undefined, db: Db) {
@@ -1933,11 +2236,13 @@ export async function updateGoal(
   input: GoalPatch,
   db: Db = createDb(),
 ) {
-  const [[current]] = await db.batch([
+  const [[current], tagRows] = await db.batch([
     db.select().from(goals).where(and(eq(goals.id, id), isNull(goals.deletedAt))).limit(1),
+    db.select().from(goalTags).where(eq(goalTags.goalId, id)),
   ]);
   if (!current) return null;
-  const mapped = mapGoal(current);
+  const tagIds = tagRows.map((row) => row.tagId);
+  const mapped = mapGoal(current, tagIds);
   const merged = goalSchema.parse({
     ...mapped, ...input,
     deadline: input.deadline === null ? undefined : (input.deadline ?? mapped.deadline),
@@ -1959,19 +2264,21 @@ export async function updateGoal(
     note: merged.note ?? null, updatedAt: new Date(),
   }).where(eq(goals.id, id)).returning();
   const [rows] = await db.batch([update]);
-  return mapGoal(rows[0]);
+  return mapGoal(rows[0], tagIds);
 }
 
 export async function deleteGoal(id: string, db: Db = createDb()) {
-  const movementRows = await db.select().from(goalReservationMovements).where(eq(goalReservationMovements.goalId, id));
-  const balances = deriveGoalReservations(movementRows);
   const queries: unknown[] = [
+    ...goalReservationLockQueries([id], db),
     db.update(budgets).set({ goalId: null, updatedAt: new Date() }).where(eq(budgets.goalId, id)),
     db.update(goals).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(goals.id, id)).returning(),
+    db.execute(sql`insert into goal_reservation_movements (goal_id, account_id, type, amount, currency, note)
+      select ${id}::uuid, account_id, 'release', sum(case when type in ('reserve','restore') then amount else -amount end), currency, 'Liberación al archivar Goal'
+      from goal_reservation_movements where goal_id = ${id}::uuid group by account_id, currency
+      having sum(case when type in ('reserve','restore') then amount else -amount end) > 0`),
   ];
-  if (balances.length) queries.push(db.insert(goalReservationMovements).values(balances.map((balance) => ({ goalId: balance.goalId, accountId: balance.accountId, type: "release", amount: decimal(balance.amount), currency: balance.currency, note: "Liberación al archivar Goal" }))));
   const results = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
-  const row = results[1][0];
+  const row = results[2][0];
   return Boolean(row);
 }
 
@@ -1979,18 +2286,19 @@ export async function createGoalReservation(
   input: NewGoalReservation,
   db: Db = createDb(),
 ) {
-  const [row] = await db
-    .insert(goalReservationMovements)
-    .values({
-      goalId: input.goalId,
-      accountId: input.accountId,
-      amount: decimal(input.amount),
-      currency: input.currency,
-      type: "reserve",
-      createdAt: new Date(input.createdAt),
-      note: input.note ?? null,
-    })
-    .returning();
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw validationError("Reservation amount must be positive");
+  const movementId = randomUUID();
+  const results = await db.batch([
+    ...goalReservationLockQueries([input.goalId], db),
+    db.execute(sql`insert into goal_reservation_movements (id,goal_id,account_id,amount,currency,type,created_at,note)
+      select ${movementId}::uuid, ${input.goalId}::uuid, ${input.accountId}::uuid, ${decimal(input.amount)}::numeric,
+        ${input.currency}, 'reserve', ${new Date(input.createdAt).toISOString()}::timestamptz, ${input.note ?? null}
+      where exists (select 1 from goals where id = ${input.goalId}::uuid and deleted_at is null and status = 'active')
+        and exists (select 1 from accounts where id = ${input.accountId}::uuid and currency = ${input.currency} and deleted_at is null)`),
+    db.select().from(goalReservationMovements).where(eq(goalReservationMovements.id, movementId)),
+  ] as unknown as Parameters<Db["batch"]>[0]);
+  const row = (results[2] as Array<typeof goalReservationMovements.$inferSelect>)[0];
+  if (!row) throw validationError("Reservations require an active goal and the account currency");
   return {
     id: row.id,
     goalId: row.goalId,
@@ -2009,18 +2317,29 @@ export async function listGoalReservations(db: Db = createDb()) {
 export async function deleteGoalReservation(id: string, db: Db = createDb()) {
   const [movement] = await db.select().from(goalReservationMovements).where(eq(goalReservationMovements.id, id)).limit(1);
   if (!movement) return false;
-  const balances = deriveGoalReservations(await db.select().from(goalReservationMovements).where(and(eq(goalReservationMovements.goalId, movement.goalId), eq(goalReservationMovements.accountId, movement.accountId))));
-  const balance = balances[0];
-  if (!balance) return false;
-  await db.insert(goalReservationMovements).values({ goalId: balance.goalId, accountId: balance.accountId, type: "release", amount: decimal(balance.amount), currency: balance.currency, note: "Liberación total" });
-  return true;
+  const balance = reservationBalanceSql(movement.goalId, movement.accountId, movement.currency);
+  const results = await db.batch([
+    ...goalReservationLockQueries([movement.goalId], db),
+    db.execute(sql`insert into goal_reservation_movements (goal_id,account_id,type,amount,currency,note)
+      select ${movement.goalId}::uuid, ${movement.accountId}::uuid, 'release', ${balance}, ${movement.currency}, 'Liberación total'
+      where ${balance} > 0 returning id`),
+  ] as unknown as Parameters<Db["batch"]>[0]);
+  return Boolean((results[1] as { rows: unknown[] }).rows.length);
 }
 
 export async function releaseGoalReservation(input: { goalId: string; accountId: string; amount: number; note?: string }, db: Db = createDb()) {
-  const movements = await db.select().from(goalReservationMovements).where(and(eq(goalReservationMovements.goalId, input.goalId), eq(goalReservationMovements.accountId, input.accountId)));
-  const balance = deriveGoalReservations(movements)[0];
-  if (!balance || input.amount > balance.amount + 0.005) throw validationError("Release exceeds the reserved balance");
-  const [row] = await db.insert(goalReservationMovements).values({ goalId: input.goalId, accountId: input.accountId, type: "release", amount: decimal(input.amount), currency: balance.currency, note: input.note ?? "Liberación parcial" }).returning();
+  if (!Number.isFinite(input.amount) || input.amount <= 0) throw validationError("Release amount must be positive");
+  const movementId = randomUUID();
+  const results = await db.batch([
+    ...goalReservationLockQueries([input.goalId], db),
+    db.execute(sql`insert into goal_reservation_movements (id,goal_id,account_id,type,amount,currency,note)
+      select ${movementId}::uuid, ${input.goalId}::uuid, ${input.accountId}::uuid, 'release', ${decimal(input.amount)}::numeric, currency, ${input.note ?? "Liberación parcial"}
+      from goal_reservation_movements where goal_id = ${input.goalId}::uuid and account_id = ${input.accountId}::uuid group by currency
+      having sum(case when type in ('reserve','restore') then amount else -amount end) >= ${decimal(input.amount)}::numeric`),
+    db.select().from(goalReservationMovements).where(eq(goalReservationMovements.id, movementId)),
+  ] as unknown as Parameters<Db["batch"]>[0]);
+  const row = (results[2] as Array<typeof goalReservationMovements.$inferSelect>)[0];
+  if (!row) throw validationError("Release exceeds the reserved balance");
   return mapGoalReservationMovement(row);
 }
 
@@ -2272,12 +2591,12 @@ export async function generateDueRecurringDebts(
       const recurringMonth = `${year}-${String(month + 1).padStart(2, "0")}`;
       const dueAt = recurringDueAt(year, month, Number(rule.dayOfMonth));
       const key = `${rule.id}:${recurringMonth}`;
-      if (dueAt <= currentDate && !existing.has(key)) {
+      if (dueAt >= rule.startedAt && dueAt <= currentDate && !existing.has(key)) {
         due.push({
           name: `${rule.name} - ${recurringMonth}`,
           direction: rule.direction as Debt["direction"],
-          originalAmount: asNumber(rule.amount),
-          pendingAmount: asNumber(rule.amount),
+          originalAmount: rule.amount === null ? undefined : asNumber(rule.amount),
+          pendingAmount: rule.amount === null ? undefined : asNumber(rule.amount),
           currency: rule.currency as Debt["currency"],
           counterpartyName: rule.counterpartyName,
           accountId: optional(rule.accountId),
@@ -2415,6 +2734,7 @@ export async function deleteRecurringDebt(id: string, db: Db = createDb()) {
 
 interface DebtPaymentInput {
   amount: number;
+  accountAmount?: number;
   accountId: string;
   occurredAt: string;
   note?: string;
@@ -2429,7 +2749,7 @@ export async function recordDebtPayment(
 ) {
   const idempotencyKey = input.idempotencyKey ?? randomUUID();
   const requestHash = createHash("sha256").update(JSON.stringify({
-    debtId: id, amount: input.amount, accountId: input.accountId,
+    debtId: id, amount: input.amount, accountId: input.accountId, accountAmount: input.accountAmount ?? null,
     occurredAt: input.occurredAt, note: input.note ?? null,
     saveAccountToDebt: Boolean(input.saveAccountToDebt),
   })).digest("hex");
@@ -2439,6 +2759,22 @@ export async function recordDebtPayment(
     const [debtRow] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
     return debtRow ? { debt: mapDebt(debtRow), record: mapRecord(existing, { [existing.id]: [] }) } : null;
   }
+  const [[debtRow], [accountRow], rateRows, [settingsRow]] = await Promise.all([
+    db.select().from(debts).where(eq(debts.id, id)).limit(1),
+    db.select().from(accounts).where(and(eq(accounts.id, input.accountId), isNull(accounts.deletedAt), eq(accounts.isActive, true))).limit(1),
+    db.select().from(exchangeRates),
+    db.select().from(settings).limit(1),
+  ]);
+  if (!debtRow) return null;
+  if (!accountRow) throw validationError("Select an active payment account");
+  const rates = rateRows.map(mapExchangeRate);
+  const currency = debtRow.currency as WalletRecord["currency"];
+  const accountRate = findExchangeRate(rates, currency, accountRow.currency as WalletRecord["currency"], input.occurredAt);
+  const primaryRate = findExchangeRate(rates, currency, (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"], input.occurredAt);
+  if (primaryRate === null || (accountRate === null && input.accountAmount === undefined)) throw validationError("A historical exchange rate or explicit account amount is required");
+  const accountAmount = input.accountAmount === undefined
+    ? sql`round(${decimal(input.amount)}::numeric * ${String(accountRate)}::numeric, 2)`
+    : sql`${decimal(input.accountAmount)}::numeric`;
   const recordId = randomUUID();
   try {
     await db.execute(sql`
@@ -2454,14 +2790,14 @@ export async function recordDebtPayment(
         RETURNING *
       )
       INSERT INTO ${records} (
-        id, type, amount, currency, account_id, category_id, counterparty_name,
+        id, type, amount, currency, account_id, account_amount, category_id, counterparty_name,
         payment_type, payment_status, exchange_rate_to_primary, occurred_at, note,
         is_fixed, debt_id, idempotency_key, request_hash
       )
       SELECT ${recordId}::uuid,
         CASE WHEN direction = 'receivable' THEN 'income'::record_type ELSE 'expense'::record_type END,
-        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, category_id, counterparty_name,
-        'transfer'::payment_type, 'cleared'::payment_status, 1, ${new Date(input.occurredAt)},
+        ${decimal(input.amount)}::numeric, currency, ${input.accountId}::uuid, ${accountAmount}, category_id, counterparty_name,
+        'transfer'::payment_type, 'cleared'::payment_status, ${decimal(primaryRate)}, ${new Date(input.occurredAt)},
         COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
       FROM updated_debt
     `);
@@ -2489,6 +2825,10 @@ export async function upsertSettings(
   db: Db = createDb(),
 ) {
   const existing = await db.select().from(settings).limit(1);
+  if (existing[0] && input.primaryCurrency !== existing[0].primaryCurrency) {
+    const [history] = await db.select({ id: records.id }).from(records).limit(1);
+    if (history) throw validationError("La moneda principal no puede cambiar mientras exista historial financiero. Exportá tus datos antes de crear una billetera con otra moneda.");
+  }
   const values = {
     primaryCurrency: input.primaryCurrency,
     primaryAccountId: input.primaryAccountId ?? null,
@@ -2497,9 +2837,7 @@ export async function upsertSettings(
     locale: input.locale,
     includeHiddenAccountsInReports: input.includeHiddenAccountsInReports,
     defaultAccountId: input.defaultAccountId ?? null,
-    defaultPaymentType: input.defaultCreditCardId
-      ? "credit"
-      : input.defaultPaymentType,
+    defaultPaymentType: input.defaultPaymentType,
     defaultCreditCardId: input.defaultCreditCardId ?? null,
     defaultPaymentStatus: input.defaultPaymentStatus,
     updatedAt: new Date(),
@@ -2542,3 +2880,4 @@ export async function patchSettings(input: SettingsPatch, db: Db = createDb()) {
   const [row] = await db.update(settings).set(values).where(eq(settings.id, current.id)).returning();
   return mapSettings(row);
 }
+

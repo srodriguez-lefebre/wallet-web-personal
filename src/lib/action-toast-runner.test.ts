@@ -12,6 +12,28 @@ function deferred<T>() {
 }
 
 describe("createActionToastRunner", () => {
+  it("runs a financial submission once until it settles and permits a later retry", async () => {
+    const runAction = createActionToastRunner(() => {});
+    const pending = deferred<string>();
+    let writes = 0;
+    const save = () => {
+      writes += 1;
+      return pending.promise;
+    };
+    const first = runAction(save, { singleFlight: "card-payment" });
+    const duplicate = runAction(save, { singleFlight: "card-payment" });
+    pending.resolve("saved");
+    expect(await first).toBe("saved");
+    expect(await duplicate).toBe("saved");
+    expect(writes).toBe(1);
+    await runAction(
+      async () => {
+        writes += 1;
+      },
+      { singleFlight: "card-payment" },
+    );
+    expect(writes).toBe(2);
+  });
   it("keeps processing visible until all concurrent actions finish", async () => {
     const states: ActionToastState[] = [];
     const runAction = createActionToastRunner((status, message) => {

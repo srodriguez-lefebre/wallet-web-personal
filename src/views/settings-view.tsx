@@ -5,7 +5,6 @@ import {
   ChevronDown,
   ChevronRight,
   Eye,
-  Moon,
   Plus,
   Save,
   Settings2,
@@ -32,7 +31,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/providers/auth-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import { useTheme } from "@/providers/theme-provider";
+import type { ActionToastOptions } from "@/lib/action-toast-runner";
+import { paymentDefaults } from "@/lib/preferences";
 import { useWallet } from "@/providers/wallet-provider";
 import type { Category, CurrencyCode, Tag } from "@shared/types";
 
@@ -61,9 +61,11 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { theme, toggleTheme } = useTheme();
   const { lock } = useAuth();
   const { toast, runAction } = useActionToast();
+  async function runSettingAction(work:()=>Promise<unknown>,options:ActionToastOptions){
+    try {await runAction(work,options);return true;} catch {return false;}
+  }
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [newCategoryParentId, setNewCategoryParentId] = useState("");
@@ -115,31 +117,37 @@ export function SettingsView() {
   async function handleAddBudget(event: FormEvent) {
     event.preventDefault();
     const limitAmount = Number(newBudgetLimit);
-    if (!newBudgetName.trim() || limitAmount <= 0) return;
-    await runAction(() => addBudget({
-      name: newBudgetName.trim(), limitAmount, currency: primaryCurrency,
-      period: "monthly", categoryId: newBudgetCategoryId || undefined,
-      color: "#F59E0B", isActive: true,
-    }), { processing: "Creating budget...", success: "Budget created", error: "Could not create budget" });
+    if (!newBudgetName.trim() || !Number.isFinite(limitAmount) || limitAmount <= 0) return;
+    if(!await runSettingAction(
+      () =>
+        addBudget({
+          name: newBudgetName.trim(),
+          limitAmount,
+          currency: primaryCurrency,
+          period: "monthly",
+          categoryId: newBudgetCategoryId || undefined,
+          color: "#F59E0B",
+          isActive: true,
+        }),
+      {
+        singleFlight:"budget-create",
+        processing: "Creating budget...",
+        success: "Budget created",
+        error: "Could not create budget",
+      },
+    ))return;
     setNewBudgetName("");
     setNewBudgetLimit("");
     setNewBudgetCategoryId("");
   }
 
   async function saveRecordDefaults() {
-    const cardId = defaultPaymentMethod.startsWith("card:")
-      ? defaultPaymentMethod.slice(5)
-      : undefined;
-    await updateWalletSettings({
-      ...dataset.settings,
+    await runSettingAction(()=>updateWalletSettings({
       primaryCurrency,
-      defaultAccountId: defaultAccountId || undefined,
-      defaultPaymentType: cardId
-        ? "credit"
-        : (defaultPaymentMethod as typeof dataset.settings.defaultPaymentType),
-      defaultCreditCardId: cardId,
+      defaultAccountId: defaultAccountId || null,
+      ...paymentDefaults(defaultPaymentMethod),
       defaultPaymentStatus,
-    });
+    }),{singleFlight:"defaults",processing:"Saving defaults...",success:"Defaults saved",error:"Could not save defaults"});
   }
 
   function getCategoryDraft(category: Category): CategoryDraft {
@@ -203,12 +211,12 @@ export function SettingsView() {
     const name = newCategoryName.trim();
     if (!name) return;
 
-    await addCategory({
+    if(!await runSettingAction(()=>addCategory({
       name,
       parentId: newCategoryParentId || undefined,
       color: newCategoryColor,
       icon: newCategoryIcon.trim() || "tag",
-    });
+    }),{singleFlight:"category-create",processing:"Creating category...",success:"Category created",error:"Could not create category"}))return;
     setNewCategoryName("");
     setNewCategoryParentId("");
     setNewCategoryColor("#2563EB");
@@ -221,20 +229,26 @@ export function SettingsView() {
     const name = draft.name.trim();
     if (!name) return;
 
-    await updateCategory(category.id, {
+    if(!await runSettingAction(()=>updateCategory(category.id, {
       ...draft,
       name,
-    });
+    }),{singleFlight:`category-save:${category.id}`,processing:"Saving category...",success:"Category saved",error:"Could not save category"}))return;
     clearCategoryDraft(category.id);
   }
 
   async function handleDeleteCategory(categoryId: string) {
-    if (!window.confirm("Delete this category tree and reassign its history to Category eliminated?")) return;
-    await runAction(() => deleteCategory(categoryId), {
+    if (
+      !window.confirm(
+        "Delete this category tree and reassign its history to Category eliminated?",
+      )
+    )
+      return;
+    if(!await runSettingAction(() => deleteCategory(categoryId), {
+      singleFlight:`category-delete:${categoryId}`,
       processing: "Reassigning category history...",
       success: "Category eliminated and history reassigned",
       error: "Could not eliminate category",
-    });
+    }))return;
     clearCategoryDraft(categoryId);
   }
 
@@ -284,11 +298,11 @@ export function SettingsView() {
     const name = newTagName.trim();
     if (!name) return;
 
-    await addTag({
+    if(!await runSettingAction(()=>addTag({
       name,
       color: newTagColor,
       isActive: true,
-    });
+    }),{singleFlight:"tag-create",processing:"Creating tag...",success:"Tag created",error:"Could not create tag"}))return;
     setNewTagName("");
     setNewTagColor("#2563EB");
   }
@@ -298,15 +312,15 @@ export function SettingsView() {
     const name = draft.name.trim();
     if (!name) return;
 
-    await updateTag(tag.id, {
+    if(!await runSettingAction(()=>updateTag(tag.id, {
       ...draft,
       name,
-    });
+    }),{singleFlight:`tag-save:${tag.id}`,processing:"Saving tag...",success:"Tag saved",error:"Could not save tag"}))return;
     clearTagDraft(tag.id);
   }
 
   async function handleDeleteTag(tagId: string) {
-    await deleteTag(tagId);
+    if(!await runSettingAction(()=>deleteTag(tagId),{singleFlight:`tag-delete:${tagId}`,processing:"Deleting tag...",success:"Tag deleted",error:"Could not delete tag"}))return;
     clearTagDraft(tagId);
   }
 
@@ -418,7 +432,13 @@ export function SettingsView() {
             size="icon"
             disabled={Boolean(category.systemKey)}
             aria-label={`Delete ${category.name}`}
-            title={category.systemKey ? "System category" : hasChildren ? "Delete category and children" : "Delete"}
+            title={
+              category.systemKey
+                ? "System category"
+                : hasChildren
+                  ? "Delete category and children"
+                  : "Delete"
+            }
             onClick={() => handleDeleteCategory(category.id)}
           >
             <Trash2 className="h-4 w-4" />
@@ -552,14 +572,53 @@ export function SettingsView() {
               <div>
                 <p className="font-medium">Theme</p>
                 <p className="text-sm text-muted-foreground">
-                  Light by default, dark as an alternative
+                  Follow your saved preference on every device
                 </p>
               </div>
-              <Button variant="outline" onClick={toggleTheme}>
-                <Moon className="h-4 w-4" />
-                {theme}
-              </Button>
+              <select
+                aria-label="Theme"
+                value={dataset.settings.theme}
+                className="rounded-md border bg-background p-2"
+                onChange={(event) =>
+                  void runSettingAction(
+                    () =>
+                      updateWalletSettings({
+                        theme: event.target
+                          .value as typeof dataset.settings.theme,
+                      }),
+                    {
+                      processing: "Saving theme...",
+                      success: "Theme saved",
+                      error: "Could not save theme",
+                    },
+                  )
+                }
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+              </select>
             </div>
+            <label className="flex items-center justify-between rounded-md border p-3">
+              Include hidden accounts in reports
+              <input
+                type="checkbox"
+                checked={dataset.settings.includeHiddenAccountsInReports}
+                onChange={(event) =>
+                  void runSettingAction(
+                    () =>
+                      updateWalletSettings({
+                        includeHiddenAccountsInReports: event.target.checked,
+                      }),
+                    {
+                      processing: "Saving reports...",
+                      success: "Report preference saved",
+                      error: "Could not save preference",
+                    },
+                  )
+                }
+              />
+            </label>
             <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <p className="font-medium">Local token</p>
@@ -844,27 +903,87 @@ export function SettingsView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <form className="grid gap-2 md:grid-cols-[1fr_140px_1fr_auto]" onSubmit={handleAddBudget}>
-              <input value={newBudgetName} onChange={(event) => setNewBudgetName(event.target.value)} className={fieldClassName} placeholder="Monthly budget" />
-              <input value={newBudgetLimit} onChange={(event) => setNewBudgetLimit(event.target.value)} className={fieldClassName} type="number" min="0.01" step="0.01" placeholder="Limit" />
-              <select value={newBudgetCategoryId} onChange={(event) => setNewBudgetCategoryId(event.target.value)} className={fieldClassName}>
+            <form
+              className="grid gap-2 md:grid-cols-[1fr_140px_1fr_auto]"
+              onSubmit={handleAddBudget}
+            >
+              <input
+                value={newBudgetName}
+                onChange={(event) => setNewBudgetName(event.target.value)}
+                className={fieldClassName}
+                placeholder="Monthly budget"
+              />
+              <input
+                value={newBudgetLimit}
+                onChange={(event) => setNewBudgetLimit(event.target.value)}
+                className={fieldClassName}
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="Limit"
+              />
+              <select
+                value={newBudgetCategoryId}
+                onChange={(event) => setNewBudgetCategoryId(event.target.value)}
+                className={fieldClassName}
+              >
                 <option value="">All categories</option>
-                {dataset.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+                {dataset.categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
               </select>
-              <Button type="submit"><Plus className="h-4 w-4" />Add</Button>
+              <Button type="submit">
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
             </form>
             <div className="space-y-2">
               {dataset.budgets.map((budget) => (
-                <div key={budget.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+                <div
+                  key={budget.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
+                >
                   <div>
                     <p className="font-medium">{budget.name}</p>
-                    <p className="text-sm text-muted-foreground">{budget.limitAmount} {budget.currency} · {budget.isActive ? "Active" : "Paused"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {budget.limitAmount} {budget.currency} ·{" "}
+                      {budget.isActive ? "Active" : "Paused"}
+                    </p>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => void runAction(() => updateBudget(budget.id, { ...budget, isActive: !budget.isActive }), { processing: "Updating budget...", success: "Budget updated", error: "Could not update budget" }).catch(() => undefined)}>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        void runSettingAction(
+                          () =>
+                            updateBudget(budget.id, {
+                              ...budget,
+                              isActive: !budget.isActive,
+                            }),
+                          {
+                            processing: "Updating budget...",
+                            success: "Budget updated",
+                            error: "Could not update budget",
+                          },
+                        ).catch(() => undefined)
+                      }
+                    >
                       {budget.isActive ? "Pause" : "Activate"}
                     </Button>
-                    <Button variant="destructive" size="icon" aria-label={`Delete ${budget.name}`} onClick={() => void runAction(() => deleteBudget(budget.id), { processing: "Deleting budget...", success: "Budget deleted", error: "Could not delete budget" }).catch(() => undefined)}>
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      aria-label={`Delete ${budget.name}`}
+                      onClick={() =>
+                        void runSettingAction(() => deleteBudget(budget.id), {
+                          processing: "Deleting budget...",
+                          success: "Budget deleted",
+                          error: "Could not delete budget",
+                        }).catch(() => undefined)
+                      }
+                    >
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>

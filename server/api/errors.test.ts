@@ -6,6 +6,8 @@ describe("database error translation", () => {
     ["23505", "CONFLICT", 409],
     ["23503", "REFERENCE_NOT_FOUND", 422],
     ["22P02", "VALIDATION_ERROR", 400],
+    ["23514", "VALIDATION_ERROR", 400],
+    ["22012", "CONFLICT", 409],
   ])("maps %s without exposing driver messages", (code, publicCode, status) => {
     const result = translateDatabaseError({ cause: { code, message: "secret SQL" } });
     expect(result).toMatchObject({ code: publicCode, status });

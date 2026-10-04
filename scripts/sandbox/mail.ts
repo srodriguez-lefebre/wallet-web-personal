@@ -45,8 +45,6 @@ export function runMailAutomation(
     WALLET_INGEST_TOKEN: input.ingestToken,
     WALLET_TARGETS_JSON: JSON.stringify(input.targets),
   };
-  const cutoff =
-    new Date(input.now ?? new Date().toISOString()).getTime() - 30 * 86_400_000;
   const context = {
     console: Object.fromEntries(
       ["log", "warn", "error"].map((level) => [
@@ -67,10 +65,7 @@ export function runMailAutomation(
           .filter(
             (thread) =>
               thread.labels.includes("Wallet/Pendiente") &&
-              !thread.labels.includes("Wallet/Procesado") &&
-              thread.messages.some(
-                (message) => Date.parse(message.date) > cutoff,
-              ),
+              !thread.labels.includes("Wallet/Procesado"),
           )
           .slice(start, start + limit)
           .map((thread) => ({

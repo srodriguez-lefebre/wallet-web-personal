@@ -83,6 +83,7 @@ export interface WalletRecord {
   accountAmount?: number;
   creditCardId?: string;
   destinationAccountId?: string;
+  destinationAmount?: number;
   categoryId?: string;
   counterpartyName?: string;
   tagIds: string[];
@@ -117,6 +118,7 @@ export interface CreditCard {
 export interface CreditCardPayment {
   id: string;
   creditCardId: string;
+  idempotencyKey?: string;
   statementId?: string;
   amount: number;
   currency: CurrencyCode;
@@ -359,6 +361,9 @@ export interface WalletSettings {
 }
 
 export interface WalletDataset {
+  ingestionEvents?: Array<{id:string;idempotencyKey:string;source:string;status:string;action?:string;fingerprint?:string;targetKey?:string;merchantNormalized?:string;amount?:number;currency?:CurrencyCode;occurredAt?:string;recordId?:string;creditCardRecordId?:string;duplicateOfId?:string;completedAt?:string;createdAt:string;updatedAt:string}>;
+  merchants?: Array<{ id: string; name: string; categoryId: string; priority: number; isActive: boolean; createdAt?: string; updatedAt?: string }>;
+  merchantAliases?: Array<{ id: string; merchantId: string; alias: string; normalizedAlias: string; createdAt?: string }>;
   settings: WalletSettings;
   accounts: Account[];
   categories: Category[];
@@ -416,6 +421,7 @@ export interface AccountBalance {
 
 export interface GoalProgress {
   goal: Goal;
+  hasMissingExchangeRate: boolean;
   reserved: number;
   spent: number;
   committed: number;
