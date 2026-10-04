@@ -13,15 +13,9 @@ import {
 
 const port = 4173;
 const origin = `http://127.0.0.1:${port}`;
-await stat(dbDirectory).catch(() => {
-  throw new Error(
-    "Run npm run sandbox:setup -- --backup <snapshot.json> first",
-  );
-});
-const release = await acquireWorkspaceLock();
-configureLocalEnvironment();
+let release = async () => {};
 const originalFetch = globalThis.fetch;
-globalThis.fetch = (input, init) => {
+const localFetch: typeof fetch = (input, init) => {
   const url = new URL(
     typeof input === "string"
       ? input
@@ -40,35 +34,83 @@ let restoreTransport = () => {};
 let server: Server | undefined;
 let vite: Awaited<ReturnType<typeof createViteServer>> | undefined;
 let stopping = false;
-async function stop() {
-  if (stopping) return;
+let finishStartup!: () => void;
+const startupFinished = new Promise<void>((resolve) => {
+  finishStartup = resolve;
+});
+const cancelled = new Error("Sandbox startup cancelled");
+const checkRunning = () => {
+  if (stopping) throw cancelled;
+};
+let shutdown: Promise<void> | undefined;
+function stop() {
   stopping = true;
-  await vite?.close();
-  await new Promise<void>((resolve) => {
-    if (!server?.listening) {
-      resolve();
-      return;
+  return (shutdown ??= (async () => {
+    // Pending startup steps retain ownership until their result can be closed.
+    await startupFinished;
+    let failure: unknown;
+    for (const cleanup of [
+      () => vite?.close(),
+      () =>
+        new Promise<void>((resolve) => {
+          if (!server?.listening) {
+            resolve();
+            return;
+          }
+          server.close(() => resolve());
+          server.closeIdleConnections();
+        }),
+      () => pg?.close(),
+      () => {
+        restoreTransport();
+        globalThis.fetch = originalFetch;
+      },
+      () => release(),
+    ]) {
+      try {
+        await cleanup();
+      } catch (error) {
+        failure ??= error;
+      }
     }
-    server.close(() => resolve());
-    server.closeIdleConnections();
-  });
-  await pg?.close();
-  restoreTransport();
-  globalThis.fetch = originalFetch;
-  await release();
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    if (failure) throw failure;
+  })());
 }
+function onSignal() {
+  void stop().catch((error: unknown) => {
+    console.error("Sandbox shutdown failed:", error);
+    process.exitCode = 1;
+  });
+}
+process.once("SIGINT", onSignal);
+process.once("SIGTERM", onSignal);
 try {
+  await stat(dbDirectory).catch(() => {
+    throw new Error(
+      "Run npm run sandbox:setup -- --backup <snapshot.json> first",
+    );
+  });
+  checkRunning();
+  release = await acquireWorkspaceLock();
+  checkRunning();
+  configureLocalEnvironment();
+  globalThis.fetch = localFetch;
   pg = await PGlite.create(dbDirectory);
+  checkRunning();
   restoreTransport = installLocalTransport(pg);
   await applyMigrations(pg);
+  checkRunning();
   server = await createSandboxServer({
     pg,
     mailboxPath: mailboxFile,
     frontend: (req, res) => vite!.middlewares(req, res),
     onStop: () => {
-      void stop();
+      onSignal();
     },
   });
+  checkRunning();
   vite = await createViteServer({
     envDir: false,
     mode: "wallet-local",
@@ -85,22 +127,21 @@ try {
       },
     ],
   });
+  checkRunning();
   await new Promise<void>((resolve, reject) => {
     server!.once("error", reject);
     server!.listen(port, "127.0.0.1", resolve);
   });
+  checkRunning();
   console.log(`Local wallet: ${origin}`);
   console.log(`Mail simulator: ${origin}/__sandbox`);
   console.log(
     "Production credentials and external network are disabled. Ctrl+C or npm run sandbox:stop closes the sandbox.",
   );
-  process.once("SIGINT", () => {
-    void stop();
-  });
-  process.once("SIGTERM", () => {
-    void stop();
-  });
 } catch (error) {
-  await stop();
-  throw error;
+  stopping = true;
+  if (error !== cancelled) throw error;
+} finally {
+  finishStartup();
+  if (stopping) await stop();
 }
