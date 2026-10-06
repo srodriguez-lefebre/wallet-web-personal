@@ -487,13 +487,13 @@ export async function processMailIngestion(
 
     const unavailableConversion =
       !primary || (account && !accountConversion) || (card && !cardConversion) || (destinationAccount && !destinationConversion);
-    if (isTransfer && !isOwnedTransfer) {
-      warnings.push("Transfer destination ownership is unconfirmed; review whether it belongs to another Wallet account.");
-    }
     if (!isCredit && !account) warnings.push("Bank account mapping unavailable; assign the correct account before confirming this notice.");
-    if (category.needsReview) warnings.push("Category could not be determined automatically; review this expense.");
+    // A transfer notice identifies its destination, not the merchant's activity.
+    // An external destination or generic category does not invalidate a mapped origin.
+    const categoryRequiresReview = !isTransfer && category.needsReview;
+    if (categoryRequiresReview) warnings.push("Category could not be determined automatically; review this expense.");
     const requiresReview =
-      accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || (isTransfer && !isOwnedTransfer) || unavailableConversion || category.needsReview;
+      accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || unavailableConversion || categoryRequiresReview;
     const effectiveAccount = isOwnedTransfer ? account : !accountWasInvalid && (isCredit ? Boolean(card) : true) && accountConversion ? account : undefined;
     const effectiveCard = cardConversion ? card : undefined;
     const noteParts = [
@@ -531,7 +531,7 @@ export async function processMailIngestion(
         ? conversionNote(input.transaction.currency, destinationAccount.currency as CurrencyCode, destinationConversion.frozen)
         : undefined,
       isTransfer && input.transaction.destinationAccountNumber
-        ? `Destination: ${input.transaction.destinationBank || "bank"} ****${input.transaction.destinationAccountNumber.replace(/\D/g, "").slice(-4)}`
+        ? `Destination: ${input.transaction.destinationBank || "bank"} · ${input.transaction.destinationAccountNumber}`
         : undefined,
       unavailableConversion
         ? "Currency conversion unavailable; unresolved amounts remain under review."

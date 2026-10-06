@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   runMailAutomation,
   type MailRunInput,
@@ -247,6 +248,27 @@ test("unknown transfer account references never match cards or default account",
       }
     ).destination,
   ).toEqual({});
+});
+
+test.each([
+  ["1440", "UYU", "da81224b-90f3-4413-aa96-46197d6d31e9"],
+  ["1431", "USD", "86b72caa-9e03-4afa-af9f-40af2b98f008"],
+])("personal transfer origin %s uses its configured Wallet account", (origin,currency,accountId)=>{
+  const value=mail({...transfer,body:`Transferencia realizada desde la cuenta ****${origin}\nImporte: 630.00 ${currency === "UYU" ? "$" : currency}\nCuenta destino: 0123929\nBanco/Institución destino: Banco Itau`});
+  value.targets.bankAccounts=JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json",import.meta.url),"utf8")).bankAccounts;
+  const result=runMailAutomation(value,ok);
+  expect(result.deliveries[0].payload).toMatchObject({
+    transaction:{accountNumber:`****${origin}`,amount:630,currency,destinationAccountNumber:"0123929",destinationBank:"Banco Itau"},
+    destination:{accountId},
+  });
+  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0].messages[0].isRead).toBe(true);
+});
+
+test("currency-specific origin configuration takes precedence without losing destination mappings",()=>{
+  const value=mail({...transfer,body:transfer.body.replace("****1357","****1440")});
+  value.targets.bankAccounts={"1440":{accountId:"fallback-source"},"1440:USD":{accountId:"explicit-source"},"ITAU:9876540:USD":{accountId:"explicit-destination"}};
+  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"explicit-source",destinationAccountId:"explicit-destination"}});
 });
 
 test("reference-only transfer mappings are supported without guessing ownership", () => {

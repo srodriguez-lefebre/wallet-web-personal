@@ -9,6 +9,7 @@ import { resolveFrozenRate } from "./exchange-rates.js";
 import { createDb } from "../db/client.js";
 import { calculateAccountBalances, calculateCreditCardSummary, calculateSummary } from "../../shared/calculations.js";
 import { walletDataHealth } from "../../shared/data-quality.js";
+import { runMailAutomation } from "../../scripts/sandbox/mail.js";
 
 let fixture:Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId=randomUUID(),cardId=randomUUID(),knownCategoryId=randomUUID();
@@ -172,17 +173,64 @@ test("same-amount bank and unmatched credit notices remain distinct across sourc
   expect((await getWalletDataset()).records).toHaveLength(2);
 });
 
-test("unmapped transfer destinations preserve outgoing money and flag ownership for review",async()=>{
+test("external transfer destinations clear when the origin is mapped and retain the destination in the note",async()=>{
   const result=await processMailIngestion(bankInput("transfer"));
-  expect(result.status).toBe("needs_review");
-  expect(result.warnings?.join(" ")).toMatch(/ownership/i);
+  expect(result.status).toBe("created");
+  expect(result.warnings?.join(" ") ?? "").not.toMatch(/ownership/i);
   const dataset=await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({type:"expense",accountId,accountAmount:50,paymentType:"transfer",paymentStatus:"needs_review"});
+  expect(dataset.records[0]).toMatchObject({type:"expense",accountId,accountAmount:50,paymentType:"transfer",paymentStatus:"cleared"});
+  expect(dataset.records[0].note).toContain("Destination: Test bank · 123456789012");
   expect(dataset.records[0].destinationAccountId).toBeUndefined();
   expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
   const metadata=(await fixture.pool.query("SELECT sanitized_payload FROM ingestion_events")).rows[0].sanitized_payload;
   expect(JSON.stringify(metadata)).not.toContain("123456789012");
   expect(metadata.transaction.destinationAccountNumber).toBe("****9012");
+});
+
+test("external transfers do not require merchant classification to confirm a known origin",async()=>{
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
+  const result=await processMailIngestion(bankInput("transfer"));
+  expect(result.status).toBe("created");
+  expect((await getWalletDataset()).records[0].paymentStatus).toBe("cleared");
+});
+
+test("an unknown transfer origin stays under review regardless of the destination bank",async()=>{
+  const event=bankInput("transfer");
+  event.destination={};
+  expect((await processMailIngestion(event)).status).toBe("needs_review");
+  const dataset=await getWalletDataset();
+  expect(dataset.records[0]).toMatchObject({paymentType:"transfer",paymentStatus:"needs_review"});
+  expect(dataset.records[0].accountId).toBeUndefined();
+  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(500);
+});
+
+test("the Itau mail flow preserves leading destination zeroes and records an outgoing transfer once",async()=>{
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
+  const parsed=runMailAutomation({
+    ingestUrl:"http://wallet.local/api/ingest/mail/transactions",ingestToken:"test-only",
+    targets:{cards:{},bankAccounts:{"1440":{accountId}}},
+    threads:[{id:"transfer-thread",labels:["Wallet/Pendiente"],messages:[{
+      id:"transfer-630",subject:"Aviso transferencia realizada",from:"Itaú Comunicaciones <comunicaciones@itau.com.uy>",date:"2026-02-01T12:00:00Z",
+      body:"Transferencia realizada desde la cuenta *****1440*\nImporte: *630.00 $*\nCuenta destino: *0123929*\nBanco/Institución destino: *Banco Itau*",
+    }]}],
+  },()=>({status:201,body:'{"data":{"status":"created"}}'}));
+  const event=mailIngestionSchema.parse(parsed.deliveries[0].payload);
+  expect((await processMailIngestion(event)).status).toBe("created");
+  expect((await processMailIngestion(event)).status).toBe("already_processed");
+  const dataset=await getWalletDataset();
+  expect(dataset.records).toHaveLength(1);
+  expect(dataset.records[0]).toMatchObject({type:"expense",accountId,amount:630,accountAmount:630,currency:"UYU",paymentType:"transfer",paymentStatus:"cleared"});
+  expect(dataset.records[0].note).toContain("Destination: Banco Itau · 0123929");
+  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(-130);
+});
+
+test("a known transfer origin still requires review when its primary currency conversion is unavailable",async()=>{
+  await fixture.pool.query("UPDATE settings SET primary_currency='EUR'");
+  vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("Offline"));
+  expect((await processMailIngestion(bankInput("transfer"))).status).toBe("needs_review");
+  const dataset=await getWalletDataset();
+  expect(dataset.records[0]).toMatchObject({accountId,exchangeRateToPrimary:0,paymentStatus:"needs_review"});
+  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
 });
 
 test("an invalid configured owned destination cannot become a third-party expense",async()=>{

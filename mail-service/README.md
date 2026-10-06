@@ -29,7 +29,14 @@ Script Properties requeridas:
 }
 ```
 
-Los números del ejemplo son ficticios. En `debitCards`, la referencia son los últimos cuatro
+Los números del ejemplo son ficticios. `bank-account-targets.json` contiene los mapeos
+personales verificados: origen `****1440` → Banco (UYU) y `****1431` → Ahorros itau (USD).
+Para aplicarlos, combinar su objeto `bankAccounts` con el de la propiedad de Apps Script
+`WALLET_TARGETS_JSON`, conservando `cards`, `debitCards`, `defaultAccountId` y los demás
+mapeos existentes. También se pueden definir referencias específicas por moneda en esa
+propiedad. El script consume la configuración de la propiedad, sin leer archivos remotos.
+
+En `debitCards`, la referencia son los últimos cuatro
 dígitos de la tarjeta de débito. En `bankAccounts`, la cuenta origen usa los últimos cuatro
 dígitos informados por el banco. La cuenta destino requiere `BANCO:referenciaCompleta:moneda`,
 por ejemplo `ITAU:9876540:USD` o `MIDINERO:9876540:UYU`: los números pueden repetirse entre bancos.
@@ -49,8 +56,9 @@ el remitente exacto `comunicaciones@itau.com.uy`, también con nombre visible. L
 comparan sin diferencias de mayúsculas ni tildes. El consumo de débito admite `Pesos` (UYU) y
 `Dolares`/`Dólares` (USD); las transferencias admiten códigos de moneda y `$` para UYU. El formato
 Automation Wallet conserva su reconocimiento por campos y el mapeo de crédito por alias.
-Las transferencias incluyen referencias para el mapeo, pero la descripción del movimiento
-solo muestra los últimos cuatro dígitos de destino. La API enmascara los metadatos persistidos.
+Las transferencias incluyen referencias para el mapeo. La contraparte muestra los últimos
+cuatro dígitos; la nota conserva banco y cuenta destino completos, por ejemplo
+`Destination: Banco Itau · 0123929`. La API sigue enmascarando los metadatos de auditoría.
 El parser admite los saltos de línea y los asteriscos de negrita que Gmail agrega al convertir
 los avisos de Itaú a texto plano, conservando los asteriscos del nombre del comercio.
 
@@ -70,8 +78,11 @@ Cada ejecución atiende hasta 100 threads; posteriores ejecuciones continúan co
 
 Para publicar estos cambios, primero habilitar en la API `paymentType: debit | transfer` y
 `destinationAccountId`, después actualizar el script y configurar únicamente mapeos verificados.
-Una transferencia entre dos cuentas propias mapeadas se registra atómicamente por la API;
-sin ambas cuentas propias confirmadas se registra como salida para revisión. Los avisos de
+Una transferencia entre dos cuentas propias mapeadas se registra atómicamente por la API.
+Un destino externo se registra como salida con método transferencia y estado confirmado
+cuando el origen está mapeado y las conversiones necesarias están disponibles. No se pide
+revisión por el banco/cuenta destino ni por una categoría genérica de transferencia. Un
+origen desconocido o una conversión faltante conserva la revisión. Los avisos de
 débito nunca generan consumos de tarjeta de crédito.
 
 La simulación local ejecuta los archivos `.gs` reales y conserva el estado `isRead` por mensaje.
