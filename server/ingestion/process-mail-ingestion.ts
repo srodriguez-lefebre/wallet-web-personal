@@ -499,6 +499,9 @@ export async function processMailIngestion(
     const noteParts = [
       input.transaction.sourceLabel ||
         `Imported from ${input.transaction.source}`,
+      isCredit && input.transaction.source === "itau_credit_card"
+        ? `Merchant: ${input.transaction.merchantRaw}`
+        : undefined,
       category.source === "openai" ? "Categorized by OpenAI" : undefined,
       primary &&
         conversionNote(

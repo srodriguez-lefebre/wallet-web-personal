@@ -28,6 +28,38 @@ function input():MailIngestionInput{
   const messageId=randomUUID();
   return {idempotencyKey:`gmail:test:${messageId}`,integration:{name:"gmail_apps_script",version:"test"},email:{provider:"gmail",messageId,threadId:randomUUID(),subject:"Test",from:"test@example.com",date:"2026-02-01T12:00:00Z"},transaction:{source:"itau_credit_card",sourceLabel:"Test",occurredAt:"2026-02-01T12:00:00Z",amount:50,currency:"UYU",merchantRaw:"Test unknown merchant",cardAlias:"Test",cardBrand:"VISA",cardNumber:"1234",paymentType:"credit_card"},destination:{accountId,creditCardId:cardId}};
 }
+
+test.each([true,false])("Itau credit notes retain the original merchant after normalization (bank linked: %s)",async(bankLinked)=>{
+  const merchantId=randomUUID();
+  await fixture.pool.query("INSERT INTO merchants(id,name,category_id) VALUES($1,'Canonical merchant',$2)",[merchantId,knownCategoryId]);
+  await fixture.pool.query("INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) VALUES($1,'MERPAGO*MGOML MONTE','MERPAGO MGOML MONTE')",[merchantId]);
+  const event=input();
+  event.transaction.merchantRaw="MERPAGO*MGOML MONTE";
+  event.transaction.sourceLabel="Auto Itaú";
+  if(!bankLinked)event.destination={creditCardId:cardId};
+  expect((await processMailIngestion(event)).status).toBe("created");
+  expect((await processMailIngestion(event)).status).toBe("already_processed");
+  const dataset=await getWalletDataset();
+  expect(dataset.creditCardRecords).toHaveLength(1);
+  expect(dataset.creditCardRecords[0]).toMatchObject({counterpartyName:"Canonical merchant",amount:50,categoryId:knownCategoryId});
+  expect(dataset.creditCardRecords[0].note).toContain("Merchant: MERPAGO*MGOML MONTE");
+  expect(dataset.creditCardRecords[0].note).toContain("Auto Itaú");
+  expect(dataset.records).toHaveLength(bankLinked?1:0);
+  if(bankLinked)expect(dataset.records[0].note).toContain("Merchant: MERPAGO*MGOML MONTE");
+});
+
+test.each(["automation_wallet","itau_debit_card","itau_transfer"])("merchant note addition does not alter %s notices",async(source)=>{
+  const event=input();event.transaction.source=source;
+  if(source!=="automation_wallet"){
+    event.transaction.paymentType=source==="itau_transfer"?"transfer":"debit";
+    event.destination={accountId};
+  }
+  expect((await processMailIngestion(event)).status).toBe("created");
+  const dataset=await getWalletDataset();
+  expect(dataset.records).toHaveLength(1);
+  expect(dataset.creditCardRecords).toHaveLength(source==="automation_wallet"?1:0);
+  for(const record of [...dataset.records,...dataset.creditCardRecords])expect(record.note).not.toContain("Merchant:");
+});
 test("unknown cards stay under review without changing a valid account balance",async()=>{
   const event=input();event.destination.creditCardId=randomUUID();
   const result=await processMailIngestion(event);expect(result.status).toBe("needs_review");

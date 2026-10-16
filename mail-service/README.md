@@ -56,6 +56,10 @@ el remitente exacto `comunicaciones@itau.com.uy`, también con nombre visible. L
 comparan sin diferencias de mayúsculas ni tildes. El consumo de débito admite `Pesos` (UYU) y
 `Dolares`/`Dólares` (USD); las transferencias admiten códigos de moneda y `$` para UYU. El formato
 Automation Wallet conserva su reconocimiento por campos y el mapeo de crédito por alias.
+Los avisos de crédito Itaú conservan siempre el texto original de `Comercio` en la nota
+como `Merchant: MERPAGO*MGOML MONTE`, incluso si se normaliza el nombre de la contraparte.
+Esto se aplica tanto al movimiento de Wallet como al consumo de Cards, sin cambiar categorías,
+estados ni los flujos de débito, transferencias y Automation Wallet.
 Las transferencias incluyen referencias para el mapeo. La contraparte muestra los últimos
 cuatro dígitos; la nota conserva banco y cuenta destino completos, por ejemplo
 `Destination: Banco Itau · 0123929`. La API sigue enmascarando los metadatos de auditoría.
