@@ -162,13 +162,16 @@ Crear `.env.local` con:
 DATABASE_URL="postgresql://..."
 API_TOKEN="token-largo"
 SESSION_SECRET="secreto-independiente-para-firmar-sesiones"
-SESSION_TTL_SECONDS="1296000"
+SESSION_TTL_SECONDS="3888000"
 INGEST_API_TOKEN="otro-token-largo"
 OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
 OPENAI_MODEL="gpt-5-nano"
 ```
 
 El archivo `.env.local` esta ignorado por git.
+
+Las nuevas sesiones duran 45 días por defecto (3.888.000 segundos). Las sesiones ya emitidas
+conservan su vencimiento; volver a desbloquear la app emite un token con la nueva duración.
 
 ## Comandos
 

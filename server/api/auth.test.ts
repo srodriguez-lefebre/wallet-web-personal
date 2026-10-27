@@ -23,17 +23,28 @@ describe("signed wallet sessions", () => {
     const session = createSessionToken(now);
     expect(isValidSessionToken(session.token, now)).toBe(true);
     expect(isValidSessionToken(`${session.token}x`, now)).toBe(false);
+    expect(session.expiresAt).toBe("2026-08-04T12:00:00.000Z");
     expect(
       isValidSessionToken(
         session.token,
-        new Date("2026-07-05T11:59:59.000Z"),
+        new Date("2026-08-04T11:59:59.000Z"),
       ),
     ).toBe(true);
     expect(
       isValidSessionToken(
         session.token,
-        new Date("2026-07-05T12:00:00.000Z"),
+        new Date("2026-08-04T12:00:00.000Z"),
       ),
     ).toBe(false);
+  });
+
+  it("honors an explicitly configured session duration", () => {
+    process.env.SESSION_SECRET = "a-long-test-session-secret";
+    process.env.SESSION_TTL_SECONDS = "60";
+    const now = new Date("2026-06-20T12:00:00.000Z");
+    const session = createSessionToken(now);
+    expect(session.expiresAt).toBe("2026-06-20T12:01:00.000Z");
+    expect(isValidSessionToken(session.token, new Date("2026-06-20T12:00:59.000Z"))).toBe(true);
+    expect(isValidSessionToken(session.token, new Date("2026-06-20T12:01:00.000Z"))).toBe(false);
   });
 });
