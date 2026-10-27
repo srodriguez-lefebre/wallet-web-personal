@@ -70,6 +70,10 @@ function buildRuntimeContext() {
 }
 
 function resolveDestination(consumption, targets) {
+  if (consumption.source === 'itau_payment') {
+    const origin = String(consumption.accountNumber || '').replace(/\D/g, '').slice(-4);
+    return { accountId: resolveBankTarget(targets.bankAccounts, origin, consumption.currency) };
+  }
   if (consumption.paymentType === 'debit') {
     const digits = String(consumption.cardNumber || '').replace(/\D/g, '').slice(-4);
     return { accountId: resolveBankTarget(targets.debitCards, digits, consumption.currency) };

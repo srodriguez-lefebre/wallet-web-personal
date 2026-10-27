@@ -24,6 +24,11 @@ const transfer: SimulatedMessage = {
   subject: "Transferencia realizada",
   body: "Transferencia realizada desde la cuenta ****1357\nImporte: 44.00 USD\nCuenta destino: 9876540\nBanco/Institución destino: Banco Itau",
 };
+const payment: SimulatedMessage = {
+  ...credit,
+  subject: "Pago realizado",
+  body: "Pago realizado.\nTu pago fue realizado con éxito. Siguen los detalles del mismo:\nCuenta origen terminada en ...1440.\nMonto: $ 1050.55.\nPago a SISTARBANC.\nSi no fuiste tú comunícate al 1784.",
+};
 const ignored: SimulatedMessage = {
   ...credit,
   id: "ignored",
@@ -45,6 +50,57 @@ function mail(...messages: SimulatedMessage[]): MailRunInput {
   value.threads[0].messages = structuredClone(messages);
   return value;
 }
+
+test.each([
+  ["$ 1050.55.",1050.55,"UYU"],
+  ["$ 1.050,55.",1050.55,"UYU"],
+  ["USD 15.20.",15.2,"USD"],
+  ["15,20 USD.",15.2,"USD"],
+  ["*$ 1050.55*.",1050.55,"UYU"],
+])("Pago realizado reads amount %s and maps its origin without using card defaults",(raw,amount,currency)=>{
+  const value=mail({...payment,body:payment.body.replace("$ 1050.55.",String(raw))});
+  value.targets.bankAccounts={"1440":{accountId:"fallback"},[`1440:${currency}`]:{accountId:"origin"}};
+  value.targets.defaultAccountId="must-not-use";
+  const result=runMailAutomation(value,ok);
+  expect(result.deliveries).toHaveLength(1);
+  expect(result.deliveries[0].payload).toMatchObject({idempotencyKey:"gmail:itau_payment:message-test",transaction:{source:"itau_payment",paymentType:"transfer",amount,currency,accountNumber:"****1440",merchantRaw:"SISTARBANC"},destination:{accountId:"origin"}});
+  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0].messages[0].isRead).toBe(true);
+});
+
+test("Pago realizado preserves payee punctuation and Gmail bold formatting",()=>{
+  const value=mail({...payment,body:payment.body.replace("...1440.","...*1440*.").replace("Pago a SISTARBANC.","Pago a *TEST*PAYMENT GATEWAY*." )});
+  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({transaction:{accountNumber:"****1440",merchantRaw:"TEST*PAYMENT GATEWAY"}});
+});
+
+test("Pago realizado uses the existing personal savings origin configuration",()=>{
+  const value=mail({...payment,body:payment.body.replace("1440","1431").replace("$ 1050.55.","USD 15.20.")});
+  value.targets.bankAccounts=JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json",import.meta.url),"utf8")).bankAccounts;
+  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"86b72caa-9e03-4afa-af9f-40af2b98f008"}});
+});
+
+test("Pago realizado with an unknown origin never falls back to a card or default account",()=>{
+  const value=mail({...payment,body:payment.body.replace("1440","9999")});
+  value.targets.defaultAccountId="must-not-use";
+  value.targets.cards["9999"]={accountId:"must-not-use",creditCardId:"must-not-use"};
+  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{}});
+});
+
+test.each([
+  payment.body.replace("Cuenta origen terminada en ...1440.",""),
+  payment.body.replace("1440","12345"),
+  payment.body.replace("Monto: $ 1050.55.",""),
+  payment.body.replace("$ 1050.55.","1050.55."),
+  payment.body.replace("$ 1050.55.","UYU 10 USD."),
+  payment.body.replace("$ 1050.55.","$ 1.2,34."),
+  payment.body.replace("Pago a SISTARBANC.","Pago a ."),
+  payment.body.replace("fue realizado con éxito","no se pudo realizar"),
+])("incomplete or invalid Pago realizado is retained pending and unread (%#)",(body)=>{
+  const result=runMailAutomation(mail({...payment,body}),ok);
+  expect(result.deliveries).toHaveLength(0);
+  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0].messages[0].isRead).toBe(false);
+});
 
 test("actual Apps Script builds credit payload and marks the completed message read", () => {
   const result = runMailAutomation(input, ok);

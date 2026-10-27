@@ -256,6 +256,29 @@ test("the Itau mail flow preserves leading destination zeroes and records an out
   expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(-130);
 });
 
+test.each([true,false])("Pago realizado records the payment, source and amount in notes without card activity (mapped: %s)",async(mapped)=>{
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
+  const parsed=runMailAutomation({
+    ingestUrl:"http://wallet.local/api/ingest/mail/transactions",ingestToken:"test-only",
+    targets:{cards:{},bankAccounts:mapped?{"1440":{accountId}}:{}},
+    threads:[{id:"payment-thread",labels:["Wallet/Pendiente"],messages:[{
+      id:"payment-1050",subject:"Pago realizado",from:"Itaú Comunicaciones <comunicaciones@itau.com.uy>",date:"2026-02-01T12:00:00Z",
+      body:"Tu pago fue realizado con éxito.\nCuenta origen terminada en ...1440.\nMonto: $ 1050.55.\nPago a SISTARBANC.",
+    }]}],
+  },()=>({status:201,body:'{"data":{"status":"created"}}'}));
+  expect(parsed.deliveries).toHaveLength(1);
+  const event=mailIngestionSchema.parse(parsed.deliveries[0].payload);
+  expect((await processMailIngestion(event)).status).toBe(mapped?"created":"needs_review");
+  expect((await processMailIngestion(event)).status).toBe("already_processed");
+  const dataset=await getWalletDataset();
+  expect(dataset.records).toHaveLength(1);
+  expect(dataset.creditCardRecords).toHaveLength(0);
+  expect(dataset.records[0]).toMatchObject({type:"expense",amount:1050.55,currency:"UYU",paymentType:"transfer",paymentStatus:mapped?"cleared":"needs_review"});
+  expect(dataset.records[0].accountId).toBe(mapped?accountId:undefined);
+  expect(dataset.records[0].note).toContain("Payment to: SISTARBANC · UYU 1050.55 · from ****1440");
+  expect(calculateAccountBalances(dataset)[0].totalBalance).toBeCloseTo(mapped?-550.55:500,2);
+});
+
 test("a known transfer origin still requires review when its primary currency conversion is unavailable",async()=>{
   await fixture.pool.query("UPDATE settings SET primary_currency='EUR'");
   vi.spyOn(globalThis,"fetch").mockRejectedValue(new Error("Offline"));

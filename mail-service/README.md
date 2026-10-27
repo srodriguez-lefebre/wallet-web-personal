@@ -56,6 +56,14 @@ el remitente exacto `comunicaciones@itau.com.uy`, también con nombre visible. L
 comparan sin diferencias de mayúsculas ni tildes. El consumo de débito admite `Pesos` (UYU) y
 `Dolares`/`Dólares` (USD); las transferencias admiten códigos de moneda y `$` para UYU. El formato
 Automation Wallet conserva su reconocimiento por campos y el mapeo de crédito por alias.
+También se reconoce el asunto exacto `Pago realizado` del mismo remitente Itaú, cuando el cuerpo
+confirma que el pago fue realizado con éxito e incluye origen, importe/moneda y destinatario.
+Se registra como salida bancaria con método transferencia, usando `bankAccounts` para el origen
+y sin generar actividad de tarjeta. La nota conserva el detalle original, por ejemplo
+`Payment to: SISTARBANC · UYU 1050.55 · from ****1440`.
+Un origen sin mapear queda para revisión. Un aviso reconocido incompleto o un importe ambiguo
+permanece pendiente y sin leer. Las notificaciones ya archivadas como procesadas no se reimportan
+automáticamente; el nuevo formato se aplica a los mensajes que el script encuentre pendientes.
 Los avisos de crédito Itaú conservan siempre el texto original de `Comercio` en la nota
 como `Merchant: MERPAGO*MGOML MONTE`, incluso si se normaliza el nombre de la contraparte.
 Esto se aplica tanto al movimiento de Wallet como al consumo de Cards, sin cambiar categorías,
@@ -68,7 +76,7 @@ los avisos de Itaú a texto plano, conservando los asteriscos del nombre del com
 
 Crear un trigger periódico para `processPendingEmails`. Cada mensaje ingresado con respuesta
 2xx o sin formato soportado se marca leído. Los mensajes no soportados, incluidas devoluciones
-y pagos de tarjetas, se completan sin crear movimientos: esos eventos todavía no se importan.
+y avisos de pago de tarjeta recibido, se completan sin crear movimientos: esos eventos todavía no se importan.
 Un aviso financiero reconocido pero incompleto, un importe mal formado (agrupaciones incorrectas
 o más de dos decimales), una excepción o una respuesta HTTP fallida
 conserva el thread pendiente y no marca leído ese mensaje. El script solo mueve el thread de

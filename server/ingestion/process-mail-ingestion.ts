@@ -502,6 +502,9 @@ export async function processMailIngestion(
       isCredit && input.transaction.source === "itau_credit_card"
         ? `Merchant: ${input.transaction.merchantRaw}`
         : undefined,
+      isTransfer && input.transaction.source === "itau_payment"
+        ? `Payment to: ${input.transaction.merchantRaw} · ${input.transaction.currency} ${money(input.transaction.amount)} · from ${input.transaction.accountNumber ? `****${input.transaction.accountNumber.replace(/\D/g, "").slice(-4)}` : "unknown account"}`
+        : undefined,
       category.source === "openai" ? "Categorized by OpenAI" : undefined,
       primary &&
         conversionNote(
