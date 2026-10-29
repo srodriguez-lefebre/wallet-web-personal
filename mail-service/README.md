@@ -30,9 +30,10 @@ Script Properties requeridas:
 ```
 
 Los números del ejemplo son ficticios. `bank-account-targets.json` contiene los mapeos
-personales verificados: origen `****1440` → Banco (UYU) y `****1431` → Ahorros itau (USD).
-Para aplicarlos, combinar su objeto `bankAccounts` con el de la propiedad de Apps Script
-`WALLET_TARGETS_JSON`, conservando `cards`, `debitCards`, `defaultAccountId` y los demás
+personales verificados: débito Visa `****9986` → Banco (UYU), origen `****1440` → Banco (UYU)
+y `****1431` → Ahorros itau (USD).
+Para aplicarlos, combinar sus objetos `bankAccounts` y `debitCards` con los de la propiedad
+de Apps Script `WALLET_TARGETS_JSON`, conservando `cards`, `defaultAccountId` y los demás
 mapeos existentes. También se pueden definir referencias específicas por moneda en esa
 propiedad. El script consume la configuración de la propiedad, sin leer archivos remotos.
 

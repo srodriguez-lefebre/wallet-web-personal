@@ -51,6 +51,23 @@ function mail(...messages: SimulatedMessage[]): MailRunInput {
   return value;
 }
 
+test("personal Visa debit 9986 is routed to Banco using the configured debit map", () => {
+  const value = mail({
+    ...debit,
+    subject: "Aviso de consumo aprobado con tarjeta de débito",
+    body: "Se aprobo un consumo de su tarjeta Visa terminada en 9986. Realizado en MERPAGO*CABIFY2644ILTVIS3 Monto: 257.60 Pesos. Si no fuiste tú comunícate al 1784.",
+  });
+  const personalTargets = JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json", import.meta.url), "utf8"));
+  value.targets = { ...value.targets, ...personalTargets, defaultAccountId: "must-not-use" };
+  const result = runMailAutomation(value, ok);
+  expect(result.deliveries).toHaveLength(1);
+  expect(result.deliveries[0].payload).toMatchObject({
+    transaction: { source: "itau_debit_card", paymentType: "debit", cardNumber: "****9986", amount: 257.6, currency: "UYU", merchantRaw: "MERPAGO*CABIFY2644ILTVIS3" },
+    destination: { accountId: "da81224b-90f3-4413-aa96-46197d6d31e9" },
+  });
+  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+});
+
 test.each([
   ["$ 1050.55.",1050.55,"UYU"],
   ["$ 1.050,55.",1050.55,"UYU"],
