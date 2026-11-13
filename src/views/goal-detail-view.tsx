@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
+import { formatCalendarDate } from "@/lib/utils";
 import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { GoalEditDialog } from "@/components/wallet/goal-edit-dialog";
@@ -288,9 +289,9 @@ export function GoalDetailView() {
                 {goalProgress.goal.deadline ? (
                   <Badge variant="muted">
                     <CalendarDays className="mr-1 h-3 w-3" />
-                    {goalProgress.goal.deadline}
-                    {deadlineDays !== null
-                      ? ` · ${deadlineDays >= 0 ? `Faltan ${deadlineDays} días` : `Finalizó hace ${Math.abs(deadlineDays)} días`}`
+                    <time dateTime={goalProgress.goal.deadline}>{formatCalendarDate(goalProgress.goal.deadline)}</time>
+                    {deadlineDays !== null && goalProgress.goal.status === "active"
+                      ? ` · ${deadlineDays === 0 ? "Due today" : deadlineDays > 0 ? `${deadlineDays} days left` : `${Math.abs(deadlineDays)} days overdue`}`
                       : ""}
                   </Badge>
                 ) : null}
@@ -361,10 +362,17 @@ export function GoalDetailView() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {reservations.length === 0 ? (
+            {goalProgress.goal.status === "completed" && (
               <p className="text-sm text-muted-foreground">
-                You have not reserved money for this goal yet.
+                Reservations are available on active goals. Completing a goal releases its remaining reserved funds back to the original accounts.
               </p>
+            )}
+            {reservations.length === 0 ? (
+              goalProgress.goal.status !== "completed" && (
+                <p className="text-sm text-muted-foreground">
+                You have not reserved money for this goal yet.
+                </p>
+              )
             ) : (
               reservations.map((reservation) => {
                 const account = dataset.accounts.find(

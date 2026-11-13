@@ -5,7 +5,8 @@ import { processMailIngestion } from "./process-mail-ingestion";
 import * as classification from "./openai-category";
 import type { MailIngestionInput } from "../../shared/schemas";
 import { createDb } from "../db/client";
-import { getWalletDataset } from "../db/wallet-repository";
+import { getWalletDataset, patchSettings, updateRecord } from "../db/wallet-repository";
+import { categoryImportWarning, countNewReviews } from "../../shared/record-review";
 import { resolveCategory } from "./process-mail-ingestion";
 import { walletBackupSchema } from "../../shared/schemas";
 import { restoreWalletBackup } from "../db/wallet-restore";
@@ -102,6 +103,53 @@ async function stored() {
     ).rows[0].sanitized_payload,
   };
 }
+
+test("review saves and undo persist, and corrected merchants only auto-apply after opt-in", async () => {
+  const first = await processMailIngestion(input("ERBOT SA MONTE"));
+  expect(first.status).toBe("needs_review");
+  const initial = (await getWalletDataset()).records.find((record) => record.id === first.recordId)!;
+  expect(initial.importHistory).toContain(categoryImportWarning);
+  expect(initial.note).not.toContain(categoryImportWarning);
+  expect(countNewReviews(await getWalletDataset())).toBe(1);
+  await patchSettings({ reviewSeenThrough: initial.createdAt! });
+  expect(countNewReviews(await getWalletDataset())).toBe(0);
+
+  const saved = (await updateRecord(initial.id, { categoryId: foodId, expectedUpdatedAt: initial.updatedAt }))!;
+  expect(saved).toMatchObject({
+    categoryId: foodId,
+    paymentStatus: "needs_review",
+    importMerchant: "ERBOT SA MONTE",
+    merchantCorrection: { autoApply: false },
+  });
+  expect(saved.importHistory).toContain(categoryImportWarning);
+  expect((await resolveCategory(createDb(), "  erbot sa   monte  ")).source).toBe("user_suggestion");
+  const next = await processMailIngestion(input("ERBOT SA MONTE"));
+  expect(next.status).toBe("needs_review");
+  expect((await getWalletDataset()).records.find((record) => record.id === next.recordId)?.categoryId).toBe(unknownId);
+  expect(countNewReviews(await getWalletDataset())).toBe(1);
+
+  const reviewed = (await updateRecord(saved.id, {
+    categoryId: foodId, paymentStatus: "cleared", merchantAutoApply: true, expectedUpdatedAt: saved.updatedAt,
+  }))!;
+  const automatic = await processMailIngestion(input("ERBOT SA MONTE"));
+  expect(automatic.status).toBe("created");
+  expect((await getWalletDataset()).records.find((record) => record.id === automatic.recordId)).toMatchObject({
+    categoryId: foodId, importMerchant: "ERBOT SA MONTE",
+  });
+  expect((await resolveCategory(createDb(), "ERBOT SA MONTE BRANCH")).source).not.toBe("user_rule");
+  await expect(updateRecord(initial.id, { categoryId: taxiId, expectedUpdatedAt: initial.updatedAt })).rejects.toThrow("record changed");
+
+  const undone = await updateRecord(saved.id, {
+    categoryId: initial.categoryId,
+    paymentStatus: initial.paymentStatus,
+    expectedUpdatedAt: reviewed.updatedAt,
+    restoreMerchantCorrection: null,
+  });
+  expect(undone).toMatchObject({ categoryId: unknownId, paymentStatus: "needs_review" });
+  expect(undone?.merchantCorrection).toBeUndefined();
+  expect((await resolveCategory(createDb(), "ERBOT SA MONTE")).source).toBe("fallback");
+  expect((await getWalletDataset()).records.find((record) => record.id === saved.id)?.importHistory).toContain(categoryImportWarning);
+});
 test("an existing erroneous Uber transport rule produces Taxi in both durable records", async () => {
   await rule("Uber", publicId);
   expect((await processMailIngestion(input("UBER TRIP MONTE"))).status).toBe(

@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, ilike, inArray, isNotNull, isNull, lt, ne, or, sql, type SQL } from "drizzle-orm";
 import { createHash, randomUUID } from "node:crypto";
 import { createDb, type DbClient } from "./client.js";
+import { isReviewCategory, splitImportNote } from "../../shared/record-review.js";
 import {
   accounts,
   budgets,
@@ -267,6 +268,8 @@ function mapRecord(
   goalAssociationsByRecord: Record<string, RecordGoalAssociation[]> = {},
 ): WalletRecord {
   const goalAssociations = goalAssociationsByRecord[row.id] ?? [];
+  const legacy = splitImportNote(optional(row.note));
+  const importHistory = [...new Set([...(row.importHistory ?? []), ...legacy.history])];
   return {
     id: row.id,
     type: row.type,
@@ -295,7 +298,12 @@ function mapRecord(
         ? undefined
         : asNumber(row.exchangeRateToLimitCurrency),
     occurredAt: asRequiredIso(row.occurredAt),
-    note: optional(row.note),
+    note: legacy.note,
+    createdAt: asIso(row.createdAt),
+    updatedAt: asIso(row.updatedAt),
+    importMerchant: optional(row.importMerchant),
+    importHistory: importHistory.length ? importHistory : undefined,
+    merchantCorrection: optional(row.merchantCorrection),
     isFixed: row.isFixed,
     debtId: optional(row.debtId),
   };
@@ -582,6 +590,7 @@ function mapSettings(
     defaultPaymentType: row?.defaultPaymentType ?? "debit",
     defaultCreditCardId: optional(row?.defaultCreditCardId),
     defaultPaymentStatus: row?.defaultPaymentStatus ?? "cleared",
+    reviewSeenThrough: asIso(row?.reviewSeenThrough),
   };
 }
 
@@ -2094,7 +2103,10 @@ export async function updateRecord(
     db.select().from(recordTags).where(eq(recordTags.recordId, id)),
     db.select().from(recordGoals).where(eq(recordGoals.recordId, id)),
   ]);
-  if (!existingRecord) return null;
+  if (!existingRecord || existingRecord.deletedAt) return null;
+  if (input.expectedUpdatedAt && existingRecord.updatedAt.toISOString() !== input.expectedUpdatedAt) {
+    throw conflictError("This record changed. Reload it before trying again.");
+  }
   if (input.debtId !== undefined && (input.debtId ?? null) !== existingRecord.debtId) {
     throw validationError("A record's debt association cannot be added, removed, or changed. Use the debt payment action.");
   }
@@ -2118,7 +2130,35 @@ export async function updateRecord(
   if (linked?.kind === "refund") assertLinkedRefundMetadata(current, merged);
   if (merged.creditCardId && merged.type !== "expense"
     && (merged.type !== current.type || merged.creditCardId !== current.creditCardId)) assertGenericCardRecord(merged);
-  const recordValues: Partial<typeof records.$inferInsert> = { updatedAt: new Date() };
+  const updatedAt = new Date(Math.max(Date.now(), existingRecord.updatedAt.getTime() + 1));
+  const recordValues: Partial<typeof records.$inferInsert> = { updatedAt };
+  if (input.restoreMerchantCorrection !== undefined) {
+    if (!current.importMerchant) throw validationError("This record has no imported merchant");
+    recordValues.merchantCorrection = input.restoreMerchantCorrection;
+  } else if (
+    current.importMerchant && current.type === "expense" &&
+    current.paymentType !== "transfer" &&
+    ((hasOwn(input, "categoryId") && merged.categoryId !== current.categoryId) ||
+      input.merchantAutoApply !== undefined)
+  ) {
+    const [category] = merged.categoryId ? await db.select().from(categories)
+      .where(and(eq(categories.id, merged.categoryId), isNull(categories.deletedAt))) : [];
+    if (isReviewCategory(category)) {
+      recordValues.merchantCorrection = {
+        savedAt: updatedAt.toISOString(),
+        autoApply: input.merchantAutoApply ?? false,
+      };
+    } else if (input.merchantAutoApply !== undefined) {
+      throw validationError("Choose a category before saving a merchant rule");
+    } else {
+      recordValues.merchantCorrection = null;
+    }
+  }
+  const legacy = splitImportNote(optional(existingRecord.note));
+  if (legacy.history.length) {
+    recordValues.importHistory = current.importHistory;
+    recordValues.note = current.note ?? null;
+  }
   if (hasOwn(input, "type")) recordValues.type = merged.type;
   if (hasOwn(input, "amount")) recordValues.amount = decimal(merged.amount);
   if (hasOwn(input, "currency")) recordValues.currency = merged.currency;
@@ -2967,6 +3007,9 @@ export async function upsertSettings(
     defaultPaymentType: input.defaultPaymentType,
     defaultCreditCardId: input.defaultCreditCardId ?? null,
     defaultPaymentStatus: input.defaultPaymentStatus,
+    reviewSeenThrough: input.reviewSeenThrough
+      ? new Date(Math.min(Date.parse(input.reviewSeenThrough), Date.now()))
+      : undefined,
     updatedAt: new Date(),
   };
 
@@ -2995,6 +3038,9 @@ export async function patchSettings(input: SettingsPatch, db: Db = createDb()) {
     return upsertSettings(merged, db);
   }
   const values: Partial<typeof settings.$inferInsert> = { updatedAt: new Date() };
+  if (input.reviewSeenThrough) {
+    values.reviewSeenThrough = sql`greatest(${settings.reviewSeenThrough}, least(${input.reviewSeenThrough}::timestamptz, now()))` as unknown as Date;
+  }
   for (const key of ["primaryCurrency", "theme", "defaultDashboardPreset", "locale", "includeHiddenAccountsInReports", "defaultPaymentType", "defaultPaymentStatus"] as const) {
     if (hasOwn(input, key)) values[key] = input[key] as never;
   }

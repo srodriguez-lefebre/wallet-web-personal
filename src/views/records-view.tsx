@@ -1,6 +1,6 @@
 ﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import * as Select from "@radix-ui/react-select";
+import * as Popover from "@radix-ui/react-popover";
 import {
   Check,
   ChevronDown,
@@ -34,6 +34,16 @@ import { cn, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { findExchangeRate } from "@shared/money";
 import {
+  countNewReviews,
+  currentReviewIssues,
+  getMerchantCorrections,
+  isReviewCategory,
+  normalizeBankMerchant,
+  recordReviewDate,
+  splitImportNote,
+} from "@shared/record-review";
+import type { RecordPatch } from "@shared/schemas";
+import {
   recordAccountAmount,
   scaleConvertedAmount,
 } from "@/lib/record-form-money";
@@ -55,6 +65,7 @@ import type {
   PaymentStatus,
   PaymentType,
   RecordType,
+  RecordFilters,
   RecordGoalAssociation,
   WalletDataset,
   WalletRecord,
@@ -62,11 +73,16 @@ import type {
 
 const paymentMethodClasses: Record<PaymentType, string> = {
   cash: "bg-muted text-muted-foreground",
-  debit: "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  debit:
+    "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
   credit: "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  transfer: "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  transfer:
+    "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
   other: "bg-muted text-muted-foreground",
 };
+
+const noteFieldClassName =
+  "block min-h-24 max-h-64 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring [field-sizing:content]";
 
 function formatCategoryName(categories: Category[], category: Category) {
   const parent = category.parentId
@@ -97,76 +113,91 @@ function CategoryFilterSelect({
   categories,
   value,
   onChange,
+  label = "Category",
+  emptyLabel = "Categories",
 }: {
   categories: Category[];
   value?: string;
   onChange: (categoryId: string | undefined) => void;
+  label?: string;
+  emptyLabel?: string;
 }) {
   const selectedCategory = categories.find((category) => category.id === value);
+  const [open, setOpen] = useState(false);
+
+  function choose(id?: string) {
+    onChange(id);
+    setOpen(false);
+  }
 
   return (
-    <Select.Root
-      value={value ?? "all"}
-      onValueChange={(categoryId) =>
-        onChange(categoryId === "all" ? undefined : categoryId)
-      }
-    >
-      <Select.Trigger
-        className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-        aria-label="Category"
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          {selectedCategory ? (
-            <CategoryIcon
-              icon={selectedCategory.icon}
-              color={selectedCategory.color}
-              size="sm"
-            />
-          ) : null}
-          <Select.Value placeholder="Categories" />
-        </span>
-        <Select.Icon>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        </Select.Icon>
-      </Select.Trigger>
-      <Select.Portal>
-        <Select.Content
-          position="popper"
-          className="z-50 max-h-72 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          <Select.Viewport className="p-1">
-            <Select.Item
-              value="all"
-              className="relative flex cursor-pointer select-none items-center rounded-sm py-2 pl-8 pr-3 text-sm outline-none data-[highlighted]:bg-secondary"
+          <span className="flex min-w-0 items-center gap-2">
+            {selectedCategory && (
+              <CategoryIcon
+                icon={selectedCategory.icon}
+                color={selectedCategory.color}
+                size="sm"
+              />
+            )}
+            <span className="truncate">
+              {selectedCategory
+                ? formatCategoryName(categories, selectedCategory)
+                : emptyLabel}
+            </span>
+          </span>
+          <ChevronDown
+            className="h-4 w-4 shrink-0 text-muted-foreground"
+            aria-hidden
+          />
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          aria-label={label + " options"}
+          align="start"
+          sideOffset={4}
+          collisionPadding={12}
+          className="z-50 max-h-[min(18rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+        >
+          <button
+            type="button"
+            aria-pressed={!value}
+            className="w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary focus-visible:bg-secondary"
+            onClick={() => choose()}
+          >
+            {emptyLabel}
+          </button>
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              aria-pressed={category.id === value}
+              className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-secondary focus-visible:bg-secondary aria-pressed:bg-secondary"
+              onClick={() => choose(category.id)}
             >
-              <Select.ItemText>Categories</Select.ItemText>
-              <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                <Check className="h-4 w-4" />
-              </Select.ItemIndicator>
-            </Select.Item>
-            {categories.map((category) => (
-              <Select.Item
-                key={category.id}
-                value={category.id}
-                className="relative flex cursor-pointer select-none items-center gap-2 rounded-sm py-2 pl-8 pr-3 text-sm outline-none data-[highlighted]:bg-secondary"
-              >
-                <CategoryIcon
-                  icon={category.icon}
-                  color={category.color}
-                  size="sm"
-                />
-                <Select.ItemText>
-                  {formatCategoryName(categories, category)}
-                </Select.ItemText>
-                <Select.ItemIndicator className="absolute left-2 inline-flex items-center">
-                  <Check className="h-4 w-4" />
-                </Select.ItemIndicator>
-              </Select.Item>
-            ))}
-          </Select.Viewport>
-        </Select.Content>
-      </Select.Portal>
-    </Select.Root>
+              <CategoryIcon
+                icon={category.icon}
+                color={category.color}
+                size="sm"
+              />
+              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+                {formatCategoryName(categories, category)}
+              </span>
+              {category.id === value && (
+                <Check className="h-4 w-4 shrink-0" aria-hidden />
+              )}
+            </button>
+          ))}
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 
@@ -252,11 +283,19 @@ export function RecordsView() {
     isSelectedRangeComplete,
     isAllHistoryComplete,
     loadMoreRecords,
+    updateWalletSettings,
   } = useWallet();
 
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [templateNotice, setTemplateNotice] = useState("");
+  const [showNoteFilter, setShowNoteFilter] = useState(false);
+  const [reviewUndo, setReviewUndo] = useState<{
+    before: WalletRecord;
+    saved: WalletRecord;
+  }>();
+  const [reviewWrite, setReviewWrite] = useState<string>();
+  const reviewWriteLock = useRef(false);
   const recordDraftRevision = useRef(0);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(defaultAccountId(dataset));
@@ -295,9 +334,20 @@ export function RecordsView() {
   const reviewCount = dataset.records.filter(
     (record) => record.paymentStatus === "needs_review",
   ).length;
+  const newReviewCount = countNewReviews(dataset);
+  const reviewSeenThrough =
+    Date.parse(dataset.settings.reviewSeenThrough ?? "") || 0;
+  const merchantCorrections = useMemo(
+    () => getMerchantCorrections(dataset),
+    [dataset],
+  );
   const categories = useMemo(
     () => sortCategoriesForSelect(dataset.categories),
     [dataset.categories],
+  );
+  const reviewCategories = useMemo(
+    () => categories.filter((category) => isReviewCategory(category)),
+    [categories],
   );
   const selectedAccountBalance = recordFilters.accountId
     ? calculateAccountBalances(dataset).find(
@@ -525,6 +575,11 @@ export function RecordsView() {
           ? (record.goalIds ?? []).includes(recordFilters.goalId)
           : true,
       )
+      .filter((record) =>
+        (record.note ?? "")
+          .toLowerCase()
+          .includes((recordFilters.note ?? "").trim().toLowerCase()),
+      )
       .filter((record) => {
         const category = dataset.categories.find(
           (item) => item.id === record.categoryId,
@@ -535,7 +590,7 @@ export function RecordsView() {
         const categoryName = category
           ? formatCategoryName(dataset.categories, category)
           : "";
-        const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${tags} ${record.note ?? ""}`;
+        const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${record.importMerchant ?? ""} ${tags} ${record.note ?? ""}`;
         return normalizeGlobalSearch(haystack).includes(
           normalizeGlobalSearch(recordFilters.search ?? ""),
         );
@@ -553,41 +608,69 @@ export function RecordsView() {
   ]);
 
   const grouped = groupRecordsByDay(filteredRecords);
-  const activeFilters = [
-    recordFilters.type && recordFilters.type !== "all"
-      ? recordFilters.type
-      : null,
-    recordFilters.accountId
-      ? dataset.accounts.find(
-          (account) => account.id === recordFilters.accountId,
-        )?.name
-      : null,
-    recordFilters.creditCardId
-      ? dataset.creditCards.find(
-          (card) => card.id === recordFilters.creditCardId,
-        )?.name
-      : null,
-    recordFilters.categoryId
-      ? (() => {
-          const category = dataset.categories.find(
-            (candidate) => candidate.id === recordFilters.categoryId,
-          );
-          return category
-            ? formatCategoryName(dataset.categories, category)
-            : null;
-        })()
-      : null,
-    recordFilters.tagId
-      ? dataset.tags.find((tag) => tag.id === recordFilters.tagId)?.name
-      : null,
-    recordFilters.goalId
-      ? dataset.goals.find((goal) => goal.id === recordFilters.goalId)?.name
-      : null,
-    recordFilters.paymentStatus && recordFilters.paymentStatus !== "all"
-      ? paymentStatusLabels[recordFilters.paymentStatus]
-      : null,
-    recordFilters.search,
-  ].filter(Boolean);
+  const filterCategory = categories.find(
+    (category) => category.id === recordFilters.categoryId,
+  );
+  const activeFilters: Array<
+    [keyof RecordFilters, string, string | undefined]
+  > = [
+    [
+      "type",
+      "Type",
+      recordFilters.type && recordFilters.type !== "all"
+        ? recordTypeLabels[recordFilters.type]
+        : undefined,
+    ],
+    [
+      "accountId",
+      "Account",
+      recordFilters.accountId &&
+        (dataset.accounts.find((item) => item.id === recordFilters.accountId)
+          ?.name ??
+          "Unavailable"),
+    ],
+    [
+      "creditCardId",
+      "Card",
+      recordFilters.creditCardId &&
+        (dataset.creditCards.find(
+          (item) => item.id === recordFilters.creditCardId,
+        )?.name ??
+          "Unavailable"),
+    ],
+    [
+      "categoryId",
+      "Category",
+      recordFilters.categoryId &&
+        (filterCategory
+          ? formatCategoryName(categories, filterCategory)
+          : "Unavailable"),
+    ],
+    [
+      "tagId",
+      "Tag",
+      recordFilters.tagId &&
+        (dataset.tags.find((item) => item.id === recordFilters.tagId)?.name ??
+          "Unavailable"),
+    ],
+    [
+      "goalId",
+      "Goal",
+      recordFilters.goalId &&
+        (dataset.goals.find((item) => item.id === recordFilters.goalId)?.name ??
+          "Unavailable"),
+    ],
+    [
+      "paymentStatus",
+      "Status",
+      recordFilters.paymentStatus && recordFilters.paymentStatus !== "all"
+        ? paymentStatusLabels[recordFilters.paymentStatus]
+        : undefined,
+    ],
+    ["search", "Search", recordFilters.search?.trim()],
+    ["note", "Note", recordFilters.note?.trim()],
+  ];
+  const appliedFilters = activeFilters.filter(([, , value]) => Boolean(value));
 
   function resetForm(nextType: RecordType = "expense") {
     recordDraftRevision.current += 1;
@@ -696,7 +779,7 @@ export function RecordsView() {
     };
     setPrimaryRate(String(record.exchangeRateToPrimary));
     setMoneyError("");
-    setNote(record.note ?? "");
+    setNote(splitImportNote(record.note).note ?? "");
     setTagId(record.tagIds[0] ?? "");
     setGoalAssociations(
       record.goalAssociations ??
@@ -777,6 +860,89 @@ export function RecordsView() {
     clearRecordFilters();
     setAllPeriod();
     setRecordFilters({ paymentStatus: "needs_review" });
+  }
+
+  async function saveReview(record: WalletRecord, patch: RecordPatch) {
+    if (reviewWriteLock.current) return;
+    reviewWriteLock.current = true;
+    setReviewWrite(record.id);
+    try {
+      await runAction(
+        async () => {
+          const saved = await updateRecord(record.id, {
+            ...patch,
+            expectedUpdatedAt: record.updatedAt,
+          });
+          setReviewUndo({ before: record, saved });
+        },
+        {
+          processing: "Saving review…",
+          success: "Review saved",
+          error: "Could not save review",
+        },
+      );
+    } catch {
+      // The toast reports the failure and the row retains its selection.
+    } finally {
+      reviewWriteLock.current = false;
+      setReviewWrite(undefined);
+    }
+  }
+
+  async function undoReview() {
+    if (!reviewUndo || reviewWriteLock.current) return;
+    const { before, saved } = reviewUndo;
+    if (!saved?.updatedAt) return;
+    reviewWriteLock.current = true;
+    setReviewWrite(before.id);
+    try {
+      await runAction(
+        async () => {
+          await updateRecord(before.id, {
+            categoryId: before.categoryId ?? null,
+            paymentStatus: before.paymentStatus,
+            expectedUpdatedAt: saved.updatedAt,
+            ...(before.importMerchant
+              ? { restoreMerchantCorrection: before.merchantCorrection ?? null }
+              : {}),
+          });
+          setReviewUndo(undefined);
+        },
+        {
+          processing: "Undoing review…",
+          success: "Review undone",
+          error: "Could not undo review",
+        },
+      );
+    } catch {
+      // Keep the action visible so the user can see what failed.
+    } finally {
+      reviewWriteLock.current = false;
+      setReviewWrite(undefined);
+    }
+  }
+
+  function markReviewQueueSeen() {
+    const newest = dataset.records
+      .filter((record) => record.paymentStatus === "needs_review")
+      .reduce(
+        (latest, record) =>
+          Math.max(latest, Date.parse(recordReviewDate(record)) || 0),
+        0,
+      );
+    if (newest > 0) {
+      void runAction(
+        () =>
+          updateWalletSettings({
+            reviewSeenThrough: new Date(newest).toISOString(),
+          }),
+        {
+          processing: "Marking records as seen…",
+          success: "Review queue marked as seen",
+          error: "Could not mark records as seen",
+        },
+      ).catch(() => undefined);
+    }
   }
 
   function closeRecordDialog() {
@@ -1025,6 +1191,9 @@ export function RecordsView() {
         >
           Needs review{" "}
           {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
+          {isAllHistoryComplete && newReviewCount > 0 && (
+            <Badge variant="warning">{newReviewCount} new</Badge>
+          )}
         </Button>
         <Button onClick={openNewRecordDialog}>
           <Plus className="h-4 w-4" />
@@ -1034,11 +1203,82 @@ export function RecordsView() {
 
       {selectedPeriodMode === "all" &&
         recordFilters.paymentStatus === "needs_review" && (
-          <p className="mb-4 text-sm text-muted-foreground" role="status">
-            Review queue · All dates. Check the details and mark reviewed
-            movements as cleared.
-          </p>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <p className="text-sm text-muted-foreground" role="status">
+              Review queue · All dates
+              {isAllHistoryComplete &&
+                ` · ${newReviewCount} new · ${reviewCount - newReviewCount} seen, still pending`}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!isAllHistoryComplete || !newReviewCount}
+              onClick={markReviewQueueSeen}
+            >
+              Mark queue as seen
+            </Button>
+          </div>
         )}
+      {reviewUndo?.saved?.updatedAt && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+          <span role="status">
+            Saved review for{" "}
+            {reviewUndo.before.importMerchant ??
+              reviewUndo.before.counterpartyName ??
+              "record"}
+            .
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={Boolean(reviewWrite)}
+            onClick={() => void undoReview()}
+          >
+            Undo
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Dismiss undo"
+            onClick={() => setReviewUndo(undefined)}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+      {merchantCorrections.size > 0 && (
+        <details className="mb-4 rounded-md border bg-card p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            Merchant category rules
+          </summary>
+          <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">
+            {[...merchantCorrections.values()].map(({ record, category }) => (
+              <label
+                key={record.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-sm"
+              >
+                <span className="min-w-0 [overflow-wrap:anywhere]">
+                  {record.importMerchant} ·{" "}
+                  {formatCategoryName(categories, category)}
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={record.merchantCorrection?.autoApply ?? false}
+                    disabled={Boolean(reviewWrite)}
+                    onChange={(event) =>
+                      void saveReview(record, {
+                        merchantAutoApply: event.target.checked,
+                      })
+                    }
+                  />
+                  Apply automatically
+                </span>
+              </label>
+            ))}
+          </div>
+        </details>
+      )}
 
       {selectedAccountBalance ? (
         <AccountStateSummary balance={selectedAccountBalance} />
@@ -1603,13 +1843,15 @@ export function RecordsView() {
 
             <label className="block space-y-2">
               <span className="text-sm font-medium">Notes</span>
-              <input
+              <textarea
+                rows={4}
                 value={note}
                 onChange={(event) => setNote(event.target.value)}
-                className={fieldClassName}
+                className={noteFieldClassName}
                 placeholder="Optional description"
               />
             </label>
+            {editingRecord && <ImportHistory record={editingRecord} />}
 
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
               {editingId ? (
@@ -1656,8 +1898,8 @@ export function RecordsView() {
         </DialogContent>
       </Dialog>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_1fr]">
-        <Card className="h-fit">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <Card className="h-fit min-w-0">
           <CardHeader className="pb-3">
             <CardTitle>Filters</CardTitle>
           </CardHeader>
@@ -1735,10 +1977,35 @@ export function RecordsView() {
               value={recordFilters.categoryId}
               onChange={(categoryId) => setRecordFilters({ categoryId })}
             />
+            {showNoteFilter || recordFilters.note ? (
+              <label className="block space-y-1 text-sm">
+                <span>Note contains</span>
+                <textarea
+                  rows={4}
+                  value={recordFilters.note ?? ""}
+                  onChange={(event) =>
+                    setRecordFilters({ note: event.target.value })
+                  }
+                  className={noteFieldClassName}
+                  placeholder="Paste part of a note"
+                />
+              </label>
+            ) : (
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={() => setShowNoteFilter(true)}
+              >
+                <Plus className="h-4 w-4" /> Add filter · Note
+              </Button>
+            )}
             <Button
               className="w-full"
               variant="outline"
-              onClick={clearRecordFilters}
+              onClick={() => {
+                clearRecordFilters();
+                setShowNoteFilter(false);
+              }}
             >
               <FilterX className="h-4 w-4" />
               Reset
@@ -1746,10 +2013,13 @@ export function RecordsView() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle>{filteredRecords.length} records</CardTitle>
+              <CardTitle>
+                {filteredRecords.length}{" "}
+                {filteredRecords.length === 1 ? "record" : "records"}
+              </CardTitle>
               <div className="flex flex-wrap gap-2">
                 {!isSelectedRangeComplete ? (
                   <Badge variant="warning">Loading complete range...</Badge>
@@ -1761,15 +2031,63 @@ export function RecordsView() {
                       ? `${format(parseISO(selectedDateRange.from), "dd/MM/yyyy")} - ${format(parseISO(selectedDateRange.to), "dd/MM/yyyy")}`
                       : selectedMonth}
                 </Badge>
-                {activeFilters.map((filter) => (
-                  <Badge key={String(filter)} variant="info">
-                    {filter}
-                  </Badge>
-                ))}
               </div>
             </div>
+            {appliedFilters.length > 0 && (
+              <div
+                className="flex flex-wrap items-center gap-2"
+                aria-label="Active filters"
+              >
+                {appliedFilters.map(([key, label, value]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-full bg-secondary px-2.5 py-1 text-left text-xs font-medium hover:bg-secondary/70"
+                    aria-label={`Remove ${label} filter`}
+                    title={value}
+                    onClick={() => {
+                      setRecordFilters({ [key]: undefined });
+                      if (key === "note") setShowNoteFilter(false);
+                    }}
+                  >
+                    <span className="truncate">
+                      {label}: {value}
+                    </span>
+                    <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  </button>
+                ))}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    clearRecordFilters();
+                    setShowNoteFilter(false);
+                  }}
+                >
+                  Clear all
+                </Button>
+              </div>
+            )}
           </CardHeader>
           <CardContent className="space-y-5">
+            {!filteredRecords.length && (
+              <div className="space-y-2 py-4 text-sm text-muted-foreground" role="status">
+                <p>
+                  {!isSelectedRangeComplete
+                    ? "Loading records for this period…"
+                    : appliedFilters.length
+                      ? "No records match the active filters in this period."
+                      : "No records in this period."}
+                </p>
+                {isSelectedRangeComplete && appliedFilters.length > 0 && (
+                  <ul className="list-disc space-y-1 pl-5 [overflow-wrap:anywhere]">
+                    {appliedFilters.map(([key, label, value]) => (
+                      <li key={key}><strong>{label}</strong> · {value}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
             {Object.entries(grouped).map(([day, records]) => (
               <div key={day}>
                 <div className="mb-2 flex items-center justify-between text-sm">
@@ -1795,135 +2113,189 @@ export function RecordsView() {
                       .map((id) => dataset.tags.find((tag) => tag.id === id))
                       .filter(Boolean);
 
+                    const review = record.paymentStatus === "needs_review";
+                    const parsedNote = splitImportNote(record.note);
+                    const correction = record.importMerchant
+                      ? merchantCorrections.get(
+                          normalizeBankMerchant(record.importMerchant),
+                        )
+                      : undefined;
                     return (
-                      <div
+                      <article
                         key={record.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => loadRecord(record)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            loadRecord(record);
-                          }
-                        }}
                         className={cn(
-                          "flex cursor-pointer items-center justify-between rounded-md border p-3 transition",
-                          record.paymentStatus === "needs_review"
-                            ? "border-amber-400 bg-amber-50 hover:border-amber-500 hover:bg-amber-100 dark:border-amber-400/50 dark:bg-amber-500/15 dark:hover:border-amber-400/70 dark:hover:bg-amber-500/20"
-                            : "hover:border-primary/50 hover:bg-secondary",
+                          "min-w-0 rounded-md border",
+                          review
+                            ? "border-amber-400 bg-amber-50 dark:border-amber-400/50 dark:bg-amber-500/15"
+                            : "hover:border-primary/50",
                         )}
                       >
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <CategoryIcon
-                              icon={category?.icon}
-                              color={category?.color ?? "#0EA5E9"}
-                              size="sm"
-                            />
-                            <p className="font-medium">
-                              {category
-                                ? formatCategoryName(
-                                    dataset.categories,
-                                    category,
-                                  )
-                                : "Transfer"}
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => loadRecord(record)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return;
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              loadRecord(record);
+                            }
+                          }}
+                          className={cn(
+                            "flex min-w-0 cursor-pointer flex-wrap items-center justify-between gap-2 rounded-md p-3 transition sm:flex-nowrap",
+                            review
+                              ? "hover:bg-amber-100 dark:hover:bg-amber-500/20"
+                              : "hover:bg-secondary",
+                          )}
+                        >
+                          <div className="min-w-0 [overflow-wrap:anywhere]">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <CategoryIcon
+                                icon={category?.icon}
+                                color={category?.color ?? "#0EA5E9"}
+                                size="sm"
+                              />
+                              <p className="font-medium">
+                                {category
+                                  ? formatCategoryName(
+                                      dataset.categories,
+                                      category,
+                                    )
+                                  : record.type === "transfer"
+                                    ? "Transfer"
+                                    : "Uncategorized"}
+                              </p>
+                              <Badge
+                                variant={
+                                  record.type === "expense"
+                                    ? "danger"
+                                    : record.type === "income"
+                                      ? "success"
+                                      : "info"
+                                }
+                              >
+                                {recordTypeLabels[record.type]}
+                              </Badge>
+                              <Badge
+                                variant={
+                                  record.paymentStatus === "needs_review"
+                                    ? "warning"
+                                    : "muted"
+                                }
+                              >
+                                {paymentStatusLabels[record.paymentStatus]}
+                              </Badge>
+                              {review &&
+                                Date.parse(recordReviewDate(record)) >
+                                  reviewSeenThrough && (
+                                  <Badge variant="warning">New</Badge>
+                                )}
+                            </div>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              <span className="font-medium text-foreground">
+                                {[
+                                  account?.name,
+                                  creditCard &&
+                                    `${creditCard.name} **** ${creditCard.lastFour}`,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                              {record.importMerchant || record.counterpartyName
+                                ? ` - ${record.importMerchant ?? record.counterpartyName}`
+                                : " - No counterparty"}
+                              {parsedNote.note
+                                ? ` - ${parsedNote.note}`
+                                : " - No note"}
                             </p>
-                            <Badge
-                              variant={
-                                record.type === "expense"
-                                  ? "danger"
-                                  : record.type === "income"
-                                    ? "success"
-                                    : "info"
-                              }
-                            >
-                              {recordTypeLabels[record.type]}
-                            </Badge>
-                            <Badge
-                              variant={
-                                record.paymentStatus === "needs_review"
-                                  ? "warning"
-                                  : "muted"
-                              }
-                            >
-                              {paymentStatusLabels[record.paymentStatus]}
-                            </Badge>
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {tags.map((tag) =>
+                                tag ? (
+                                  <Badge key={tag.id} variant="info">
+                                    {tag.name}
+                                  </Badge>
+                                ) : null,
+                              )}
+                              <Badge
+                                variant="muted"
+                                className={`font-semibold ${paymentMethodClasses[record.paymentType]}`}
+                                style={
+                                  record.paymentType === "credit" && creditCard
+                                    ? {
+                                        color: creditCard.color,
+                                        backgroundColor: `color-mix(in srgb, ${creditCard.color} 15%, transparent)`,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {paymentTypeLabels[record.paymentType]}
+                              </Badge>
+                            </div>
                           </div>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground">
-                              {creditCard
-                                ? `${creditCard.name} **** ${creditCard.lastFour}`
-                                : account?.name}
-                            </span>
-                            {record.counterpartyName
-                              ? ` - ${record.counterpartyName}`
-                              : " - No counterparty"}
-                            {record.note ? ` - ${record.note}` : " - No note"}
-                          </p>
-                          <div className="mt-2 flex flex-wrap gap-1">
-                            {tags.map((tag) =>
-                              tag ? (
-                                <Badge key={tag.id} variant="info">
-                                  {tag.name}
-                                </Badge>
-                              ) : null,
+                          <div className="flex shrink-0 items-center gap-3">
+                            <div className="text-right">
+                              <p
+                                className={
+                                  record.type === "expense"
+                                    ? "font-semibold text-red-600"
+                                    : record.type === "income"
+                                      ? "font-semibold text-emerald-600"
+                                      : "font-semibold text-sky-600"
+                                }
+                              >
+                                {record.type === "expense"
+                                  ? "-"
+                                  : record.type === "income"
+                                    ? "+"
+                                    : ""}
+                                {formatMoney(record.amount, record.currency)}
+                              </p>
+                              <p className="mt-1 text-sm font-semibold text-muted-foreground">
+                                {formatRecordDateTime(record.occurredAt)}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void runAction(() => deleteRecord(record.id), {
+                                  processing: "Deleting record...",
+                                  success: "Record deleted",
+                                  error: "Could not delete record",
+                                }).catch(() => undefined);
+                              }}
+                              aria-label="Delete record"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        {review && (
+                          <ReviewRecordActions
+                            key={`${record.id}:${record.updatedAt ?? record.categoryId}`}
+                            record={record}
+                            dataset={dataset}
+                            categories={reviewCategories}
+                            suggestion={correction?.category}
+                            autoApply={Boolean(
+                              correction?.record.merchantCorrection
+                                ?.autoApply &&
+                              correction.category.id === record.categoryId,
                             )}
-                            <Badge
-                              variant="muted"
-                              className={`font-semibold ${paymentMethodClasses[record.paymentType]}`}
-                              style={
-                                record.paymentType === "credit" && creditCard
-                                  ? {
-                                      color: creditCard.color,
-                                      backgroundColor: `color-mix(in srgb, ${creditCard.color} 15%, transparent)`,
-                                    }
-                                  : undefined
-                              }
-                            >
-                              {paymentTypeLabels[record.paymentType]}
-                            </Badge>
+                            busy={Boolean(reviewWrite)}
+                            onSave={(patch) => void saveReview(record, patch)}
+                          />
+                        )}
+                        {Boolean(
+                          record.importHistory?.length ||
+                          parsedNote.history.length,
+                        ) && (
+                          <div className="px-3 pb-3">
+                            <ImportHistory record={record} />
                           </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p
-                              className={
-                                record.type === "expense"
-                                  ? "font-semibold text-red-600"
-                                  : record.type === "income"
-                                    ? "font-semibold text-emerald-600"
-                                    : "font-semibold text-sky-600"
-                              }
-                            >
-                              {record.type === "expense"
-                                ? "-"
-                                : record.type === "income"
-                                  ? "+"
-                                  : ""}
-                              {formatMoney(record.amount, record.currency)}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-muted-foreground">
-                              {formatRecordDateTime(record.occurredAt)}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void runAction(() => deleteRecord(record.id), {
-                                processing: "Deleting record...",
-                                success: "Record deleted",
-                                error: "Could not delete record",
-                              }).catch(() => undefined);
-                            }}
-                            aria-label="Delete record"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
+                        )}
+                      </article>
                     );
                   })}
                 </div>
@@ -1946,6 +2318,157 @@ export function RecordsView() {
         </Card>
       </div>
     </div>
+  );
+}
+
+function ImportHistory({ record }: { record: WalletRecord }) {
+  const history = [
+    ...new Set([
+      ...(record.importHistory ?? []),
+      ...splitImportNote(record.note).history,
+    ]),
+  ];
+  if (!history.length) return null;
+  return (
+    <details className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+      <summary className="cursor-pointer">Import history</summary>
+      <ul className="mt-1 list-disc space-y-1 pl-4">
+        {history.map((entry) => (
+          <li key={entry}>{entry}</li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function ReviewRecordActions({
+  record,
+  dataset,
+  categories,
+  suggestion,
+  autoApply,
+  busy,
+  onSave,
+}: {
+  record: WalletRecord;
+  dataset: WalletDataset;
+  categories: Category[];
+  suggestion?: Category;
+  autoApply: boolean;
+  busy: boolean;
+  onSave: (patch: RecordPatch) => void;
+}) {
+  const [selectedCategory, setSelectedCategory] = useState(
+    categories.some((category) => category.id === record.categoryId)
+      ? record.categoryId
+      : undefined,
+  );
+  const [ruleChoice, setRuleChoice] = useState<boolean>();
+  const issues = currentReviewIssues(record, dataset);
+  const needsCategory = record.type !== "transfer" && !selectedCategory;
+  const currentNeedsCategory =
+    record.type !== "transfer" &&
+    !categories.some((category) => category.id === record.categoryId);
+  const canRemember = Boolean(
+    record.importMerchant &&
+    record.type === "expense" &&
+    record.paymentType !== "transfer",
+  );
+  const canClear = !needsCategory && issues.length === 0;
+  const reason =
+    [...issues, ...(currentNeedsCategory ? ["Choose a category"] : [])].join(
+      " · ",
+    ) || "Ready to review";
+
+  function save(clear: boolean) {
+    onSave({
+      ...(selectedCategory && record.type !== "transfer"
+        ? { categoryId: selectedCategory }
+        : {}),
+      ...(clear ? { paymentStatus: "cleared" } : {}),
+      ...(canRemember && ruleChoice !== undefined
+        ? { merchantAutoApply: ruleChoice }
+        : {}),
+    });
+  }
+
+  return (
+    <section
+      aria-label="Review actions"
+      className="space-y-2 border-t border-amber-400/40 p-3"
+    >
+      <p className="text-sm font-medium">{reason}</p>
+      {record.type !== "transfer" && (
+        <div className="max-w-sm">
+          <CategoryFilterSelect
+            categories={categories}
+            value={selectedCategory}
+            onChange={(id) => {
+              setSelectedCategory(id);
+              setRuleChoice(undefined);
+            }}
+            label="Review category"
+            emptyLabel="Choose category"
+          />
+        </div>
+      )}
+      {suggestion && suggestion.id !== record.categoryId && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          className="h-auto max-w-full whitespace-normal text-left"
+          onClick={() => {
+            setSelectedCategory(suggestion.id);
+            setRuleChoice(undefined);
+          }}
+        >
+          Use suggestion · {suggestion.name}
+        </Button>
+      )}
+      {canRemember && selectedCategory && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={
+              ruleChoice ??
+              (autoApply && selectedCategory === record.categoryId)
+            }
+            disabled={busy}
+            onChange={(event) => setRuleChoice(event.target.checked)}
+          />
+          Apply this category automatically for {record.importMerchant}
+        </label>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {record.type !== "transfer" && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={
+              busy ||
+              needsCategory ||
+              (selectedCategory === record.categoryId &&
+                ruleChoice === undefined)
+            }
+            onClick={() => save(false)}
+          >
+            Save category
+          </Button>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          className="h-auto max-w-full whitespace-normal text-left"
+          disabled={busy || !canClear}
+          onClick={() => save(true)}
+        >
+          Save and mark reviewed
+        </Button>
+      </div>
+    </section>
   );
 }
 

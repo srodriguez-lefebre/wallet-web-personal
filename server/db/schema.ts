@@ -15,6 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+import type { MerchantCorrection } from "../../shared/types.js";
 
 export const accountTypeEnum = pgEnum("account_type", [
   "cash",
@@ -234,6 +235,9 @@ export const records = pgTable(
     }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     note: text("note"),
+    importMerchant: text("import_merchant"),
+    importHistory: jsonb("import_history").$type<string[]>(),
+    merchantCorrection: jsonb("merchant_correction").$type<MerchantCorrection>(),
     isFixed: boolean("is_fixed").notNull().default(false),
     debtId: uuid("debt_id"),
     idempotencyKey: text("idempotency_key"),
@@ -580,6 +584,7 @@ export const settings = pgTable("settings", {
   defaultPaymentStatus: paymentStatusEnum("default_payment_status")
     .notNull()
     .default("cleared"),
+  reviewSeenThrough: timestamp("review_seen_through", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

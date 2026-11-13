@@ -803,7 +803,31 @@ export function InvestmentsView() {
               )}
             </CardContent>
           </Card>
-        ) : null}
+        ) : (
+          <Card>
+            <CardHeader>
+              <CardTitle>{dataset.investments.length ? "No visible investments" : "No investments yet"}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dataset.investments.length ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    {isEditing ? "Show hidden investments or cancel your edits to see the portfolio." : "Show hidden investments to see your portfolio."}
+                  </p>
+                  {!showHidden && <Button variant="outline" onClick={() => setShowHidden(true)}>Show hidden</Button>}
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-muted-foreground">Add an investment to track how much you invested and its current value.</p>
+                  <Button onClick={() => { setEditError(""); setIsCreateOpen(true); }}>
+                    <Plus className="h-4 w-4" />
+                    Add your first investment
+                  </Button>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="xl:col-span-2">
           <CardHeader>

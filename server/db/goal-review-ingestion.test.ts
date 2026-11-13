@@ -96,7 +96,7 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     creditCardId: cardId,
     goalIds: [],
   });
-  expect(data.records[0].note).toContain("Automatic goal");
+  expect(data.records[0].importHistory?.some((entry) => entry.includes("Automatic goal"))).toBe(true);
   expect(data.creditCardRecords).toHaveLength(1);
   expect(calculateCreditCardSummary(data, data.creditCards[0]).usedLimit).toBe(
     50,

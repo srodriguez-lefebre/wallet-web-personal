@@ -27,7 +27,7 @@ import {
 import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
-import { limitDecimalPlaces } from "@/lib/utils";
+import { formatCalendarDate, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
@@ -66,7 +66,7 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
     currency: goal.currency,
     color: goal.color,
     isVisible: goal.isVisible,
-    deadline: goal.deadline ?? "",
+    deadline: goal.deadline?.slice(0, 10) ?? "",
     status: goal.status,
     accountId: goal.accountId ?? "",
     note: goal.note ?? "",
@@ -91,7 +91,13 @@ export function GoalsView() {
   const [showHidden, setShowHidden] = useState(false);
   const goals = calculateGoalProgress(dataset);
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
-  const [goalId, setGoalId] = useState(dataset.goals[0]?.id ?? "");
+  const [preferredGoalId, setGoalId] = useState("");
+  const reservationGoals = dataset.goals.filter(
+    (goal) => goal.isVisible && goal.status === "active",
+  );
+  const goalId = preferredGoalId
+    ? (reservationGoals.find((goal) => goal.id === preferredGoalId)?.id ?? "")
+    : (reservationGoals[0]?.id ?? "");
   const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
   const [reserveAmount, setReserveAmount] = useState("");
   const [name, setName] = useState("");
@@ -255,7 +261,7 @@ export function GoalsView() {
     event.preventDefault();
     const account = dataset.accounts.find((item) => item.id === accountId);
     const numericAmount = Number(reserveAmount);
-    if (!account || !goalId || numericAmount <= 0) return;
+    if (!account || !goalId || !Number.isFinite(numericAmount) || numericAmount <= 0) return;
     const balance = calculateAccountBalances(dataset).find((item) => item.account.id === accountId);
     if (balance && numericAmount > balance.freeBalance && !window.confirm(`La reserva supera el saldo disponible (${formatMoney(balance.freeBalance, account.currency)}). ¿Continuar?`)) return;
 
@@ -736,7 +742,7 @@ export function GoalsView() {
                     {item.goal.deadline ? (
                       <Badge variant="muted">
                         <CalendarDays className="mr-1 h-3 w-3" />
-                        {item.goal.deadline}
+                        <time dateTime={item.goal.deadline}>{formatCalendarDate(item.goal.deadline)}</time>
                       </Badge>
                     ) : null}
                     {!item.goal.isVisible ? (
@@ -768,21 +774,31 @@ export function GoalsView() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              <p className="mb-4 text-sm text-muted-foreground">
+                You can reserve money for active goals. Completing a goal releases its remaining reservations back to the original accounts.
+              </p>
+              {reservationGoals.length === 0 && (
+                <p className="mb-4 text-sm font-medium">Create or reopen a visible goal to reserve money.</p>
+              )}
               <form className="space-y-4" onSubmit={handleReserve}>
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Goal</span>
                   <select
                     value={goalId}
+                    disabled={reservationGoals.length === 0}
                     onChange={(event) => setGoalId(event.target.value)}
                     className={inputClassName}
                   >
-                    {dataset.goals
-                      .filter((goal) => goal.isVisible)
-                      .map((goal) => (
-                        <option key={goal.id} value={goal.id}>
-                          {goal.name}
-                        </option>
-                      ))}
+                    {!goalId && (
+                      <option value="" disabled>
+                        {reservationGoals.length ? "Choose an active goal" : "No active goals"}
+                      </option>
+                    )}
+                    {reservationGoals.map((goal) => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.name}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="block space-y-2">
@@ -812,7 +828,11 @@ export function GoalsView() {
                     step="0.01"
                   />
                 </label>
-                <Button className="w-full" type="submit">
+                <Button
+                  className="w-full"
+                  type="submit"
+                  disabled={!goalId || !accountId || !(Number(reserveAmount) > 0)}
+                >
                   <Plus className="h-4 w-4" />
                   Reserve
                 </Button>

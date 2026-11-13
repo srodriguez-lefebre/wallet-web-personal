@@ -431,6 +431,7 @@ export const settingsSchema = z.object({
   defaultPaymentType: paymentTypeSchema,
   defaultCreditCardId: uuidSchema.optional(),
   defaultPaymentStatus: paymentStatusSchema,
+  reviewSeenThrough: z.string().datetime().optional(),
 });
 
 export const unlockSchema = z.object({
@@ -478,6 +479,11 @@ export const categoryPatchSchema = nonEmptyPatch({
   icon: z.string().min(1).optional(),
 });
 
+const merchantCorrectionSchema = z.object({
+  savedAt: z.string().datetime(),
+  autoApply: z.boolean(),
+});
+
 export const recordPatchSchema = nonEmptyPatch({
   type: recordTypeSchema.optional(), amount: z.number().positive().optional(),
   currency: currencySchema.optional(), accountId: uuidSchema.optional(),
@@ -490,7 +496,13 @@ export const recordPatchSchema = nonEmptyPatch({
   exchangeRateToPrimary: z.number().nonnegative().optional(), amountInLimitCurrency: z.number().positive().optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
   note: z.string().nullable().optional(), isFixed: z.boolean().optional(), debtId: uuidSchema.nullable().optional(),
-});
+  expectedUpdatedAt: z.string().datetime().optional(),
+  merchantAutoApply: z.boolean().optional(),
+  restoreMerchantCorrection: merchantCorrectionSchema.nullable().optional(),
+}).refine(
+  (value) => value.restoreMerchantCorrection === undefined || Boolean(value.expectedUpdatedAt),
+  { message: "Restoring a merchant correction requires the saved record version" },
+);
 
 export const creditCardPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(), issuer: z.string().min(1).optional(),
@@ -555,6 +567,7 @@ export const installmentPlanPatchSchema = nonEmptyPatch({
 });
 
 export const settingsPatchSchema = nonEmptyPatch({
+  reviewSeenThrough: z.string().datetime().optional(),
   primaryCurrency: currencySchema.optional(), primaryAccountId: uuidSchema.nullable().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
   defaultDashboardPreset: settingsSchema.shape.defaultDashboardPreset.optional(), locale: z.literal("es-UY").optional(),
@@ -669,7 +682,14 @@ export type MailIngestionInput = z.infer<typeof mailIngestionSchema>;
 
 const id = { id: uuidSchema };
 // Read contracts preserve legacy history, including uncategorized records. Creation rules remain stricter.
-export const walletRecordResponseSchema = z.object({...recordSchema.shape,...id});
+export const walletRecordResponseSchema = z.object({
+  ...recordSchema.shape, ...id,
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+  importMerchant: z.string().optional(),
+  importHistory: z.array(z.string()).optional(),
+  merchantCorrection: merchantCorrectionSchema.optional(),
+});
 export const cardStatementResponseSchema = z.object({ ...id, creditCardId: uuidSchema, cycleStart: z.string().datetime(), cycleEnd: z.string().datetime(), dueAt: z.string().datetime(), status: z.enum(["pending","partial","paid","overdue"]), closedAt:z.string().datetime(),paidAt:z.string().datetime().optional() });
 export const cardPaymentResponseSchema = creditCardPaymentSchema.safeExtend({ ...id, creditCardId: uuidSchema, statementId: uuidSchema.optional() });
 export const cardRecordResponseSchema = creditCardRecordSchema.safeExtend({ ...id, creditCardId:uuidSchema, walletRecordId:uuidSchema.optional(),statementId:uuidSchema.optional() });
@@ -680,7 +700,7 @@ export const goalResponseSchema = goalSchema.safeExtend({...id,tagIds:z.array(uu
 export const walletDatasetSchema = z.object({
   recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
   settings:settingsSchema,
-  accounts:z.array(accountSchema.extend(id)),categories:z.array(categorySchema.extend(id)),tags:z.array(tagSchema.extend(id)),records:z.array(walletRecordResponseSchema),
+  accounts:z.array(accountSchema.extend(id)),categories:z.array(categorySchema.extend({...id,systemKey:z.string().optional()})),tags:z.array(tagSchema.extend(id)),records:z.array(walletRecordResponseSchema),
   creditCards:z.array(creditCardSchema.extend(id)),creditCardRecords:z.array(cardRecordResponseSchema),creditCardStatements:z.array(cardStatementResponseSchema),creditCardPayments:z.array(cardPaymentResponseSchema),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema),
   goals:z.array(goalResponseSchema),goalReservations:z.array(goalReservationSchema.extend(id)),goalReservationMovements:z.array(reservationMovementResponseSchema).optional(),
   budgets:z.array(budgetSchema.extend(id)),exchangeRates:z.array(exchangeRateResponseSchema),investments:z.array(investmentSchema.extend(id)),debts:z.array(debtSchema.safeExtend(id)),recurringDebts:z.array(recurringDebtSchema.extend(id)),installmentPlans:z.array(installmentPlanSchema.extend(id)),

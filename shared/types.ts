@@ -98,6 +98,16 @@ export interface WalletRecord {
   note?: string;
   isFixed?: boolean;
   debtId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  importMerchant?: string;
+  importHistory?: string[];
+  merchantCorrection?: MerchantCorrection;
+}
+
+export interface MerchantCorrection {
+  savedAt: string;
+  autoApply: boolean;
 }
 
 export interface RecordTemplate {
@@ -374,6 +384,7 @@ export interface WalletSettings {
   defaultPaymentType: PaymentType;
   defaultCreditCardId?: string;
   defaultPaymentStatus: PaymentStatus;
+  reviewSeenThrough?: string;
 }
 
 export interface WalletDataset {
@@ -423,6 +434,7 @@ export interface RecordFilters {
   tagId?: string;
   goalId?: string;
   search?: string;
+  note?: string;
   paymentStatus?: PaymentStatus | "all";
 }
 

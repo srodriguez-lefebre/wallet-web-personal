@@ -74,7 +74,7 @@ interface WalletContextValue {
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
-  updateRecord: (recordId: string, record: RecordPatch) => Promise<void>;
+  updateRecord: (recordId: string, record: RecordPatch) => Promise<WalletRecord>;
   deleteRecord: (recordId: string) => Promise<void>;
   addRecordTemplate: (template: Omit<RecordTemplate, "id">) => Promise<string>;
   updateRecordTemplate: (
@@ -703,7 +703,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await mutate(() => walletApi.createRecord(requireToken(), record));
   }
   async function updateRecord(id: string, record: RecordPatch) {
-    await mutate(() => walletApi.updateRecord(requireToken(), id, record));
+    return mutate(() => walletApi.updateRecord(requireToken(), id, record));
   }
   async function deleteRecord(id: string) {
     await mutate(() => walletApi.deleteRecord(requireToken(), id));

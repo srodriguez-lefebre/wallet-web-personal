@@ -2,6 +2,7 @@ import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 import type { MailIngestionInput } from "../../shared/schemas.js";
+import { categoryImportWarning, isReviewCategory, normalizeBankMerchant } from "../../shared/record-review.js";
 import { createDb, type DbClient } from "../db/client.js";
 import {
   accounts,
@@ -145,14 +146,14 @@ async function pruneExpiredMetadata(db: DbClient) {
 interface CategoryResolution {
   categoryId: string | undefined;
   merchantName: string;
-  source: "merchant_rule" | "corrected_rule" | "generic_rule" | "openai" | "fallback" | "transfer";
+  source: "merchant_rule" | "corrected_rule" | "generic_rule" | "openai" | "fallback" | "transfer" | "user_rule" | "user_suggestion";
   needsReview: boolean;
   reason?: string;
   modelAttempt?: CategoryInferenceDiagnostic;
   learning?: MerchantRuleLearning;
 }
 
-export async function resolveCategory(db: DbClient, merchantRaw: string): Promise<CategoryResolution> {
+export async function resolveCategory(db: DbClient, merchantRaw: string, useCorrections = true): Promise<CategoryResolution> {
   const aliasRows = await db
     .select({
       normalizedAlias: merchantAliases.normalizedAlias,
@@ -176,7 +177,7 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
   const local = explicit ?? learned;
   // Classification may change, but the identity used to deduplicate must stay stable.
   const merchantName = local?.merchantName ?? merchantRaw;
-  const allCategories = await db.select().from(categories);
+  const allCategories = await db.select().from(categories).where(isNull(categories.deletedAt));
   const fallback = allCategories.find(item => item.systemKey === "unknown_expense")
     ?? allCategories.find(item => item.name.toLowerCase() === "unknown expense")
     ?? allCategories.find(item => item.name.toLowerCase() === "others");
@@ -184,6 +185,31 @@ export async function resolveCategory(db: DbClient, merchantRaw: string): Promis
     const category = allCategories.find(item => item.id === id);
     return !category || category.systemKey === "unknown_expense" || ["unknown expense", "others"].includes(category.name.toLowerCase());
   };
+  if (useCorrections) {
+    const correctedRecords = await db.select({
+      categoryId: categories.id,
+      merchant: records.importMerchant,
+      correction: records.merchantCorrection,
+    })
+      .from(records)
+      .innerJoin(categories, eq(records.categoryId, categories.id))
+      .where(and(
+        isNull(records.deletedAt), isNull(categories.deletedAt),
+        isNotNull(records.merchantCorrection),
+        eq(records.type, "expense"), ne(records.paymentType, "transfer"), ne(records.paymentStatus, "cancelled"),
+      ))
+      .orderBy(sql`${records.merchantCorrection}->>'savedAt' DESC`, sql`${records.id} DESC`);
+    const merchantKey = normalizeBankMerchant(merchantRaw);
+    const match = correctedRecords.find(({ merchant, categoryId }) =>
+      merchant && normalizeBankMerchant(merchant) === merchantKey &&
+      isReviewCategory(allCategories.find((category) => category.id === categoryId)));
+    if (match?.correction) {
+      if (match.correction.autoApply) {
+        return { categoryId: match.categoryId, merchantName, source: "user_rule", needsReview: false };
+      }
+      if (fallback) return { categoryId: fallback.id, merchantName, source: "user_suggestion", needsReview: true };
+    }
+  }
   const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
   // A broad Uber alias must not consume the more specific food-delivery notice.
   if (generic && local && normalizeMerchantTerm(local.merchantName) === "UBER" && ["UBER EATS", "UBEREATS"].includes(generic.normalizedAlias)) {
@@ -395,7 +421,7 @@ export async function processMailIngestion(
     const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
     const category = isOwnedTransfer
       ? { categoryId: undefined, merchantName: input.transaction.merchantRaw, source: "transfer" as const, needsReview: false }
-      : await resolveCategory(db, input.transaction.merchantRaw);
+      : await resolveCategory(db, input.transaction.merchantRaw, !isTransfer);
     console.info(JSON.stringify({ event: "mail_category_classification", ingestionEventId: eventId, source: category.source, categoryId: category.categoryId, needsReview: category.needsReview, reason: "reason" in category ? category.reason : undefined, modelAttempt: "modelAttempt" in category ? category.modelAttempt : undefined }));
     const canonicalMerchantNormalized = normalizeMerchantTerm(
       category.merchantName,
@@ -491,7 +517,7 @@ export async function processMailIngestion(
     // A transfer notice identifies its destination, not the merchant's activity.
     // An external destination or generic category does not invalidate a mapped origin.
     const categoryRequiresReview = !isTransfer && category.needsReview;
-    if (categoryRequiresReview) warnings.push("Category could not be determined automatically; review this expense.");
+    if (categoryRequiresReview && category.source !== "user_suggestion") warnings.push(categoryImportWarning);
     const requiresReview =
       accountWasInvalid || cardWasInvalid || (isCredit ? !card : !account) || unavailableConversion || categoryRequiresReview;
     const effectiveAccount = isOwnedTransfer ? account : !accountWasInvalid && (isCredit ? Boolean(card) : true) && accountConversion ? account : undefined;
@@ -526,6 +552,8 @@ export async function processMailIngestion(
           card.limitCurrency as CurrencyCode,
           cardConversion.frozen,
         ),
+    ].filter(Boolean);
+    const importHistory = [
       ...warnings,
       isCredit && (cardWasInvalid || (!card && input.transaction.cardNumber))
         ? `Unknown card: ${input.transaction.cardAlias || input.transaction.cardNumber}`
@@ -533,16 +561,16 @@ export async function processMailIngestion(
       accountWasInvalid
         ? `Unknown account: ${input.destination.accountId}`
         : undefined,
-      destinationConversion && destinationAccount
-        ? conversionNote(input.transaction.currency, destinationAccount.currency as CurrencyCode, destinationConversion.frozen)
-        : undefined,
-      isTransfer && input.transaction.destinationAccountNumber
-        ? `Destination: ${input.transaction.destinationBank || "bank"} · ${input.transaction.destinationAccountNumber}`
-        : undefined,
       unavailableConversion
         ? "Currency conversion unavailable; unresolved amounts remain under review."
         : undefined,
     ].filter(Boolean);
+    if (destinationConversion && destinationAccount) {
+      noteParts.push(conversionNote(input.transaction.currency, destinationAccount.currency as CurrencyCode, destinationConversion.frozen));
+    }
+    if (isTransfer && input.transaction.destinationAccountNumber) {
+      noteParts.push(`Destination: ${input.transaction.destinationBank || "bank"} · ${input.transaction.destinationAccountNumber}`);
+    }
     const recordId =
       effectiveAccount || !effectiveCard || requiresReview ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
@@ -557,9 +585,9 @@ export async function processMailIngestion(
     },db):null;
     for (const warning of goalWrites?.warnings ?? []) {
       if (!warnings.includes(warning)) warnings.push(warning);
-      noteParts.push(warning);
+      importHistory.push(warning);
     }
-    const note = [...new Set(noteParts)].join(" | ");
+    const note = [...new Set(noteParts.filter(Boolean))].join(" | ");
     const recordInsert = recordId
       ? db.insert(records).values({
           id: recordId,
@@ -589,6 +617,8 @@ export async function processMailIngestion(
               : null,
           occurredAt,
           note,
+          importMerchant: input.transaction.merchantRaw,
+          importHistory: [...new Set(importHistory.filter((part): part is string => Boolean(part)))],
         })
       : null;
     const cardInsert =
