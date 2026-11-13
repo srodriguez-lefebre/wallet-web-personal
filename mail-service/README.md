@@ -55,7 +55,7 @@ con un error de configuración hasta asignar esa cuenta: no se inventa un gasto 
 Se reconocen avisos de consumo aprobado de crédito y débito y de transferencia realizada desde
 el remitente exacto `comunicaciones@itau.com.uy`, también con nombre visible. Los asuntos se
 comparan sin diferencias de mayúsculas ni tildes. El consumo de débito admite `Pesos` (UYU) y
-`Dolares`/`Dólares` (USD); las transferencias admiten códigos de moneda y `$` para UYU. El formato
+`Dolares`/`Dólares` (USD); las transferencias admiten códigos de moneda, incluido `URGP` de Itaú como alias de `UYU`, y `$` para UYU. El formato
 Automation Wallet conserva su reconocimiento por campos y el mapeo de crédito por alias.
 También se reconoce el asunto exacto `Pago realizado` del mismo remitente Itaú, cuando el cuerpo
 confirma que el pago fue realizado con éxito e incluye origen, importe/moneda y destinatario.

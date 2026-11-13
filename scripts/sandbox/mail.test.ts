@@ -273,6 +273,8 @@ test.each([
   ["1.234,56 UYU", 1234.56, "UYU"],
   ["$ 44,00", 44, "UYU"],
   ["44,00 $", 44, "UYU"],
+  ["24500.00 URGP", 24500, "UYU"],
+  ["*24.500,00* *URGP*", 24500, "UYU"],
 ])(
   "outgoing transfer %s carries explicit bank mappings and a masked description",
   (raw, amount, currency) => {
