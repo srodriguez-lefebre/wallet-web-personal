@@ -339,3 +339,39 @@ rechaza dos settings sin DDL/journal parcial; corregida sólo esa fixture aplica
 únicamente0022, conserva los6hashesCRLF, deuda de prueba80sinreplay0019, y repetir
 es no-op. /tmp/wallet-drizzle-upgrade-verify.{mts,log}. La recuperación por código
 no elimina columnas. Sandbox10/104exit0; no hay servidores propios pendientes.
+
+### Puerta de publicación3 cerrada: 0022 aplicada y verificada
+
+Build diagnóstico compatible e1643a81b77cd0bee0844ba36077b4fee3daced4 en rama
+`refactor/03-target-verification`, sin PR ni merge: check93/703exit0 y revisión sin
+hallazgos; preview READY dpl_82qnAEVUNxKu8oQKPC5FKUCiC1fd. Logs emitieron sólo
+huellas: host0704d3b001f3e06657a66f6be65715e751a2b693a4e997584419280d819b3beb y
+base693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8, idénticas
+al destinoNeon. MetadataSecret compartidaPreview/Production sin overrides, valor
+sin cambios desdeJun17 anterior al deploy098, cierra el vínculo de producción.
+No conexiónDB desde el diagnóstico, credenciales en logs, nuevo endpoint, bypass,
+config de proveedor ni cambio de auth. Rama diagnóstica no se integra a main.
+
+La revisión automática rechazó el primer intento antes de ejecutarlo por no
+reconocer autorización. Se verificó el mensaje directo de Santiago de2026-11-14
+01:46UTC («Sisi, aplica migraciones nomas»), y el único reintento de esa denegación
+fue aceptado. La conexiónPG se detuvo después con08P01 antesdeDDL: el pooler
+rechaza startupoptions. Se diagnosticó sólo conSELECT y se usó conexiónnormal,
+sin cambiar TLS, credenciales ni configuración del proveedor.
+
+Aplicación transaccional normal deDrizzle verificada el2026-11-14; punto previo
+`2026-11-14T15:37:21.913Z`, ventanaPITR6h revalidada. Postflight exit0:
+baselineAlreadyApplied:true, pending:[], previousJournalUnchanged:true,
+oneExpectedRowAppended:true, legacyReservationTablePresent:true,
+unknownMigrationHashes:false. Journal0–21 intacto, incluidoCRLF; sólo0022 añadida.
+/tmp/wallet-apply-baseline0022-final.log y operador.mts en/tmp contienen la evidencia
+sanitizada; no se consultaron importes, ids o contenido financiero.
+
+No TimeTravelAssist: la documentación confirma que crea rama y compute efímeros
+con estado histórico real, excluidos por la restricción de copias. Se verificó
+la disponibilidadPITR por metadata y la recuperación/rollback en fixtures
+sintéticos; no se ejecutó restore real ni se creó snapshot/ramaNeon.
+No FK, drop legacy, reparación de referencias huérfanas, secreto nuevo ni
+revocación activada. Main098 sigue compatible con la ampliación durante rollout.
+Siguiente: pushFF del candidato completo, único draftPR3/CI+previewSHA exacto,
+merge normal y CI main/READY+alias/smokeGET sin sesión. Bloque4 permanece300db45.
