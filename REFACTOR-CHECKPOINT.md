@@ -291,3 +291,51 @@ script viejo/API nueva y estabilidad de idempotencia; avisar antes de editar Hea
 en Google Chrome. Guardar puede activar processPendingEmails; no ejecutar lotes
 reales ni cambiar triggers. Restan paquetes4 (cliente/vistas y activaciones de
 archivo compatibles) y5 (ingesta/shared). El refactor íntegro no está terminado.
+
+### Verificación Neon y compatibilidad de journal histórico (2026-11-14)
+
+Sesión de Neon abierta por Santiago. Lectura únicamente de metadata del proyecto
+Wallet, rama default `production`, un único compute y una única base. Los IDs y
+hostname se conservan en el registro local ignorado, sin credenciales. Coincide
+con el destino local por huella0704d3b…b3beb.
+PITR visible: 6 horas, earliest observado2026-11-14 05:39GMT-3; sin snapshots ni
+schedule. No se creó copia/rama, ejecutó restore, cambió plan/settings o leyó
+contenido financiero. La recuperación por código con columnas nuevas conservadas
+se ensayó antes con main098 y backups exclusivamente sintéticos.
+
+Primer preflight READ ONLY detuvo la publicación por6 hashes unknown. Diagnóstico
+SHA256 contra SQL versionado confirmó exactamente CRLF sinBOM de0015–0020,
+texto normalizado idéntico y timestamps originales iguales. No son migraciones
+para reejecutar; particularmente0019 ajusta saldos y NO debe repetirse. Se añade
+whitelist de sólo esas6 variantes verificadas, sin tocar journal ni SQL. Nuevas
+regresiones rechazan canonical+alias duplicadas, BOM, fechas alteradas y CRLF de
+0022/noautorizadas; prueba financiera de0019 enLF/CRLF confirma iguales cambios y
+rollback con fixtures sintéticos. Revisión independiente sin hallazgos bloqueantes.
+Check nuevo99archivos/733tests exit0; target2/16pass. Logs
+/tmp/wallet-preflight-crlf-{red,green}.log y wallet-package3-crlf-check.log.
+
+Preflight real actualizado exit0: unknownMigrationHashes:false, pendiente sólo0022,
+baselineReadyToApply:true, singleton-ready:true, legacy-presente:true, database-path
+correcto. Hay referencias de deuda huérfanas (sólo EXISTS, sin ids/importes); no se
+reparan ni borra historia y laFK continúa diferida fuera de0022. Columnas/índices
+nuevos todavía ausentes; no se ha aplicado0022. Evidencia
+/tmp/wallet-package3-neon-preflight2.log y journal-encoding.log (sólo metadata).
+
+Vercel autenticado por Santiago: DATABASE_URL es Secret/write-only, única variable
+con targetsPreview+Production; createdAt=updatedAt Jun17 y sin
+override de rama diagnóstica ni valoresProduction ocultos. UIStorage no vincula
+Neon; métricasExternalAPIs muestran sólo endpoint regional api.c-2.us-east-1.aws.neon.tech,
+insuficiente por sí solo para afirmar la rama. No se reveló, copió ni rotó el valor.
+Siguiente comprobación segura: build de una rama diagnóstica sobre40compatible,
+emitiendo exclusivamente SHA256 del hostname y de la base desde el proceso normal
+de build, con guard preview+ref exacta y pruebas sintéticas de no exposición.
+Sin DB, endpoint nuevo, bypass, cambio de permisos/configuración del proveedor,
+CI skip, producción o PR extra. Después comparar ambas huellas y volver a preflight
+antes de aplicar la ampliación compatible autorizada. Mientras eso esté pendiente,
+NO ejecutar0022 ni subir el candidato completo. Rama4 limpia en300db45 se conserva.
+
+Ensayo del migrador Drizzle real (mismo PgDialect transaccional) en PGlite sintético:
+rechaza dos settings sin DDL/journal parcial; corregida sólo esa fixture aplica
+únicamente0022, conserva los6hashesCRLF, deuda de prueba80sinreplay0019, y repetir
+es no-op. /tmp/wallet-drizzle-upgrade-verify.{mts,log}. La recuperación por código
+no elimina columnas. Sandbox10/104exit0; no hay servidores propios pendientes.

@@ -27,20 +27,37 @@ export function verifyEndpoint(connection: string, expected: string) {
       "Endpoint fingerprint mismatch; no database connection attempted",
     );
 }
+// Production journal used Windows CRLF for exactly these six SQL files. Their
+// SHA-256 and timestamps were matched to the byte-exact CRLF form of tracked SQL.
+// Never rewrite that journal, replay those migrations, or accept arbitrary drift.
+const legacyCrlfTags = new Set([
+  "0015_financial_integrity",
+  "0016_credit_card_payment_idempotency",
+  "0017_review_financial_guards",
+  "0018_amusing_union_jack",
+  "0019_review_activity_accounting",
+  "0020_merchant_match_mode",
+]);
 export async function migrationManifest() {
   const folder = new URL("../drizzle/migrations/", import.meta.url);
   const journal = JSON.parse(await readFile(new URL("meta/_journal.json", folder), "utf8")) as {
     entries: { tag: string; when: number }[];
   };
   return Promise.all(
-    journal.entries.map(async (entry) => ({
-      ...entry,
-      hash: createHash("sha256")
-        .update(await readFile(new URL(`${entry.tag}.sql`, folder), "utf8"))
-        .digest("hex"),
-    })),
+    journal.entries.map(async (entry) => {
+      const text = await readFile(new URL(`${entry.tag}.sql`, folder), "utf8");
+      const digest = (value: string) => createHash("sha256").update(value).digest("hex");
+      return {
+        ...entry,
+        hash: digest(text),
+        legacyHashes: legacyCrlfTags.has(entry.tag)
+          ? [digest(text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"))]
+          : [],
+      };
+    }),
   );
 }
+
 const baselineColumns = Object.fromEntries([
   ...[
     "budgets.deleted_at",
@@ -148,19 +165,31 @@ export async function inspectMigrationState(db: DbClient) {
         ])
       )[1].rows
     : [];
-  const appliedHashes = new Set(applied.map((row) => String(row.hash)));
-  const known = new Set(manifest.map((entry) => entry.hash));
+  const knownHashes = new Map(
+    manifest.flatMap((entry) =>
+      [entry.hash, ...entry.legacyHashes].map((hash) => [hash, entry] as const),
+    ),
+  );
+  const recognized = applied.map((row) => knownHashes.get(String(row.hash)));
+  const appliedTags = new Set(
+    recognized.filter((entry) => entry !== undefined).map((entry) => entry.tag),
+  );
   const unknownHashes =
-    appliedHashes.size !== applied.length ||
+    appliedTags.size !== applied.length ||
     applied.some(
-      (row) =>
-        !known.has(String(row.hash)) ||
-        String(row.created_at) !==
-          String(manifest.find((entry) => entry.hash === String(row.hash))?.when),
+      (row, index) =>
+        !recognized[index] || String(row.created_at) !== String(recognized[index]?.when),
     );
-  const pending = manifest
-    .filter((entry) => !appliedHashes.has(entry.hash))
-    .map((entry) => entry.tag);
+  const pending = manifest.filter((entry) => !appliedTags.has(entry.tag)).map((entry) => entry.tag);
+  const legacyCrlfMigrations = applied.flatMap((row, index) => {
+    const entry = recognized[index];
+    return entry &&
+      String(row.created_at) === String(entry.when) &&
+      entry.legacyHashes.includes(String(row.hash)) &&
+      row.hash !== entry.hash
+      ? [entry.tag]
+      : [];
+  });
   const singletonReady = results[3].rows[0]?.singleton_ready === true;
   const ready =
     hasJournal &&
@@ -189,6 +218,7 @@ export async function inspectMigrationState(db: DbClient) {
     targetVerified: false,
     journalPresent: hasJournal,
     unknownMigrationHashes: unknownHashes,
+    legacyCrlfMigrations,
     pendingMigrations: pending,
     missingBaselineColumns: missingBaseline,
     invalidBaselineColumns: invalidColumns,

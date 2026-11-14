@@ -458,7 +458,11 @@ El preflight sólo lee metadata y guards agregados; no aplica migraciones ni
 imprime credenciales o filas financieras. La huella SHA-256 corresponde al
 hostname normalizado sin `-pooler`, cotejado con un origen independiente del
 archivo local. Detenerse si faltan migraciones anteriores, hay hashes desconocidos,
-DDL parcial o más de una fila de settings. No marcar migraciones como aplicadas
+DDL parcial o más de una fila de settings. El journal histórico conserva hashes CRLF de
+0015–0020: el preflight acepta sólo sus variantes byte a byte verificadas y fechas
+originales, las informa en `legacyCrlfMigrations` y no modifica el journal ni
+repite SQL. BOM, otros hashes, fechas alteradas o identidades duplicadas siguen
+bloqueando la operación. No marcar migraciones como aplicadas
 por suposición ni crear una copia de datos reales para ensayar. Migración antes
 del deploy del código que lee sus columnas; rollback de código conservando las
 columnas. Los tests restauran un backup sintético antiguo y comprueban rollback
