@@ -514,3 +514,10 @@ la sesión que hizo la llamada y no cierra una sesión posterior. GET reintenta
 una vez ante fallos transitorios; las mutaciones no se reintentan. Los backups
 conservan su tipo y metadata propios. WalletSync aún recarga el snapshot canónico
 hasta completar la migración de caché por entidad.
+
+El contrato también ofrece `GET /api/wallet/reference` y
+`POST /api/wallet/bootstrap-reference`: diccionarios sin movimientos y una primera
+página separada para sembrar la caché. Las rutas anteriores conservan su payload
+para pestañas existentes. Las opciones de Query y las políticas de invalidación
+están en `src/services/wallet-queries.ts` y `src/services/mutations.ts`; la app
+continúa con WalletSync hasta completar sus consumidores y agregados.

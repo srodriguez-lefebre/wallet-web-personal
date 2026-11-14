@@ -101,3 +101,43 @@ PR 4. No activar revocación, crear secretos, ejecutar drop legacy o reparar hu�
 Apps Script activo permanece intacto; su actualización se coordina desde el editor
 Google de Chrome cuando el bundle compatible y sus fixtures estén probados.
 Los commits nuevos deben tener títulos descriptivos y ningún Co-authored-by.
+
+## Task 2b · referencia y base de Query en curso
+
+Ruling: se agregan `wallet.reference` y `wallet.bootstrapReference` en vez de
+cambiar el payload de rutas que usan pestañas anteriores. Coste: mantener las
+lecturas legacy durante la transición. GET de referencia ejecuta un batch
+REPEATABLE READ / READ ONLY y devuelve diccionarios y metadata de fechas/revisión,
+sin records ni movimientos/pagos/allocations/ledger. El bootstrap nuevo conserva
+la primera página completa. Sin nuevas columnas o migraciones.
+
+Tests de repositorio y HTTP: RED por función/operación inexistente, luego GREEN
+3 archivos / 7 pruebas, incluyendo contratos legacy. Un DISTINCT agregado falló
+porque Drizzle generaba parámetros distintos para la misma zona horaria; se
+proyecta la fecha local una vez en CTE. GREEN 2/2 y HTTP posterior verdes.
+React Query 5 y MSW 2.11.6 instalados con npm/lockfile. Se fijó MSW compatible con
+Node 22.22.1 de la HP; la última versión traía transitorios que exigían otro patch
+de Node. No se actualizó el host ni se aplicó audit fix.
+
+Base Query preparada (todavía sin cambiar App/WalletProvider): opciones tipadas,
+primera página sembrada, retry GET sólo del transporte, tabla exhaustiva de
+mutaciones por contrato. MSW: RED módulos faltantes → GREEN 4/4 (bootstrap
+concurrente único, sin segunda lectura de página, invalidación selectiva de
+settings/records y bootstrap cancelado sin recrear caché). Pendiente integración
+React y datos agregados antes de retirar el historial del cliente.
+
+La validación completa inicial pasó 104 archivos / 763 tests y falló después en
+TypeScript: el mapper histórico Goal marcaba defaults como opcionales. Se valida
+la referencia contra su schema para conservar defaults e inferencia; fixture con
+goal real local comprueba autoCaptureEnabled/tagIds. Build y target posterior
+3 archivos / 8 pruebas verdes. No se oculta el fallo anterior. Nueva validación
+completa antes del commit: /tmp/wallet-package4-query-foundation-final-check.log.
+
+Checkpoint de base Query validado: check completo exit 0, 104 archivos / 763
+pruebas, formato/lint/build/OpenAPI verdes. Log:
+`/tmp/wallet-package4-query-foundation-check3.log`. Se mantuvo un worker.
+App/WalletProvider todavía no consumen estas nuevas primitivas; no afirmar que
+se retiró WalletSync o que ya no se descarga historial. Siguiente: agregados SQL
+para balances y metas (fixture diseñado en /tmp/wallet-aggregates-test.txt), luego
+lecturas de presentación/agenda y consumidores. Preservar el crédito de reembolso
+FIFO, reservas históricas y FX congelado; no usar páginas parciales para totales.

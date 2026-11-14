@@ -2,6 +2,12 @@ import { z, type ZodType } from "zod";
 
 import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
+  referenceBootstrapInputSchema,
+  referenceBootstrapSchema,
+  referenceQuerySchema,
+  walletReferenceSchema,
+} from "./reference-contract.js";
+import {
   accountPatchSchema,
   accountSchema,
   budgetPatchSchema,
@@ -98,6 +104,8 @@ const currencyAmounts = z.array(
   z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
 );
 const specialResponses = {
+  "wallet.reference": walletReferenceSchema,
+  "wallet.bootstrapReference": referenceBootstrapSchema,
   "analytics.summary": analyticsSummarySchema,
   "cards.refreshStatements": z.object({ refreshed: z.literal(true) }),
   "cards.delete": z.object({ archived: z.literal(true) }),
@@ -322,6 +330,28 @@ export const apiOperations = [
     successStatus: 200,
     errors: [401, 500],
     summary: "Legacy full wallet snapshot",
+  }),
+  op({
+    operationId: "wallet.reference",
+    method: "GET",
+    path: "/api/wallet/reference",
+    auth: "session",
+    stability: "stable",
+    query: referenceQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read reference dictionaries and history metadata without movements",
+  }),
+  op({
+    operationId: "wallet.bootstrapReference",
+    method: "POST",
+    path: "/api/wallet/bootstrap-reference",
+    auth: "session",
+    stability: "stable",
+    body: referenceBootstrapInputSchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Generate recurring debts and seed reference plus the first records page",
   }),
   op({
     operationId: "wallet.bootstrap",

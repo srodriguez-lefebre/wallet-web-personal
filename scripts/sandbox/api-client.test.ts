@@ -151,3 +151,17 @@ test("contract client preserves records, debt retry, card movements and backup r
   expect(reloaded.debts.find((row) => row.id === debt.id)?.pendingAmount).toBe(90);
   expect(reloaded.creditCardRecords.find((row) => row.id === movement.id)?.amount).toBe(20);
 }, 30_000);
+
+test("reference operations validate real HTTP responses without changing legacy wallet responses", async () => {
+  token = (await client["auth.unlock"]({ body: { token: LOCAL_ACCESS_CODE } })).token;
+  const reference = await client["wallet.reference"]({ query: { timeZone: "America/Montevideo" } });
+  expect(reference).not.toHaveProperty("records");
+  expect(reference).not.toHaveProperty("creditCardRecords");
+  const boot = await client["wallet.bootstrapReference"]({
+    body: { recordsLimit: 1, timeZone: "America/Montevideo" },
+  });
+  expect(boot.reference).not.toHaveProperty("records");
+  expect(Array.isArray(boot.recordsPage.items)).toBe(true);
+  expect(boot.recordsPage.items.length).toBeLessThanOrEqual(1);
+  expect((await client["wallet.get"]()).records).toEqual(expect.any(Array));
+});
