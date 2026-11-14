@@ -1,11 +1,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
-import * as Popover from "@radix-ui/react-popover";
-import { Check, ChevronDown, Copy, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
+import { Copy, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { findExchangeRate } from "@shared/money";
 import {
   countNewReviews,
-  currentReviewIssues,
   getMerchantCorrections,
   isReviewCategory,
   normalizeBankMerchant,
@@ -23,7 +21,6 @@ import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@share
 
 import type { RecordPatch } from "@shared/schemas";
 import type {
-  Category,
   CurrencyCode,
   PaymentStatus,
   PaymentType,
@@ -34,6 +31,10 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
+import { ReviewRecordActions } from "@/components/wallet/review-record-actions";
+import { ImportHistory } from "@/components/wallet/record-import-history";
+import { CategoryFilterSelect } from "@/components/wallet/category-filter-select";
+import { formatCategoryName, sortCategoriesForSelect } from "@/lib/category-options";
 import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -67,108 +68,6 @@ const paymentMethodClasses: Record<PaymentType, string> = {
 
 const noteFieldClassName =
   "block min-h-24 max-h-64 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring [field-sizing:content]";
-
-function formatCategoryName(categories: Category[], category: Category) {
-  const parent = category.parentId
-    ? categories.find((candidate) => candidate.id === category.parentId)
-    : undefined;
-
-  return parent ? `${parent.name} / ${category.name}` : category.name;
-}
-
-function sortCategoriesForSelect(categories: Category[]) {
-  return categories.slice().sort((a, b) => {
-    const aParent = a.parentId
-      ? (categories.find((category) => category.id === a.parentId)?.name ?? "")
-      : a.name;
-    const bParent = b.parentId
-      ? (categories.find((category) => category.id === b.parentId)?.name ?? "")
-      : b.name;
-    const parentCompare = aParent.localeCompare(bParent);
-
-    if (parentCompare !== 0) return parentCompare;
-    if (!a.parentId && b.parentId) return -1;
-    if (a.parentId && !b.parentId) return 1;
-    return a.name.localeCompare(b.name);
-  });
-}
-
-function CategoryFilterSelect({
-  categories,
-  value,
-  onChange,
-  label = "Category",
-  emptyLabel = "Categories",
-}: {
-  categories: Category[];
-  value?: string;
-  onChange: (categoryId: string | undefined) => void;
-  label?: string;
-  emptyLabel?: string;
-}) {
-  const selectedCategory = categories.find((category) => category.id === value);
-  const [open, setOpen] = useState(false);
-
-  function choose(id?: string) {
-    onChange(id);
-    setOpen(false);
-  }
-
-  return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          className="flex h-10 w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="flex min-w-0 items-center gap-2">
-            {selectedCategory && (
-              <CategoryIcon icon={selectedCategory.icon} color={selectedCategory.color} size="sm" />
-            )}
-            <span className="truncate">
-              {selectedCategory ? formatCategoryName(categories, selectedCategory) : emptyLabel}
-            </span>
-          </span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          aria-label={label + " options"}
-          align="start"
-          sideOffset={4}
-          collisionPadding={12}
-          className="z-50 max-h-[min(18rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-md border bg-card p-1 text-card-foreground shadow-md"
-        >
-          <button
-            type="button"
-            aria-pressed={!value}
-            className="w-full rounded px-2 py-2 text-left text-sm hover:bg-secondary focus-visible:bg-secondary"
-            onClick={() => choose()}
-          >
-            {emptyLabel}
-          </button>
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              type="button"
-              aria-pressed={category.id === value}
-              className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-secondary focus-visible:bg-secondary aria-pressed:bg-secondary"
-              onClick={() => choose(category.id)}
-            >
-              <CategoryIcon icon={category.icon} color={category.color} size="sm" />
-              <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
-                {formatCategoryName(categories, category)}
-              </span>
-              {category.id === value && <Check className="h-4 w-4 shrink-0" aria-hidden />}
-            </button>
-          ))}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
-  );
-}
 
 function defaultAccountId(dataset: WalletDataset) {
   const activeVisibleAccounts = dataset.accounts.filter(
@@ -2041,139 +1940,6 @@ export function RecordsView() {
         </Card>
       </div>
     </div>
-  );
-}
-
-function ImportHistory({ record }: { record: WalletRecord }) {
-  const history = [
-    ...new Set([...(record.importHistory ?? []), ...splitImportNote(record.note).history]),
-  ];
-  if (!history.length) return null;
-  return (
-    <details className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
-      <summary className="cursor-pointer">Import history</summary>
-      <ul className="mt-1 list-disc space-y-1 pl-4">
-        {history.map((entry) => (
-          <li key={entry}>{entry}</li>
-        ))}
-      </ul>
-    </details>
-  );
-}
-
-function ReviewRecordActions({
-  record,
-  dataset,
-  categories,
-  suggestion,
-  autoApply,
-  busy,
-  onSave,
-}: {
-  record: WalletRecord;
-  dataset: WalletDataset;
-  categories: Category[];
-  suggestion?: Category;
-  autoApply: boolean;
-  busy: boolean;
-  onSave: (patch: RecordPatch) => void;
-}) {
-  const [selectedCategory, setSelectedCategory] = useState(
-    categories.some((category) => category.id === record.categoryId)
-      ? record.categoryId
-      : undefined,
-  );
-  const [ruleChoice, setRuleChoice] = useState<boolean>();
-  const issues = currentReviewIssues(record, dataset);
-  const needsCategory = record.type !== "transfer" && !selectedCategory;
-  const currentNeedsCategory =
-    record.type !== "transfer" && !categories.some((category) => category.id === record.categoryId);
-  const canRemember = Boolean(
-    record.importMerchant && record.type === "expense" && record.paymentType !== "transfer",
-  );
-  const canClear = !needsCategory && issues.length === 0;
-  const reason =
-    [...issues, ...(currentNeedsCategory ? ["Choose a category"] : [])].join(" · ") ||
-    "Ready to review";
-
-  function save(clear: boolean) {
-    onSave({
-      ...(selectedCategory && record.type !== "transfer" ? { categoryId: selectedCategory } : {}),
-      ...(clear ? { paymentStatus: "cleared" } : {}),
-      ...(canRemember && ruleChoice !== undefined ? { merchantAutoApply: ruleChoice } : {}),
-    });
-  }
-
-  return (
-    <section aria-label="Review actions" className="space-y-2 border-t border-amber-400/40 p-3">
-      <p className="text-sm font-medium">{reason}</p>
-      {record.type !== "transfer" && (
-        <div className="max-w-sm">
-          <CategoryFilterSelect
-            categories={categories}
-            value={selectedCategory}
-            onChange={(id) => {
-              setSelectedCategory(id);
-              setRuleChoice(undefined);
-            }}
-            label="Review category"
-            emptyLabel="Choose category"
-          />
-        </div>
-      )}
-      {suggestion && suggestion.id !== record.categoryId && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={busy}
-          className="h-auto max-w-full whitespace-normal text-left"
-          onClick={() => {
-            setSelectedCategory(suggestion.id);
-            setRuleChoice(undefined);
-          }}
-        >
-          Use suggestion · {suggestion.name}
-        </Button>
-      )}
-      {canRemember && selectedCategory && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={ruleChoice ?? (autoApply && selectedCategory === record.categoryId)}
-            disabled={busy}
-            onChange={(event) => setRuleChoice(event.target.checked)}
-          />
-          Apply this category automatically for {record.importMerchant}
-        </label>
-      )}
-      <div className="flex flex-wrap gap-2">
-        {record.type !== "transfer" && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={
-              busy ||
-              needsCategory ||
-              (selectedCategory === record.categoryId && ruleChoice === undefined)
-            }
-            onClick={() => save(false)}
-          >
-            Save category
-          </Button>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          className="h-auto max-w-full whitespace-normal text-left"
-          disabled={busy || !canClear}
-          onClick={() => save(true)}
-        >
-          Save and mark reviewed
-        </Button>
-      </div>
-    </section>
   );
 }
 

@@ -63,7 +63,7 @@ const InvestmentsView = lazy(() =>
   })),
 );
 const RecordsView = lazy(() =>
-  import("@/views/records-view").then((module) => ({
+  import("@/features/records/RecordsView").then((module) => ({
     default: module.RecordsView,
   })),
 );

@@ -225,3 +225,27 @@ leer el estado canónico. GREEN final 3 archivos / 13 tests, incluyendo QA HTTP
 de gasto/meta/saldo y undo. Log `/tmp/wallet-package4-query-session-race-green.log`.
 TypeScript exit 0 (`query-session-types2.log`), imports corregidos por ESLint sin
 desactivar reglas. No cambia App, sesiones productivas, DB ni Apps Script.
+
+Commit `9d0d3a6fbef72c2fdab3e79d2036cb5b4c17fa0e` confirmado en GitHub;
+preview READY `dpl_5R4dQv3b8UiWLFderLmEELawkKc6`.
+
+## Task 3 · extracción inicial de vistas y estado UI
+
+Records se movió a `src/features/records/RecordsView.tsx`; CategoryFilterSelect,
+ImportHistory y ReviewRecordActions ahora son componentes wallet compartidos.
+Opciones de categoría y draft de Cards están en lib; el formulario de Cards se
+extrajo a `src/features/cards/CardFormDialog.tsx` sin cambiar el submit.
+WalletUIProvider prepara un reducer sólo de selección, filtros, solicitud de
+formulario y contexto de retorno de revisión, separado en estado/acciones.
+Todavía no reemplaza WalletProvider: sus consumidores actuales siguen intactos.
+
+Regresiones previas de Cards: 4/4 después de ajustar un selector al control de
+límite actual (su label contiene dos controles y no nombra el input; corregir con
+el kit). Post-extracción: 7 archivos / 69 tests verdes en
+`/tmp/wallet-package4-view-extraction-green.log`, incluyendo cuatro casos UI y
+cuatro de formularios Cards (crear, editar, fallo/reintento, doble submit ocupado).
+Lint limpio (`view-extraction-lint.log`). TypeScript directo exit 0, registrado en
+`/tmp/wallet-package4-view-types-direct.status`; dos llamadas anteriores quedaron
+sin cierre visible y no se usaron como prueba de éxito. No se interrumpió proceso.
+Pendientes: kit, RecordDraft/reducer y separación de filtros/lista/formulario,
+lecturas Cards/metadata, integración Query y retiro definitivo de WalletSync.

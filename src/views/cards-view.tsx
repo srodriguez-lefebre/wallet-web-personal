@@ -24,71 +24,21 @@ import {
   YAxis,
 } from "recharts";
 
-import type { CreditCard, CurrencyCode } from "@shared/types";
+import type { CreditCard } from "@shared/types";
 
+import { emptyDraft, draftFromCard, type CardDraft } from "@/lib/card-draft";
+import { CardFormDialog } from "@/features/cards/CardFormDialog";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import { finishAction } from "@/lib/async-event";
 import { selectPendingCardStatements } from "@/lib/cards-presentation";
 import { useActionToast } from "@/lib/use-action-toast";
 import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-
-const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
-const fieldClassName =
-  "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-
-interface CardDraft {
-  name: string;
-  issuer: string;
-  lastFour: string;
-  creditLimit: string;
-  limitCurrency: CurrencyCode;
-  closingDay: string;
-  dueDay: string;
-  color: string;
-  note: string;
-}
-
-function emptyDraft(): CardDraft {
-  return {
-    name: "",
-    issuer: "",
-    lastFour: "",
-    creditLimit: "",
-    limitCurrency: "UYU",
-    closingDay: "20",
-    dueDay: "5",
-    color: "#2563EB",
-    note: "",
-  };
-}
-
-function draftFromCard(card: CreditCard): CardDraft {
-  return {
-    name: card.name,
-    issuer: card.issuer,
-    lastFour: card.lastFour,
-    creditLimit: String(card.creditLimit),
-    limitCurrency: card.limitCurrency,
-    closingDay: String(card.closingDay),
-    dueDay: String(card.dueDay),
-    color: card.color,
-    note: card.note ?? "",
-  };
-}
 
 export function CardsView() {
   const navigate = useNavigate();
@@ -239,123 +189,16 @@ export function CardsView() {
         </Button>
       </PageHeader>
 
-      <Dialog open={showForm} onOpenChange={setShowForm}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingId ? "Edit card" : "New card"}</DialogTitle>
-            <DialogDescription>
-              Configure the card identity, limit and billing dates.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            className="grid gap-4 md:grid-cols-2"
-            onSubmit={(event) => {
-              finishAction(submit(event));
-            }}
-          >
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Name</span>
-              <input
-                className={fieldClassName}
-                value={draft.name}
-                onChange={(e) => setField("name", e.target.value)}
-                placeholder="Itaú Internacional"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Issuer</span>
-              <input
-                className={fieldClassName}
-                value={draft.issuer}
-                onChange={(e) => setField("issuer", e.target.value)}
-                placeholder="Itaú"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Last four digits</span>
-              <input
-                className={fieldClassName}
-                value={draft.lastFour}
-                onChange={(e) =>
-                  setField("lastFour", e.target.value.replace(/\D/g, "").slice(0, 4))
-                }
-                inputMode="numeric"
-                placeholder="4006"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Limit</span>
-              <div className="flex gap-2">
-                <select
-                  className={fieldClassName}
-                  value={draft.limitCurrency}
-                  onChange={(e) => setField("limitCurrency", e.target.value as CurrencyCode)}
-                >
-                  {currencies.map((currency) => (
-                    <option key={currency}>{currency}</option>
-                  ))}
-                </select>
-                <input
-                  className={fieldClassName}
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={draft.creditLimit}
-                  onChange={(e) => setField("creditLimit", e.target.value)}
-                />
-              </div>
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Closing day</span>
-              <input
-                className={fieldClassName}
-                type="number"
-                min="1"
-                max="31"
-                value={draft.closingDay}
-                onChange={(e) => setField("closingDay", e.target.value)}
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Due day</span>
-              <input
-                className={fieldClassName}
-                type="number"
-                min="1"
-                max="31"
-                value={draft.dueDay}
-                onChange={(e) => setField("dueDay", e.target.value)}
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Color</span>
-              <input
-                className={fieldClassName}
-                type="color"
-                value={draft.color}
-                onChange={(e) => setField("color", e.target.value)}
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Note</span>
-              <input
-                className={fieldClassName}
-                value={draft.note}
-                onChange={(e) => setField("note", e.target.value)}
-              />
-            </label>
-            {error ? <p className="text-sm text-destructive md:col-span-2">{error}</p> : null}
-            <div className="flex gap-2 md:col-span-2">
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? "Saving..." : "Save card"}
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
-                Cancel
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CardFormDialog
+        open={showForm}
+        onOpenChange={setShowForm}
+        draft={draft}
+        editingId={editingId}
+        error={error}
+        busy={isSaving}
+        onFieldChange={setField}
+        onSubmit={submit}
+      />
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {

@@ -2,10 +2,11 @@ import { act, create, type ReactTestRenderer, type ReactTestInstance } from "rea
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
-import { RecordsView } from "./records-view";
 
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
+
+import { RecordsView } from "@/features/records/RecordsView";
 
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;

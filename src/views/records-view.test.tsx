@@ -4,10 +4,12 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { createDb } from "../../server/db/client.js";
-import { RecordsView } from "./records-view";
+
 
 import type { RecordFilters, WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
+
+import { RecordsView } from "@/features/records/RecordsView";
 const update = vi.hoisted(() => vi.fn());
 const add = vi.hoisted(() => vi.fn());
 const clearFilters = vi.hoisted(() => vi.fn());
