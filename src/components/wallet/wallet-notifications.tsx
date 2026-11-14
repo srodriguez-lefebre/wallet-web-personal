@@ -15,7 +15,7 @@ export function WalletNotifications() {
     dataset,
     isAllHistoryComplete,
     clearRecordFilters,
-    setRecordFilters,
+    openReviewQueue,
     setAllPeriod,
   } = useWallet();
   const [open, setOpen] = useState(false);
@@ -25,9 +25,11 @@ export function WalletNotifications() {
     : 0;
 
   function goTo(href: string, review = false) {
-    clearRecordFilters();
-    setAllPeriod();
-    if (review) setRecordFilters({ paymentStatus: "needs_review" });
+    if (review) openReviewQueue();
+    else {
+      clearRecordFilters();
+      setAllPeriod();
+    }
     setOpen(false);
     navigate(href);
   }

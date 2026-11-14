@@ -28,6 +28,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useActionToast } from "@/lib/use-action-toast";
+import { selectPendingCardStatements } from "@/lib/cards-presentation";
+import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
 import {
@@ -103,6 +105,10 @@ export function CardsView() {
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { toast, runAction } = useActionToast();
+  const pendingStatements = useMemo(
+    () => isAllHistoryComplete ? selectPendingCardStatements(dataset) : [],
+    [dataset, isAllHistoryComplete],
+  );
   const cardSummaries = useMemo(
     () =>
       calculateCreditCardSummaries(dataset).map((summary) => ({
@@ -358,6 +364,7 @@ export function CardsView() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {
+          const cardStatements = pendingStatements.filter((entry) => entry.card.id === summary.card.id);
           const expenseTrend = expenseTrendsByCard.get(summary.card.id) ?? [];
           const chartData = [
             ...categoryUsage.map((category) => ({
@@ -502,14 +509,33 @@ export function CardsView() {
                   value={Math.min(100, summary.utilizationPercent)}
                   indicatorStyle={{ backgroundColor: summary.card.color }}
                 />
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Closes {summary.currentCycleEnd}</span>
-                  <span>Due {summary.dueDate}</span>
+                <div className="space-y-2 text-xs text-muted-foreground">
+                  <p>Current cycle: {formatCalendarDate(summary.currentCycleStart)} – {formatCalendarDate(summary.currentCycleEnd)}</p>
+                  <p>Closes {formatCalendarDate(summary.currentCycleEnd)}</p>
+                  {!isAllHistoryComplete ? (
+                    <p>Loading closed statements...</p>
+                  ) : cardStatements.length ? cardStatements.map((entry) => (
+                    <button
+                      key={entry.statement.id}
+                      type="button"
+                      className="block w-full rounded-md border p-2 text-left hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                      onKeyDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(entry.href);
+                      }}
+                    >
+                      <span className="block">Statement closed {formatCalendarDate(entry.statement.cycleEnd)}</span>
+                      <span className="block font-medium text-foreground">
+                        {entry.urgency === "overdue" ? "Overdue" : "Due"} {formatCalendarDate(entry.statement.dueAt)} · {formatMoney(entry.dueAmountInLimitCurrency, summary.card.limitCurrency)}
+                      </span>
+                    </button>
+                  )) : <p>No closed statement pending</p>}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {summary.outstanding.map((item) => (
                     <Badge key={item.currency} variant="muted">
-                      Due {formatMoney(item.amount, item.currency)}
+                      Outstanding {formatMoney(item.amount, item.currency)}
                     </Badge>
                   ))}
                 </div>

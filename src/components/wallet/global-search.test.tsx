@@ -32,6 +32,10 @@ vi.mock("@/providers/wallet-provider", () => ({
     setAllPeriod: () => {
       state.period = "all";
     },
+    openReviewQueue: () => {
+      state.filters = { type: "all", paymentStatus: "needs_review" };
+      state.period = "all";
+    },
     requestNewRecord: state.draft,
     addRecord: state.writes,
     payDebt: state.writes,

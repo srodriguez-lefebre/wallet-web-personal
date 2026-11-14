@@ -13,6 +13,80 @@ vi.mock("@/providers/theme-provider", () => ({ useTheme: () => theme }));
 vi.mock("@/services/wallet-api");
 let context: ReturnType<typeof useWallet>;
 let tree: ReactTestRenderer | undefined;
+
+test.each(["month", "custom", "all"] as const)(
+  "review queue restores the %s context across reentry and dismiss",
+  async (mode) => {
+    await act(async () => {
+      tree = create(
+        <WalletProvider>
+          <Consumer />
+        </WalletProvider>,
+      );
+    });
+    await act(async () => {
+      if (mode === "all") context.setAllPeriod();
+      if (mode === "custom")
+        context.setCustomDateRange({ from: "2020-01-02", to: "2020-06-30" });
+      context.setRecordFilters({
+        accountId: "bank",
+        creditCardId: "card",
+        paymentStatus: "cancelled",
+        categoryId: "category",
+        tagId: "tag",
+        goalId: "goal",
+        note: "Lunch",
+        search: "merchant",
+        type: "expense",
+      });
+    });
+    const previous = {
+      filters: context.recordFilters,
+      mode: context.selectedPeriodMode,
+      range: context.selectedDateRange,
+      month: context.selectedMonth,
+    };
+    for (let pass = 0; pass < 2; pass++) {
+      await act(async () => context.openReviewQueue());
+      expect(context.selectedPeriodMode).toBe("all");
+      expect(context.recordFilters).toEqual({
+        type: "all",
+        paymentStatus: "needs_review",
+      });
+      // Reopening from another entry point must not overwrite the return context.
+      await act(async () => context.openReviewQueue());
+      await act(async () => context.closeReviewQueue());
+      expect(context.recordFilters).toEqual(previous.filters);
+      expect(context.selectedPeriodMode).toBe(previous.mode);
+      expect(context.selectedDateRange).toEqual(previous.range);
+      expect(context.selectedMonth).toBe(previous.month);
+    }
+  },
+);
+
+test("explicit search/reset navigation discards an obsolete review return context", async () => {
+  await act(async () => {
+    tree = create(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
+  await act(async () => context.setRecordFilters({ accountId: "previous" }));
+  await act(async () => context.openReviewQueue());
+  await act(async () => {
+    context.clearRecordFilters();
+    context.setAllPeriod();
+    context.setRecordFilters({ search: "new destination" });
+  });
+  await act(async () => context.openReviewQueue());
+  await act(async () => context.closeReviewQueue());
+  expect(context.recordFilters).toEqual({
+    type: "all",
+    search: "new destination",
+  });
+  expect(context.selectedPeriodMode).toBe("all");
+});
 function Consumer() {
   const value = useWallet();
   useEffect(() => {
