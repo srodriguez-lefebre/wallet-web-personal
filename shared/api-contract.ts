@@ -2,6 +2,12 @@ import { z, type ZodType } from "zod";
 
 import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
+  balanceTrendQuerySchema,
+  balanceTrendSchema,
+  reportDetailsSchema,
+  reportQuerySchema,
+} from "./report-contract.js";
+import {
   accountBalanceMetricsSchema,
   accountBalanceQuerySchema,
   goalProgressMetricsSchema,
@@ -114,6 +120,8 @@ const specialResponses = {
   "wallet.reference": walletReferenceSchema,
   "wallet.bootstrapReference": referenceBootstrapSchema,
   "analytics.summary": analyticsSummarySchema,
+  "analytics.details": reportDetailsSchema,
+  "analytics.balanceTrend": balanceTrendSchema,
   "cards.refreshStatements": z.object({ refreshed: z.literal(true) }),
   "cards.delete": z.object({ archived: z.literal(true) }),
   "auth.session": z.object({ revocable: z.boolean() }),
@@ -241,6 +249,28 @@ export const apiOperations = [
     successStatus: 200,
     errors: [401, 503, 500],
     summary: "Revoke all sessions when the optional profile is activated",
+  }),
+  op({
+    operationId: "analytics.balanceTrend",
+    method: "GET",
+    path: "/api/analytics/balance-trend",
+    auth: "session",
+    stability: "stable",
+    query: balanceTrendQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Compare account balances at local calendar cutoffs without returning history",
+  }),
+  op({
+    operationId: "analytics.details",
+    method: "GET",
+    path: "/api/analytics/details",
+    auth: "session",
+    stability: "stable",
+    query: reportQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate report charts and merchant purchases without returning history",
   }),
   op({
     operationId: "analytics.summary",

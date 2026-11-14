@@ -5,6 +5,7 @@ import {
   type AnalyticsQuery,
   type AnalyticsResult,
 } from "../../shared/analytics-contract.js";
+import { exchangeRateSql } from "./fx.js";
 
 import type { Db } from "./input-types.js";
 
@@ -52,7 +53,7 @@ export async function getAnalyticsSummary(db: Db, input: AnalyticsQuery): Promis
  ), budget_matches AS (
    SELECT b.id,r.id AS record_id,b.currency,
      CASE WHEN b.goal_id IS NOT NULL THEN coalesce((SELECT allocated_amount FROM record_goals WHERE record_id=r.id AND goal_id=b.goal_id),r.amount) ELSE r.amount END AS amount,
-     r.currency AS record_currency,r.exchange_rate_to_primary,r.account_amount,r.amount AS full_amount,a.currency AS account_currency
+     r.currency AS record_currency,r.exchange_rate_to_primary,r.account_amount,r.amount AS full_amount,a.currency AS account_currency,r.occurred_at
    FROM active_budgets b LEFT JOIN filtered r ON r.type='expense'
      AND (b.category_id IS NULL OR EXISTS(SELECT 1 FROM category_tree t WHERE t.root_id=b.category_id AND t.category_id=r.category_id))
      AND (b.tag_id IS NULL OR EXISTS(SELECT 1 FROM record_tags t WHERE t.record_id=r.id AND t.tag_id=b.tag_id))
@@ -61,9 +62,9 @@ export async function getAnalyticsSummary(db: Db, input: AnalyticsQuery): Promis
    LEFT JOIN accounts a ON a.id=r.account_id
  ), budget_converted AS (
    SELECT b.*,CASE WHEN record_currency=b.currency THEN amount
-     WHEN b.currency=prefs.currency AND exchange_rate_to_primary>0 AND exchange_rate_to_primary<>'NaN'::numeric THEN amount*exchange_rate_to_primary
+     WHEN b.currency=prefs.currency THEN CASE WHEN exchange_rate_to_primary>0 AND exchange_rate_to_primary<>'NaN'::numeric THEN amount*exchange_rate_to_primary END
      WHEN account_currency=b.currency AND account_amount IS NOT NULL THEN account_amount*amount/nullif(full_amount,0)
-     ELSE NULL END AS converted FROM budget_matches b CROSS JOIN prefs
+     ELSE amount*${exchangeRateSql(sql`b.record_currency`, sql`b.currency`, sql`b.occurred_at`)} END AS converted FROM budget_matches b CROSS JOIN prefs
  ), budget_totals AS (
    SELECT id,coalesce(sum(converted),0) AS spent,count(*) FILTER(WHERE record_id IS NOT NULL AND converted IS NULL)::int AS unresolved
    FROM budget_converted GROUP BY id

@@ -606,6 +606,341 @@ paths:
       tags:
         - analytics
       x-stability: stable
+  /api/analytics/balance-trend:
+    get:
+      operationId: analytics.balanceTrend
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: accountId
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+        - in: query
+          name: selectedMonth
+          required: true
+          schema:
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+            type: string
+        - in: query
+          name: periodMode
+          required: true
+          schema:
+            enum:
+              - month
+              - custom
+              - all
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        current:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        day:
+                          type: string
+                        previous:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        previousPrevious:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                      required:
+                        - day
+                        - previousPrevious
+                        - previous
+                        - current
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Compare account balances at local calendar cutoffs without returning history
+      tags:
+        - analytics
+      x-stability: stable
+  /api/analytics/details:
+    get:
+      operationId: analytics.details
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: accountId
+          required: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+        - in: query
+          name: selectedMonth
+          required: true
+          schema:
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+            type: string
+        - in: query
+          name: periodMode
+          required: true
+          schema:
+            enum:
+              - month
+              - custom
+              - all
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      averageMonthlyExpenses:
+                        type: number
+                      currentMonthTotals:
+                        additionalProperties: false
+                        properties:
+                          cashFlow:
+                            type: number
+                          expenses:
+                            type: number
+                          income:
+                            type: number
+                        required:
+                          - income
+                          - expenses
+                          - cashFlow
+                        type: object
+                      expenseMonths:
+                        items:
+                          type: string
+                        type: array
+                      expenseSequenceTrend:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            current:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            expense:
+                              type: string
+                            previous:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            previousPrevious:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                          required:
+                            - expense
+                            - previousPrevious
+                            - previous
+                            - current
+                          type: object
+                        type: array
+                      expenseTrend:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            current:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            day:
+                              type: string
+                            previous:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            previousPrevious:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                          required:
+                            - day
+                            - previousPrevious
+                            - previous
+                            - current
+                          type: object
+                        type: array
+                      merchants:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            average:
+                              type: number
+                            key:
+                              type: string
+                            name:
+                              type: string
+                            purchases:
+                              maximum: 9007199254740991
+                              minimum: -9007199254740991
+                              type: integer
+                            total:
+                              type: number
+                          required:
+                            - key
+                            - name
+                            - purchases
+                            - total
+                            - average
+                          type: object
+                        type: array
+                      monthlySeries:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            cashFlow:
+                              type: number
+                            expenses:
+                              type: number
+                            income:
+                              type: number
+                            month:
+                              type: string
+                          required:
+                            - income
+                            - expenses
+                            - cashFlow
+                            - month
+                          type: object
+                        type: array
+                      previousTotals:
+                        additionalProperties: false
+                        properties:
+                          cashFlow:
+                            type: number
+                          expenses:
+                            type: number
+                          income:
+                            type: number
+                        required:
+                          - income
+                          - expenses
+                          - cashFlow
+                        type: object
+                    required:
+                      - monthlySeries
+                      - expenseTrend
+                      - expenseSequenceTrend
+                      - previousTotals
+                      - currentMonthTotals
+                      - averageMonthlyExpenses
+                      - expenseMonths
+                      - merchants
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Aggregate report charts and merchant purchases without returning history
+      tags:
+        - analytics
+      x-stability: stable
   /api/analytics/goals:
     get:
       operationId: analytics.goalProgress

@@ -168,3 +168,40 @@ antes del siguiente commit. Los consumidores de UI todavía usan WalletSync.
 Validación completa de estos agregados: 105 archivos / 769 pruebas, formato,
 lint, build y OpenAPI verdes. Log: `/tmp/wallet-package4-aggregates-check.log`.
 Sin nuevas migraciones ni cambios en producción. La integración de UI continúa.
+
+Commit `a8420ca3c05d658d55269983f35b1cb851cec0d5` subido y confirmado en GitHub.
+Preview READY `dpl_B3j1MUQGdrS9hJAbqupAQZX11KgQ`, sin migraciones ni activaciones.
+
+## Task 2b · reportes y tendencias en curso
+
+`analytics.details` produce series mensuales, comparación diaria y por gasto,
+totales anterior/mes actual, promedio para runway y comercios agrupados. Los
+periodos de calendario se comparten con `analytics.balanceTrend`, que reutiliza
+la aritmética de saldos y cortes locales en una sola lectura HTTP a la DB.
+No se entrega historial por estas rutas. App/WalletSync todavía no los consumen.
+
+Fixtures contra las fórmulas anteriores: RED por módulo faltante, luego 4/5;
+el fallo restante reprodujo un presupuesto EUR sin cotización por puente (null
+frente a 3.9625). Corregido el fallback histórico; también se evita usar el importe
+de cuenta si falta la conversión congelada a primary. GREEN reportes 7/7,
+incluyendo scope vacío, meses cortos, cuenta explícita y preferencias de ocultas.
+Saldos/gráficos: 2 archivos / 12 pruebas verdes. Router HTTP de agregados verde.
+Primer check completo se detuvo en import/order; corregido antes de repetirlo.
+
+QA solicitada: HTTP real sintético con Query, cuenta 1000 y dos gastos 20+10
+asignados a una meta. Página visible de tamaño 1 excluye el gasto anterior:
+saldo/progreso 970/30; editar 10→30 actualiza caches activas a 950/50; una caché
+nueva recarga los mismos resultados; deshacer vuelve a 970/30 y se comprueba
+también tras refetch de la caché recargada. GREEN sandbox API 4/4 en
+`/tmp/wallet-package4-paged-goal-qa.log`. Esto no prueba todavía la integración de
+las pantallas con Query: repetir el recorrido tras migrar los consumidores.
+No se confirmó ni se presupone un bug de exclusión de metas.
+
+Para bloque 5 conservar casos sintéticos independientes: reintento del mismo
+aviso sin duplicación; dos sueldos iguales en fechas distintas separados;
+prefijo genérico de procesador y cuenta sin mapear en Needs review. Sin datos reales.
+
+Check completo final exit 0: 106 archivos / 778 pruebas, formato, lint, build y
+OpenAPI verdes. Log: `/tmp/wallet-package4-reports-check2.log`. El bloque agrega
+lecturas compatibles y no requiere migraciones. Próximo: sesión de Query React,
+restantes lecturas de Cards/metadata y migración de consumidores/vistas.

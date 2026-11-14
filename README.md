@@ -526,3 +526,8 @@ continúa con WalletSync hasta completar sus consumidores y agregados.
 opcional; `GET /api/analytics/goals` devuelve el progreso de las metas. Ambas
 lecturas calculan importes en SQL sin enviar historial. Una conversión faltante
 se devuelve como `null`, sin asumir una equivalencia entre monedas.
+
+Las lecturas `GET /api/analytics/details` y `GET /api/analytics/balance-trend`
+devuelven series de comparación por calendario y comercios agregados. Aceptan la
+zona horaria del navegador y mantienen separadas las conversiones congeladas de
+los gastos y las cotizaciones históricas usadas por presupuestos en otra moneda.

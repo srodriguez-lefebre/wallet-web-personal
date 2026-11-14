@@ -90,6 +90,24 @@ export function cardSummaryQueryOptions(client: WalletClient, id: string) {
     queryFn: ({ signal }) => client["cards.summary"]({ params: { id }, signal }),
   });
 }
+export function reportDetailsQueryOptions(
+  client: WalletClient,
+  query: NonNullable<ClientInput<"analytics.details">["query"]>,
+) {
+  return queryOptions({
+    queryKey: ["analytics", "details", query] as const,
+    queryFn: ({ signal }) => client["analytics.details"]({ query, signal }),
+  });
+}
+export function balanceTrendQueryOptions(
+  client: WalletClient,
+  query: NonNullable<ClientInput<"analytics.balanceTrend">["query"]>,
+) {
+  return queryOptions({
+    queryKey: ["account-balances", "trend", query] as const,
+    queryFn: ({ signal }) => client["analytics.balanceTrend"]({ query, signal }),
+  });
+}
 export function cardStatementsQueryOptions(client: WalletClient, id: string) {
   return queryOptions({
     queryKey: ["card-statements", id] as const,

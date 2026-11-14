@@ -8,8 +8,12 @@ import {
   calculateAccountBalanceAtDate,
   calculateAccountBalances,
   calculateGoalProgress,
+  dateKeysForRange,
+  dateRangeForMonth,
+  relativeMonthKeys,
 } from "../../shared/calculations.js";
 import { getAccountBalanceMetrics } from "./balances.js";
+import { getBalanceTrend } from "./balance-trend.js";
 import { createDb } from "./client.js";
 import { getWalletDataset } from "./dataset.js";
 import { getGoalProgressMetrics } from "./goals/progress.js";
@@ -220,4 +224,33 @@ test("account cutoffs follow a 25-hour viewer calendar day across DST", async ()
   } finally {
     vi.stubEnv("TZ", "America/Montevideo");
   }
+});
+
+test("balance comparison charts retain local cutoffs, FIFO credits and short-month null tails", async () => {
+  const data = await getWalletDataset(createDb());
+  const values = relativeMonthKeys("2026-11", 3)
+    .map(dateRangeForMonth)
+    .map((range) =>
+      dateKeysForRange(range).map((date) => calculateAccountBalanceAtDate(data, bank, date)),
+    );
+  const actual = await getBalanceTrend(
+    createDb(),
+    {
+      from: "2026-11-01",
+      to: "2026-11-30",
+      selectedMonth: "2026-11",
+      periodMode: "month",
+      accountId: bank,
+      timeZone: "America/Montevideo",
+    },
+    now,
+  );
+  expect(actual).toEqual(
+    Array.from({ length: 31 }, (_, i) => ({
+      day: `Day ${i + 1}`,
+      previousPrevious: values[0]?.[i] ?? null,
+      previous: values[1]?.[i] ?? null,
+      current: values[2]?.[i] ?? null,
+    })),
+  );
 });
