@@ -19,6 +19,8 @@ import {
 } from "@shared/calculations";
 import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@shared/constants";
 
+import { useRecordDraft } from "./use-record-draft";
+
 import type { RecordPatch } from "@shared/schemas";
 import type {
   CurrencyCode,
@@ -27,10 +29,22 @@ import type {
   RecordType,
   RecordFilters,
   RecordGoalAssociation,
-  WalletDataset,
   WalletRecord,
 } from "@shared/types";
 
+import {
+  emptyDraft,
+  draftFromRecord,
+  duplicateDraft,
+  draftFromTemplate,
+  recordSubmitMode,
+  hasInvalidGoalAllocation as draftHasInvalidGoalAllocation,
+  scaleDraftAmount,
+  buildRecordInput,
+  buildRecordPatch,
+  defaultRecordAccountId as defaultAccountId,
+  defaultRecordDestinationId as defaultDestinationAccountId,
+} from "@/lib/record-draft";
 import { localDateTimeInput as toDateTimeLocal, dateTimeInputToIso } from "@/lib/date-input";
 import { ReviewRecordActions } from "@/components/wallet/review-record-actions";
 import { ImportHistory } from "@/components/wallet/record-import-history";
@@ -46,7 +60,6 @@ import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { CategoryPicker } from "@/components/wallet/category-picker";
 import { normalizeGlobalSearch } from "@/lib/global-search";
-import { prepareTemplateDraft } from "@/lib/record-templates";
 import {
   Dialog,
   DialogContent,
@@ -57,7 +70,6 @@ import {
 import { useActionToast } from "@/lib/use-action-toast";
 import { cn, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { recordAccountAmount, scaleConvertedAmount } from "@/lib/record-form-money";
 
 const paymentMethodClasses: Record<PaymentType, string> = {
   cash: "bg-muted text-muted-foreground",
@@ -69,29 +81,6 @@ const paymentMethodClasses: Record<PaymentType, string> = {
 
 const noteFieldClassName =
   "block min-h-24 max-h-64 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring [field-sizing:content]";
-
-function defaultAccountId(dataset: WalletDataset) {
-  const activeVisibleAccounts = dataset.accounts.filter(
-    (account) => account.isActive && account.isVisible,
-  );
-  return (
-    activeVisibleAccounts.find(
-      (account) =>
-        account.id === (dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId),
-    )?.id ??
-    activeVisibleAccounts[0]?.id ??
-    dataset.accounts.find((account) => account.isActive)?.id ??
-    ""
-  );
-}
-
-function defaultDestinationAccountId(dataset: WalletDataset, sourceAccountId: string) {
-  return (
-    dataset.accounts.find(
-      (account) => account.isActive && account.isVisible && account.id !== sourceAccountId,
-    )?.id ?? ""
-  );
-}
 
 function dateTimeLocalToIso(value: string) {
   return value ? dateTimeInputToIso(value) : new Date().toISOString();
@@ -156,32 +145,73 @@ export function RecordsView() {
   const [reviewWrite, setReviewWrite] = useState<string>();
   const reviewWriteLock = useRef(false);
   const recordDraftRevision = useRef(0);
-  const [type, setType] = useState<RecordType>("expense");
-  const [accountId, setAccountId] = useState(defaultAccountId(dataset));
-  const [creditCardId, setCreditCardId] = useState(recordFilters.creditCardId ?? "");
-  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [exchangeRateToLimitCurrency, setExchangeRateToLimitCurrency] = useState("1");
-  const [destinationAccountId, setDestinationAccountId] = useState(
-    defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
-  );
-  const [categoryId, setCategoryId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [accountAmount, setAccountAmount] = useState("");
-  const [destinationAmount, setDestinationAmount] = useState("");
+  const {
+    draft,
+    setDraft,
+    type,
+    setType,
+    accountId,
+    setAccountId,
+    creditCardId,
+    setCreditCardId,
+    currency,
+    setCurrency,
+    exchangeRateToLimitCurrency,
+    setExchangeRateToLimitCurrency,
+    destinationAccountId,
+    setDestinationAccountId,
+    categoryId,
+    setCategoryId,
+    amount,
+    accountAmount,
+    setAccountAmount,
+    destinationAmount,
+    setDestinationAmount,
+    primaryRate,
+    setPrimaryRate,
+    moneyError,
+    setMoneyError,
+    note,
+    setNote,
+    goalAssociations,
+    setGoalAssociations,
+    counterpartyName,
+    setCounterpartyName,
+    occurredAtLocal,
+    setOccurredAtLocal,
+    paymentType,
+    setPaymentType,
+    paymentStatus,
+    setPaymentStatus,
+  } = useRecordDraft(() => ({
+    type: "expense",
+    accountId: defaultAccountId(dataset),
+    creditCardId: recordFilters.creditCardId ?? "",
+    currency: "UYU",
+    exchangeRateToLimitCurrency: "1",
+    destinationAccountId: defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
+    categoryId: "",
+    amount: "",
+    accountAmount: "",
+    destinationAmount: "",
+    primaryRate: "",
+    moneyError: "",
+    note: "",
+    tagId: "",
+    goalAssociations: [],
+    counterpartyName: "",
+    occurredAtLocal: toDateTimeLocal(new Date()),
+    paymentType: "debit",
+    paymentStatus: "cleared",
+  }));
+
   const conversionBasis = useRef<{
     source?: { amount: string; converted: string };
     destination?: { amount: string; converted: string };
   }>({});
-  const [primaryRate, setPrimaryRate] = useState("");
-  const [moneyError, setMoneyError] = useState("");
+
   const recordSubmission = useRef(false);
-  const [note, setNote] = useState("");
-  const [tagId, setTagId] = useState("");
-  const [goalAssociations, setGoalAssociations] = useState<RecordGoalAssociation[]>([]);
-  const [counterpartyName, setCounterpartyName] = useState("");
-  const [occurredAtLocal, setOccurredAtLocal] = useState(() => toDateTimeLocal(new Date()));
-  const [paymentType, setPaymentType] = useState<PaymentType>("debit");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
+
   const { toast, runAction } = useActionToast();
   const reviewCount = dataset.records.filter(
     (record) => record.paymentStatus === "needs_review",
@@ -205,54 +235,14 @@ export function RecordsView() {
   const fieldClassName =
     "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
   const numericAmount = Number(amount);
-  const hasInvalidGoalAllocation = goalAssociations.some(
-    (association) =>
-      association.allocatedAmount !== undefined &&
-      (!Number.isFinite(association.allocatedAmount) ||
-        association.allocatedAmount <= 0 ||
-        association.allocatedAmount > numericAmount),
-  );
+  const hasInvalidGoalAllocation = draftHasInvalidGoalAllocation(draft);
   const editingLinkedRefund = dataset.creditCardRecords.find(
     (record) => record.walletRecordId === editingId && record.kind === "refund",
   );
-  const statusOnlyCancellation = Boolean(
-    editingId &&
-    !editingLinkedRefund &&
-    paymentStatus === "cancelled" &&
-    dataset.records.find((record) => record.id === editingId)?.paymentStatus === "needs_review",
-  );
   const editingRecord = dataset.records.find((record) => record.id === editingId);
-  const originalGoalAssociations =
-    editingRecord?.goalAssociations ??
-    (editingRecord?.goalIds ?? []).map((goalId) => ({
-      goalId,
-      assignmentSource: "manual",
-      useReserved: true,
-      reserveIncome: true,
-    }));
-  // A review item with unknown primary FX may still receive metadata edits.
-  // Send a sparse patch so its recorded amounts and unresolved rate survive.
-  const reviewMetadataOnly = Boolean(
-    editingRecord &&
-    editingRecord.exchangeRateToPrimary === 0 &&
-    editingRecord.paymentStatus === "needs_review" &&
-    paymentStatus === "needs_review" &&
-    primaryRate.trim() !== "" &&
-    Number(primaryRate) === 0 &&
-    type === editingRecord.type &&
-    numericAmount === editingRecord.amount &&
-    currency === editingRecord.currency &&
-    (accountId || undefined) === editingRecord.accountId &&
-    (!accountId ||
-      Number(accountAmount) === (editingRecord.accountAmount ?? editingRecord.amount)) &&
-    (destinationAccountId || undefined) === editingRecord.destinationAccountId &&
-    destinationAmount === String(editingRecord.destinationAmount ?? "") &&
-    (creditCardId || undefined) === editingRecord.creditCardId &&
-    Number(exchangeRateToLimitCurrency) === (editingRecord.exchangeRateToLimitCurrency ?? 1) &&
-    paymentType === editingRecord.paymentType &&
-    occurredAtLocal === toDateTimeLocal(editingRecord.occurredAt) &&
-    JSON.stringify(goalAssociations) === JSON.stringify(originalGoalAssociations),
-  );
+  const submitMode = recordSubmitMode(draft, editingRecord, Boolean(editingLinkedRefund));
+  const statusOnlyCancellation = submitMode === "cancel";
+  const reviewMetadataOnly = submitMode === "review";
   const canSubmit =
     statusOnlyCancellation ||
     (reviewMetadataOnly && !hasInvalidGoalAllocation) ||
@@ -269,73 +259,35 @@ export function RecordsView() {
   }
   useEffect(() => {
     if (!newRecordRequestId || openedNewRecordRef.current === newRecordRequestId) return;
-
     queueMicrotask(() => {
       recordDraftRevision.current += 1;
-      setTemplateNotice("");
       openedNewRecordRef.current = newRecordRequestId;
-      const nextAccountId = defaultAccountId(dataset);
-      const requestedCard = dataset.creditCards.find(
+      const now = new Date();
+      const requested = dataset.creditCards.find(
         (card) => card.id === recordFilters.creditCardId && card.isActive,
       );
-      setEditingId(null);
-      setType("expense");
-      const defaultCard = dataset.creditCards.find(
-        (card) =>
-          dataset.settings.defaultPaymentType === "credit" &&
-          card.id === dataset.settings.defaultCreditCardId &&
-          card.isActive,
-      );
-      const nextCard = requestedCard ?? defaultCard;
-      setAccountId(nextAccountId);
-      setCreditCardId(nextCard?.id ?? "");
-      setCurrency(
-        nextCard?.limitCurrency ??
-          dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
-          "UYU",
-      );
-      setExchangeRateToLimitCurrency("1");
-      setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
-      setCategoryId("");
-      setAmount("");
-      conversionBasis.current = {};
-      setAccountAmount("");
-      setDestinationAmount("");
-      setPrimaryRate("");
-      setMoneyError("");
-      setNote("");
-      setTagId("");
-      setCounterpartyName("");
-      setOccurredAtLocal(toDateTimeLocal(new Date()));
-      setPaymentType(nextCard ? "credit" : dataset.settings.defaultPaymentType);
-      setPaymentStatus(dataset.settings.defaultPaymentStatus);
-      setGoalAssociations([]);
+      let next = emptyDraft(dataset, now);
+      if (requested)
+        next = {
+          ...next,
+          creditCardId: requested.id,
+          currency: requested.limitCurrency,
+          paymentType: "credit",
+        };
+      next = { ...next, goalAssociations: [] };
+      let notice = "";
       if (newRecordTemplateId) {
         const template = dataset.recordTemplates?.find((item) => item.id === newRecordTemplateId);
         if (template) {
-          const { value, limitRate, problems } = prepareTemplateDraft(template, dataset);
-          setType(value.type);
-          setAmount(String(value.amount));
-          setCurrency(value.currency);
-          setAccountId(value.accountId ?? "");
-          setCreditCardId(value.creditCardId ?? "");
-          setDestinationAccountId(value.destinationAccountId ?? "");
-          setCategoryId(value.categoryId ?? "");
-          setTagId(value.tagId ?? "");
-          setCounterpartyName(value.counterpartyName ?? "");
-          setNote(value.note ?? "");
-          setPaymentType(value.paymentType);
-          setExchangeRateToLimitCurrency(limitRate);
-          setTemplateNotice(
-            problems.length
-              ? problems.join(" ")
-              : "Borrador desde plantilla. Revisá la fecha y las conversiones antes de confirmar.",
-          );
-        } else
-          setTemplateNotice(
-            "La plantilla ya no está disponible. Podés completar un movimiento nuevo.",
-          );
+          const prepared = draftFromTemplate(template, dataset, now, next);
+          next = prepared.draft;
+          notice = prepared.notice;
+        } else notice = "The template is no longer available. Complete a new record.";
       }
+      setEditingId(null);
+      setTemplateNotice(notice);
+      setDraft(next);
+      conversionBasis.current = {};
       setIsRecordDialogOpen(true);
       consumeNewRecordRequest();
     });
@@ -345,6 +297,7 @@ export function RecordsView() {
     newRecordRequestId,
     newRecordTemplateId,
     recordFilters.creditCardId,
+    setDraft,
   ]);
 
   const filteredRecords = useMemo(() => {
@@ -460,61 +413,8 @@ export function RecordsView() {
     recordDraftRevision.current += 1;
     conversionBasis.current = {};
     setTemplateNotice("");
-    const nextAccountId = defaultAccountId(dataset);
     setEditingId(null);
-    setType(nextType);
-    setAccountId(nextAccountId);
-    const defaultCard = dataset.creditCards.find(
-      (card) =>
-        dataset.settings.defaultPaymentType === "credit" &&
-        card.id === dataset.settings.defaultCreditCardId &&
-        card.isActive,
-    );
-    setCreditCardId(nextType === "expense" ? (defaultCard?.id ?? "") : "");
-    setCurrency(
-      (nextType === "expense" ? defaultCard?.limitCurrency : undefined) ??
-        dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
-        "UYU",
-    );
-    setExchangeRateToLimitCurrency("1");
-    setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
-    setCategoryId("");
-    setAmount("");
-    setAccountAmount("");
-    setDestinationAmount("");
-    setPrimaryRate("");
-    setMoneyError("");
-    setNote("");
-    setTagId("");
-    const date = new Date().toISOString().slice(0, 10);
-    setGoalAssociations(
-      dataset.goals
-        .filter(
-          (goal) =>
-            goal.status === "active" &&
-            goal.autoCaptureEnabled &&
-            goal.autoCaptureStart &&
-            goal.autoCaptureEnd &&
-            goal.autoCaptureStart <= date &&
-            goal.autoCaptureEnd >= date,
-        )
-        .map((goal) => ({
-          goalId: goal.id,
-          assignmentSource: "date_rule",
-          useReserved: true,
-          reserveIncome: true,
-        })),
-    );
-    setCounterpartyName("");
-    setOccurredAtLocal(toDateTimeLocal(new Date()));
-    setPaymentType(
-      nextType === "transfer"
-        ? "transfer"
-        : nextType === "expense" && defaultCard
-          ? "credit"
-          : dataset.settings.defaultPaymentType,
-    );
-    setPaymentStatus(dataset.settings.defaultPaymentStatus);
+    setDraft(emptyDraft(dataset, new Date(), nextType));
   }
 
   function openNewRecordDialog() {
@@ -526,51 +426,17 @@ export function RecordsView() {
     recordDraftRevision.current += 1;
     setTemplateNotice("");
     setEditingId(record.id);
-    setType(record.type);
-    setAccountId(record.accountId ?? "");
-    setCreditCardId(record.creditCardId ?? "");
-    setCurrency(record.currency);
-    setExchangeRateToLimitCurrency(String(record.exchangeRateToLimitCurrency ?? 1));
-    setDestinationAccountId(record.destinationAccountId ?? "");
-    setCategoryId(record.categoryId ?? "");
-    setAmount(String(record.amount));
-    setAccountAmount(String(record.accountAmount ?? record.amount));
-    setDestinationAmount(
-      record.destinationAmount === undefined ? "" : String(record.destinationAmount),
-    );
+    setDraft(draftFromRecord(record));
     conversionBasis.current = {
       source:
         record.accountAmount === undefined
           ? undefined
-          : {
-              amount: String(record.amount),
-              converted: String(record.accountAmount),
-            },
+          : { amount: String(record.amount), converted: String(record.accountAmount) },
       destination:
         record.destinationAmount === undefined
           ? undefined
-          : {
-              amount: String(record.amount),
-              converted: String(record.destinationAmount),
-            },
+          : { amount: String(record.amount), converted: String(record.destinationAmount) },
     };
-    setPrimaryRate(String(record.exchangeRateToPrimary));
-    setMoneyError("");
-    setNote(splitImportNote(record.note).note ?? "");
-    setTagId(record.tagIds[0] ?? "");
-    setGoalAssociations(
-      record.goalAssociations ??
-        (record.goalIds ?? []).map((goalId) => ({
-          goalId,
-          assignmentSource: "manual",
-          useReserved: true,
-          reserveIncome: true,
-        })),
-    );
-    setCounterpartyName(record.counterpartyName ?? "");
-    setOccurredAtLocal(toDateTimeLocal(record.occurredAt));
-    setPaymentType(record.paymentType);
-    setPaymentStatus(record.paymentStatus);
     setIsRecordDialogOpen(true);
   }
 
@@ -578,46 +444,7 @@ export function RecordsView() {
     const record = dataset.records.find((item) => item.id === editingId);
     if (!record) return;
     resetForm(record.type);
-    const now = new Date();
-    const account = dataset.accounts.find((item) => item.id === record.accountId && item.isActive);
-    const card =
-      record.type === "expense"
-        ? dataset.creditCards.find((item) => item.id === record.creditCardId && item.isActive)
-        : undefined;
-    const destination = dataset.accounts.find(
-      (item) => item.id === record.destinationAccountId && item.isActive && item.id !== account?.id,
-    );
-    setAccountId(account?.id ?? "");
-    setCreditCardId(card?.id ?? "");
-    setDestinationAccountId(record.type === "transfer" ? (destination?.id ?? "") : "");
-    setCurrency(record.currency);
-    setAmount(String(record.amount));
-    setCategoryId(record.categoryId ?? "");
-    setCounterpartyName(record.counterpartyName ?? "");
-    setNote(record.note ?? "");
-    setTagId(record.tagIds[0] ?? "");
-    setPaymentType(
-      record.type === "transfer"
-        ? "transfer"
-        : card
-          ? "credit"
-          : record.paymentType === "credit"
-            ? "debit"
-            : record.paymentType,
-    );
-    setExchangeRateToLimitCurrency(
-      card
-        ? String(
-            findExchangeRate(
-              dataset.exchangeRates,
-              record.currency,
-              card.limitCurrency,
-              now.toISOString(),
-            ) ?? "",
-          )
-        : "1",
-    );
-    setOccurredAtLocal(toDateTimeLocal(now));
+    setDraft(duplicateDraft(record, dataset, new Date()));
   }
 
   function toggleReviewQueue() {
@@ -726,97 +553,6 @@ export function RecordsView() {
     );
   }
 
-  function buildRecord(): Omit<WalletRecord, "id"> | null {
-    const numericAmount = Number(amount);
-    if (!numericAmount || numericAmount <= 0) return null;
-    if (hasInvalidGoalAllocation) return null;
-
-    const account = dataset.accounts.find((item) => item.id === accountId);
-    const card = dataset.creditCards.find((item) => item.id === creditCardId);
-    const limitRate = Number(exchangeRateToLimitCurrency);
-    const original = editingId
-      ? dataset.records.find((record) => record.id === editingId)
-      : undefined;
-    const date =
-      original && toDateTimeLocal(original.occurredAt) === occurredAtLocal
-        ? original.occurredAt
-        : dateTimeLocalToIso(occurredAtLocal);
-    const frozenPrimaryRate =
-      Number(primaryRate) ||
-      findExchangeRate(dataset.exchangeRates, currency, dataset.settings.primaryCurrency, date);
-    const sourceRate = account
-      ? findExchangeRate(dataset.exchangeRates, currency, account.currency, date)
-      : 1;
-    const destination = dataset.accounts.find((item) => item.id === destinationAccountId);
-    const destinationRate = destination
-      ? findExchangeRate(dataset.exchangeRates, currency, destination.currency, date)
-      : 1;
-    const unchangedAmount = original?.amount === numericAmount && original.currency === currency;
-    const sourceAmount = account
-      ? recordAccountAmount(
-          numericAmount,
-          currency,
-          account.currency,
-          accountAmount,
-          sourceRate,
-          unchangedAmount && original?.accountId === accountId,
-        )
-      : undefined;
-    const targetAmount =
-      type === "transfer" && destination
-        ? recordAccountAmount(
-            numericAmount,
-            currency,
-            destination.currency,
-            destinationAmount,
-            destinationRate,
-            unchangedAmount && original?.destinationAccountId === destinationAccountId,
-          )
-        : undefined;
-    if (
-      frozenPrimaryRate === null ||
-      !Number.isFinite(frozenPrimaryRate) ||
-      frozenPrimaryRate <= 0 ||
-      sourceAmount === null ||
-      targetAmount === null ||
-      (card && (!Number.isFinite(limitRate) || !(limitRate > 0)))
-    ) {
-      setMoneyError(
-        "Enter the converted amounts and a valid exchange rate for the selected currencies.",
-      );
-      return null;
-    }
-
-    return {
-      type,
-      amount: numericAmount,
-      currency,
-      accountId: accountId || undefined,
-      accountAmount: sourceAmount,
-      creditCardId: creditCardId || undefined,
-      destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
-      destinationAmount: targetAmount,
-      categoryId: type === "transfer" ? undefined : categoryId,
-      counterpartyName: counterpartyName.trim() || undefined,
-      tagIds: tagId ? [tagId] : [],
-      goalIds: goalAssociations.map((association) => association.goalId),
-      goalAssociations,
-      paymentType,
-      paymentStatus,
-      exchangeRateToPrimary: frozenPrimaryRate,
-      amountInLimitCurrency: card
-        ? unchangedAmount &&
-          original?.creditCardId === creditCardId &&
-          original.exchangeRateToLimitCurrency === limitRate
-          ? original.amountInLimitCurrency
-          : numericAmount * limitRate
-        : undefined,
-      exchangeRateToLimitCurrency: card ? limitRate : undefined,
-      occurredAt: date,
-      note: note || undefined,
-    };
-  }
-
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (recordSubmission.current) return;
@@ -826,58 +562,38 @@ export function RecordsView() {
       );
       return;
     }
-    const nextRecord =
-      editingLinkedRefund || statusOnlyCancellation || reviewMetadataOnly ? null : buildRecord();
-    if (!nextRecord && !editingLinkedRefund && !statusOnlyCancellation && !reviewMetadataOnly)
+    const now = new Date();
+    const patch = editingId
+      ? buildRecordPatch(draft, editingRecord, dataset, now, {
+          linkedRefund: Boolean(editingLinkedRefund),
+        })
+      : null;
+    const created = editingId ? null : buildRecordInput(draft, dataset, undefined, now);
+    const result = patch ?? created;
+    if (!result || !result.ok) {
+      if (result?.error) setMoneyError(result.error);
       return;
+    }
     recordSubmission.current = true;
     const revision = recordDraftRevision.current;
-
     try {
-      if (editingId) {
-        await runAction(
-          () =>
-            updateRecord(
-              editingId,
-              statusOnlyCancellation
-                ? { paymentStatus: "cancelled" }
-                : reviewMetadataOnly
-                  ? {
-                      categoryId: categoryId || null,
-                      counterpartyName: counterpartyName.trim() || null,
-                      note: note || null,
-                      tagIds: tagId ? [tagId] : [],
-                    }
-                  : editingLinkedRefund
-                    ? {
-                        categoryId,
-                        counterpartyName: counterpartyName.trim() || null,
-                        note: note || null,
-                        tagIds: tagId ? [tagId] : [],
-                        goalIds: goalAssociations.map((item) => item.goalId),
-                        goalAssociations,
-                      }
-                    : { ...nextRecord!, creditCardId: creditCardId || null },
-            ),
-          {
-            processing: "Saving record...",
-            success: "Record saved",
-            error: "Could not save record",
-          },
-        );
-      } else {
-        await runAction(() => addRecord(nextRecord!), {
+      if (editingId && patch?.ok)
+        await runAction(() => updateRecord(editingId, patch.patch), {
+          processing: "Saving record...",
+          success: "Record saved",
+          error: "Could not save record",
+        });
+      else if (created?.ok)
+        await runAction(() => addRecord(created.value), {
           processing: "Creating record...",
           success: "Record created",
           error: "Could not create record",
         });
-      }
     } catch {
       return;
     } finally {
       recordSubmission.current = false;
     }
-
     if (revision === recordDraftRevision.current) closeRecordDialog();
   }
 
@@ -1072,15 +788,8 @@ export function RecordsView() {
                   value={amount}
                   onChange={(event) => {
                     const next = limitDecimalPlaces(event.target.value);
-                    const source = conversionBasis.current.source;
-                    const destination = conversionBasis.current.destination;
-                    if (source)
-                      setAccountAmount(scaleConvertedAmount(source.converted, source.amount, next));
-                    if (destination)
-                      setDestinationAmount(
-                        scaleConvertedAmount(destination.converted, destination.amount, next),
-                      );
-                    setAmount(next);
+                    const basis = { ...conversionBasis.current };
+                    setDraft((current) => scaleDraftAmount(current, next, basis));
                   }}
                   className={fieldClassName}
                   type="number"

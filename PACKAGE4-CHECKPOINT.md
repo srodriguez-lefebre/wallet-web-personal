@@ -271,3 +271,28 @@ Check final exit 0: 110 archivos / 798 pruebas, lint/formato/build/OpenAPI verde
 Log `/tmp/wallet-package4-form-kit-check2.log`, estado explícito en `.status`.
 La app sigue usando WalletSync; aún no afirmar caché por entidad completa ni
 separación final de Records, que conserva lógica de draft/formulario y lista.
+
+## Task 3 · RecordDraft integrado
+
+Tras reconexión se preservaron los dos archivos sin commit y se verificó main
+`6701646`, rama remota `a61b0d9`, sin PR 4 existente. Las seis pruebas pendientes
+habían fallado por un id faltante en una cotización del fixture; corregido el
+fixture, pasaron 6/6 y TypeScript. Se agregaron plantillas/ventanas automáticas
+de metas y un hook de reducer con setters estables y actualizaciones funcionales.
+
+Records usa ese único draft para reset, edición, duplicación y plantillas. Los
+cuatro modos de submit están en funciones puras: cancelación sólo de status,
+metadata con FX sin resolver, metadata de reembolso y edición/creación normal.
+Se preservan el timestamp exacto y FX congelado cuando no se editaron, y el
+escalado bancario usa la base original incluso al cambiar varias veces el importe.
+Las ventanas automáticas se mantienen como antes; no se dedujo un bug de
+persistencia a partir de que el pedido global inicia sin asociaciones explícitas.
+Los avisos de plantilla ahora están en inglés y no se guardan como notas.
+
+La primera integración detectó un helper de fecha aún usado por un placeholder:
+se corrigió antes de repetir. Target final: 6 archivos / 60 tests verdes,
+`/tmp/wallet-package4-record-draft-integrated3.log`. El check completo terminó
+exit 0: 112 archivos / 807 pruebas, formato/lint/build/OpenAPI verdes, en
+`/tmp/wallet-package4-record-draft-check.log`, con estado en `.status`.
+Pendiente separar diálogo/filtros/lista y conectar los consumidores de Query;
+WalletSync sigue activo. No se modificaron DB, producción ni Apps Script.
