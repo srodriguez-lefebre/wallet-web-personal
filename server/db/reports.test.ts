@@ -10,12 +10,24 @@ import {
   calculateBudgetProgress,
   calculateMonthlySeries,
   calculateSummary,
+  calculateSummaryForDateRange,
+  calculateEmergencyRunway,
+  calculateCategoryExpenses,
+  calculateCategoryExpensesForDateRange,
   dateRangeForMonth,
   recentMonthKeys,
   relativeDateRanges,
   relativeMonthKeys,
 } from "../../shared/calculations.js";
 import { calculateMerchantSpending } from "../../shared/merchant-analytics.js";
+import {
+  buildSavingsRecommendations,
+  calculateAllowedDailySpend,
+  calculateEndOfMonthProjection,
+} from "../../shared/simulations.js";
+import { buildReportViewModel, categoryBreakdown } from "../../src/lib/wallet-read-model.js";
+import { getAccountBalanceMetrics } from "./balances.js";
+import { getWalletReference } from "./reference.js";
 import { getAnalyticsSummary } from "./analytics.js";
 import { createDb } from "./client.js";
 import { getWalletDataset } from "./dataset.js";
@@ -221,3 +233,96 @@ test("the reporting preference includes hidden activity without overriding expli
     await fixture.pool.query("UPDATE settings SET include_hidden_accounts_in_reports=false");
   }
 });
+
+test("an explicit card report includes hidden bank activity and preserves frozen trend totals", async () => {
+  const card = randomUUID(),
+    ids = Array.from({ length: 3 }, () => randomUUID());
+  await fixture.pool.query(
+    "INSERT INTO credit_cards(id,name,issuer,last_four,credit_limit,limit_currency,closing_day,due_day,color,icon) VALUES($1,'Synthetic scoped card','Synthetic bank','1234',5000,'UYU',20,5,'blue','card')",
+    [card],
+  );
+  try {
+    await fixture.pool.query(
+      "INSERT INTO records(id,type,amount,currency,account_id,category_id,credit_card_id,payment_type,payment_status,exchange_rate_to_primary,occurred_at) VALUES($1,'expense',30,'UYU',$4,$6,$7,'credit','cleared',1,'2026-04-02T12:00:00Z'),($2,'expense',2,'USD',$5,$6,$7,'credit','needs_review',40,'2026-03-02T12:00:00Z'),($3,'expense',999,'UYU',$4,$6,$7,'credit','cancelled',1,'2026-04-03T12:00:00Z')",
+      [...ids, hidden, bank, category, card],
+    );
+    const dataset = await getWalletDataset(createDb());
+    const cardDataset = {
+      ...dataset,
+      records: dataset.records.filter((row) => row.creditCardId === card),
+    };
+    const query = {
+      from: "2026-04-01",
+      to: "2026-04-30",
+      selectedMonth: "2026-04",
+      periodMode: "month" as const,
+      timeZone: "America/Montevideo",
+      creditCardId: card,
+    };
+    const data = await getReportDetails(createDb(), query, now);
+    expect(data.expenseTrend).toEqual(
+      buildExpenseComparisonSeries(
+        cardDataset,
+        relativeMonthKeys("2026-04", 3).map(dateRangeForMonth),
+      ),
+    );
+    expect(data.previousTotals.expenses).toBe(80);
+    expect(data.currentMonthTotals.expenses).toBe(30);
+    const visibleOnly = await getReportDetails(createDb(), { ...query, accountId: bank }, now);
+    expect(visibleOnly.currentMonthTotals.expenses).toBe(0);
+    expect(visibleOnly.previousTotals.expenses).toBe(80);
+  } finally {
+    await fixture.pool.query("DELETE FROM records WHERE id=ANY($1::uuid[])", [ids]);
+    await fixture.pool.query("DELETE FROM credit_cards WHERE id=$1", [card]);
+  }
+});
+
+test.each([undefined, bank, hidden])(
+  "view models consume SQL totals without history and preserve period formulas: %s",
+  async (accountId) => {
+    const dataset = await scoped(accountId);
+    const reference = await getWalletReference(createDb());
+    const balances = await getAccountBalanceMetrics(
+      createDb(),
+      { timeZone: "America/Montevideo" },
+      now,
+    );
+    for (const selection of [
+      { from: "2026-04-01", to: "2026-04-30", periodMode: "month" as const },
+      { from: "2026-03-29", to: "2026-04-07", periodMode: "custom" as const },
+      { from: "2026-02-05", to: "2026-07-01", periodMode: "all" as const },
+    ]) {
+      const query = {
+        ...selection,
+        accountId,
+        timeZone: "America/Montevideo",
+        selectedMonth: "2026-04",
+      };
+      const totals = await getAnalyticsSummary(createDb(), query);
+      const details = await getReportDetails(createDb(), query, now);
+      const view = buildReportViewModel(reference, balances, totals, details, query, now);
+      const expected =
+        selection.periodMode === "month"
+          ? calculateSummary(dataset, "2026-04")
+          : calculateSummaryForDateRange(dataset, selection);
+      expect(view.summary).toEqual(expected);
+      expect(view.emergencyRunway).toEqual(
+        calculateEmergencyRunway(
+          dataset,
+          selection.periodMode === "month" ? "2026-04" : selection.to.slice(0, 7),
+        ),
+      );
+      expect(view.allowedDaily).toBe(calculateAllowedDailySpend(dataset));
+      expect(view.projection).toBe(
+        calculateEndOfMonthProjection(dataset, expected.dailyAverageExpense),
+      );
+      expect(view.recommendations).toEqual(buildSavingsRecommendations(dataset));
+      expect(categoryBreakdown(totals, "expense")).toEqual(
+        selection.periodMode === "month"
+          ? calculateCategoryExpenses(dataset, "2026-04")
+          : calculateCategoryExpensesForDateRange(dataset, selection),
+      );
+      expect(view).not.toHaveProperty("records");
+    }
+  },
+);

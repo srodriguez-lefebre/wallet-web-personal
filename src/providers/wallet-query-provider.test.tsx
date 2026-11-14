@@ -126,12 +126,18 @@ test("locking aborts late bootstrap, empties its cache and isolates the next ses
   mount();
   await started;
   const old = cache;
+  const oldData = data;
   await act(async () => {
     auth.lock();
     await Promise.resolve();
   });
   expect(screen.getByText("Locked")).toBeDefined();
   expect(old.getQueryCache().getAll()).toEqual([]);
+  expect(oldData.signal.aborted).toBe(true);
+  await expect(
+    oldData.mutations["settings.patch"]({ body: { theme: "dark" } }),
+  ).rejects.toMatchObject({ name: "AbortError" });
+  expect(old.getMutationCache().getAll()).toEqual([]);
   await act(async () => {
     release();
     await Promise.resolve();

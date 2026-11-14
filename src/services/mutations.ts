@@ -98,9 +98,18 @@ export const mutationDefinitions = {
 export type WalletMutations = {
   [Id in MutationOperationId]: (input: ClientInput<Id>) => Promise<OperationResponse<Id>>;
 };
-export function createWalletMutations(client: WalletClient, cache: QueryClient): WalletMutations {
+export function createWalletMutations(
+  client: WalletClient,
+  cache: QueryClient,
+  options: { signal?: AbortSignal } = {},
+): WalletMutations {
   function method<Id extends MutationOperationId>(operationId: Id) {
     return async (input: ClientInput<Id>): Promise<OperationResponse<Id>> => {
+      const signal =
+        options.signal && input.signal
+          ? AbortSignal.any([options.signal, input.signal])
+          : (options.signal ?? input.signal);
+      signal?.throwIfAborted();
       // The contract ties this indexed method to its input/output; TS cannot preserve
       // that correlation while indexing a union of function signatures.
       const call = client[operationId];
@@ -111,11 +120,13 @@ export function createWalletMutations(client: WalletClient, cache: QueryClient):
         // Invalidation alone can join an initial GET with no cached data. Cancel
         // its result before writing, so settlement always reads canonical state.
         onMutate: async () => {
+          options.signal?.throwIfAborted();
           await Promise.all(
             mutationDefinitions[operationId].map((key) => cache.cancelQueries({ queryKey: [key] })),
           );
         },
         onSettled: async () => {
+          if (options.signal?.aborted) return;
           await Promise.all(
             mutationDefinitions[operationId].map((key) =>
               cache.invalidateQueries({ queryKey: [key] }),
@@ -124,7 +135,7 @@ export function createWalletMutations(client: WalletClient, cache: QueryClient):
         },
       });
       try {
-        return await observer.mutate(input);
+        return await observer.mutate({ ...input, signal });
       } finally {
         observer.reset();
       }

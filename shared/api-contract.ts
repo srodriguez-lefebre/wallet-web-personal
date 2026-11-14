@@ -11,7 +11,7 @@ import {
   balanceTrendQuerySchema,
   balanceTrendSchema,
   reportDetailsSchema,
-  reportQuerySchema,
+  reportDetailsQuerySchema,
 } from "./report-contract.js";
 import {
   accountBalanceMetricsSchema,
@@ -276,7 +276,7 @@ export const apiOperations = [
     path: "/api/analytics/details",
     auth: "session",
     stability: "stable",
-    query: reportQuerySchema,
+    query: reportDetailsQuerySchema,
     successStatus: 200,
     errors: [400, 401, 500],
     summary: "Aggregate report charts and merchant purchases without returning history",

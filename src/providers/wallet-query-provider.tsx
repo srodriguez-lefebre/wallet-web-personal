@@ -18,9 +18,11 @@ import { createWalletMutations, type WalletMutations } from "@/services/mutation
 import { createWalletQueryClient, walletBootstrapQueryOptions } from "@/services/wallet-queries";
 
 type Bootstrap = OperationResponse<"wallet.bootstrapReference">;
-const DataContext = createContext<{ client: WalletClient; mutations: WalletMutations } | null>(
-  null,
-);
+const DataContext = createContext<{
+  client: WalletClient;
+  mutations: WalletMutations;
+  signal: AbortSignal;
+} | null>(null);
 const BootstrapContext = createContext<UseQueryResult<Bootstrap, Error> | null>(null);
 
 function SessionQueries({ client, children }: PropsWithChildren<{ client: WalletClient }>) {
@@ -31,8 +33,14 @@ function SessionQueries({ client, children }: PropsWithChildren<{ client: Wallet
     walletBootstrapQueryOptions(cache, client, { signal: controller.signal }),
     cache,
   );
-  const mutations = useMemo(() => createWalletMutations(client, cache), [client, cache]);
-  const data = useMemo(() => ({ client, mutations }), [client, mutations]);
+  const mutations = useMemo(
+    () => createWalletMutations(client, cache, { signal: controller.signal }),
+    [client, cache, controller],
+  );
+  const data = useMemo(
+    () => ({ client, mutations, signal: controller.signal }),
+    [client, mutations, controller],
+  );
   useEffect(() => {
     mounted.current = true;
     removeStorage("wallet-dataset-cache");

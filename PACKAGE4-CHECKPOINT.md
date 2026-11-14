@@ -419,3 +419,58 @@ Sandbox final exit 0: 11 archivos / 109 pruebas, en
 El árbol funcional quedó estable durante ambas validaciones. Continuar la
 integración de Query conforme al plan local; no hay PR 4 todavía y siguen dos
 PRs disponibles. App/WalletSync aún conservan el snapshot hasta esa integración.
+
+## Task 2b · hooks de entidades y modelos de presentación preparados
+
+El commit `6e2c43dfe330d9f7be6345f3b5b27c64524c40d8` se subió por fast-forward y se
+confirmó con GitHub CLI, sin Co-authored-by. Preview READY
+`dpl_GeeLc5VwUmPp253mUy3cjdQeJfMv` (`wallet-web-personal-b9i655z34.vercel.app`).
+
+SessionQueries entrega un AbortSignal propio. Las mutaciones combinan ese signal
+con el de la llamada y rechazan acciones ya canceladas antes de crear observers;
+una acción tardía no escribe usando el token de otra sesión ni repuebla el cache
+borrado. Si la sesión termina durante cancelQueries, no envía la escritura ni
+refetchea con otro token. RED 2 fallos / 9 pass; se reprodujo además una entrada
+nueva en mutationCache después del lock (RED 1/3), corregida antes de repetir.
+Esto no activa revocación ni cambia secretos/configuración de autenticación.
+
+analytics.details admite creditCardId opt-in para las tendencias de Cards. Ese
+scope conserva actividad en cuentas ocultas como la fórmula anterior; accountId
+explícito se combina con el filtro de tarjeta. El contrato anterior queda igual
+si no se envía creditCardId. balanceTrend conserva su propio query sin ese campo.
+RED 1/7 → GREEN. Sin migraciones, OpenAPI regenerado.
+
+wallet-read-model deriva presentación desde referencia y agregados SQL: saldos,
+metas, resumen, categorías, ahorro, runway, proyección y recomendaciones. No
+recibe historial para calcular totales. Conversiones desconocidas conservan el
+sentinel explícito NaN de la UI anterior; nunca se convierten a cero. Pruebas
+comparan contra las fórmulas anteriores en tres scopes y mes/custom/all.
+
+Hooks tipados en src/hooks/wallet-entities.ts: reference con selectors, Accounts,
+Goals, Records infinito, Cards/ledger/agenda/summary, Analytics y balance trend.
+Sus bindings de mutación se derivan de la tabla exhaustiva del contrato, sin
+wrappers en el provider. Todavía no se conectan en App/las vistas activas.
+
+Testing Library/MSW prueba gasto con impacto completo 970/30 → 950/50 → reload →
+undo 970/30, aunque la página contiene sólo un movimiento y queda historial más
+viejo. Bootstrap se conserva, no aparece wallet.get y no hay persistencia local.
+Cards conserva archivadas y comparte summary entre lista/detalle; editar settings
+no refetchea ledger/summary, editar límite sí. El primer fixture omitió un import:
+corregido antes de la validación. La comparación inicial de lecturas contó un GET
+abortado por el replay de StrictMode; diagnóstico verificó signals [true,false].
+Se cuentan lecturas completadas para comprobar deduplicación, sin ocultar el
+aborto de desarrollo ni cambiar las reglas de cancelación.
+
+Target final: 5 archivos / 33 pruebas verdes,
+`/tmp/wallet-package4-entity-readers-target.log` y `.status` 0. Lint de archivos
+cambiados exit 0, `entity-readers-lint.log`. El typecheck previo detectó sólo un
+parámetro no usado de Cards, ya corregido. Completar check/sandbox antes del
+siguiente commit. Luego integrar consumidores y retirar WalletSync; no abrir el
+PR 4 hasta cerrar el paquete, su revisión y los checks del SHA exacto.
+
+Validación final de hooks/modelos: check completo exit 0, 117 archivos / 835
+pruebas, formato/lint/build/OpenAPI verdes en
+`/tmp/wallet-package4-entity-readers-check.log` y `.status`.
+Sandbox exit 0, 11 archivos / 109 pruebas, en
+`/tmp/wallet-package4-entity-readers-sandbox.log` y `.status`.
+No se modificaron App, producción, migraciones, secretos o Apps Script.

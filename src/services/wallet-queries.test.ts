@@ -2,7 +2,7 @@
 import { InfiniteQueryObserver, QueryObserver } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
-import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 
 import { createWalletClient } from "./api-client";
 import { createWalletMutations } from "./mutations";
@@ -285,4 +285,68 @@ test("renaming a category or tag refreshes active record search results", async 
   expect(reads).toBe(2);
   await actions["tags.patch"]({ params: { id }, body: { name: "Synthetic renamed tag" } });
   expect(reads).toBe(3);
+});
+
+test.each(["session", "request"] as const)(
+  "a cancelled %s cannot send a mutation",
+  async (aborted) => {
+    let writes = 0;
+    server.use(
+      http.patch("http://test.local/api/settings", () => {
+        writes++;
+        return response(reference.settings);
+      }),
+    );
+    const session = new AbortController(),
+      request = new AbortController();
+    const actions = createWalletMutations(client, cache(), { signal: session.signal });
+    (aborted === "session" ? session : request).abort();
+    await expect(
+      actions["settings.patch"]({ body: { theme: "dark" }, signal: request.signal }),
+    ).rejects.toMatchObject({ name: "AbortError" });
+    expect(writes).toBe(0);
+  },
+);
+
+test("ending the session while query cancellation is pending prevents a late write or refetch", async () => {
+  let writes = 0,
+    reads = 0;
+  server.use(
+    http.get("http://test.local/api/wallet/reference", () => {
+      reads++;
+      return response(reference);
+    }),
+    http.patch("http://test.local/api/settings", () => {
+      writes++;
+      return response(reference.settings);
+    }),
+  );
+  const value = cache();
+  unsubscribers.push(new QueryObserver(value, referenceQueryOptions(client)).subscribe(() => {}));
+  await value.fetchQuery(referenceQueryOptions(client));
+  let release!: () => void, started!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const blocked = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const cancellation = vi.spyOn(value, "cancelQueries").mockImplementation(async () => {
+    started();
+    await blocked;
+  });
+  const session = new AbortController();
+  const action = createWalletMutations(client, value, { signal: session.signal })["settings.patch"](
+    { body: { theme: "dark" } },
+  );
+  await arrived;
+  session.abort();
+  release();
+  try {
+    await expect(action).rejects.toMatchObject({ name: "AbortError" });
+    expect(writes).toBe(0);
+    expect(reads).toBe(1);
+  } finally {
+    cancellation.mockRestore();
+  }
 });

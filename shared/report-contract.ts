@@ -7,6 +7,9 @@ export const reportQuerySchema = analyticsQuerySchema.safeExtend({
   selectedMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   periodMode: z.enum(["month", "custom", "all"]),
 });
+export const reportDetailsQuerySchema = reportQuerySchema.safeExtend({
+  creditCardId: uuidSchema.optional(),
+});
 const totals = z.object({ income: z.number(), expenses: z.number(), cashFlow: z.number() });
 const comparison = {
   previousPrevious: z.number().nullable(),
@@ -34,5 +37,5 @@ export const reportDetailsSchema = z.object({
     }),
   ),
 });
-export type ReportQuery = z.infer<typeof reportQuerySchema>;
+export type ReportQuery = z.infer<typeof reportDetailsQuerySchema>;
 export type ReportDetails = z.infer<typeof reportDetailsSchema>;

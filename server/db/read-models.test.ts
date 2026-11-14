@@ -12,6 +12,10 @@ import {
   dateRangeForMonth,
   relativeMonthKeys,
 } from "../../shared/calculations.js";
+import {
+  accountBalancesFromMetrics,
+  goalProgressFromMetrics,
+} from "../../src/lib/wallet-read-model.js";
 import { getAccountBalanceMetrics } from "./balances.js";
 import { getBalanceTrend } from "./balance-trend.js";
 import { createDb } from "./client.js";
@@ -137,7 +141,8 @@ afterAll(async () => {
 });
 const wire = (value: number) => (Number.isFinite(value) ? value : null);
 test("account SQL aggregates preserve frozen transfers, review impact, refund-credit releases and unknown FX without history payloads", async () => {
-  const expected = calculateAccountBalances(await getWalletDataset(createDb()));
+  const dataset = await getWalletDataset(createDb());
+  const expected = calculateAccountBalances(dataset);
   let calls = 0;
   const previous = neonConfig.fetchFunction!;
   neonConfig.fetchFunction = (input: string, init: RequestInit) => {
@@ -151,6 +156,7 @@ test("account SQL aggregates preserve frozen transfers, review impact, refund-cr
       now,
     );
     expect(calls).toBe(1);
+    const presented = accountBalancesFromMetrics(dataset, actual);
     expect(actual.find((row) => row.accountId === tieBank)?.balance).toBe(999);
     for (const row of expected) {
       const result = actual.find((item) => item.accountId === row.account.id)!;
@@ -163,8 +169,14 @@ test("account SQL aggregates preserve frozen transfers, review impact, refund-cr
         "balanceInPrimary",
         "totalBalanceInPrimary",
       ] as const) {
-        if (Number.isFinite(row[field])) expect(result[field]).toBeCloseTo(row[field], 10);
-        else expect(result[field]).toBeNull();
+        const visible = presented.find((item) => item.account.id === row.account.id)![field];
+        if (Number.isFinite(row[field])) {
+          expect(result[field]).toBeCloseTo(row[field], 10);
+          expect(visible).toBeCloseTo(row[field], 10);
+        } else {
+          expect(result[field]).toBeNull();
+          expect(visible).toBeNaN();
+        }
       }
     }
   } finally {
@@ -187,8 +199,10 @@ test("historical account balances use the viewer's calendar cutoff and the reser
   }
 });
 test("goal SQL aggregates preserve allocated portions, frozen account/primary FX, inverse bridges and unresolved rates", async () => {
-  const expected = calculateGoalProgress(await getWalletDataset(createDb()));
+  const dataset = await getWalletDataset(createDb());
+  const expected = calculateGoalProgress(dataset);
   const actual = await getGoalProgressMetrics(createDb(), now);
+  const presented = goalProgressFromMetrics(dataset, actual);
   for (const row of expected) {
     const result = actual.find((item) => item.goalId === row.goal.id)!;
     expect(result.hasMissingExchangeRate).toBe(row.hasMissingExchangeRate);
@@ -201,8 +215,14 @@ test("goal SQL aggregates preserve allocated portions, frozen account/primary FX
       "percentage",
     ] as const) {
       const value = wire(row[field]);
-      if (value === null) expect(result[field]).toBeNull();
-      else expect(result[field]).toBeCloseTo(value, 10);
+      const visible = presented.find((item) => item.goal.id === row.goal.id)![field];
+      if (value === null) {
+        expect(result[field]).toBeNull();
+        expect(visible).toBeNaN();
+      } else {
+        expect(result[field]).toBeCloseTo(value, 10);
+        expect(visible).toBeCloseTo(value, 10);
+      }
     }
   }
 });

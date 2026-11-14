@@ -26,9 +26,12 @@ export async function getReportDetails(
   input: ReportQuery,
   now: Date,
 ): Promise<ReportDetails> {
-  const scope = input.accountId
+  const accountScope = input.accountId
     ? sql`(r.account_id=${input.accountId}::uuid OR r.destination_account_id=${input.accountId}::uuid)`
     : sql`(prefs.include_hidden OR (r.account_id IS NULL AND r.destination_account_id IS NULL) OR EXISTS(SELECT 1 FROM accounts a WHERE a.id IN(r.account_id,r.destination_account_id) AND a.deleted_at IS NULL AND a.is_visible))`;
+  const scope = input.creditCardId
+    ? sql`r.credit_card_id=${input.creditCardId}::uuid AND ${input.accountId ? accountScope : sql`true`}`
+    : accountScope;
   const result = await db.execute(sql`WITH prefs AS (
     SELECT coalesce((SELECT include_hidden_accounts_in_reports FROM settings LIMIT 1),false) AS include_hidden,
       ${input.from}::date AS from_date,${input.to}::date AS to_date,(${input.selectedMonth}||'-01')::date AS month,
