@@ -93,78 +93,96 @@ const entities = {
   installmentPlans: installmentPlanSchema.extend({ id: uuidSchema }),
 };
 const pagination = z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() });
-function operationResponse(operationId: string): ZodType {
-  if (operationId === "analytics.summary") return analyticsSummarySchema;
-  if (operationId === "cards.refreshStatements") return z.object({ refreshed: z.literal(true) });
-  if (operationId === "cards.delete") return z.object({ archived: z.literal(true) });
-  if (operationId === "auth.session") return z.object({ revocable: z.boolean() });
-  if (operationId === "auth.lockAll") return z.object({ locked: z.literal(true) });
-  if (operationId === "auth.unlock")
-    return z.object({ token: z.string(), expiresAt: z.string().datetime() });
-  if (operationId === "health.get")
-    return z.object({ ok: z.literal(true), service: z.literal("wallet-web-personal") });
-  if (operationId === "wallet.get" || operationId === "wallet.restore") return walletDatasetSchema;
-  if (operationId === "wallet.backup") return walletBackupSchema;
-  if (operationId === "wallet.bootstrap")
-    return z.object({
-      dataset: walletDatasetSchema,
-      recordsPage: pagination,
-      generatedDebts: z.array(entities.debts),
-      serverDate: z.string().date(),
-    });
-  if (operationId.startsWith("settings.")) return settingsSchema;
-  if (operationId === "ingest.mailTransaction")
-    return z.object({
-      status: z.enum(["created", "needs_review", "already_processed", "duplicate", "ignored"]),
-      recordId: uuidSchema.optional(),
-      creditCardRecordId: uuidSchema.optional(),
-      duplicateOfId: uuidSchema.optional(),
-      warnings: z.array(z.string()).optional(),
-    });
-  if (operationId === "records.list")
-    return pagination.extend({ items: z.array(walletRecordResponseSchema) });
-  if (operationId === "records.import") return z.array(walletRecordResponseSchema);
-  if (operationId === "debts.pay")
-    return z.object({ debt: entities.debts, record: walletRecordResponseSchema });
-  if (operationId === "debts.generateRecurring") return z.array(entities.debts);
-  if (operationId === "cardStatements.pay") return cardPaymentResponseSchema;
-  if (operationId === "goalReservations.release" || operationId === "goalReservations.create")
-    return reservationMovementResponseSchema;
-  if (operationId === "categories.delete")
-    return z.object({
-      deleted: z.literal(true),
-      fallbackCategoryId: uuidSchema,
-      archivedCategoryIds: z.array(uuidSchema),
-      reassigned: z.record(z.string(), z.number().int().nonnegative()),
-    });
-  if (operationId === "cards.summary") {
-    const amounts = z.array(
-      z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
-    );
-    return z.object({
-      card: entities.cards,
-      usedLimit: z.number(),
-      availableLimit: z.number(),
-      utilizationPercent: z.number(),
-      currentCycleStart: z.string(),
-      currentCycleEnd: z.string(),
-      lastClosingDate: z.string(),
-      dueDate: z.string(),
-      currentCycle: amounts,
-      outstanding: amounts,
-      statementDue: amounts,
-      status: z.enum(["ok", "partial", "overdue", "over_limit"]),
-    });
+const deletedResponse = z.object({ deleted: z.literal(true) });
+const currencyAmounts = z.array(
+  z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
+);
+const specialResponses = {
+  "analytics.summary": analyticsSummarySchema,
+  "cards.refreshStatements": z.object({ refreshed: z.literal(true) }),
+  "cards.delete": z.object({ archived: z.literal(true) }),
+  "auth.session": z.object({ revocable: z.boolean() }),
+  "auth.lockAll": z.object({ locked: z.literal(true) }),
+  "auth.unlock": z.object({ token: z.string(), expiresAt: z.string().datetime() }),
+  "health.get": z.object({ ok: z.literal(true), service: z.literal("wallet-web-personal") }),
+  "wallet.get": walletDatasetSchema,
+  "wallet.restore": walletDatasetSchema,
+  "wallet.backup": walletBackupSchema,
+  "wallet.bootstrap": z.object({
+    dataset: walletDatasetSchema,
+    recordsPage: pagination,
+    generatedDebts: z.array(entities.debts),
+    serverDate: z.string().date(),
+  }),
+  "settings.get": settingsSchema,
+  "settings.replace": settingsSchema,
+  "settings.patch": settingsSchema,
+  "ingest.mailTransaction": z.object({
+    status: z.enum(["created", "needs_review", "already_processed", "duplicate", "ignored"]),
+    recordId: uuidSchema.optional(),
+    creditCardRecordId: uuidSchema.optional(),
+    duplicateOfId: uuidSchema.optional(),
+    warnings: z.array(z.string()).optional(),
+  }),
+  "records.list": pagination.extend({ items: z.array(walletRecordResponseSchema) }),
+  "records.import": z.array(walletRecordResponseSchema),
+  "debts.pay": z.object({ debt: entities.debts, record: walletRecordResponseSchema }),
+  "debts.generateRecurring": z.array(entities.debts),
+  "cardStatements.pay": cardPaymentResponseSchema,
+  "goalReservations.release": reservationMovementResponseSchema,
+  "goalReservations.create": reservationMovementResponseSchema,
+  "categories.delete": z.object({
+    deleted: z.literal(true),
+    fallbackCategoryId: uuidSchema,
+    archivedCategoryIds: z.array(uuidSchema),
+    reassigned: z.record(z.string(), z.number().int().nonnegative()),
+  }),
+  "cards.summary": z.object({
+    card: entities.cards,
+    usedLimit: z.number(),
+    availableLimit: z.number(),
+    utilizationPercent: z.number(),
+    currentCycleStart: z.string(),
+    currentCycleEnd: z.string(),
+    lastClosingDate: z.string(),
+    dueDate: z.string(),
+    currentCycle: currencyAmounts,
+    outstanding: currencyAmounts,
+    statementDue: currencyAmounts,
+    status: z.enum(["ok", "partial", "overdue", "over_limit"]),
+  }),
+};
+type ResponseSchema<Id extends string> = Id extends keyof typeof specialResponses
+  ? (typeof specialResponses)[Id]
+  : Id extends `${infer Entity}.${infer Action}`
+    ? Action extends "delete"
+      ? typeof deletedResponse
+      : Entity extends keyof typeof entities
+        ? Action extends "list"
+          ? z.ZodArray<(typeof entities)[Entity]>
+          : (typeof entities)[Entity]
+        : never
+    : never;
+function operationResponse<Id extends string>(operationId: Id): ResponseSchema<Id> {
+  let response: ZodType;
+  if (operationId in specialResponses)
+    response = specialResponses[operationId as keyof typeof specialResponses];
+  else {
+    const [entity = "", action] = operationId.split(".");
+    if (action === "delete") response = deletedResponse;
+    else {
+      if (!(entity in entities)) throw new Error(`Missing response schema for ${operationId}`);
+      const schema = entities[entity as keyof typeof entities];
+      response = action === "list" ? z.array(schema) : schema;
+    }
   }
-  const [entity = "", action] = operationId.split(".");
-  if (action === "delete") return z.object({ deleted: z.literal(true) });
-  if (!(entity in entities)) throw new Error(`Missing response schema for ${operationId}`);
-  const response = entities[entity as keyof typeof entities];
-  return action === "list" ? z.array(response) : response;
+  // The runtime lookup and this conditional type follow the same registry keys.
+  return response as ResponseSchema<Id>;
 }
+
 const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
   ...definition,
-  response: operationResponse(definition.operationId),
+  response: operationResponse<T["operationId"]>(definition.operationId),
 });
 
 export const apiOperations = [
@@ -1045,6 +1063,11 @@ export const apiOperations = [
 ] as const satisfies readonly ApiOperation[];
 
 export type ApiOperationId = (typeof apiOperations)[number]["operationId"];
+export type ContractOperations = {
+  [Op in (typeof apiOperations)[number] as Op["operationId"]]: Op;
+};
+export type ContractOperation<Id extends ApiOperationId> = ContractOperations[Id];
+export type OperationResponse<Id extends ApiOperationId> = z.output<ResponseSchema<Id>>;
 export type UnlockRequest = z.infer<typeof unlockSchema>;
 export interface UnlockResult {
   token: string;
