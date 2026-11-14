@@ -6,7 +6,7 @@ Spec: PLAN-REFACTOR-wallet-web-personal.md provisto íntegro por Santiago en la 
 
 ## Alcance y compatibilidad
 
-Máximo **cinco PRs nuevos** para el refactor completo. Borrador primero, checks del SHA exacto antes de merge, integración normal de Vercel. Sin force push, sin cambios en otros proyectos, secretos ni permisos. Una función y rewrite actual; misma base Neon. El Apps Script activo lo actualiza Santiago.
+Máximo **cinco PRs nuevos** para el refactor completo. Borrador primero, checks del SHA exacto antes de merge, integración normal de Vercel. Sin force push, sin cambios en otros proyectos, secretos ni permisos. Una función y rewrite actual; misma base Neon. El Apps Script activo se coordina con Santiago desde el editor de Google en Chrome de la HP; no requiere un chat con ese nombre.
 
 La autorización más reciente permite migraciones compatibles/no destructivas tras ensayos sintéticos, verificación del destino, estado real y recuperación. No permite pérdidas irreversibles, rotación/creación de secretos ni cambios de seguridad productiva. No ejecutar drop legacy con datos reales. No crear ramas Neon con copias reales. No smoke autenticado ni bootstrap productivo.
 
@@ -35,13 +35,13 @@ La autorización más reciente permite migraciones compatibles/no destructivas t
 - [x] 0.2 lint/TS estrictos (ver excepciones documentadas).
 - [x] 0.3 cascadas, filtros y summary con router real y tests sintéticos.
 - [x] 0.4 infraestructura aislada y providers con Testing Library.
-- [ ] npm run check y sandbox sintético del SHA final del paquete 1.
-- [ ] PR 1 borrador, CI, merge y Vercel READY + alias.
+- [x] npm run check del SHA 9c32a5b: 80 archivos / 662 tests; sandbox: 10 / 103 y smoke sintético completo.
+- [x] PR #9 borrador → listo → merge f1cd16f, CI verde y producción READY con alias.
 - [ ] Paquetes 2–5.
 
 ## Retomar
 
-Continuar en refactor/01-foundation desde el primer checkbox pendiente. No crear PR adicional si ya existe uno para el paquete: buscar por rama. Mantener aquí enlaces, SHAs, pruebas y cualquier bloqueo real. Nunca interpretar una fase parcial como completada.
+Continuar en refactor/02-repository-session-compatible desde la verificación del paquete 2. Base actualizada por fast-forward a f1cd16f; preservar el árbol local. No crear PR adicional si ya existe uno para el paquete: buscar por rama. Mantener aquí enlaces, SHAs, pruebas y cualquier bloqueo real. Nunca interpretar una fase parcial como completada.
 
 ## Decisiones de implementación del paquete 1
 
@@ -61,7 +61,7 @@ Continuar en refactor/01-foundation desde el primer checkbox pendiente. No crear
 - El baseline restringido tuvo timeouts; las pruebas aisladas con acceso a
   localhost (auth y PGlite) pasaron. Ese ensayo fue detenido. No cuenta como
   baseline completo aprobado ni como evidencia de regresión del código.
-- El Apps Script activo se coordina en el chat separado de la HP, según la última
+- El Apps Script activo se coordina desde el editor de Google en Chrome de la HP, según la última
   dirección de Santiago. Este refactor sólo prepara código/bundle y prueba
   compatibilidad antes de coordinarlo; no edita cuenta, permisos ni triggers.
 
@@ -82,25 +82,94 @@ Continuar en refactor/01-foundation desde el primer checkbox pendiente. No crear
 - Navegador Chrome en QA local: desbloqueo, alta de un gasto sintético UYU 12,34,
   edición de notas y recarga. No se usa token ni datos de producción.
 
-### Bloqueo de publicación del paquete 1
+### Publicación de la base y recuperación de la HP
 
-La rama `refactor/01-foundation` está publicada por SSH usando la autorización
-existente. La integración GitHub rechazó `create_pull_request` para este repo
-con **403 Resource not accessible by integration**. No se creó ningún PR (búsqueda
-por rama confirmó lista vacía). No es un rechazo de auto-review.
+- PR #9: https://github.com/srodriguez-lefebre/wallet-web-personal/pull/9
+  Head `9c32a5bb42571ad43d5e1486a4efbeccb47a563f`; merge
+  `f1cd16f97085ca4e201037c87fffec300afa5d24`. CI del head y del main verdes.
+- Producción READY en `dpl_6MLttNrtDy2wcZLByVBeQ1XvGjRS`, commit f1cd16f;
+  alias https://wallet-web-personal.vercel.app. Smoke sin sesión: raíz 200,
+  health y summary anidado 401 JSON del router. URL concreta protegida devuelve
+  302; no se presenta esa redirección como prueba de aplicación autenticada.
+- El bloqueo del conector GitHub (403 al crear PR) fue resuelto operativamente
+  con la sesión existente de Chrome. Santiago instaló y autorizó `gh` después;
+  su cuenta y acceso al repo se verificaron sin mostrar tokens ni cambiar scopes.
+- PRs utilizados: **1 de 5**. No recrear ni volver a fusionar #9.
+- La terminal dejó de responder durante el cierre local del paquete 2. Al volver
+  la HP, `pwd` y `git status` confirmaron el árbol preservado y el lint ya terminado.
+  No se reinició la máquina ni se interrumpieron procesos ajenos.
 
-Chrome también muestra **Sign in**, sin sesión GitHub activa. No se inició login,
-no se cambiaron claves ni permisos y no se reintentó la creación por otra vía.
-Se dejó abierta la comparación para iniciar sesión con la cuenta existente:
-https://github.com/srodriguez-lefebre/wallet-web-personal/compare/main...refactor/01-foundation
+## Paquete 2 · repositorio y protección compatible
 
-Paso del dueño: iniciar sesión en GitHub en Chrome de la HP y avisar; o crear
-allí **un único PR en borrador** desde la rama publicada hacia main y compartir
-su número. No ampliar scopes ni registrar claves. Antes del merge hay que
-comprobar CI del SHA final, pasar el borrador a listo y fusionar con guard de SHA.
+Rama `refactor/02-repository-session-compatible`, basada en main f1cd16f.
 
-Hasta resolverlo: PRs creados para el refactor = **0 de 5**; no se fusionó ni se
-lanzó despliegue. Producción verificada por Vercel seguía READY en 459f546,
-dpl_5AgD94n9793FVe4G6tksPk7isDUH; alias wallet-web-personal.vercel.app.
-Las fases 1–6 y sus posibles migraciones/Apps Script siguen pendientes; no están
-implementadas ni activadas por este paquete.
+- Repositorio por agregado en `server/db/`, DB explícita primero y una fábrica
+  lazy memoizada por request. Cuerpo de unlock inválido no crea cliente.
+- Helpers compartidos de mappers, patches parciales, errores PG, batches nombrados,
+  locks `SELECT FOR UPDATE` ordenados y FX histórico en SQL. Se mantienen tasas
+  directas/inversas y puentes ordenados, sin inventar conversiones.
+- Creación simple delega al bulk, preservando conflicto de deuda duplicada.
+  Recurrentes usan un `INSERT SELECT generate_series` con fechas UTC al mediodía,
+  límite de último día y el índice único existente desde 0006.
+- Limpieza atómica de referencias de templates y auto-reserva al archivar;
+  tarjetas vuelven a debit; patchSettings no cambia paymentType implícitamente.
+  Patches concurrentes de budgets/planes escriben sólo campos enviados.
+- Reservas se suman como numeric en SQL; reembolsos conservan la guarda SQL
+  atómica sin el precheck de floats. Se conserva todo el historial financiero.
+- Caché v3 sólo de referencia, allowlist estricta, 128 KiB y limpieza de cachés
+  viejas/inválidas. Sin records, actividad de tarjeta, pagos ni deudas en disco.
+- Rate limit atómico por IP (5) y global (20), 15 minutos; el éxito sólo limpia
+  la IP. Se conserva el formato de sesión y los secretos existentes.
+
+### Matriz de compatibilidad y recuperación
+
+| Superficie            | Este paquete                                         | Requisitos antes de publicar                                                                   |
+| --------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Schema / migraciones  | Sin cambios en schema, journal ni SQL de migraciones | Ninguna migración nueva; no ejecutar db:migrate para este PR                                   |
+| Backend anterior ↔ DB | Misma estructura y contratos                         | Rollback al despliegue anterior no exige reversión de datos                                    |
+| Sesiones              | Mismo payload/firma; sin corte de sesiones           | Revocación versionada y secreto obligatorio separado quedan pendientes                         |
+| Apps Script actual    | Payload, endpoint e idempotencia sin cambios         | No editar Head/trigger; preparar bundle compatible en paquete 5                                |
+| Backups               | Mismo schema y tabla legacy conservada               | Ensayar restauración sintética antigua/completa y reload antes del PR                          |
+| Browser cache         | V2 se descarta y se vuelve a consultar la API        | Puede haber carga inicial sin historial hasta sincronizar; no se pierde historial del servidor |
+
+No se consulta ni copia contenido financiero real para estos ensayos. Las pruebas
+aplican las migraciones versionadas a PostgreSQL/PGlite temporales y verifican
+rollback de batches y restauración. README antiguo no demuestra el estado de las
+migraciones productivas; no afirmar que están o no aplicadas sin inspección del destino.
+
+### Pendientes explícitos de los paquetes siguientes
+
+- 1.1 sesión revocable/versionada: requiere diseño de transición sin invalidar
+  sesiones ni exigir secretos nuevos por cuenta propia. No está activada.
+- Poda persistente del rate limit; 2.3 singleton de settings, índices, FK,
+  soft-deletes y timestamps nuevos. Preparar migración aditiva y preflight del
+  destino/recuperación con publicación ordenada en paquete 3. No ejecutar drop
+  legacy: conservar tabla y lectura de respaldos viejos hasta evidencia suficiente.
+- 3 router por contrato, lecturas puras, agregados; 4 cliente/caché por entidad;
+  5 vistas; 6 ingesta/shared. No presentar este paquete compatible como fase 2
+  íntegra ni como refactor terminado.
+- Apps Script: guardar Head podría activar processPendingEmails. Entregar bundle,
+  commit, prueba script viejo/API nueva, claves estables y orden compatible antes
+  de coordinar la edición en Chrome; no ejecutar lote real ni modificar triggers.
+
+### Revisión del paquete 2
+
+Revisión independiente contra f1cd16f: sin hallazgos adicionales confirmados.
+El caso de tasa almacenada NaN quedó reproducido RED (NaN en vez de 40) y
+corregido filtrando NaN antes de seleccionar la última tasa válida. Se corrigió
+además un mock de vista que aún usaba la firma anterior de createRecord.
+La semántica de recurrentes se contrastó con el repositorio productivo base,
+no con el helper shared sin consumidores que se eliminó.
+
+### Puerta de publicación del paquete 2
+
+Verificado: revisión independiente; fixes/backup/restore legacy 4 archivos / 33
+tests; smoke en Chrome (alta, edición y recarga) y API (pago/reintento idempotente,
+consumo/summary de tarjeta, restore y reload) con fixtures sintéticos. QA detenido.
+Esquema, migraciones, contrato OpenAPI y vercel.json iguales a main.
+
+Check completo exit 0: formato, lint, 87 archivos / 688 tests, build y spec.
+Sandbox exit 0: 10 archivos / 103 tests. Logs locales en /tmp/wallet-package2-\*.
+
+Pendiente: un único PR borrador contra main, CI/preview del head exacto,
+merge con guard de SHA, CI main y Vercel READY/alias. Registrar evidencia aquí.

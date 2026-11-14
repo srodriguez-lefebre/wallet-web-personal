@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { updateRecord } from "./wallet-repository.js";
-
+import { createDb } from "./client.js";
+import { updateRecord } from "./index.js";
 const uyu = "00000000-0000-4000-8000-000000000001";
 const usd = "00000000-0000-4000-8000-000000000002";
 const eur = "00000000-0000-4000-8000-000000000003";
@@ -13,10 +13,10 @@ const cardId = "00000000-0000-4000-8000-000000000007";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   if (fixture) await fixture.close();
-}, 30_000);
+}, 30000);
 beforeEach(async () => {
   await fixture.pool.query(
     "TRUNCATE accounts,categories,settings,exchange_rates,credit_cards CASCADE",
@@ -86,15 +86,14 @@ async function linkedCard() {
     [cardId, recordId, categoryId],
   );
 }
-
 test("amount-only PATCH updates a same-currency account amount", async () => {
   await seed();
-  expect((await updateRecord(recordId, { amount: 200 }))?.accountAmount).toBe(200);
+  expect((await updateRecord(createDb(), recordId, { amount: 200 }))?.accountAmount).toBe(200);
   expect((await saved()).account_amount).toBe("200.00");
 });
 test("amount-only transfer PATCH normalizes both source and destination", async () => {
   await seed({ destination: uyuDestination, destinationAmount: 100 });
-  await updateRecord(recordId, { amount: 200 });
+  await updateRecord(createDb(), recordId, { amount: 200 });
   expect((await saved()).account_amount).toBe("200.00");
   expect((await saved()).destination_amount).toBe("200.00");
 });
@@ -109,7 +108,7 @@ test("amount-only PATCH scales frozen source and destination FX ratios using num
     primaryRate: 41.153333,
   });
   await quote("USD", "UYU", 80, "2026-07-01");
-  await updateRecord(recordId, { amount: 7 });
+  await updateRecord(createDb(), recordId, { amount: 7 });
   const row = await saved();
   expect(row.account_amount).toBe("288.07");
   expect(row.destination_amount).toBe("6.32");
@@ -120,7 +119,7 @@ test("currency change recalculates source, destination and primary conversions u
   await quote("EUR", "UYU", 45);
   await quote("EUR", "USD", 1.1);
   await quote("EUR", "UYU", 60, "2026-07-01");
-  await updateRecord(recordId, { currency: "EUR", amount: 10 });
+  await updateRecord(createDb(), recordId, { currency: "EUR", amount: 10 });
   const row = await saved();
   expect(row.account_amount).toBe("450.00");
   expect(row.destination_amount).toBe("11.00");
@@ -129,23 +128,23 @@ test("currency change recalculates source, destination and primary conversions u
 test("account changes resolve new currencies and cannot retain previous converted amounts", async () => {
   await seed();
   await quote("USD", "UYU", 40);
-  await updateRecord(recordId, { accountId: usd });
+  await updateRecord(createDb(), recordId, { accountId: usd });
   expect((await saved()).account_amount).toBe("2.50");
 });
 test("missing conversion rejects a changed account atomically", async () => {
   await seed();
-  await expect(updateRecord(recordId, { accountId: eur })).rejects.toThrow();
+  await expect(updateRecord(createDb(), recordId, { accountId: eur })).rejects.toThrow();
   expect((await saved()).account_id).toBe(uyu);
 });
 test("a new transfer destination resolves its own currency instead of retaining old conversion", async () => {
   await seed({ destination: uyuDestination, destinationAmount: 100 });
   await quote("USD", "UYU", 40);
-  await updateRecord(recordId, { destinationAccountId: usd });
+  await updateRecord(createDb(), recordId, { destinationAccountId: usd });
   expect((await saved()).destination_amount).toBe("2.50");
 });
 test("explicit converted amounts and primary rates remain authoritative on a currency change", async () => {
   await seed({ destination: eur, destinationAmount: 90 });
-  await updateRecord(recordId, {
+  await updateRecord(createDb(), recordId, {
     currency: "USD",
     amount: 10,
     accountAmount: 410,
@@ -159,7 +158,9 @@ test("explicit converted amounts and primary rates remain authoritative on a cur
 });
 test("a currency change cannot retain a stale primary rate when the new conversion is unknown", async () => {
   await seed();
-  await expect(updateRecord(recordId, { currency: "USD", accountId: usd })).rejects.toThrow();
+  await expect(
+    updateRecord(createDb(), recordId, { currency: "USD", accountId: usd }),
+  ).rejects.toThrow();
   expect((await saved()).currency).toBe("UYU");
 });
 test("notes-only PATCH preserves frozen conversions even without historical quotes", async () => {
@@ -170,7 +171,7 @@ test("notes-only PATCH preserves frozen conversions even without historical quot
     destinationAmount: 90,
     primaryRate: 41,
   });
-  await updateRecord(recordId, { note: "Only the note" });
+  await updateRecord(createDb(), recordId, { note: "Only the note" });
   const row = await saved();
   expect(row.account_amount).toBe("4100.00");
   expect(row.destination_amount).toBe("90.00");
@@ -180,7 +181,7 @@ test("amount-only linked-card PATCH scales the frozen limit conversion in both l
   await seed({ currency: "USD", accountAmount: 4100, primaryRate: 41 });
   await linkedCard();
   await quote("USD", "UYU", 60, "2026-07-01");
-  await updateRecord(recordId, { amount: 200 });
+  await updateRecord(createDb(), recordId, { amount: 200 });
   expect((await saved()).amount_in_limit_currency).toBe("8200.00");
   const linked = (
     await fixture.pool.query("select * from credit_card_records where wallet_record_id=$1", [
@@ -195,7 +196,7 @@ test("linked-card currency PATCH resolves the historical limit rate and updates 
   await linkedCard();
   await quote("EUR", "UYU", 45);
   await quote("EUR", "UYU", 60, "2026-07-01");
-  await updateRecord(recordId, { currency: "EUR", amount: 10 });
+  await updateRecord(createDb(), recordId, { currency: "EUR", amount: 10 });
   expect((await saved()).amount_in_limit_currency).toBe("450.00");
   const linked = (
     await fixture.pool.query("select * from credit_card_records where wallet_record_id=$1", [

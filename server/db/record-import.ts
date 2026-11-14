@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 
 import { recordFingerprint } from "../../shared/record-identity.js";
-import { createDb, type DbClient } from "./client.js";
-import { createRecordsBulk, getWalletDataset } from "./wallet-repository.js";
+import { type DbClient } from "./client.js";
+import { createRecordsBulk, getWalletDataset } from "./index.js";
+import { isPgError } from "./pg-error.js";
 import { records } from "./schema.js";
 
 import type { WalletRecord } from "../../shared/types.js";
-
 function importId(fingerprint: string) {
   const bytes = createHash("sha256")
     .update(`wallet-import-v1:${fingerprint}`)
@@ -17,17 +17,8 @@ function importId(fingerprint: string) {
   const hex = bytes.toString("hex");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
-function isUniqueConflict(error: unknown) {
-  let current = error as { code?: string; cause?: unknown } | undefined;
-  for (let depth = 0; depth < 5 && current; depth++, current = current.cause as typeof current)
-    if (current.code === "23505") return true;
-  return false;
-}
 /** Durable identities serialize competing copies; failed batches leave no orphan side effects. */
-export async function importWalletRecords(
-  inputs: Omit<WalletRecord, "id">[],
-  db: DbClient = createDb(),
-) {
+export async function importWalletRecords(db: DbClient, inputs: Omit<WalletRecord, "id">[]) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const [dataset, persistedRecords] = await Promise.all([
       getWalletDataset(db),
@@ -46,12 +37,12 @@ export async function importWalletRecords(
     if (!pending.length) return [];
     try {
       return await createRecordsBulk(
-        pending,
         db,
+        pending,
         pending.map((input) => importId(recordFingerprint(input))),
       );
     } catch (error) {
-      if (!isUniqueConflict(error) || attempt === 3) throw error;
+      if (!isPgError(error, "23505") || attempt === 3) throw error;
     }
   }
   return [];

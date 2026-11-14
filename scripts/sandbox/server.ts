@@ -1,29 +1,29 @@
-import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { createServer } from "node:http";
 
 import { z } from "zod";
 
-import { getWalletDataset } from "../../server/db/wallet-repository.js";
+import { createDb } from "../../server/db/client.js";
+import { getWalletDataset } from "../../server/db/index.js";
 import { json, readJson, serveWalletApi } from "./http.js";
 import {
   runMailWorker,
+  type MailRunResult,
   type MailTargets,
   type SimulatedThread,
-  type MailRunResult,
 } from "./mail.js";
-import { writePrivateJson } from "./workspace.js";
 import { panelHtml } from "./panel.js";
+import { writePrivateJson } from "./workspace.js";
 
-import type { IncomingMessage, ServerResponse } from "node:http";
 import type { PGlite } from "@electric-sql/pglite";
-
+import type { IncomingMessage, ServerResponse } from "node:http";
 const messageSchema = z.object({
   from: z.string().min(1).max(500),
   subject: z.string().min(1).max(500),
   date: z.iso.datetime(),
-  body: z.string().max(100_000),
-  html: z.string().max(100_000).optional(),
+  body: z.string().max(100000),
+  html: z.string().max(100000).optional(),
   threadId: z.string().max(200).optional(),
 });
 const targetsSchema = z.object({
@@ -43,7 +43,6 @@ interface Mailbox {
   targets: MailTargets;
   lastRun?: MailRunResult;
 }
-
 export async function createSandboxServer(options: {
   pg: PGlite;
   mailboxPath: string;
@@ -55,7 +54,7 @@ export async function createSandboxServer(options: {
     mailbox = JSON.parse(await readFile(options.mailboxPath, "utf8")) as Mailbox;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    const dataset = await getWalletDataset();
+    const dataset = await getWalletDataset(createDb());
     mailbox = {
       threads: [],
       targets: {
@@ -69,7 +68,9 @@ export async function createSandboxServer(options: {
   let mutation: Promise<unknown> = Promise.resolve();
   const save = () => writePrivateJson(options.mailboxPath, mailbox);
   const serve = async (req: IncomingMessage, res: ServerResponse) => {
-    const address = server.address() as { port: number };
+    const address = server.address() as {
+      port: number;
+    };
     const origin = `http://127.0.0.1:${address.port}`;
     if (
       req.headers.host !== `127.0.0.1:${address.port}` ||
@@ -92,7 +93,7 @@ export async function createSandboxServer(options: {
       return;
     }
     if (url.pathname === "/__sandbox/state" && req.method === "GET") {
-      const dataset = await getWalletDataset();
+      const dataset = await getWalletDataset(createDb());
       json(res, {
         ...mailbox,
         running,

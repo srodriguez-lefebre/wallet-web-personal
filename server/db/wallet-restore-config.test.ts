@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { neonConfig } from "@neondatabase/serverless";
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { getWalletBackup, getWalletDataset } from "./wallet-repository.js";
+import { createDb } from "./client.js";
+import { getWalletBackup, getWalletDataset } from "./index.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
-
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
   categoryId = randomUUID(),
@@ -14,7 +14,7 @@ const accountId = randomUUID(),
   goalId = randomUUID();
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   await fixture?.close();
 });
@@ -38,16 +38,15 @@ beforeEach(async () => {
   );
   await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
 });
-
 test("legacy backup preserves merchant rules and remaps equivalent categories before atomic replacement", async () => {
-  const backup = await getWalletDataset();
+  const backup = await getWalletDataset(createDb());
   // Older snapshots did not carry these optional configuration collections.
   const oldBackup = { ...backup } as Record<string, unknown>;
   delete oldBackup.merchants;
   delete oldBackup.merchantAliases;
   const replacementId = randomUUID();
   backup.categories.find((category) => category.id === categoryId)!.id = replacementId;
-  await restoreWalletBackup(oldBackup);
+  await restoreWalletBackup(createDb(), oldBackup);
   const merchants = await fixture.pool.query(
     "SELECT id, category_id, priority FROM merchants WHERE id=$1",
     [merchantId],
@@ -60,17 +59,15 @@ test("legacy backup preserves merchant rules and remaps equivalent categories be
     { merchant_id: merchantId, alias: "RESTORE STORE", normalized_alias: "restore store" },
   ]);
 });
-
 test("unmappable merchant rules reject an old snapshot without deleting current history", async () => {
-  const backup = { ...(await getWalletDataset()) } as Record<string, unknown>;
+  const backup = { ...(await getWalletDataset(createDb())) } as Record<string, unknown>;
   delete backup.merchants;
   delete backup.merchantAliases;
   backup.categories = [];
-  await expect(restoreWalletBackup(backup)).rejects.toThrow();
+  await expect(restoreWalletBackup(createDb(), backup)).rejects.toThrow();
   expect((await fixture.pool.query("SELECT id FROM merchants")).rows).toEqual([{ id: merchantId }]);
   expect((await fixture.pool.query("SELECT id FROM accounts")).rows).toEqual([{ id: accountId }]);
 });
-
 test("full backup restores merchant configuration and migrated reserve ledger without legacy FK blockers", async () => {
   await fixture.pool.query(
     "INSERT INTO goals(id,name,target_amount,currency,color,icon) VALUES($1,'Restore goal',100,'UYU','blue','bank')",
@@ -85,10 +82,10 @@ test("full backup restores merchant configuration and migrated reserve ledger wi
     "INSERT INTO goal_reservation_movements(goal_id,account_id,type,amount,currency) VALUES($1,$2,'reserve',50,'UYU')",
     [goalId, accountId],
   );
-  const backup = await getWalletBackup();
+  const backup = await getWalletBackup(createDb());
   await fixture.pool.query("UPDATE merchants SET priority=99 WHERE id=$1", [merchantId]);
-  await restoreWalletBackup(backup);
-  const restored = await getWalletDataset();
+  await restoreWalletBackup(createDb(), backup);
+  const restored = await getWalletDataset(createDb());
   expect(restored.goalReservationMovements).toEqual(backup.goalReservationMovements);
   expect(restored.goalReservations.map((row) => row.amount)).toEqual([50]);
   expect((await fixture.pool.query("SELECT * FROM goal_reservations")).rows).toHaveLength(0);
@@ -99,15 +96,18 @@ test("full backup restores merchant configuration and migrated reserve ledger wi
     { normalized_alias: "restore store" },
   ]);
 });
-
 test("legacy restore retains ingestion committed after preparation and before the table lock", async () => {
-  const backup = { ...(await getWalletBackup()) } as Record<string, unknown>;
+  const backup = { ...(await getWalletBackup(createDb())) } as Record<string, unknown>;
   delete backup.ingestionEvents;
   const eventId = randomUUID();
   const transport = neonConfig.fetchFunction!;
   let injected = false;
   neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
-    const body = JSON.parse(options.body as string) as { queries?: { query: string }[] };
+    const body = JSON.parse(options.body as string) as {
+      queries?: {
+        query: string;
+      }[];
+    };
     if (!injected && body.queries?.some((item) => item.query.includes("LOCK TABLE"))) {
       injected = true;
       await fixture.pool.query(
@@ -118,7 +118,7 @@ test("legacy restore retains ingestion committed after preparation and before th
     return transport(url, options);
   };
   try {
-    await restoreWalletBackup(backup);
+    await restoreWalletBackup(createDb(), backup);
     expect(injected).toBe(true);
     expect(
       (
@@ -131,9 +131,8 @@ test("legacy restore retains ingestion committed after preparation and before th
     neonConfig.fetchFunction = transport;
   }
 });
-
 test("legacy restore prunes ingestion references and all duplicate descendants outside the snapshot", async () => {
-  const backup = { ...(await getWalletBackup()) } as Record<string, unknown>;
+  const backup = { ...(await getWalletBackup(createDb())) } as Record<string, unknown>;
   delete backup.ingestionEvents;
   const recordId = randomUUID(),
     original = randomUUID(),
@@ -155,6 +154,6 @@ test("legacy restore prunes ingestion references and all duplicate descendants o
       "INSERT INTO ingestion_events(id,idempotency_key,source,status,duplicate_of_id) VALUES($1,$2,'test','duplicate',$3)",
       [id, `duplicate:${id}`, parent],
     );
-  await restoreWalletBackup(backup);
+  await restoreWalletBackup(createDb(), backup);
   expect((await fixture.pool.query("SELECT id FROM ingestion_events")).rows).toEqual([]);
 });

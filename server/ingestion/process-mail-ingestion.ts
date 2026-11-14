@@ -7,7 +7,8 @@ import {
   isReviewCategory,
   normalizeBankMerchant,
 } from "../../shared/record-review.js";
-import { createDb, type DbClient } from "../db/client.js";
+import { type DbClient } from "../db/client.js";
+import { prepareRecordGoalWrites } from "../db/index.js";
 import {
   accounts,
   categories,
@@ -19,34 +20,28 @@ import {
   records,
   settings,
 } from "../db/schema.js";
-import { prepareRecordGoalWrites } from "../db/wallet-repository.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
-import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
 import { prepareMerchantLearning, type MerchantRuleLearning } from "./learned-merchant.js";
 import {
   cardLastFour,
-  normalizeMerchantTerm,
   merchantTokenSequenceMatch,
+  normalizeMerchantTerm,
   pickLongestMerchantMatch,
 } from "./normalization.js";
+import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
 
-import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 import type { MailIngestionInput } from "../../shared/schemas.js";
-
+import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 export class IngestionInProgressError extends Error {}
-
 function money(value: number) {
   return value.toFixed(2);
 }
-
 function rate(value: number) {
   return value.toFixed(6);
 }
-
 function addDays(date: Date, days: number) {
-  return new Date(date.getTime() + days * 86_400_000);
+  return new Date(date.getTime() + days * 86400000);
 }
-
 const genericMerchantCategoryRules = [
   {
     aliases: ["PANALERA", "PANALERIA"],
@@ -97,7 +92,6 @@ const genericMerchantCategoryRules = [
     categoryNames: ["Service station"],
   },
 ] as const;
-
 function pickGenericMerchantCategory(
   merchantRaw: string,
   categoryRows: Array<typeof categories.$inferSelect>,
@@ -117,10 +111,8 @@ function pickGenericMerchantCategory(
       merchantName: merchantRaw,
     }));
   });
-
   return pickLongestMerchantMatch(merchantRaw, candidates);
 }
-
 function sanitizedPayload(input: MailIngestionInput) {
   const mask = (value: string | undefined) =>
     value ? `****${value.replace(/\D/g, "").slice(-4)}` : undefined;
@@ -135,7 +127,6 @@ function sanitizedPayload(input: MailIngestionInput) {
     destination: { ...input.destination },
   };
 }
-
 async function pruneExpiredMetadata(db: DbClient) {
   const now = new Date();
   await db
@@ -151,7 +142,6 @@ async function pruneExpiredMetadata(db: DbClient) {
       and(lt(ingestionEvents.metadataExpiresAt, now), isNotNull(ingestionEvents.sanitizedPayload)),
     );
 }
-
 interface CategoryResolution {
   categoryId: string | undefined;
   merchantName: string;
@@ -169,7 +159,6 @@ interface CategoryResolution {
   modelAttempt?: CategoryInferenceDiagnostic;
   learning?: MerchantRuleLearning;
 }
-
 export async function resolveCategory(
   db: DbClient,
   merchantRaw: string,
@@ -296,7 +285,6 @@ export async function resolveCategory(
       source: "merchant_rule",
       needsReview: false,
     };
-
   const missingInsuranceCategory = genericMerchantCategoryRules.find(
     (rule) =>
       rule.categoryNames[0] === "Insurance" &&
@@ -313,7 +301,6 @@ export async function resolveCategory(
       needsReview: true,
       reason: "missing_insurance_category",
     };
-
   if (generic)
     return {
       categoryId: generic.categoryId,
@@ -321,7 +308,6 @@ export async function resolveCategory(
       source: "generic_rule",
       needsReview: false,
     };
-
   const parentIds = new Set(allCategories.map((item) => item.parentId).filter(Boolean));
   const byId = new Map(allCategories.map((item) => [item.id, item]));
   const leaves = allCategories.filter((item) => !parentIds.has(item.id));
@@ -369,7 +355,6 @@ export async function resolveCategory(
     modelAttempt,
   };
 }
-
 async function convert(
   db: DbClient,
   amount: number,
@@ -380,15 +365,13 @@ async function convert(
   const frozen = await resolveFrozenRate(db, from, to, occurredAt);
   return frozen ? { amount: amount * frozen.rate, frozen } : null;
 }
-
 function conversionNote(from: CurrencyCode, to: CurrencyCode, frozen: FrozenRate) {
   if (from === to) return undefined;
   return `${from}/${to} ${frozen.rate.toFixed(6)} (${frozen.source}, ${frozen.date.toISOString().slice(0, 10)})`;
 }
-
 export async function processMailIngestion(
+  db: DbClient,
   input: MailIngestionInput,
-  db: DbClient = createDb(),
 ): Promise<MailIngestionResult> {
   await pruneExpiredMetadata(db);
   const eventId = randomUUID();
@@ -402,7 +385,7 @@ export async function processMailIngestion(
       and(
         eq(ingestionEvents.idempotencyKey, input.idempotencyKey),
         eq(ingestionEvents.status, "processing"),
-        lt(ingestionEvents.updatedAt, new Date(now.getTime() - 5 * 60_000)),
+        lt(ingestionEvents.updatedAt, new Date(now.getTime() - 5 * 60000)),
       ),
     );
   const [claimed] = await db
@@ -425,7 +408,6 @@ export async function processMailIngestion(
     })
     .onConflictDoNothing()
     .returning();
-
   if (!claimed) {
     const [existing] = await db
       .select()
@@ -440,7 +422,6 @@ export async function processMailIngestion(
       creditCardRecordId: existing?.creditCardRecordId ?? undefined,
     };
   }
-
   try {
     if (input.transaction.amount === 0) {
       await db
@@ -454,7 +435,6 @@ export async function processMailIngestion(
         .where(eq(ingestionEvents.id, eventId));
       return { status: "ignored" };
     }
-
     const isCredit = input.transaction.paymentType === "credit_card";
     const isTransfer = input.transaction.paymentType === "transfer";
     const [account] = input.destination.accountId
@@ -518,7 +498,6 @@ export async function processMailIngestion(
           .limit(1);
       }
     }
-
     const accountWasInvalid = Boolean(input.destination.accountId && !account);
     const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
     const category = isOwnedTransfer
@@ -549,8 +528,8 @@ export async function processMailIngestion(
       canonicalMerchantNormalized,
       targetKey,
     ].join("|");
-    const duplicateWindowStart = new Date(occurredAt.getTime() - 10 * 60_000);
-    const duplicateWindowEnd = new Date(occurredAt.getTime() + 10 * 60_000);
+    const duplicateWindowStart = new Date(occurredAt.getTime() - 10 * 60000);
+    const duplicateWindowEnd = new Date(occurredAt.getTime() + 10 * 60000);
     const duplicateWhere = and(
       eq(ingestionEvents.fingerprint, fingerprint),
       ne(ingestionEvents.source, input.transaction.source),
@@ -579,7 +558,6 @@ export async function processMailIngestion(
     };
     const [duplicate] = await findDuplicate();
     if (duplicate) return await completeDuplicate(duplicate.id);
-
     const [settingsRow] = await db.select().from(settings).limit(1);
     const primaryCurrency = (settingsRow?.primaryCurrency ?? "UYU") as CurrencyCode;
     const warnings: string[] = [];
@@ -625,7 +603,6 @@ export async function processMailIngestion(
     ].forEach((item) => {
       if (item?.warning && !warnings.includes(item.warning)) warnings.push(item.warning);
     });
-
     const unavailableConversion =
       !primary ||
       (account && !accountConversion) ||
@@ -705,29 +682,25 @@ export async function processMailIngestion(
       effectiveAccount || !effectiveCard || requiresReview ? randomUUID() : undefined;
     const cardRecordId = effectiveCard ? randomUUID() : undefined;
     const goalWrites = recordId
-      ? await prepareRecordGoalWrites(
-          recordId,
-          {
-            type: recordType,
-            amount: input.transaction.amount,
-            currency: input.transaction.currency,
-            accountId: effectiveAccount?.id,
-            accountAmount: effectiveAccount ? accountConversion?.amount : undefined,
-            destinationAccountId: destinationAccount?.id,
-            destinationAmount: destinationConversion?.amount,
-            creditCardId: effectiveCard?.id,
-            categoryId: category.categoryId,
-            counterpartyName: category.merchantName,
-            paymentType,
-            paymentStatus: requiresReview ? "needs_review" : "cleared",
-            exchangeRateToPrimary: primary?.frozen.rate ?? 0,
-            occurredAt: occurredAt.toISOString(),
-            tagIds: [],
-            amountInLimitCurrency: effectiveCard ? cardConversion?.amount : undefined,
-            exchangeRateToLimitCurrency: effectiveCard ? cardConversion?.frozen.rate : undefined,
-          },
-          db,
-        )
+      ? await prepareRecordGoalWrites(db, recordId, {
+          type: recordType,
+          amount: input.transaction.amount,
+          currency: input.transaction.currency,
+          accountId: effectiveAccount?.id,
+          accountAmount: effectiveAccount ? accountConversion?.amount : undefined,
+          destinationAccountId: destinationAccount?.id,
+          destinationAmount: destinationConversion?.amount,
+          creditCardId: effectiveCard?.id,
+          categoryId: category.categoryId,
+          counterpartyName: category.merchantName,
+          paymentType,
+          paymentStatus: requiresReview ? "needs_review" : "cleared",
+          exchangeRateToPrimary: primary?.frozen.rate ?? 0,
+          occurredAt: occurredAt.toISOString(),
+          tagIds: [],
+          amountInLimitCurrency: effectiveCard ? cardConversion?.amount : undefined,
+          exchangeRateToLimitCurrency: effectiveCard ? cardConversion?.frozen.rate : undefined,
+        })
       : null;
     for (const warning of goalWrites?.warnings ?? []) {
       if (!warnings.includes(warning)) warnings.push(warning);
@@ -863,7 +836,12 @@ export async function processMailIngestion(
         eventUpdate,
       ] as unknown as Parameters<DbClient["batch"]>[0]);
     } catch (error) {
-      const failure = error as { code?: string; cause?: { code?: string } };
+      const failure = error as {
+        code?: string;
+        cause?: {
+          code?: string;
+        };
+      };
       if (failure.code === "22012" || failure.cause?.code === "22012") {
         const [concurrentDuplicate] = await findDuplicate();
         if (concurrentDuplicate) return await completeDuplicate(concurrentDuplicate.id);

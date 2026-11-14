@@ -3,11 +3,10 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { createDb } from "../../server/db/client.js";
+import { getWalletDataset } from "../../server/db/index.js";
 import { accounts, records } from "../../server/db/schema.js";
-import { getWalletDataset } from "../../server/db/wallet-repository.js";
 import { applyMigrations, installLocalTransport } from "./database.js";
 import { importSnapshot } from "./snapshot.js";
-
 const pg = new PGlite();
 const accountId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "00000000-0000-4000-8000-000000000002";
@@ -75,19 +74,17 @@ const snapshot = {
     },
   ],
 };
-
 beforeAll(async () => {
   process.env.DATABASE_URL = "postgresql://local:local@wallet.local/wallet";
   installLocalTransport(pg);
   await applyMigrations(pg);
-}, 30_000);
+}, 30000);
 afterAll(async () => {
   await pg.close();
 });
-
 test("reconstructs snapshot associations and exact amounts through the real repository", async () => {
   await importSnapshot(pg, snapshot);
-  const result = await getWalletDataset();
+  const result = await getWalletDataset(createDb());
   expect(result.accounts[0]!.initialBalance).toBe(500.25);
   expect(result.categories).toHaveLength(1);
   expect(result.records[0]!.occurredAt).toBe("2026-06-21T12:00:00.000Z");
@@ -99,7 +96,6 @@ test("reconstructs snapshot associations and exact amounts through the real repo
   expect(result.recordTemplates).toHaveLength(1);
   expect(result.recordTemplates![0]!).toMatchObject(snapshot.recordTemplates[0]!);
 });
-
 test("Neon batches roll back earlier financial writes when a later write fails", async () => {
   const db = createDb();
   await expect(
@@ -121,7 +117,6 @@ test("Neon batches roll back earlier financial writes when a later write fails",
   const result = await db.execute(sql`select 123.45::numeric as amount`);
   expect(result.rows[0]!).toEqual({ amount: "123.45" });
 });
-
 test("invalid snapshot restores none of its rows and leaves existing data intact", async () => {
   await expect(
     importSnapshot(pg, {

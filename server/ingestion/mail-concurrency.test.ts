@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
+import { createDb } from "../db/client.js";
 import { processMailIngestion } from "./process-mail-ingestion.js";
 
 import type { MailIngestionInput } from "../../shared/schemas.js";
-
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
   cardId = randomUUID(),
@@ -14,7 +14,7 @@ const accountId = randomUUID(),
   merchantId = randomUUID();
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   await fixture?.close();
 });
@@ -43,7 +43,6 @@ beforeEach(async () => {
   );
   await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
 });
-
 function input(source: MailIngestionInput["transaction"]["source"]): MailIngestionInput {
   return {
     idempotencyKey: randomUUID(),
@@ -71,12 +70,14 @@ function input(source: MailIngestionInput["transaction"]["source"]): MailIngesti
     destination: { accountId, creditCardId: cardId },
   };
 }
-
 async function overlap(first: MailIngestionInput, second: MailIngestionInput) {
   const blocker = await fixture.pool.connect();
   await blocker.query("BEGIN");
   await blocker.query("SELECT id FROM credit_cards WHERE id=$1 FOR UPDATE", [cardId]);
-  const result = Promise.all([processMailIngestion(first), processMailIngestion(second)]);
+  const result = Promise.all([
+    processMailIngestion(createDb(), first),
+    processMailIngestion(createDb(), second),
+  ]);
   void result.catch(() => {});
   try {
     let waiting = 0;
@@ -97,7 +98,6 @@ async function overlap(first: MailIngestionInput, second: MailIngestionInput) {
   }
   return result;
 }
-
 test("concurrent cross-source duplicate creates one purchase and completes the other claim as duplicate", async () => {
   const first = input("itau_credit_card"),
     second = input("google_wallet");
@@ -111,9 +111,8 @@ test("concurrent cross-source duplicate creates one purchase and completes the o
     { status: "completed", action: "created" },
     { status: "completed", action: "duplicate" },
   ]);
-  expect((await processMailIngestion(second)).status).toBe("already_processed");
+  expect((await processMailIngestion(createDb(), second)).status).toBe("already_processed");
 });
-
 test("same-source purchases and cross-source purchases outside the duplicate window remain distinct", async () => {
   expect(
     (await overlap(input("itau_credit_card"), input("itau_credit_card"))).map(
@@ -122,6 +121,6 @@ test("same-source purchases and cross-source purchases outside the duplicate win
   ).toEqual(["created", "created"]);
   const later = input("google_wallet");
   later.transaction.occurredAt = "2026-02-01T12:11:00Z";
-  expect((await processMailIngestion(later)).status).toBe("created");
+  expect((await processMailIngestion(createDb(), later)).status).toBe("created");
   expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(3);
 });

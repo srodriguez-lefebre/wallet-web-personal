@@ -3,10 +3,10 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import * as repository from "./wallet-repository.js";
 import * as schemas from "../../shared/schemas.js";
+import { createDb } from "./client.js";
+import * as repository from "./index.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
-
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
   categoryId = randomUUID();
@@ -22,7 +22,7 @@ const input = {
 };
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   await fixture?.close();
 });
@@ -37,12 +37,14 @@ beforeEach(async () => {
     [categoryId],
   );
 });
-
 test("template CRUD changes only the library and partial patches preserve untouched fields", async () => {
-  const template = await repository.createRecordTemplate(input);
+  const template = await repository.createRecordTemplate(createDb(), input);
   expect(template).toMatchObject({ ...input, name: "Groceries", id: expect.any(String) });
-  expect(await repository.listRecordTemplates()).toEqual([template]);
-  const updated = await repository.updateRecordTemplate(template.id, { name: "Lunch", note: null });
+  expect(await repository.listRecordTemplates(createDb())).toEqual([template]);
+  const updated = await repository.updateRecordTemplate(createDb(), template.id, {
+    name: "Lunch",
+    note: null,
+  });
   expect(updated).toMatchObject({
     name: "Lunch",
     amount: 25,
@@ -51,16 +53,15 @@ test("template CRUD changes only the library and partial patches preserve untouc
     paymentType: "debit",
     note: undefined,
   });
-  expect((await repository.getWalletDataset()).recordTemplates).toEqual([updated]);
-  expect((await repository.bootstrapWallet({ recordsLimit: 50 })).dataset.recordTemplates).toEqual([
-    updated,
-  ]);
-  expect((await repository.getWalletDataset()).records).toEqual([]);
-  expect(await repository.deleteRecordTemplate(template.id)).toBe(true);
-  expect(await repository.deleteRecordTemplate(template.id)).toBe(false);
-  expect(await repository.listRecordTemplates()).toEqual([]);
+  expect((await repository.getWalletDataset(createDb())).recordTemplates).toEqual([updated]);
+  expect(
+    (await repository.bootstrapWallet(createDb(), { recordsLimit: 50 })).dataset.recordTemplates,
+  ).toEqual([updated]);
+  expect((await repository.getWalletDataset(createDb())).records).toEqual([]);
+  expect(await repository.deleteRecordTemplate(createDb(), template.id)).toBe(true);
+  expect(await repository.deleteRecordTemplate(createDb(), template.id)).toBe(false);
+  expect(await repository.listRecordTemplates(createDb())).toEqual([]);
 });
-
 test("templates reject malformed, inactive and archived references without mutating history", async () => {
   expect(schemas.recordTemplateSchema.safeParse({ ...input, name: " " }).success).toBe(false);
   expect(schemas.recordTemplateSchema.safeParse({ ...input, name: "x".repeat(81) }).success).toBe(
@@ -91,73 +92,78 @@ test("templates reject malformed, inactive and archived references without mutat
       false,
     );
     await expect(
-      repository.createRecordTemplate({ ...input, [key]: randomUUID() }),
+      repository.createRecordTemplate(createDb(), { ...input, [key]: randomUUID() }),
     ).rejects.toThrow(/reference|active/i);
   }
   await fixture.pool.query("UPDATE accounts SET is_active=false WHERE id=$1", [accountId]);
-  await expect(repository.createRecordTemplate(input)).rejects.toThrow(/reference|active/i);
-  await fixture.pool.query("UPDATE accounts SET is_active=true WHERE id=$1", [accountId]);
-  const template = await repository.createRecordTemplate(input);
-  await fixture.pool.query("UPDATE categories SET deleted_at=now() WHERE id=$1", [categoryId]);
-  await expect(repository.updateRecordTemplate(template.id, { amount: 30 })).rejects.toThrow(
+  await expect(repository.createRecordTemplate(createDb(), input)).rejects.toThrow(
     /reference|active/i,
   );
-  expect((await repository.listRecordTemplates())[0]!.amount).toBe(25);
+  await fixture.pool.query("UPDATE accounts SET is_active=true WHERE id=$1", [accountId]);
+  const template = await repository.createRecordTemplate(createDb(), input);
+  await fixture.pool.query("UPDATE categories SET deleted_at=now() WHERE id=$1", [categoryId]);
+  await expect(
+    repository.updateRecordTemplate(createDb(), template.id, { amount: 30 }),
+  ).rejects.toThrow(/reference|active/i);
+  expect((await repository.listRecordTemplates(createDb()))[0]!.amount).toBe(25);
 });
-
 test("deleting a tag keeps its template while clearing the optional tag reference", async () => {
-  const tag = await repository.createTag({ name: "Template tag", color: "blue", isActive: true });
-  const template = await repository.createRecordTemplate({ ...input, tagId: tag.id });
-  expect(await repository.deleteTag(tag.id)).toBe(true);
+  const tag = await repository.createTag(createDb(), {
+    name: "Template tag",
+    color: "blue",
+    isActive: true,
+  });
+  const template = await repository.createRecordTemplate(createDb(), { ...input, tagId: tag.id });
+  expect(await repository.deleteTag(createDb(), tag.id)).toBe(true);
   expect(
-    (await repository.listRecordTemplates()).find((item) => item.id === template.id)!,
+    (await repository.listRecordTemplates(createDb())).find((item) => item.id === template.id)!,
   ).toMatchObject({ name: "Groceries", tagId: undefined });
 });
-
 test("concurrent creates cannot exceed the 100 template library limit", async () => {
   await fixture.pool.query(
     "INSERT INTO record_templates(name,type,amount,currency,payment_type) SELECT 'Template '||n,'expense',1,'UYU','cash' FROM generate_series(1,99) n",
   );
   const results = await Promise.allSettled([
-    repository.createRecordTemplate(input),
-    repository.createRecordTemplate({ ...input, name: "Lunch" }),
+    repository.createRecordTemplate(createDb(), input),
+    repository.createRecordTemplate(createDb(), { ...input, name: "Lunch" }),
   ]);
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-  expect(await repository.listRecordTemplates()).toHaveLength(100);
+  expect(await repository.listRecordTemplates(createDb())).toHaveLength(100);
 });
-
 test("template names are unique after trimming and ignoring case, including renames", async () => {
-  const template = await repository.createRecordTemplate(input);
+  const template = await repository.createRecordTemplate(createDb(), input);
   await expect(
-    repository.createRecordTemplate({ ...input, name: " groceries " }),
+    repository.createRecordTemplate(createDb(), { ...input, name: " groceries " }),
   ).rejects.toThrow();
-  const other = await repository.createRecordTemplate({ ...input, name: "Lunch" });
-  await expect(repository.updateRecordTemplate(other.id, { name: "GROCERIES" })).rejects.toThrow();
-  expect(await repository.listRecordTemplates()).toHaveLength(2);
+  const other = await repository.createRecordTemplate(createDb(), { ...input, name: "Lunch" });
+  await expect(
+    repository.updateRecordTemplate(createDb(), other.id, { name: "GROCERIES" }),
+  ).rejects.toThrow();
+  expect(await repository.listRecordTemplates(createDb())).toHaveLength(2);
   expect(
-    (await repository.listRecordTemplates()).find((item) => item.id === template.id)?.name,
+    (await repository.listRecordTemplates(createDb())).find((item) => item.id === template.id)
+      ?.name,
   ).toBe("Groceries");
 });
-
 test("complete template backups restore archived dictionary references and old backups reset to an empty library", async () => {
-  const template = await repository.createRecordTemplate(input);
+  const template = await repository.createRecordTemplate(createDb(), input);
   await fixture.pool.query("UPDATE accounts SET deleted_at=now(),is_active=false WHERE id=$1", [
     accountId,
   ]);
   await fixture.pool.query("UPDATE categories SET deleted_at=now() WHERE id=$1", [categoryId]);
   const backup = schemas.walletBackupSchema.parse(
-    JSON.parse(JSON.stringify(await repository.getWalletBackup())),
+    JSON.parse(JSON.stringify(await repository.getWalletBackup(createDb()))),
   );
   expect(backup.recordTemplates).toEqual([JSON.parse(JSON.stringify(template))]);
-  await restoreWalletBackup(backup);
-  expect((await repository.getWalletDataset()).recordTemplates).toEqual([template]);
+  await restoreWalletBackup(createDb(), backup);
+  expect((await repository.getWalletDataset(createDb())).recordTemplates).toEqual([template]);
   const old: Omit<typeof backup, "recordTemplates"> & {
     recordTemplates?: typeof backup.recordTemplates;
   } = { ...backup };
   delete old.recordTemplates;
   expect(schemas.walletBackupSchema.parse(old).recordTemplates).toEqual([]);
-  await restoreWalletBackup(old);
-  expect(await repository.listRecordTemplates()).toEqual([]);
+  await restoreWalletBackup(createDb(), old);
+  expect(await repository.listRecordTemplates(createDb())).toEqual([]);
   const broken = { ...backup, recordTemplates: [{ ...template, accountId: randomUUID() }] };
   expect(schemas.walletBackupSchema.safeParse(broken).success).toBe(false);
 });

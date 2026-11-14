@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import {
@@ -12,8 +12,8 @@ import {
   recurringDebtSchema,
   settingsSchema,
 } from "../../shared/schemas.js";
-import * as repository from "./wallet-repository.js";
-
+import { createDb } from "./client.js";
+import * as repository from "./index.js";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 let accountId: string,
   otherAccountId: string,
@@ -26,7 +26,7 @@ let accountId: string,
 const occurredAt = "2026-10-12T12:00:00.000Z";
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   await fixture?.close();
 });
@@ -45,18 +45,31 @@ beforeEach(async () => {
     isActive: true,
     isVisible: true,
   };
-  accountId = (await repository.createAccount(account)).id;
-  otherAccountId = (await repository.createAccount({ ...account, name: "Other bank" })).id;
-  const category = { name: "Synthetic category", color: "blue", icon: "tag" };
-  categoryId = (await repository.createCategory(category)).id;
-  childId = (await repository.createCategory({ ...category, name: "Child", parentId: categoryId }))
+  accountId = (await repository.createAccount(createDb(), account)).id;
+  otherAccountId = (await repository.createAccount(createDb(), { ...account, name: "Other bank" }))
     .id;
-  grandchildId = (
-    await repository.createCategory({ ...category, name: "Grandchild", parentId: childId })
+  const category = { name: "Synthetic category", color: "blue", icon: "tag" };
+  categoryId = (await repository.createCategory(createDb(), category)).id;
+  childId = (
+    await repository.createCategory(createDb(), {
+      ...category,
+      name: "Child",
+      parentId: categoryId,
+    })
   ).id;
-  tagId = (await repository.createTag({ name: "Synthetic tag", color: "blue", isActive: true })).id;
+  grandchildId = (
+    await repository.createCategory(createDb(), {
+      ...category,
+      name: "Grandchild",
+      parentId: childId,
+    })
+  ).id;
+  tagId = (
+    await repository.createTag(createDb(), { name: "Synthetic tag", color: "blue", isActive: true })
+  ).id;
   goalId = (
     await repository.createGoal(
+      createDb(),
       goalSchema.parse({
         name: "Synthetic goal",
         targetAmount: 1000,
@@ -69,6 +82,7 @@ beforeEach(async () => {
   ).id;
   cardId = (
     await repository.createCreditCard(
+      createDb(),
       creditCardSchema.parse({
         name: "Synthetic card",
         issuer: "Test bank",
@@ -84,6 +98,7 @@ beforeEach(async () => {
     )
   ).id;
   await repository.upsertSettings(
+    createDb(),
     settingsSchema.parse({
       primaryCurrency: "UYU",
       primaryAccountId: accountId,
@@ -135,10 +150,10 @@ const recurringInput = () =>
     dayOfMonth: 12,
     startedAt: occurredAt,
   });
-
 test("category deletion archives the entire tree and reassigns every existing financial reference", async () => {
-  const record = await repository.createRecord(recordInput());
+  const record = await repository.createRecord(createDb(), recordInput());
   await repository.createCreditCardRecord(
+    createDb(),
     cardId,
     creditCardRecordSchema.parse({
       kind: "purchase",
@@ -150,8 +165,9 @@ test("category deletion archives the entire tree and reassigns every existing fi
       occurredAt,
     }),
   );
-  await repository.createBudget(budgetInput());
+  await repository.createBudget(createDb(), budgetInput());
   await repository.createDebt(
+    createDb(),
     debtSchema.parse({
       name: "Synthetic debt",
       direction: "payable",
@@ -164,8 +180,9 @@ test("category deletion archives the entire tree and reassigns every existing fi
       startedAt: occurredAt,
     }),
   );
-  await repository.createRecurringDebt(recurringInput());
+  await repository.createRecurringDebt(createDb(), recurringInput());
   await repository.createInstallmentPlan(
+    createDb(),
     installmentPlanSchema.parse({
       name: "Synthetic plan",
       totalAmount: 300,
@@ -180,7 +197,7 @@ test("category deletion archives the entire tree and reassigns every existing fi
     "INSERT INTO merchants(name,category_id) VALUES('Synthetic merchant',$1)",
     [childId],
   );
-  const result = await repository.deleteCategory(categoryId);
+  const result = await repository.deleteCategory(createDb(), categoryId);
   expect(result).toMatchObject({
     deleted: true,
     archivedCategoryIds: expect.arrayContaining([categoryId, childId, grandchildId]),
@@ -195,34 +212,33 @@ test("category deletion archives the entire tree and reassigns every existing fi
     },
   });
   if (!result.deleted) throw new Error("Expected archived category");
-  expect((await repository.listRecords()).items).toContainEqual(
+  expect((await repository.listRecords(createDb())).items).toContainEqual(
     expect.objectContaining({ id: record.id, categoryId: result.fallbackCategoryId, amount: 20 }),
   );
   expect(
-    (await repository.listCategories()).some((category) =>
+    (await repository.listCategories(createDb())).some((category) =>
       [categoryId, childId, grandchildId].includes(category.id),
     ),
   ).toBe(false);
   expect(
-    (await repository.getWalletBackup()).categories.filter((category) =>
+    (await repository.getWalletBackup(createDb())).categories.filter((category) =>
       [categoryId, childId, grandchildId].includes(category.id),
     ),
   ).toHaveLength(3);
 });
-
 test("account archive preserves records and reservations and disables dependent active configuration", async () => {
-  const record = await repository.createRecord(recordInput());
-  await repository.createGoalReservation({
+  const record = await repository.createRecord(createDb(), recordInput());
+  await repository.createGoalReservation(createDb(), {
     goalId,
     accountId,
     amount: 100,
     currency: "UYU",
     createdAt: occurredAt,
   });
-  await repository.createBudget(budgetInput());
-  await repository.createRecurringDebt(recurringInput());
-  expect(await repository.deleteAccount(accountId)).toBe(true);
-  const dataset = await repository.getWalletDataset();
+  await repository.createBudget(createDb(), budgetInput());
+  await repository.createRecurringDebt(createDb(), recurringInput());
+  expect(await repository.deleteAccount(createDb(), accountId)).toBe(true);
+  const dataset = await repository.getWalletDataset(createDb());
   expect(dataset.accounts.some((account) => account.id === accountId)).toBe(false);
   expect(dataset.records).toContainEqual(
     expect.objectContaining({ id: record.id, accountId, amount: 20 }),
@@ -237,14 +253,17 @@ test("account archive preserves records and reservations and disables dependent 
     primaryAccountId: otherAccountId,
     defaultAccountId: otherAccountId,
   });
-  expect((await repository.getWalletBackup()).accounts).toContainEqual(
+  expect((await repository.getWalletBackup(createDb())).accounts).toContainEqual(
     expect.objectContaining({ id: accountId, deletedAt: expect.any(String) }),
   );
 });
-
 test("card archive clears its default while retaining purchases and statement history", async () => {
-  await repository.patchSettings({ defaultCreditCardId: cardId, defaultPaymentType: "credit" });
+  await repository.patchSettings(createDb(), {
+    defaultCreditCardId: cardId,
+    defaultPaymentType: "credit",
+  });
   const movement = await repository.createCreditCardRecord(
+    createDb(),
     cardId,
     creditCardRecordSchema.parse({
       kind: "purchase",
@@ -256,28 +275,29 @@ test("card archive clears its default while retaining purchases and statement hi
       occurredAt,
     }),
   );
-  expect(await repository.archiveCreditCard(cardId)).toBe(true);
-  const settings = await repository.getSettings();
+  expect(await repository.archiveCreditCard(createDb(), cardId)).toBe(true);
+  const settings = await repository.getSettings(createDb());
   expect(settings.defaultCreditCardId).toBeUndefined();
   expect(settings.defaultPaymentType).not.toBe("credit");
-  expect(await repository.listCreditCards()).toContainEqual(
+  expect(await repository.listCreditCards(createDb())).toContainEqual(
     expect.objectContaining({ id: cardId, isActive: false }),
   );
-  expect(await repository.listCreditCardRecords(cardId)).toContainEqual(
+  expect(await repository.listCreditCardRecords(createDb(), cardId)).toContainEqual(
     expect.objectContaining({ id: movement.id, amount: 30 }),
   );
 });
-
 test("tag deletion removes both join tables and budget references without deleting history", async () => {
-  const record = await repository.createRecord(recordInput());
-  await repository.createBudget(budgetInput());
+  const record = await repository.createRecord(createDb(), recordInput());
+  await repository.createBudget(createDb(), budgetInput());
   await fixture.pool.query("INSERT INTO goal_tags(goal_id,tag_id) VALUES($1,$2)", [goalId, tagId]);
-  expect(await repository.deleteTag(tagId)).toBe(true);
-  expect((await repository.listRecords()).items).toContainEqual(
+  expect(await repository.deleteTag(createDb(), tagId)).toBe(true);
+  expect((await repository.listRecords(createDb())).items).toContainEqual(
     expect.objectContaining({ id: record.id, tagIds: [], amount: 20 }),
   );
-  expect((await repository.listGoals()).find((goal) => goal.id === goalId)?.tagIds).toEqual([]);
-  expect((await repository.listBudgets())[0]?.tagId).toBeUndefined();
+  expect(
+    (await repository.listGoals(createDb())).find((goal) => goal.id === goalId)?.tagIds,
+  ).toEqual([]);
+  expect((await repository.listBudgets(createDb()))[0]?.tagId).toBeUndefined();
   expect(
     (
       await fixture.pool.query(
@@ -286,31 +306,29 @@ test("tag deletion removes both join tables and budget references without deleti
     ).rows,
   ).toHaveLength(0);
 });
-
 test("concurrent settings replacement and partial updates preserve the existing singleton", async () => {
-  const initial = await repository.getSettings();
+  const initial = await repository.getSettings(createDb());
   await Promise.all([
-    repository.upsertSettings({ ...initial, theme: "dark" }),
-    repository.upsertSettings({ ...initial, theme: "system" }),
+    repository.upsertSettings(createDb(), { ...initial, theme: "dark" }),
+    repository.upsertSettings(createDb(), { ...initial, theme: "system" }),
   ]);
   await Promise.all([
-    repository.patchSettings({ theme: "dark" }),
-    repository.patchSettings({ defaultPaymentStatus: "needs_review" }),
+    repository.patchSettings(createDb(), { theme: "dark" }),
+    repository.patchSettings(createDb(), { defaultPaymentStatus: "needs_review" }),
   ]);
   expect((await fixture.pool.query("SELECT id FROM settings")).rows).toHaveLength(1);
-  expect(await repository.getSettings()).toMatchObject({
+  expect(await repository.getSettings(createDb())).toMatchObject({
     theme: "dark",
     defaultPaymentStatus: "needs_review",
   });
 });
-
 test("record filters and cursor pagination select only matching durable rows", async () => {
-  const match = await repository.createRecord(recordInput());
+  const match = await repository.createRecord(createDb(), recordInput());
   await fixture.pool.query("INSERT INTO record_goals(record_id,goal_id) VALUES($1,$2)", [
     match.id,
     goalId,
   ]);
-  const other = await repository.createRecord({
+  const other = await repository.createRecord(createDb(), {
     ...recordInput(),
     accountId: otherAccountId,
     categoryId,
@@ -331,21 +349,234 @@ test("record filters and cursor pagination select only matching durable rows", a
     { from: "2026-10-01", to: "2026-10-31" },
   ];
   for (const filter of checks)
-    expect((await repository.listRecords(filter)).items.map((record) => record.id)).toEqual([
-      match.id,
-    ]);
-  expect((await repository.listRecords({ type: "income" })).items).toEqual([]);
-  expect((await repository.listRecords({ creditCardId: cardId })).items).toEqual([]);
-  const first = await repository.listRecords({ type: "expense", limit: 1 });
+    expect(
+      (await repository.listRecords(createDb(), filter)).items.map((record) => record.id),
+    ).toEqual([match.id]);
+  expect((await repository.listRecords(createDb(), { type: "income" })).items).toEqual([]);
+  expect((await repository.listRecords(createDb(), { creditCardId: cardId })).items).toEqual([]);
+  const first = await repository.listRecords(createDb(), { type: "expense", limit: 1 });
   expect(first).toMatchObject({
     hasMore: true,
     items: [expect.objectContaining({ id: match.id })],
   });
   expect(first.nextCursor).toBeTruthy();
-  const second = await repository.listRecords({ limit: 1, cursor: first.nextCursor ?? undefined });
+  const second = await repository.listRecords(createDb(), {
+    limit: 1,
+    cursor: first.nextCursor ?? undefined,
+  });
   expect(second).toMatchObject({
     hasMore: false,
     nextCursor: null,
     items: [expect.objectContaining({ id: other.id })],
   });
+});
+test("account archive detaches every template destination and auto-reservation configuration atomically", async () => {
+  const template = await repository.createRecordTemplate(createDb(), {
+    name: "Archive account template",
+    type: "transfer",
+    amount: 10,
+    currency: "UYU",
+    accountId: otherAccountId,
+    destinationAccountId: accountId,
+    categoryId,
+    paymentType: "transfer",
+  });
+  await repository.updateGoal(createDb(), goalId, { autoReservationAccountId: accountId });
+  expect(await repository.deleteAccount(createDb(), accountId)).toBe(true);
+  expect(
+    (await repository.listRecordTemplates(createDb())).find((row) => row.id === template.id)
+      ?.destinationAccountId,
+  ).toBeUndefined();
+  expect(
+    (await repository.listGoals(createDb())).find((row) => row.id === goalId)
+      ?.autoReservationAccountId,
+  ).toBeUndefined();
+});
+test("category archive reassigns reusable templates as well as financial rows", async () => {
+  const template = await repository.createRecordTemplate(createDb(), {
+    name: "Archive category template",
+    type: "expense",
+    amount: 10,
+    currency: "UYU",
+    accountId,
+    categoryId: grandchildId,
+    paymentType: "debit",
+  });
+  const result = await repository.deleteCategory(createDb(), categoryId);
+  if (!result.deleted) throw new Error("Expected archived category");
+  expect(
+    (await repository.listRecordTemplates(createDb())).find((row) => row.id === template.id)
+      ?.categoryId,
+  ).toBe(result.fallbackCategoryId);
+});
+test("card archive detaches templates and defaults to debit without erasing their draft amounts", async () => {
+  const template = await repository.createRecordTemplate(createDb(), {
+    name: "Archive card template",
+    type: "expense",
+    amount: 10,
+    currency: "UYU",
+    creditCardId: cardId,
+    categoryId,
+    paymentType: "credit",
+  });
+  await repository.patchSettings(createDb(), {
+    defaultCreditCardId: cardId,
+    defaultPaymentType: "credit",
+  });
+  await repository.archiveCreditCard(createDb(), cardId);
+  expect(await repository.getSettings(createDb())).toMatchObject({
+    defaultPaymentType: "debit",
+    defaultCreditCardId: undefined,
+  });
+  expect(
+    (await repository.listRecordTemplates(createDb())).find((row) => row.id === template.id),
+  ).toMatchObject({ amount: 10, paymentType: "debit", creditCardId: undefined });
+});
+test("a card default patch does not implicitly rewrite the selected payment type", async () => {
+  await repository.patchSettings(createDb(), { defaultPaymentType: "cash" });
+  await repository.patchSettings(createDb(), { defaultCreditCardId: cardId });
+  expect(await repository.getSettings(createDb())).toMatchObject({
+    defaultPaymentType: "cash",
+    defaultCreditCardId: cardId,
+  });
+});
+
+test.each(["budget", "installment"] as const)(
+  "concurrent disjoint %s patches never overwrite omitted columns",
+  async (kind) => {
+    const { neonConfig } = await import("@neondatabase/serverless");
+    const previous: unknown = neonConfig.fetchFunction;
+    const original = previous as (input: string, options: RequestInit) => Promise<Response>;
+    const db = createDb();
+    const entity =
+      kind === "budget"
+        ? await repository.createBudget(db, budgetInput())
+        : await repository.createInstallmentPlan(
+            db,
+            installmentPlanSchema.parse({
+              name: "Original plan",
+              totalAmount: 100,
+              currency: "UYU",
+              installmentsTotal: 5,
+              installmentsPaid: 0,
+              accountId,
+              categoryId,
+            }),
+          );
+    let reads = 0;
+    let release!: () => void;
+    const bothRead = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const table = kind === "budget" ? "budgets" : "installment_plans";
+    neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
+      const request = JSON.parse(options.body as string) as { query?: string };
+      const response = await original(url, options);
+      if (request.query?.includes(`from "${table}"`) && request.query.startsWith("select")) {
+        reads++;
+        if (reads === 2) release();
+        await bothRead;
+      }
+      return response;
+    };
+    try {
+      if (kind === "budget") {
+        await Promise.all([
+          repository.updateBudget(db, entity.id, { name: "Concurrent name" }),
+          repository.updateBudget(db, entity.id, { limitAmount: 345 }),
+        ]);
+      } else {
+        await Promise.all([
+          repository.updateInstallmentPlan(db, entity.id, { name: "Concurrent name" }),
+          repository.updateInstallmentPlan(db, entity.id, { installmentsPaid: 1 }),
+        ]);
+      }
+    } finally {
+      release();
+      neonConfig.fetchFunction = previous;
+    }
+    const rows =
+      kind === "budget"
+        ? await repository.listBudgets(db)
+        : await repository.listInstallmentPlans(db);
+    expect(rows.find((row) => row.id === entity.id)).toMatchObject(
+      kind === "budget"
+        ? { name: "Concurrent name", limitAmount: 345 }
+        : { name: "Concurrent name", installmentsPaid: 1 },
+    );
+  },
+);
+
+test("reservation balances aggregate PostgreSQL decimals before converting the response to numbers", async () => {
+  const db = createDb();
+  for (const amount of [0.1, 0.2])
+    await repository.createGoalReservation(db, {
+      goalId,
+      accountId,
+      amount,
+      currency: "UYU",
+      createdAt: occurredAt,
+    });
+  expect(
+    (await repository.listGoalReservations(db)).find((row) => row.goalId === goalId)?.amount,
+  ).toBe(0.3);
+  expect(
+    (await repository.getWalletDataset(db)).goalReservations.find((row) => row.goalId === goalId)
+      ?.amount,
+  ).toBe(0.3);
+});
+
+test("empty record batches do not execute database work", async () => {
+  const db = createDb();
+  const batch = vi.spyOn(db, "batch");
+  expect(await repository.createRecordsBulk(db, [])).toEqual([]);
+  expect(batch).not.toHaveBeenCalled();
+});
+
+test("single debt creation still rejects duplicate recurring instances", async () => {
+  const rule = await repository.createRecurringDebt(createDb(), recurringInput());
+  const input = debtSchema.parse({
+    name: "Test instance",
+    direction: "payable",
+    startedAt: occurredAt,
+    currency: "UYU",
+    counterpartyName: "Test",
+    categoryId,
+    originalAmount: 30,
+    pendingAmount: 30,
+    recurringDebtId: rule.id,
+    recurringMonth: "2026-10",
+  });
+  await repository.createDebt(createDb(), input);
+  await expect(repository.createDebt(createDb(), input)).rejects.toThrow();
+  expect(await repository.createDebts(createDb(), [input])).toEqual([]);
+});
+
+test("recurring generation keeps UTC noon, clamps month ends and is retry safe", async () => {
+  const rule = await repository.createRecurringDebt(createDb(), {
+    ...recurringInput(),
+    dayOfMonth: 31,
+    startedAt: "2024-01-31T12:00:01.000Z",
+  });
+  await repository.createRecurringDebt(createDb(), { ...recurringInput(), isActive: false });
+  expect(
+    await repository.generateDueRecurringDebts(createDb(), new Date("2024-02-29T11:59:59Z")),
+  ).toEqual([]);
+  const outputs = await Promise.all(
+    [1, 2].map(() =>
+      repository.generateDueRecurringDebts(createDb(), new Date("2024-04-30T12:00:00Z")),
+    ),
+  );
+  const instances = outputs.flat().sort((a, b) => a.dueAt!.localeCompare(b.dueAt!));
+  expect(instances.map((d) => d.dueAt)).toEqual([
+    "2024-02-29T12:00:00.000Z",
+    "2024-03-31T12:00:00.000Z",
+    "2024-04-30T12:00:00.000Z",
+  ]);
+  expect(instances.every((d) => d.recurringDebtId === rule.id && d.pendingAmount === 30)).toBe(
+    true,
+  );
+  expect(
+    await repository.generateDueRecurringDebts(createDb(), new Date("2024-04-30T12:00:00Z")),
+  ).toEqual([]);
 });

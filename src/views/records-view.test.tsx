@@ -1,13 +1,13 @@
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 import { recordCreateSchema } from "@shared/schemas";
+import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
+import { createDb } from "../../server/db/client.js";
 import { RecordsView } from "./records-view";
 
 import type { RecordFilters, WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
-
 const update = vi.hoisted(() => vi.fn());
 const add = vi.hoisted(() => vi.fn());
 const clearFilters = vi.hoisted(() => vi.fn());
@@ -104,7 +104,12 @@ beforeEach(() => {
   setFilters.mockImplementation((patch: RecordFilters) => {
     filters = { ...filters, ...patch };
   });
-  let previous: { filters: RecordFilters; period: "month" | "all" } | undefined;
+  let previous:
+    | {
+        filters: RecordFilters;
+        period: "month" | "all";
+      }
+    | undefined;
   openReviewQueue.mockImplementation(() => {
     isReviewQueueOpen = true;
     previous ??= { filters: { ...filters }, period: periodMode };
@@ -167,7 +172,6 @@ async function openRecord() {
   });
   await act(async () => tree!.root.findAllByProps({ role: "button" })[0]!.props.onClick());
 }
-
 test("the queue toggle opens global review from a manually filtered Needs review view", async () => {
   filters = { accountId: "bank", paymentStatus: "needs_review" };
   await act(async () => {
@@ -194,7 +198,6 @@ test("the queue toggle opens global review from a manually filtered Needs review
     false,
   );
 });
-
 test.each(["cleared", "needs_review"] as const)(
   "Status All exits the global queue and restores the previous %s filter",
   async (status) => {
@@ -216,7 +219,6 @@ test.each(["cleared", "needs_review"] as const)(
     expect(periodMode).toBe("month");
   },
 );
-
 test("Note receives focus only when explicitly opened, including after removal", async () => {
   const focus = vi.fn();
   await act(async () => {
@@ -247,7 +249,6 @@ test("Note receives focus only when explicitly opened, including after removal",
   await act(async () => addNote().props.onClick());
   expect(focus).toHaveBeenCalledTimes(2);
 });
-
 test("an existing Note filter on mount does not steal focus", async () => {
   filters = { note: "existing" };
   const focus = vi.fn();
@@ -256,7 +257,6 @@ test("an existing Note filter on mount does not steal focus", async () => {
   });
   expect(focus).not.toHaveBeenCalled();
 });
-
 test("dismissing the review status chip uses the same return action as the toggle", async () => {
   await act(async () => {
     tree = create(<RecordsView />);
@@ -270,7 +270,6 @@ test("dismissing the review status chip uses the same return action as the toggl
   );
   expect(closeReviewQueue).toHaveBeenCalledOnce();
 });
-
 test("removing a card sends JSON null and preserves an unchanged precise timestamp", async () => {
   await openRecord();
   const paymentType = tree!.root
@@ -284,7 +283,6 @@ test("removing a card sends JSON null and preserves an unchanged precise timesta
     occurredAt: preciseDate,
   });
 });
-
 test("bank-refund editing locks financial inputs and submits only metadata", async () => {
   dataset.records[0] = {
     ...dataset.records[0]!,
@@ -336,7 +334,6 @@ test("bank-refund editing locks financial inputs and submits only metadata", asy
   ])
     expect(payload).not.toHaveProperty(key);
 });
-
 test("new income and transfers cannot select a credit card", async () => {
   await act(async () => {
     tree = create(<RecordsView />);
@@ -357,7 +354,6 @@ test("new income and transfers cannot select a credit card", async () => {
     ).toHaveLength(0);
   }
 });
-
 test("clicking the active review queue again restores the previous period and filters", async () => {
   dataset.records.push({
     ...dataset.records[0]!,
@@ -381,7 +377,6 @@ test("clicking the active review queue again restores the previous period and fi
   expect(periodMode).toBe("month");
   expect(tree!.root.findAllByProps({ role: "button" })).toHaveLength(1);
 });
-
 test("a default foreign credit card starts in its limit currency rather than the bank currency", async () => {
   dataset.settings.defaultPaymentType = "credit";
   dataset.settings.defaultCreditCardId = "test-card";
@@ -404,7 +399,6 @@ test("a default foreign credit card starts in its limit currency rather than the
     )!;
   expect(currency.props.value).toBe("USD");
 });
-
 test("an unknown-bank purchase can be resolved as card-only without a bank account", async () => {
   dataset.records[0] = {
     ...dataset.records[0]!,
@@ -436,7 +430,6 @@ test("an unknown-bank purchase can be resolved as card-only without a bank accou
   });
   expect(update.mock.calls[0]![1].accountId).toBeUndefined();
 });
-
 test("an unresolved review record can be cancelled without inventing destinations or FX", async () => {
   dataset.records[0] = {
     ...dataset.records[0]!,
@@ -466,7 +459,6 @@ test("an unresolved review record can be cancelled without inventing destination
   });
   expect(dataset.records[0]).toEqual(original);
 });
-
 test("review queue clears incompatible filters and includes drafts outside the selected month", async () => {
   dataset.records.push({
     ...dataset.records[0]!,
@@ -492,7 +484,6 @@ test("review queue clears incompatible filters and includes drafts outside the s
   expect(tree!.root.findAllByProps({ role: "button" })).toHaveLength(1);
   expect(JSON.stringify(tree!.toJSON())).toContain("Old review merchant");
 });
-
 test("review count does not present partial loaded history as a complete total", async () => {
   historyComplete = false;
   await act(async () => {
@@ -502,7 +493,6 @@ test("review count does not present partial loaded history as a complete total",
     JSON.stringify(tree!.root.findByProps({ "aria-label": "Open review queue" }).props.children),
   ).toContain("Loading");
 });
-
 test("duplicating opens a fresh draft and writes only once on submit with current conversions", async () => {
   const accountId = "11111111-1111-4111-8111-111111111111",
     categoryId = "22222222-2222-4222-8222-222222222222",
@@ -584,7 +574,6 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
     expect(payload).not.toHaveProperty(key);
   expect(dataset.records[0]).toEqual(original);
 });
-
 test("duplicate with no current quote stays editable and sends no write", async () => {
   dataset.records[0] = {
     ...dataset.records[0]!,
@@ -605,7 +594,6 @@ test("duplicate with no current quote stays editable and sends no write", async 
   expect(add).not.toHaveBeenCalled();
   expect(tree!.root.findByProps({ role: "alert" })).toBeDefined();
 });
-
 test("duplicate does not reuse inactive cards or accounts and retains its form after a failed save", async () => {
   dataset.creditCards[0]!.isActive = false;
   dataset.accounts[0]!.isActive = false;
@@ -632,10 +620,9 @@ test("duplicate does not reuse inactive cards or accounts and retains its form a
   expect(add).toHaveBeenCalledOnce();
   expect(tree!.root.findByType("form")).toBeDefined();
 });
-
 test("a submitted duplicate persists as a separate record after a canonical reload", async () => {
   const { createPostgresTestDatabase } = await import("../../scripts/sandbox/postgres-test");
-  const { createRecord, getWalletDataset } = await import("../../server/db/wallet-repository");
+  const { createRecord, getWalletDataset } = await import("../../server/db/index");
   const { randomUUID } = await import("node:crypto");
   const fixture = await createPostgresTestDatabase();
   try {
@@ -658,16 +645,16 @@ test("a submitted duplicate persists as a separate record after a canonical relo
       "INSERT INTO records(id,type,amount,currency,account_id,account_amount,category_id,payment_type,payment_status,exchange_rate_to_primary,occurred_at,debt_id) VALUES($1,'expense',100,'USD',$2,3900,$3,'debit','cleared',39,'2020-06-01T12:00:00Z',$4)",
       [sourceId, accountId, categoryId, randomUUID()],
     );
-    dataset = await getWalletDataset();
+    dataset = await getWalletDataset(createDb());
     const original = structuredClone(dataset.records[0]!);
-    add.mockImplementation(createRecord);
+    add.mockImplementation((input) => createRecord(createDb(), input));
     await openRecord();
     await act(async () =>
       tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
     );
-    expect((await getWalletDataset()).records).toHaveLength(1);
+    expect((await getWalletDataset(createDb())).records).toHaveLength(1);
     await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-    const reloaded = await getWalletDataset();
+    const reloaded = await getWalletDataset(createDb());
     expect(reloaded.records).toHaveLength(2);
     expect(reloaded.records.find((record) => record.id === sourceId)!).toEqual(original);
     expect(reloaded.records.find((record) => record.id !== sourceId)!).toMatchObject({
@@ -680,15 +667,13 @@ test("a submitted duplicate persists as a separate record after a canonical relo
   } finally {
     await fixture.close();
   }
-}, 60_000);
-
+}, 60000);
 test("editing a bank-backed purchase cannot select Card only", async () => {
   await openRecord();
   expect(
     tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),
   ).toHaveLength(0);
 });
-
 test("editing an existing card-only purchase retains Card only", async () => {
   dataset.records[0]!.accountId = undefined;
   dataset.records[0]!.accountAmount = undefined;

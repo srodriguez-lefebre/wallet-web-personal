@@ -4,18 +4,17 @@ import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { createDb } from "./client.js";
-import { accounts, categories, creditCards } from "./schema.js";
 import {
   createCreditCardRecord,
+  createRecord,
+  deleteCreditCardRecord,
+  deleteRecord,
   getWalletDataset,
   listCreditCardStatements,
   payCreditCardStatement,
-  deleteCreditCardRecord,
-  createRecord,
   updateRecord,
-  deleteRecord,
-} from "./wallet-repository.js";
-
+} from "./index.js";
+import { accounts, categories, creditCards } from "./schema.js";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const cardId = randomUUID(),
   categoryId = randomUUID(),
@@ -52,7 +51,7 @@ beforeEach(async () => {
     icon: "card",
     isActive: true,
   });
-  await createCreditCardRecord(cardId, {
+  await createCreditCardRecord(db, cardId, {
     kind: "purchase",
     amount: 100,
     currency: "UYU",
@@ -71,30 +70,32 @@ const payment = (amount: number) => ({
   accountAmount: amount,
   occurredAt: new Date().toISOString(),
 });
-
 test("independent PostgreSQL connections cannot both pay the same full statement", async () => {
-  const [statement] = await listCreditCardStatements(cardId);
+  const [statement] = await listCreditCardStatements(createDb(), cardId);
   if (!statement) throw new Error("Expected synthetic fixture row");
   const results = await Promise.allSettled(
-    Array.from({ length: 6 }, () => payCreditCardStatement(cardId, statement.id, payment(100))),
+    Array.from({ length: 6 }, () =>
+      payCreditCardStatement(createDb(), cardId, statement.id, payment(100)),
+    ),
   );
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-  const dataset = await getWalletDataset();
+  const dataset = await getWalletDataset(createDb());
   expect(dataset.creditCardPayments).toHaveLength(1);
   expect(
     dataset.creditCardPaymentAllocations.reduce((sum, row) => sum + row.amountInLimitCurrency, 0),
   ).toBe(100);
   expect(dataset.creditCardStatements[0]!.status).toBe("paid");
 });
-
 test("independent partial payments allocate exactly the balance without overdraw", async () => {
-  const [statement] = await listCreditCardStatements(cardId);
+  const [statement] = await listCreditCardStatements(createDb(), cardId);
   if (!statement) throw new Error("Expected synthetic fixture row");
   const results = await Promise.allSettled(
-    Array.from({ length: 6 }, () => payCreditCardStatement(cardId, statement.id, payment(25))),
+    Array.from({ length: 6 }, () =>
+      payCreditCardStatement(createDb(), cardId, statement.id, payment(25)),
+    ),
   );
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(4);
-  const dataset = await getWalletDataset();
+  const dataset = await getWalletDataset(createDb());
   expect(dataset.creditCardPayments.reduce((sum, row) => sum + row.amountInLimitCurrency, 0)).toBe(
     100,
   );
@@ -102,13 +103,12 @@ test("independent partial payments allocate exactly the balance without overdraw
     dataset.creditCardPaymentAllocations.reduce((sum, row) => sum + row.amountInLimitCurrency, 0),
   ).toBe(100);
 });
-
 test("independent refund submissions cannot refund more than the original purchase", async () => {
-  const dataset = await getWalletDataset();
+  const dataset = await getWalletDataset(createDb());
   const original = dataset.creditCardRecords[0]!;
   const results = await Promise.allSettled(
     Array.from({ length: 4 }, () =>
-      createCreditCardRecord(cardId, {
+      createCreditCardRecord(createDb(), cardId, {
         kind: "refund",
         originalRecordId: original.id,
         amount: 60,
@@ -123,37 +123,37 @@ test("independent refund submissions cannot refund more than the original purcha
   );
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
   expect(
-    (await getWalletDataset()).creditCardRecords
+    (await getWalletDataset(createDb())).creditCardRecords
       .filter((row) => row.kind === "refund")
       .reduce((sum, row) => sum + row.amount, 0),
   ).toBe(60);
 });
-
 test("concurrent retries of one partial request return one durable payment", async () => {
-  const [statement] = await listCreditCardStatements(cardId);
+  const [statement] = await listCreditCardStatements(createDb(), cardId);
   if (!statement) throw new Error("Expected synthetic fixture row");
   const request = { ...payment(25), idempotencyKey: randomUUID() };
   const payments = await Promise.all(
-    Array.from({ length: 6 }, () => payCreditCardStatement(cardId, statement.id, request)),
+    Array.from({ length: 6 }, () =>
+      payCreditCardStatement(createDb(), cardId, statement.id, request),
+    ),
   );
   expect(new Set(payments.map((row) => row.id)).size).toBe(1);
-  const dataset = await getWalletDataset();
+  const dataset = await getWalletDataset(createDb());
   expect(dataset.creditCardPayments).toHaveLength(1);
   expect(dataset.creditCardPayments[0]!.amountInLimitCurrency).toBe(25);
   expect(
     dataset.creditCardPaymentAllocations.reduce((sum, row) => sum + row.amountInLimitCurrency, 0),
   ).toBe(25);
 });
-
 test("deletion waits for an in-flight refund and cannot hide its purchase", async () => {
-  const original = (await getWalletDataset()).creditCardRecords[0]!;
+  const original = (await getWalletDataset(createDb())).creditCardRecords[0]!;
   await fixture.pool
     .query(`CREATE FUNCTION delay_test_refund() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
     IF NEW.kind = 'refund' THEN PERFORM pg_sleep(0.25); END IF;
     RETURN NEW; END $$;
     CREATE TRIGGER delay_test_refund BEFORE INSERT ON credit_card_records FOR EACH ROW EXECUTE FUNCTION delay_test_refund()`);
   try {
-    const refund = createCreditCardRecord(cardId, {
+    const refund = createCreditCardRecord(createDb(), cardId, {
       kind: "refund",
       originalRecordId: original.id,
       amount: 60,
@@ -176,20 +176,19 @@ test("deletion waits for an in-flight refund and cannot hide its purchase", asyn
       }
     }
     expect(refundIsInserting).toBe(true);
-    const deletion = deleteCreditCardRecord(cardId, original.id);
+    const deletion = deleteCreditCardRecord(createDb(), cardId, original.id);
     const results = await Promise.allSettled([refund, deletion]);
     expect(results[0].status).toBe("fulfilled");
     expect(results[1].status).toBe("rejected");
-    expect((await getWalletDataset()).creditCardRecords).toHaveLength(2);
+    expect((await getWalletDataset(createDb())).creditCardRecords).toHaveLength(2);
   } finally {
     await fixture.pool.query(
       "DROP TRIGGER delay_test_refund ON credit_card_records; DROP FUNCTION delay_test_refund()",
     );
   }
 });
-
 test("a refund rejects a purchase whose bank data changed before acquiring the card lock", async () => {
-  const original = (await getWalletDataset()).creditCardRecords[0]!;
+  const original = (await getWalletDataset(createDb())).creditCardRecords[0]!;
   await fixture.pool.query(
     "UPDATE credit_card_records SET account_impact_at_creation=true, account_id=$2, account_amount=100 WHERE id=$1",
     [original.id, accountId],
@@ -209,7 +208,7 @@ test("a refund rejects a purchase whose bank data changed before acquiring the c
   try {
     await holder.query("BEGIN");
     await holder.query("SELECT id FROM credit_cards WHERE id=$1 FOR UPDATE", [cardId]);
-    const refund = createCreditCardRecord(cardId, {
+    const refund = createCreditCardRecord(createDb(), cardId, {
       kind: "refund",
       originalRecordId: original.id,
       amount: 60,
@@ -245,16 +244,15 @@ test("a refund rejects a purchase whose bank data changed before acquiring the c
     committed = true;
     expect(await refund).toHaveProperty("error");
     expect(
-      (await getWalletDataset()).creditCardRecords.filter((row) => row.kind === "refund"),
+      (await getWalletDataset(createDb())).creditCardRecords.filter((row) => row.kind === "refund"),
     ).toHaveLength(0);
   } finally {
     if (!committed) await holder.query("ROLLBACK");
     holder.release();
   }
 });
-
 const linkedWalletPurchase = () =>
-  createRecord({
+  createRecord(createDb(), {
     type: "expense",
     amount: 100,
     currency: "UYU",
@@ -270,12 +268,11 @@ const linkedWalletPurchase = () =>
     exchangeRateToLimitCurrency: 1,
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
-
 test.each(["delete", "cancel"] as const)(
   "linked wallet %s cannot overtake a refund creating dependent history",
   async (action) => {
     const wallet = await linkedWalletPurchase();
-    const original = (await getWalletDataset()).creditCardRecords.find(
+    const original = (await getWalletDataset(createDb())).creditCardRecords.find(
       (row) => row.walletRecordId === wallet.id,
     )!;
     await fixture.pool
@@ -284,7 +281,7 @@ test.each(["delete", "cancel"] as const)(
     RETURN NEW; END $$;
     CREATE TRIGGER delay_linked_test_refund BEFORE INSERT ON credit_card_records FOR EACH ROW EXECUTE FUNCTION delay_linked_test_refund()`);
     try {
-      const refund = createCreditCardRecord(cardId, {
+      const refund = createCreditCardRecord(createDb(), cardId, {
         kind: "refund",
         originalRecordId: original.id,
         amount: 60,
@@ -309,12 +306,12 @@ test.each(["delete", "cancel"] as const)(
       expect(refundIsInserting).toBe(true);
       const mutation =
         action === "delete"
-          ? deleteRecord(wallet.id)
-          : updateRecord(wallet.id, { paymentStatus: "cancelled" });
+          ? deleteRecord(createDb(), wallet.id)
+          : updateRecord(createDb(), wallet.id, { paymentStatus: "cancelled" });
       const results = await Promise.allSettled([refund, mutation]);
       expect(results[0].status).toBe("fulfilled");
       expect(results[1].status).toBe("rejected");
-      const after = await getWalletDataset();
+      const after = await getWalletDataset(createDb());
       expect(after.records.find((row) => row.id === wallet.id)?.paymentStatus).toBe("cleared");
       expect(after.creditCardRecords.find((row) => row.id === original.id)!).toBeDefined();
       expect(after.creditCardRecords.filter((row) => row.kind === "refund")).toHaveLength(1);
@@ -325,7 +322,6 @@ test.each(["delete", "cancel"] as const)(
     }
   },
 );
-
 test("linked deletion rejects a card reassignment that happened before its lock", async () => {
   const wallet = await linkedWalletPurchase();
   const otherCardId = randomUUID();
@@ -338,7 +334,7 @@ test("linked deletion rejects a card reassignment that happened before its lock"
   try {
     await holder.query("BEGIN");
     await holder.query("SELECT id FROM credit_cards WHERE id=$1 FOR UPDATE", [cardId]);
-    const deletion = deleteRecord(wallet.id).then(
+    const deletion = deleteRecord(createDb(), wallet.id).then(
       (value) => ({ value }),
       (error) => ({ error }),
     );
@@ -366,7 +362,8 @@ test("linked deletion rejects a card reassignment that happened before its lock"
     committed = true;
     expect(await deletion).toHaveProperty("error");
     expect(
-      (await getWalletDataset()).records.find((row) => row.id === wallet.id)?.creditCardId,
+      (await getWalletDataset(createDb())).records.find((row) => row.id === wallet.id)
+        ?.creditCardId,
     ).toBe(otherCardId);
   } finally {
     if (!committed) await holder.query("ROLLBACK");
