@@ -1,5 +1,7 @@
-import { expect, test } from "vitest";
 import { readFileSync } from "node:fs";
+
+import { expect, test } from "vitest";
+
 import { runMailAutomation, type MailRunInput, type SimulatedMessage } from "./mail.js";
 
 const credit: SimulatedMessage = {
@@ -41,7 +43,7 @@ const input: MailRunInput = {
 const ok = () => ({ status: 201, body: '{"data":{"status":"created"}}' });
 function mail(...messages: SimulatedMessage[]): MailRunInput {
   const value = structuredClone(input);
-  value.threads[0].messages = structuredClone(messages);
+  value.threads[0]!.messages = structuredClone(messages);
   return value;
 }
 
@@ -57,7 +59,7 @@ test("personal Visa debit 9986 is routed to Banco using the configured debit map
   value.targets = { ...value.targets, ...personalTargets, defaultAccountId: "must-not-use" };
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: {
       source: "itau_debit_card",
       paymentType: "debit",
@@ -68,7 +70,7 @@ test("personal Visa debit 9986 is routed to Banco using the configured debit map
     },
     destination: { accountId: "da81224b-90f3-4413-aa96-46197d6d31e9" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each([
@@ -88,7 +90,7 @@ test.each([
     value.targets.defaultAccountId = "must-not-use";
     const result = runMailAutomation(value, ok);
     expect(result.deliveries).toHaveLength(1);
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       idempotencyKey: "gmail:itau_payment:message-test",
       transaction: {
         source: "itau_payment",
@@ -100,8 +102,8 @@ test.each([
       },
       destination: { accountId: "origin" },
     });
-    expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-    expect(result.threads[0].messages[0].isRead).toBe(true);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
   },
 );
 
@@ -112,7 +114,7 @@ test("Pago realizado preserves payee punctuation and Gmail bold formatting", () 
       .replace("...1440.", "...*1440*.")
       .replace("Pago a SISTARBANC.", "Pago a *TEST*PAYMENT GATEWAY*."),
   });
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     transaction: { accountNumber: "****1440", merchantRaw: "TEST*PAYMENT GATEWAY" },
   });
 });
@@ -125,7 +127,7 @@ test("Pago realizado uses the existing personal savings origin configuration", (
   value.targets.bankAccounts = JSON.parse(
     readFileSync(new URL("../../mail-service/bank-account-targets.json", import.meta.url), "utf8"),
   ).bankAccounts;
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "86b72caa-9e03-4afa-af9f-40af2b98f008" },
   });
 });
@@ -134,7 +136,7 @@ test("Pago realizado with an unknown origin never falls back to a card or defaul
   const value = mail({ ...payment, body: payment.body.replace("1440", "9999") });
   value.targets.defaultAccountId = "must-not-use";
   value.targets.cards["9999"] = { accountId: "must-not-use", creditCardId: "must-not-use" };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({ destination: {} });
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({ destination: {} });
 });
 
 test.each([
@@ -149,13 +151,13 @@ test.each([
 ])("incomplete or invalid Pago realizado is retained pending and unread (%#)", (body) => {
   const result = runMailAutomation(mail({ ...payment, body }), ok);
   expect(result.deliveries).toHaveLength(0);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("actual Apps Script builds credit payload and marks the completed message read", () => {
   const result = runMailAutomation(input, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:itau_credit_card:message-test",
     transaction: {
       amount: 1234.56,
@@ -165,16 +167,16 @@ test("actual Apps Script builds credit payload and marks the completed message r
     },
     destination: { creditCardId: "card-test" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
-  expect(input.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+  expect(input.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("unsupported mail completes and is read without an ingestion request", () => {
   const result = runMailAutomation(mail(ignored), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
 });
 
 test.each(["Aviso de devolución", "Pago de tarjeta recibido"])(
@@ -182,8 +184,8 @@ test.each(["Aviso de devolución", "Pago de tarjeta recibido"])(
   (subject) => {
     const result = runMailAutomation(mail({ ...credit, subject }), ok);
     expect(result.deliveries).toEqual([]);
-    expect(result.threads[0].messages[0].isRead).toBe(true);
-    expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
   },
 );
 
@@ -194,7 +196,7 @@ test.each([
 ])("does not ingest misleading sender %s", (from) => {
   const result = runMailAutomation(mail({ ...credit, from }), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test("display-name sender and accent-free credit subject are recognized", () => {
@@ -206,7 +208,7 @@ test("display-name sender and accent-free credit subject are recognized", () => 
     }),
     ok,
   );
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "credit_card" },
   });
 });
@@ -221,7 +223,7 @@ test.each(["1.234,56", "1,234.56", "1234.56", "1234,56", "1.234", "1,234"])(
       }),
       ok,
     );
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       transaction: {
         amount: raw === "1.234" || raw === "1,234" ? 1234 : 1234.56,
       },
@@ -234,8 +236,8 @@ test.each([credit, debit, transfer])(
   (message) => {
     const result = runMailAutomation(mail({ ...message, body: "Financial fields missing" }), ok);
     expect(result.deliveries).toEqual([]);
-    expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-    expect(result.threads[0].messages[0].isRead).toBe(false);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
     expect(result.logs.some((log) => log.includes("queda pendiente"))).toBe(true);
   },
 );
@@ -255,7 +257,7 @@ test.each([
     },
   };
   const result = runMailAutomation(value, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:itau_debit_card:message-test",
     transaction: {
       paymentType: "debit",
@@ -267,7 +269,7 @@ test.each([
     },
     destination: { accountId: "currency-account" },
   });
-  expect((result.deliveries[0].payload as { destination: unknown }).destination).toEqual({
+  expect((result.deliveries[0]!.payload as { destination: unknown }).destination).toEqual({
     accountId: "currency-account",
   });
 });
@@ -281,16 +283,16 @@ test("unmapped debit never falls back to a credit card or default account", () =
     defaultAccountId: "must-not-guess",
   };
   const result = runMailAutomation(value, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "debit" },
   });
-  expect((result.deliveries[0].payload as { destination: unknown }).destination).toEqual({});
+  expect((result.deliveries[0]!.payload as { destination: unknown }).destination).toEqual({});
 });
 
 test("reference-only debit mapping remains supported", () => {
   const value = mail(debit);
   value.targets.debitCards = { "2468": { accountId: "fallback" } };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "fallback" },
   });
 });
@@ -316,7 +318,7 @@ test.each([
       [`ITAU:9876540:${currency}`]: { accountId: "destination-currency" },
     };
     const result = runMailAutomation(value, ok);
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       idempotencyKey: "gmail:itau_transfer:message-test",
       transaction: {
         paymentType: "transfer",
@@ -345,7 +347,7 @@ test("unknown transfer account references never match cards or default account",
   };
   expect(
     (
-      runMailAutomation(value, ok).deliveries[0].payload as {
+      runMailAutomation(value, ok).deliveries[0]!.payload as {
         destination: unknown;
       }
     ).destination,
@@ -369,7 +371,7 @@ test.each([
       ),
     ).bankAccounts;
     const result = runMailAutomation(value, ok);
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       transaction: {
         accountNumber: `****${origin}`,
         amount: 630,
@@ -379,8 +381,8 @@ test.each([
       },
       destination: { accountId },
     });
-    expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-    expect(result.threads[0].messages[0].isRead).toBe(true);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
   },
 );
 
@@ -391,7 +393,7 @@ test("currency-specific origin configuration takes precedence without losing des
     "1440:USD": { accountId: "explicit-source" },
     "ITAU:9876540:USD": { accountId: "explicit-destination" },
   };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "explicit-source", destinationAccountId: "explicit-destination" },
   });
 });
@@ -402,7 +404,7 @@ test("reference-only transfer mappings are supported without guessing ownership"
     "1357": { accountId: "source" },
     "ITAU:9876540": { accountId: "destination" },
   };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "source", destinationAccountId: "destination" },
   });
 });
@@ -414,15 +416,15 @@ test("owned destination matching includes the destination bank and cannot credit
     "9876540:USD": { accountId: "unscoped-must-not-use" },
     "ITAU:9876540:USD": { accountId: "owned-itau" },
   };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "source" },
   });
   expect(
-    (runMailAutomation(value, ok).deliveries[0].payload as { destination: Record<string, string> })
+    (runMailAutomation(value, ok).deliveries[0]!.payload as { destination: Record<string, string> })
       .destination.destinationAccountId,
   ).toBeUndefined();
   value.targets.bankAccounts["OTHER BANK:9876540:USD"] = { accountId: "owned-other" };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "source", destinationAccountId: "owned-other" },
   });
 });
@@ -432,11 +434,11 @@ test("a known owned destination without source mapping remains pending until con
   value.targets.bankAccounts = { "ITAU:9876540:USD": { accountId: "destination" } };
   const pending = runMailAutomation(value, ok);
   expect(pending.deliveries).toHaveLength(0);
-  expect(pending.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(pending.threads[0].messages[0].isRead).toBe(false);
+  expect(pending.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(pending.threads[0]!.messages[0]!.isRead).toBe(false);
   expect(pending.logs.join(" ")).toMatch(/origen/i);
   value.targets.bankAccounts["1357:USD"] = { accountId: "source" };
-  expect(runMailAutomation(value, ok).threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(runMailAutomation(value, ok).threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each(["1.2,34 UYU", "1,2.34 UYU", "12.3456 UYU", "1.23.456,78 UYU"])(
@@ -445,8 +447,8 @@ test.each(["1.2,34 UYU", "1,2.34 UYU", "12.3456 UYU", "1.23.456,78 UYU"])(
     const value = mail({ ...transfer, body: transfer.body.replace("44.00 USD", raw) });
     const result = runMailAutomation(value, ok);
     expect(result.deliveries).toHaveLength(0);
-    expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-    expect(result.threads[0].messages[0].isRead).toBe(false);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
   },
 );
 
@@ -457,14 +459,14 @@ test("mixed ignored, successful and failed messages close only after idempotent 
       ? { status: 503, body: "temporary failure" }
       : ok(),
   );
-  expect(failed.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(failed.threads[0].messages.map((message) => message.isRead)).toEqual([true, true, false]);
+  expect(failed.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(failed.threads[0]!.messages.map((message) => message.isRead)).toEqual([true, true, false]);
   const retried = runMailAutomation({ ...value, threads: failed.threads }, () => ({
     status: 200,
     body: '{"data":{"status":"duplicate"}}',
   }));
-  expect(retried.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(retried.threads[0].messages.every((message) => message.isRead)).toBe(true);
+  expect(retried.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(retried.threads[0]!.messages.every((message) => message.isRead)).toBe(true);
   expect(
     retried.deliveries.map(
       (delivery) => (delivery.payload as { idempotencyKey: string }).idempotencyKey,
@@ -484,23 +486,23 @@ test("a parser failure does not prevent other messages being completed and read"
   );
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages.map((message) => message.isRead)).toEqual([false, true, true]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages.map((message) => message.isRead)).toEqual([false, true, true]);
 });
 
 test("new pending mail runs even when its thread retains the processed label", () => {
   const value = mail(credit);
-  value.threads[0].labels.push("Wallet/Procesado");
+  value.threads[0]!.labels.push("Wallet/Procesado");
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
 });
 
 test("pending history older than 30 days is recovered", () => {
   const result = runMailAutomation(mail({ ...credit, date: "2026-08-01T12:00:00.000Z" }), ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each([
@@ -515,8 +517,8 @@ test.each([
 ])("invalid financial metadata stays pending: $body", (message) => {
   const result = runMailAutomation(mail(message), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("malformed recognized automation purchase is retained instead of ignored", () => {
@@ -526,8 +528,8 @@ test("malformed recognized automation purchase is retained instead of ignored", 
   };
   const result = runMailAutomation(mail(message), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("automation alias credit mapping keeps the existing idempotency contract", () => {
@@ -537,7 +539,7 @@ test("automation alias credit mapping keeps the existing idempotency contract", 
   };
   const value = mail(message);
   value.targets.cards.INTERNACIONAL = { creditCardId: "alias-card" };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:automation_wallet:ignored",
     transaction: { paymentType: "credit_card", amount: 125.5, currency: "UYU" },
     destination: { creditCardId: "alias-card" },
@@ -549,7 +551,7 @@ test("HTML-only debit body is normalized before ingestion", () => {
     mail({ ...debit, body: "", html: `<div>${debit.body}</div>` }),
     ok,
   );
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "debit", amount: 95.84 },
   });
 });
@@ -565,7 +567,7 @@ test("Gmail wraps the approved debit sentence and merchant without changing the 
   expect(result.deliveries[0]?.payload).toMatchObject({
     transaction: { paymentType: "debit", amount: 95.84, merchantRaw: "TEST *SUBSCRIPTION" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each(["*44.00* *USD*", "*44.00 USD*", "*USD 44.00*"])(
@@ -591,6 +593,6 @@ test.each(["*44.00* *USD*", "*44.00 USD*", "*USD 44.00*"])(
       },
       destination: { accountId: "origin-account", destinationAccountId: "destination-account" },
     });
-    expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
   },
 );

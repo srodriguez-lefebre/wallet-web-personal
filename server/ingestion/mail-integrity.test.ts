@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { processMailIngestion } from "./process-mail-ingestion.js";
 import * as classification from "./openai-category.js";
@@ -94,15 +96,15 @@ test.each([true, false])(
     expect((await processMailIngestion(event)).status).toBe("already_processed");
     const dataset = await getWalletDataset();
     expect(dataset.creditCardRecords).toHaveLength(1);
-    expect(dataset.creditCardRecords[0]).toMatchObject({
+    expect(dataset.creditCardRecords[0]!).toMatchObject({
       counterpartyName: "Canonical merchant",
       amount: 50,
       categoryId: knownCategoryId,
     });
-    expect(dataset.creditCardRecords[0].note).toContain("Merchant: MERPAGO*MGOML MONTE");
-    expect(dataset.creditCardRecords[0].note).toContain("Auto Itaú");
+    expect(dataset.creditCardRecords[0]!.note).toContain("Merchant: MERPAGO*MGOML MONTE");
+    expect(dataset.creditCardRecords[0]!.note).toContain("Auto Itaú");
     expect(dataset.records).toHaveLength(bankLinked ? 1 : 0);
-    if (bankLinked) expect(dataset.records[0].note).toContain("Merchant: MERPAGO*MGOML MONTE");
+    if (bankLinked) expect(dataset.records[0]!.note).toContain("Merchant: MERPAGO*MGOML MONTE");
   },
 );
 
@@ -129,7 +131,7 @@ test("unknown cards stay under review without changing a valid account balance",
   const result = await processMailIngestion(event);
   expect(result.status).toBe("needs_review");
   const dataset = await getWalletDataset();
-  expect(dataset.records[0].accountId).toBeUndefined();
+  expect(dataset.records[0]!.accountId).toBeUndefined();
   expect(dataset.creditCardRecords).toHaveLength(0);
 });
 
@@ -139,7 +141,7 @@ test("missing primary FX remains reviewable while known bank and card currency a
   const result = await processMailIngestion(input());
   expect(result.status).toBe("needs_review");
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     paymentStatus: "needs_review",
     accountId,
     accountAmount: 50,
@@ -147,7 +149,7 @@ test("missing primary FX remains reviewable while known bank and card currency a
     exchangeRateToPrimary: 0,
   });
   expect(dataset.creditCardRecords).toHaveLength(1);
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
   expect(
     calculateCreditCardSummary(dataset, dataset.creditCards.find((row) => row.id === cardId)!)
       .usedLimit,
@@ -197,8 +199,8 @@ test("mail records capture automatic goals and consume reserves only once after 
   await processMailIngestion(event);
   const dataset = await getWalletDataset();
   expect(dataset.records).toHaveLength(1);
-  expect(dataset.records[0].goalIds).toEqual([goal.id]);
-  expect(dataset.goalReservations[0].amount).toBe(50);
+  expect(dataset.records[0]!.goalIds).toEqual([goal.id]);
+  expect(dataset.goalReservations[0]!.amount).toBe(50);
 });
 test("a retry reclaims an abandoned lease and fences the expired original worker", async () => {
   let release: (value: null) => void = () => {},
@@ -262,16 +264,16 @@ test("debit notices debit the mapped bank account without matching a credit card
   expect((await processMailIngestion(event)).status).toBe("already_processed");
   const dataset = await getWalletDataset();
   expect(dataset.records).toHaveLength(1);
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     type: "expense",
     accountId,
     accountAmount: 50,
     paymentType: "debit",
     paymentStatus: "cleared",
   });
-  expect(dataset.records[0].creditCardId).toBeUndefined();
+  expect(dataset.records[0]!.creditCardId).toBeUndefined();
   expect(dataset.creditCardRecords).toHaveLength(0);
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
 });
 
 test("a debit notice without an account mapping stays reviewable without guessing a bank account", async () => {
@@ -279,16 +281,19 @@ test("a debit notice without an account mapping stays reviewable without guessin
   event.destination = {};
   expect((await processMailIngestion(event)).status).toBe("needs_review");
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({ paymentType: "debit", paymentStatus: "needs_review" });
-  expect(dataset.records[0].accountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(500);
+  expect(dataset.records[0]!).toMatchObject({
+    paymentType: "debit",
+    paymentStatus: "needs_review",
+  });
+  expect(dataset.records[0]!.accountId).toBeUndefined();
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(500);
   expect(dataset.creditCardRecords).toHaveLength(0);
 });
 
 test("inactive bank mappings are not used for debit notices", async () => {
   await fixture.pool.query("UPDATE accounts SET is_active=false WHERE id=$1", [accountId]);
   expect((await processMailIngestion(bankInput("debit"))).status).toBe("needs_review");
-  expect((await getWalletDataset()).records[0].accountId).toBeUndefined();
+  expect((await getWalletDataset()).records[0]!.accountId).toBeUndefined();
 });
 
 test("a bank account deactivated during ingestion cannot receive a cleared debit", async () => {
@@ -328,7 +333,7 @@ test("a positively mapped owned transfer moves both balances once without creati
   expect((await processMailIngestion(event)).status).toBe("already_processed");
   const dataset = await getWalletDataset();
   expect(dataset.records).toHaveLength(1);
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     type: "transfer",
     accountId,
     accountAmount: 50,
@@ -357,7 +362,7 @@ test("owned transfers freeze source and destination amounts in their currencies"
   );
   const event = bankInput("transfer", destinationAccountId);
   expect((await processMailIngestion(event)).status).toBe("created");
-  expect((await getWalletDataset()).records[0]).toMatchObject({
+  expect((await getWalletDataset()).records[0]!).toMatchObject({
     accountAmount: 50,
     destinationAmount: 1.25,
   });
@@ -374,14 +379,14 @@ test("missing destination FX preserves an owned transfer without inventing dolla
     "needs_review",
   );
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     type: "transfer",
     accountId,
     accountAmount: 50,
     destinationAccountId,
     paymentStatus: "needs_review",
   });
-  expect(dataset.records[0].destinationAmount).toBeUndefined();
+  expect(dataset.records[0]!.destinationAmount).toBeUndefined();
   expect(
     calculateAccountBalances(dataset).find((row) => row.account.id === destinationAccountId)
       ?.totalBalance,
@@ -403,16 +408,16 @@ test("external transfer destinations clear when the origin is mapped and retain 
   expect(result.status).toBe("created");
   expect(result.warnings?.join(" ") ?? "").not.toMatch(/ownership/i);
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     type: "expense",
     accountId,
     accountAmount: 50,
     paymentType: "transfer",
     paymentStatus: "cleared",
   });
-  expect(dataset.records[0].note).toContain("Destination: Test bank · 123456789012");
-  expect(dataset.records[0].destinationAccountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
+  expect(dataset.records[0]!.note).toContain("Destination: Test bank · 123456789012");
+  expect(dataset.records[0]!.destinationAccountId).toBeUndefined();
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
   const metadata = (await fixture.pool.query("SELECT sanitized_payload FROM ingestion_events"))
     .rows[0].sanitized_payload;
   expect(JSON.stringify(metadata)).not.toContain("123456789012");
@@ -423,7 +428,7 @@ test("external transfers do not require merchant classification to confirm a kno
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
   const result = await processMailIngestion(bankInput("transfer"));
   expect(result.status).toBe("created");
-  expect((await getWalletDataset()).records[0].paymentStatus).toBe("cleared");
+  expect((await getWalletDataset()).records[0]!.paymentStatus).toBe("cleared");
 });
 
 test("an unknown transfer origin stays under review regardless of the destination bank", async () => {
@@ -431,12 +436,12 @@ test("an unknown transfer origin stays under review regardless of the destinatio
   event.destination = {};
   expect((await processMailIngestion(event)).status).toBe("needs_review");
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     paymentType: "transfer",
     paymentStatus: "needs_review",
   });
-  expect(dataset.records[0].accountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(500);
+  expect(dataset.records[0]!.accountId).toBeUndefined();
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(500);
 });
 
 test("the Itau mail flow preserves leading destination zeroes and records an outgoing transfer once", async () => {
@@ -464,12 +469,12 @@ test("the Itau mail flow preserves leading destination zeroes and records an out
     },
     () => ({ status: 201, body: '{"data":{"status":"created"}}' }),
   );
-  const event = mailIngestionSchema.parse(parsed.deliveries[0].payload);
+  const event = mailIngestionSchema.parse(parsed.deliveries[0]!.payload);
   expect((await processMailIngestion(event)).status).toBe("created");
   expect((await processMailIngestion(event)).status).toBe("already_processed");
   const dataset = await getWalletDataset();
   expect(dataset.records).toHaveLength(1);
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     type: "expense",
     accountId,
     amount: 630,
@@ -478,8 +483,8 @@ test("the Itau mail flow preserves leading destination zeroes and records an out
     paymentType: "transfer",
     paymentStatus: "cleared",
   });
-  expect(dataset.records[0].note).toContain("Destination: Banco Itau · 0123929");
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(-130);
+  expect(dataset.records[0]!.note).toContain("Destination: Banco Itau · 0123929");
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(-130);
 });
 
 test.each([true, false])(
@@ -510,24 +515,24 @@ test.each([true, false])(
       () => ({ status: 201, body: '{"data":{"status":"created"}}' }),
     );
     expect(parsed.deliveries).toHaveLength(1);
-    const event = mailIngestionSchema.parse(parsed.deliveries[0].payload);
+    const event = mailIngestionSchema.parse(parsed.deliveries[0]!.payload);
     expect((await processMailIngestion(event)).status).toBe(mapped ? "created" : "needs_review");
     expect((await processMailIngestion(event)).status).toBe("already_processed");
     const dataset = await getWalletDataset();
     expect(dataset.records).toHaveLength(1);
     expect(dataset.creditCardRecords).toHaveLength(0);
-    expect(dataset.records[0]).toMatchObject({
+    expect(dataset.records[0]!).toMatchObject({
       type: "expense",
       amount: 1050.55,
       currency: "UYU",
       paymentType: "transfer",
       paymentStatus: mapped ? "cleared" : "needs_review",
     });
-    expect(dataset.records[0].accountId).toBe(mapped ? accountId : undefined);
-    expect(dataset.records[0].note).toContain(
+    expect(dataset.records[0]!.accountId).toBe(mapped ? accountId : undefined);
+    expect(dataset.records[0]!.note).toContain(
       "Payment to: SISTARBANC · UYU 1050.55 · from ****1440",
     );
-    expect(calculateAccountBalances(dataset)[0].totalBalance).toBeCloseTo(
+    expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBeCloseTo(
       mapped ? -550.55 : 500,
       2,
     );
@@ -539,12 +544,12 @@ test("a known transfer origin still requires review when its primary currency co
   vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Offline"));
   expect((await processMailIngestion(bankInput("transfer"))).status).toBe("needs_review");
   const dataset = await getWalletDataset();
-  expect(dataset.records[0]).toMatchObject({
+  expect(dataset.records[0]!).toMatchObject({
     accountId,
     exchangeRateToPrimary: 0,
     paymentStatus: "needs_review",
   });
-  expect(calculateAccountBalances(dataset)[0].totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
 });
 
 test("an invalid configured owned destination cannot become a third-party expense", async () => {

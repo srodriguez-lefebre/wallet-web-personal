@@ -2,6 +2,13 @@ import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-re
 import { useNavigate, useParams } from "react-router-dom";
 import { Check, Edit3 } from "lucide-react";
 import { useRef, useState } from "react";
+import { calculateGoalFundingPlan } from "@shared/planning";
+import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
+
+import type { GoalPatch } from "@shared/schemas";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,10 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import type { GoalPatch } from "@shared/schemas";
-import { calculateGoalFundingPlan } from "@shared/planning";
-import { calculateGoalProgress, formatMoney } from "@shared/calculations";
-import { goalStatusLabels } from "@shared/constants";
 
 export function GoalDetailView() {
   const { goalId } = useParams();
@@ -41,7 +44,12 @@ export function GoalDetailView() {
     return (
       <div>
         <PageHeader title="Goal not found" description="This goal does not exist." />
-        <Button variant="outline" onClick={() => navigate("/goals")}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/goals");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
@@ -84,7 +92,7 @@ export function GoalDetailView() {
       type: "expense",
       goalId: goalProgress.goal.id,
     });
-    navigate("/records");
+    void navigate("/records");
   }
 
   return (
@@ -95,7 +103,12 @@ export function GoalDetailView() {
         title={goalProgress.goal.name}
         description="Goal detail, reserved money, and directly linked records."
       >
-        <Button variant="outline" onClick={() => navigate("/goals")}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/goals");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Goals
         </Button>
@@ -170,7 +183,9 @@ export function GoalDetailView() {
             <Button
               aria-label="Complete goal and release reservations"
               disabled={pending}
-              onClick={() => saveGoal({ status: "completed" }, true)}
+              onClick={() => {
+                finishAction(saveGoal({ status: "completed" }, true));
+              }}
             >
               {pending ? "Closing..." : "Complete and release"}
             </Button>

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { goalPatchSchema } from "@shared/schemas";
+
 import { buildGoalUpdatePayload } from "./goal-update";
 
 describe("buildGoalUpdatePayload", () => {

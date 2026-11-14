@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
-import type { Debt, GoalProgress, Investment } from "./types.js";
+
 import {
   calculateGoalFundingPlan,
   debtDueState,
   selectDebtsByDueDate,
   summarizeInvestmentsByCurrency,
 } from "./planning.js";
+
+import type { Debt, GoalProgress, Investment } from "./types.js";
 
 const now = new Date(2026, 5, 21, 23, 59);
 function progress(overrides: Partial<GoalProgress> = {}): GoalProgress {
@@ -134,8 +136,8 @@ test("open debts sort dated first and undated last, preserving unknown balances"
   ];
   const result = selectDebtsByDueDate(debts, { window: "all", asOf: now });
   expect(result.map((item) => item.id)).toEqual(["earlier", "later", "unknown"]);
-  expect(result[2].pendingAmount).toBeUndefined();
-  expect(debts[0].id).toBe("unknown");
+  expect(result[2]!.pendingAmount).toBeUndefined();
+  expect(debts[0]!.id).toBe("unknown");
 });
 test("next seven days includes today and day seven, excluding overdue and day eight", () => {
   const debts = [
@@ -205,6 +207,6 @@ test("legacy zero cost never produces infinite percentage", () => {
   expect(
     summarizeInvestmentsByCurrency([
       { currency: "USD", amountInvested: 0, currentValue: 10 } as Investment,
-    ])[0].returnPercentage,
+    ])[0]!.returnPercentage,
   ).toBeNull();
 });

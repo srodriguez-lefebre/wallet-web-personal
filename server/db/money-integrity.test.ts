@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import {
   createDebt,
@@ -15,7 +18,6 @@ import {
   calculateAccountBalances,
   calculateVisibleDebtSummary,
 } from "../../shared/calculations.js";
-import { randomUUID } from "node:crypto";
 import { importWalletRecords } from "./record-import.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
@@ -76,14 +78,14 @@ test("cancelling, editing and deleting payments reconciles the debt atomically",
   const debt = await createDebt(debtInput);
   const result = await recordDebtPayment(debt.id, payment);
   await updateRecord(result!.record.id, { amount: 50, accountAmount: 2000 });
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(150);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(150);
   await updateRecord(result!.record.id, { paymentStatus: "cancelled" });
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(200);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(200);
   await updateRecord(result!.record.id, { paymentStatus: "cleared" });
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(150);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(150);
   await deleteRecord(result!.record.id);
   await deleteRecord(result!.record.id);
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(200);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(200);
 });
 test("simultaneous payments cannot overpay or partially insert a financial record", async () => {
   const debt = await createDebt({ ...debtInput, originalAmount: 100, pendingAmount: 100 });
@@ -93,7 +95,7 @@ test("simultaneous payments cannot overpay or partially insert a financial recor
   ]);
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
   const dataset = await getWalletDataset();
-  expect(dataset.debts[0].pendingAmount).toBe(25);
+  expect(dataset.debts[0]!.pendingAmount).toBe(25);
   expect(dataset.records).toHaveLength(1);
 });
 
@@ -101,14 +103,14 @@ test("reviewing a valid debt payment preserves the debt payment and bank balance
   const debt = await createDebt(debtInput);
   const result = await recordDebtPayment(debt.id, payment);
   await updateRecord(result!.record.id, { paymentStatus: "needs_review" });
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(100);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(100);
   expect(
     calculateAccountBalances(await getWalletDataset()).find(
       (item) => item.account.id === accountId,
     )!.balance,
   ).toBe(1000);
   await updateRecord(result!.record.id, { paymentStatus: "cleared" });
-  expect((await getWalletDataset()).debts[0].pendingAmount).toBe(100);
+  expect((await getWalletDataset()).debts[0]!.pendingAmount).toBe(100);
 });
 
 test("unclassified review history with unknown primary conversion can be cancelled and retried without a bank assignment", async () => {
@@ -126,12 +128,12 @@ test("unclassified review history with unknown primary conversion can be cancell
   await updateRecord(record.id, { paymentStatus: "cancelled" });
   await updateRecord(record.id, { paymentStatus: "cancelled" });
   const dataset = await getWalletDataset();
-  expect(dataset.records.find((row) => row.id === record.id)).toMatchObject({
+  expect(dataset.records.find((row) => row.id === record.id)!).toMatchObject({
     paymentStatus: "cancelled",
     exchangeRateToPrimary: 0,
   });
-  expect(dataset.records[0].accountId).toBeUndefined();
-  expect(dataset.records[0].categoryId).toBeUndefined();
+  expect(dataset.records[0]!.accountId).toBeUndefined();
+  expect(dataset.records[0]!.categoryId).toBeUndefined();
   expect(
     calculateAccountBalances(dataset).find((item) => item.account.id === accountId)!.totalBalance,
   ).toBe(5000);
@@ -192,8 +194,8 @@ test("unknown recurring amounts stay unknown and cycles do not precede rule star
   );
   const generated = await generateDueRecurringDebts(new Date("2026-02-10T12:00:00Z"));
   expect(generated).toHaveLength(1);
-  expect(generated[0].pendingAmount).toBeUndefined();
-  expect(generated[0].status).toBe("active");
+  expect(generated[0]!.pendingAmount).toBeUndefined();
+  expect(generated[0]!.status).toBe("active");
 });
 test("overlapping imports across independent connections do not duplicate records or lose unique rows", async () => {
   const input = {

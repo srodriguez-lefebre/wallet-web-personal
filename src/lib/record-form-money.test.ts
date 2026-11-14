@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+
 import { recordAccountAmount, scaleConvertedAmount } from "./record-form-money";
 
 test("editing a same-currency amount updates both transfer sides despite hidden old amounts", () => {

@@ -1,6 +1,8 @@
-import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
+
+import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import { createDb } from "./client.js";
 import {
   accounts,
@@ -39,7 +41,6 @@ import {
   calculateAccountBalances,
   calculateAccountBalanceAtDate,
 } from "../../shared/calculations.js";
-
 import { restoreWalletBackup } from "./wallet-restore.js";
 import { recordPatchSchema } from "../../shared/schemas.js";
 
@@ -152,6 +153,7 @@ test("refunds preserve original currency and historical conversion", async () =>
 test("a retroactive purchase reopens a paid statement and date edits reassign its cycle", async () => {
   await purchase();
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment());
   const added = await purchase(50);
   await ensureCreditCardStatements();
@@ -171,6 +173,7 @@ test("a paid purchase refund transfers its payment credit to other purchases", a
   const first = await purchase();
   await purchase(100, "2020-06-02T12:00:00.000Z");
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment());
   await refund(first.id, 100);
   const dataset = await getWalletDataset();
@@ -192,6 +195,7 @@ test("refund credit clears other purchase currencies on the same statement", asy
   });
   await purchase(1000, "2020-06-02T12:00:00.000Z");
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(4000));
   await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -225,6 +229,7 @@ test("payment allocations settle debt in the purchase currency", async () => {
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(4000));
   const summary = calculateCreditCardSummary(await getWalletDataset(), card);
   expect(summary.usedLimit).toBe(0);
@@ -247,6 +252,7 @@ test("a partially paid statement becomes overdue after its due date", () => {
 test("concurrent statement payments debit the bank only once", async () => {
   await purchase();
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   const results = await Promise.allSettled([
     payCreditCardStatement(cardId, statement.id, payment()),
     payCreditCardStatement(cardId, statement.id, payment()),
@@ -257,6 +263,7 @@ test("concurrent statement payments debit the bank only once", async () => {
 test("a failed payment rolls back its allocations and statement status", async () => {
   await purchase();
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await expect(
     payCreditCardStatement(cardId, statement.id, {
       ...payment(),
@@ -266,11 +273,12 @@ test("a failed payment rolls back its allocations and statement status", async (
   const dataset = await getWalletDataset();
   expect(dataset.creditCardPayments).toHaveLength(0);
   expect(dataset.creditCardPaymentAllocations).toHaveLength(0);
-  expect(dataset.creditCardStatements[0].status).toBe("overdue");
+  expect(dataset.creditCardStatements[0]!.status).toBe("overdue");
 });
 test("a partial payment retry returns the original payment and rejects changed payloads", async () => {
   await purchase();
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   const request = { ...payment(25), idempotencyKey: randomUUID() };
   const first = await payCreditCardStatement(cardId, statement.id, request);
   const retry = await payCreditCardStatement(cardId, statement.id, request);
@@ -304,6 +312,7 @@ test("deleting a purchase cannot orphan its refund or payment history", async ()
   await expect(deleteCreditCardRecord(cardId, original.id)).rejects.toThrow();
   const second = await purchase(50);
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(130));
   await expect(deleteCreditCardRecord(cardId, second.id)).rejects.toThrow();
   expect(
@@ -328,9 +337,10 @@ test("a paid linked purchase refund cannot credit the bank while its payment cre
     exchangeRateToLimitCurrency: 1,
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
-  const original = (await getWalletDataset()).creditCardRecords[0];
+  const original = (await getWalletDataset()).creditCardRecords[0]!;
   await purchase(100, "2020-06-02T12:00:00.000Z");
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(100));
   await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -367,6 +377,7 @@ test("a paid direct purchase refund keeps its credit on the card", async () => {
   });
   await purchase(100, "2020-06-02T12:00:00.000Z");
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(100));
   const returned = await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -407,9 +418,10 @@ test("a partially paid linked refund restores only the unpaid bank reservation",
     exchangeRateToLimitCurrency: 1,
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
-  const original = (await getWalletDataset()).creditCardRecords[0];
+  const original = (await getWalletDataset()).creditCardRecords[0]!;
   await purchase(100, "2020-06-02T12:00:00.000Z");
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(40));
   const returned = await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -531,8 +543,9 @@ test("a fully paid foreign-currency refund needs no bank quote because it remain
     exchangeRateToLimitCurrency: 40,
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
-  const original = (await getWalletDataset()).creditCardRecords[0];
+  const original = (await getWalletDataset()).creditCardRecords[0]!;
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(4000));
   const returned = await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -554,17 +567,15 @@ test("a fully paid foreign-currency refund needs no bank quote because it remain
 
 test("reused payment credit releases the other purchase's reservation in its own bank account", async () => {
   const otherAccountId = randomUUID();
-  await createDb()
-    .insert(accounts)
-    .values({
-      id: otherAccountId,
-      name: "Other bank",
-      type: "bank",
-      currency: "UYU",
-      initialBalance: "10000",
-      color: "blue",
-      icon: "bank",
-    });
+  await createDb().insert(accounts).values({
+    id: otherAccountId,
+    name: "Other bank",
+    type: "bank",
+    currency: "UYU",
+    initialBalance: "10000",
+    color: "blue",
+    icon: "bank",
+  });
   const original = await createCreditCardRecord(cardId, {
     kind: "purchase",
     amount: 100,
@@ -590,6 +601,7 @@ test("reused payment credit releases the other purchase's reservation in its own
     occurredAt: "2020-06-02T12:00:00.000Z",
   });
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(100));
   await createCreditCardRecord(cardId, {
     kind: "refund",
@@ -610,17 +622,15 @@ test("reused payment credit releases the other purchase's reservation in its own
 });
 test("reservation release excludes future refunds and payments from historical balances", async () => {
   const otherAccountId = randomUUID();
-  await createDb()
-    .insert(accounts)
-    .values({
-      id: otherAccountId,
-      name: "Other bank",
-      type: "bank",
-      currency: "UYU",
-      initialBalance: "10000",
-      color: "blue",
-      icon: "bank",
-    });
+  await createDb().insert(accounts).values({
+    id: otherAccountId,
+    name: "Other bank",
+    type: "bank",
+    currency: "UYU",
+    initialBalance: "10000",
+    color: "blue",
+    icon: "bank",
+  });
   const original = await createCreditCardRecord(cardId, {
     kind: "purchase",
     amount: 100,
@@ -646,6 +656,7 @@ test("reservation release excludes future refunds and payments from historical b
     occurredAt: "2020-06-02T12:00:00.000Z",
   });
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, {
     ...payment(40),
     occurredAt: "2020-07-01T12:00:00.000Z",
@@ -681,17 +692,15 @@ test("reservation release excludes future refunds and payments from historical b
 
 test("releasing part of a bank reservation preserves its rounding remainder", async () => {
   const otherAccountId = randomUUID();
-  await createDb()
-    .insert(accounts)
-    .values({
-      id: otherAccountId,
-      name: "Other bank",
-      type: "bank",
-      currency: "UYU",
-      initialBalance: "10000",
-      color: "blue",
-      icon: "bank",
-    });
+  await createDb().insert(accounts).values({
+    id: otherAccountId,
+    name: "Other bank",
+    type: "bank",
+    currency: "UYU",
+    initialBalance: "10000",
+    color: "blue",
+    icon: "bank",
+  });
   const original = await createCreditCardRecord(cardId, {
     kind: "purchase",
     amount: 1,
@@ -705,6 +714,7 @@ test("releasing part of a bank reservation preserves its rounding remainder", as
     occurredAt: "2020-06-01T12:00:00.000Z",
   });
   const [statement] = await listCreditCardStatements(cardId);
+  if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(cardId, statement.id, payment(1));
   await createCreditCardRecord(cardId, {
     kind: "purchase",
@@ -791,7 +801,7 @@ test("a bank refund uses the account-to-primary quote instead of an invented 1:1
     occurredAt: new Date().toISOString(),
   });
   const dataset = await getWalletDataset();
-  const bankRefund = dataset.records.find((row) => row.type === "income");
+  const bankRefund = dataset.records.find((row) => row.type === "income")!;
   expect(bankRefund).toMatchObject({
     amount: 4000,
     currency: "UYU",
@@ -829,7 +839,7 @@ test.each(["refund", "payment"] as const)(
       .insert(creditCards)
       .values({ ...card, id: otherCardId, creditLimit: "10000" });
     if (dependency === "refund") await refund(original.id, 40);
-    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(40));
+    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0]!.id, payment(40));
     for (const patch of [
       { paymentStatus: "cancelled" as const },
       { creditCardId: undefined },
@@ -888,6 +898,7 @@ test("cancelled creates no active linked card liability through single or bulk c
   const status = "cancelled";
   const single = await createRecord(linkedPurchaseInput(status));
   const [bulk] = await createRecordsBulk([linkedPurchaseInput(status)]);
+  if (!bulk) throw new Error("Expected synthetic bulk record");
   expect((await getWalletDataset()).creditCardRecords).toHaveLength(0);
   await updateRecord(single.id, { paymentStatus: "cleared" });
   await updateRecord(bulk.id, { paymentStatus: "cleared" });
@@ -899,6 +910,7 @@ test("cancelled creates no active linked card liability through single or bulk c
 test("review purchases preserve linked liability through single and bulk creation and clearing", async () => {
   const single = await createRecord(linkedPurchaseInput("needs_review"));
   const [bulk] = await createRecordsBulk([linkedPurchaseInput("needs_review")]);
+  if (!bulk) throw new Error("Expected synthetic bulk record");
   const reviewed = await getWalletDataset();
   expect(reviewed.creditCardRecords.filter((row) => row.kind === "purchase")).toHaveLength(2);
   expect(
@@ -925,7 +937,7 @@ test("clearing a card-only review purchase preserves its wallet history and repo
   const movement = before.creditCardRecords.find((row) => row.walletRecordId === wallet.id)!;
   await updateRecord(wallet.id, { paymentStatus: "cleared" });
   const after = await getWalletDataset();
-  expect(after.records.find((row) => row.id === wallet.id)).toMatchObject({
+  expect(after.records.find((row) => row.id === wallet.id)!).toMatchObject({
     paymentStatus: "cleared",
     amount: 100,
   });
@@ -960,7 +972,7 @@ test("unknown original primary FX cannot produce a cleared bank refund unless a 
     });
   await refund(original.id, 20);
   const resolved = await getWalletDataset();
-  expect(resolved.records.find((row) => row.type === "income")).toMatchObject({
+  expect(resolved.records.find((row) => row.type === "income")!).toMatchObject({
     paymentStatus: "cleared",
     amount: 20,
     currency: "UYU",
@@ -985,17 +997,15 @@ test.each(["income", "transfer"] as const)(
   "generic %s cannot bypass the Cards refund action",
   async (type) => {
     const destinationAccountId = randomUUID();
-    await createDb()
-      .insert(accounts)
-      .values({
-        id: destinationAccountId,
-        name: "Other bank",
-        type: "bank",
-        currency: "UYU",
-        initialBalance: "10000",
-        color: "blue",
-        icon: "bank",
-      });
+    await createDb().insert(accounts).values({
+      id: destinationAccountId,
+      name: "Other bank",
+      type: "bank",
+      currency: "UYU",
+      initialBalance: "10000",
+      color: "blue",
+      icon: "bank",
+    });
     const invalid = {
       ...linkedPurchaseInput(),
       type,
@@ -1082,23 +1092,23 @@ test("linked refund bank history rejects generic financial changes but permits n
   await expect(deleteRecord(returned.walletRecordId!)).rejects.toThrow();
   await updateRecord(returned.walletRecordId!, { note: "Confirmed refund" });
   const after = await getWalletDataset();
-  expect(after.creditCardRecords.find((row) => row.id === returned.id)).toMatchObject({
+  expect(after.creditCardRecords.find((row) => row.id === returned.id)!).toMatchObject({
     originalRecordId: original.id,
     kind: "refund",
     amount: 20,
     note: "Confirmed refund",
   });
-  expect(after.records.find((row) => row.id === returned.walletRecordId)).toMatchObject({
+  expect(after.records.find((row) => row.id === returned.walletRecordId)!).toMatchObject({
     amount: 20,
     paymentStatus: "cleared",
   });
   await updateRecord(returned.walletRecordId!, { paymentStatus: "needs_review" });
   const reviewed = await getWalletDataset();
-  expect(reviewed.records.find((row) => row.id === returned.walletRecordId)).toMatchObject({
+  expect(reviewed.records.find((row) => row.id === returned.walletRecordId)!).toMatchObject({
     amount: 20,
     paymentStatus: "needs_review",
   });
-  expect(reviewed.creditCardRecords.find((row) => row.id === returned.id)).toMatchObject({
+  expect(reviewed.creditCardRecords.find((row) => row.id === returned.id)!).toMatchObject({
     kind: "refund",
     amount: 20,
   });
@@ -1130,14 +1140,14 @@ test("foreign linked refund metadata keeps card-native and bank amounts distinct
   });
   await updateRecord(returned.walletRecordId!, { note: "Verified foreign refund" });
   const after = await getWalletDataset();
-  expect(after.creditCardRecords.find((row) => row.id === returned.id)).toMatchObject({
+  expect(after.creditCardRecords.find((row) => row.id === returned.id)!).toMatchObject({
     originalRecordId: original.id,
     amount: 20,
     currency: "USD",
     accountAmount: 800,
     note: "Verified foreign refund",
   });
-  expect(after.records.find((row) => row.id === returned.walletRecordId)).toMatchObject({
+  expect(after.records.find((row) => row.id === returned.walletRecordId)!).toMatchObject({
     amount: 800,
     currency: "UYU",
   });
@@ -1159,7 +1169,7 @@ test.each(["refund", "payment"] as const)(
     const dataset = await getWalletDataset();
     const original = dataset.creditCardRecords.find((row) => row.walletRecordId === wallet.id)!;
     if (dependency === "refund") await refund(original.id, 20);
-    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(20));
+    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0]!.id, payment(20));
     await expect(updateRecord(wallet.id, { accountAmount: 10 })).rejects.toThrow();
     await expect(
       updateCreditCardRecord(cardId, original.id, { accountAmount: 10 }),
@@ -1177,7 +1187,7 @@ test.each(["refund", "payment"] as const)(
       occurredAt: "2020-06-02T12:00:00.000Z",
     });
     if (dependency === "refund") await refund(direct.id, 20);
-    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0].id, payment(100));
+    else await payCreditCardStatement(cardId, dataset.creditCardStatements[0]!.id, payment(100));
     await expect(
       updateCreditCardRecord(cardId, direct.id, { accountAmount: 10 }),
     ).rejects.toThrow();

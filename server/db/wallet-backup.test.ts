@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import {
   applyMigrations,
   installLocalTransport,
@@ -156,14 +157,14 @@ test("backup retains archived goals and every ledger reference without exposing 
   const record = await archiveHistory();
   const normal = await getWalletDataset();
   expect(normal.goals).toEqual([]);
-  expect(normal.records[0].goalIds).toEqual([goalId]);
+  expect(normal.records[0]!.goalIds).toEqual([goalId]);
   const backup = await getWalletBackup(createDb());
   expect(backup.goals).toHaveLength(1);
-  expect(backup.goals[0]).toMatchObject({
+  expect(backup.goals[0]!).toMatchObject({
     id: goalId,
     deletedAt: expect.any(String),
   });
-  expect(backup.records[0].id).toBe(record.id);
+  expect(backup.records[0]!.id).toBe(record.id);
   expect(backup.goalReservationMovements).toHaveLength(3);
   expect(
     backup.goalReservationMovements?.find((movement) => movement.type === "consume"),
@@ -178,11 +179,11 @@ test("backup retains soft-deleted records and accounts referenced by durable fin
   expect(normal.accounts).toEqual([]);
   expect(normal.records).toEqual([]);
   const backup = await getWalletBackup(createDb());
-  expect(backup.accounts[0]).toMatchObject({
+  expect(backup.accounts[0]!).toMatchObject({
     id: accountId,
     deletedAt: expect.any(String),
   });
-  expect(backup.records[0]).toMatchObject({
+  expect(backup.records[0]!).toMatchObject({
     id: record.id,
     deletedAt: expect.any(String),
   });
@@ -192,7 +193,7 @@ test("JSON export and atomic restore preserve archived goals and reservation led
   await archiveHistory();
   const before = await getWalletDataset();
   const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
-  expect(backup.goals[0].deletedAt).toEqual(expect.any(String));
+  expect(backup.goals[0]!.deletedAt).toEqual(expect.any(String));
   await restoreWalletBackup(backup);
   expect(await getWalletDataset()).toEqual(before);
   expect(JSON.parse(JSON.stringify(await getWalletBackup()))).toEqual(
@@ -205,8 +206,8 @@ test("export and restore retain deleted records and archived accounts needed by 
   await deleteRecord(record.id);
   await pg.query("update accounts set deleted_at=now() where id=$1", [accountId]);
   const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
-  expect(backup.accounts[0].deletedAt).toEqual(expect.any(String));
-  expect(backup.records[0].deletedAt).toEqual(expect.any(String));
+  expect(backup.accounts[0]!.deletedAt).toEqual(expect.any(String));
+  expect(backup.records[0]!.deletedAt).toEqual(expect.any(String));
   await restoreWalletBackup(backup);
   const reloaded = await getWalletDataset();
   expect(reloaded.accounts).toEqual([]);

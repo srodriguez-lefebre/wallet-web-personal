@@ -1,4 +1,5 @@
 import { useState } from "react";
+
 import { CategoryIcon } from "@/components/wallet/category-icon";
 
 export type CategoryPickerItem = {

@@ -1,5 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { recordTemplateSchema } from "@shared/schemas";
+import { formatMoney } from "@shared/calculations";
+
+import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -17,9 +22,6 @@ import {
   templateReplacementPatch,
 } from "@/lib/record-templates";
 import { useWallet } from "@/providers/wallet-provider";
-import { recordTemplateSchema } from "@shared/schemas";
-import { formatMoney } from "@shared/calculations";
-import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
 
 type Draft = Omit<RecordTemplate, "id" | "amount"> & { amount: string };
 const field =
@@ -229,7 +231,7 @@ export function RecordTemplateManager() {
                     aria-label={`Usar plantilla ${template.name}`}
                     onClick={() => {
                       requestNewRecord(template.id);
-                      navigate("/records");
+                      void navigate("/records");
                     }}
                   >
                     Usar
@@ -268,7 +270,12 @@ export function RecordTemplateManager() {
                 Configuración reutilizable. Las fechas y conversiones se eligen al usarla.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={save} className="space-y-4">
+            <form
+              onSubmit={(event) => {
+                void save(event);
+              }}
+              className="space-y-4"
+            >
               {error && (
                 <p role="alert" className="text-sm text-destructive">
                   {error}

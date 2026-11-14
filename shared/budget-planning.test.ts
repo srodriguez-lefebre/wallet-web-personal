@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+
 import { mockWalletData } from "./mock-data";
-import type { Budget, WalletDataset, WalletRecord } from "./types";
 import { buildBudgetPlan } from "./budget-planning";
 import { reportDataset } from "../src/lib/preferences";
+
+import type { Budget, WalletDataset, WalletRecord } from "./types";
 
 const food = "10000000-0000-4000-8000-000000000001";
 const dining = "10000000-0000-4000-8000-000000000002";
@@ -31,7 +33,7 @@ function fixture(): WalletDataset {
 }
 function expense(overrides: Partial<WalletRecord> = {}): WalletRecord {
   return {
-    ...mockWalletData.records[0],
+    ...mockWalletData.records[0]!,
     id: "expense",
     type: "expense",
     accountId: "acc-bank",
@@ -89,7 +91,7 @@ describe("history budget planning", () => {
         amountInLimitCurrency: 3000,
       },
     ];
-    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]).toMatchObject({
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]!).toMatchObject({
       total: 30,
       limitAmount: 10,
     });
@@ -104,20 +106,20 @@ describe("history budget planning", () => {
     const plan = buildBudgetPlan(dataset, "2026-02", 10);
     expect(plan.sourceMonths).toEqual(["2025-11", "2025-12", "2026-01"]);
     expect(plan.proposals).toHaveLength(1);
-    expect(plan.proposals[0]).toMatchObject({
+    expect(plan.proposals[0]!).toMatchObject({
       categoryId: food,
       total: 100.01,
       limitAmount: 36.68,
       status: "ready",
     });
-    expect(plan.proposals[0].monthlyAmounts).toEqual([0, 0, 100.01]);
+    expect(plan.proposals[0]!.monthlyAmounts).toEqual([0, 0, 100.01]);
   });
 
   it("handles leap calendar boundaries and allows margins zero through one hundred", () => {
     const dataset = fixture();
     dataset.records = [expense({ amount: 30, occurredAt: "2024-02-29T12:00:00Z" })];
-    expect(buildBudgetPlan(dataset, "2024-03", 0).proposals[0].limitAmount).toBe(10);
-    expect(buildBudgetPlan(dataset, "2024-03", 100).proposals[0].limitAmount).toBe(20);
+    expect(buildBudgetPlan(dataset, "2024-03", 0).proposals[0]!.limitAmount).toBe(10);
+    expect(buildBudgetPlan(dataset, "2024-03", 100).proposals[0]!.limitAmount).toBe(20);
     for (const margin of [-1, 101, Number.NaN])
       expect(() => buildBudgetPlan(dataset, "2024-03", margin)).toThrow();
     for (const month of ["2024-00", "2024-13", "2024-2", "not-a-month"])
@@ -142,7 +144,7 @@ describe("history budget planning", () => {
     ];
     dataset.creditCardRecords = [
       {
-        ...mockWalletData.creditCardRecords[0],
+        ...mockWalletData.creditCardRecords[0]!,
         walletRecordId: "expense",
         amount: 5000,
         amountInLimitCurrency: 5000,
@@ -150,7 +152,7 @@ describe("history budget planning", () => {
     ];
     const plan = buildBudgetPlan(dataset, "2026-02", 0);
     expect(plan.proposals).toHaveLength(1);
-    expect(plan.proposals[0]).toMatchObject({
+    expect(plan.proposals[0]!).toMatchObject({
       categoryId: food,
       total: 593,
       limitAmount: 197.67,
@@ -161,32 +163,32 @@ describe("history budget planning", () => {
     const dataset = fixture();
     dataset.accounts = [
       {
-        ...dataset.accounts[0],
+        ...dataset.accounts[0]!,
         id: "visible",
         isVisible: true,
         isActive: false,
       },
-      { ...dataset.accounts[0], id: "hidden", isVisible: false },
+      { ...dataset.accounts[0]!, id: "hidden", isVisible: false },
     ];
     dataset.records = [
       expense({ accountId: "visible", amount: 30 }),
       expense({ accountId: "hidden", amount: 300 }),
     ];
-    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total).toBe(30);
+    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0]!.total).toBe(30);
     dataset.settings.includeHiddenAccountsInReports = true;
-    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total).toBe(330);
+    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0]!.total).toBe(330);
   });
 
   it("withholds incomplete category totals when historical FX is invalid", () => {
     const dataset = fixture();
     dataset.records = [expense(), expense({ currency: "USD", exchangeRateToPrimary: 0 })];
-    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]).toMatchObject({
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]!).toMatchObject({
       status: "missing_exchange_rate",
       total: null,
       limitAmount: null,
     });
     dataset.records = [expense({ currency: "USD", exchangeRateToPrimary: Number.NaN })];
-    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0].status).toBe(
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]!.status).toBe(
       "missing_exchange_rate",
     );
   });
@@ -203,38 +205,39 @@ describe("history budget planning", () => {
 
   it("does not offer categories whose parent hierarchy is missing or cyclic", () => {
     const dataset = fixture();
-    dataset.categories[0].parentId = "deleted-parent";
+    dataset.categories[0]!.parentId = "deleted-parent";
     dataset.records = [expense()];
     expect(buildBudgetPlan(dataset, "2026-02", 10).proposals).toEqual([]);
-    dataset.categories[0].parentId = dining;
+    dataset.categories[0]!.parentId = dining;
     expect(buildBudgetPlan(dataset, "2026-02", 10).proposals).toEqual([]);
   });
 
   it("rounds any positive small estimate up to a cent without representation noise adding another cent", () => {
     const dataset = fixture();
     dataset.records = [expense({ amount: 1e-20 })];
-    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0].limitAmount).toBe(0.01);
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]!.limitAmount).toBe(0.01);
     dataset.records = [expense({ amount: 30 })];
-    expect(buildBudgetPlan(dataset, "2026-02", 10).proposals[0].limitAmount).toBe(11);
+    expect(buildBudgetPlan(dataset, "2026-02", 10).proposals[0]!.limitAmount).toBe(11);
   });
 
   it("blocks overlapping active categories in any currency or scope but permits archived budgets", () => {
     const dataset = fixture();
     dataset.records = [expense()];
     const budget: Budget = {
-      ...mockWalletData.budgets[0],
+      ...mockWalletData.budgets[0]!,
       id: "existing",
       categoryId: dining,
       currency: "USD",
       accountId: "hidden",
       isActive: true,
     };
-    expect(buildBudgetPlan(dataset, "2026-02", 10, [budget]).proposals[0]).toMatchObject({
+    expect(buildBudgetPlan(dataset, "2026-02", 10, [budget]).proposals[0]!).toMatchObject({
       status: "conflict",
       conflictingBudgetIds: ["existing"],
     });
     expect(
-      buildBudgetPlan(dataset, "2026-02", 10, [{ ...budget, isActive: false }]).proposals[0].status,
+      buildBudgetPlan(dataset, "2026-02", 10, [{ ...budget, isActive: false }]).proposals[0]!
+        .status,
     ).toBe("ready");
   });
 });

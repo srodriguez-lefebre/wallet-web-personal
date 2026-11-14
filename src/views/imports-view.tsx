@@ -1,7 +1,13 @@
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
-import { PageHeader } from "@/components/page/page-header";
 import { useNavigate } from "react-router-dom";
+import { formatMoney, recordsForDateRange } from "@shared/calculations";
+import { walletBackupSchema } from "@shared/wallet-backup-schema";
+
+import type { WalletDataset } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
+import { PageHeader } from "@/components/page/page-header";
 import { DataHealthPanel } from "@/components/wallet/data-health-panel";
 import {
   backupFilename,
@@ -15,9 +21,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useWallet } from "@/providers/wallet-provider";
 import { useActionToast } from "@/lib/use-action-toast";
 import { prepareCsvRecords, recordsCsv } from "@/lib/record-import";
-import { formatMoney, recordsForDateRange } from "@shared/calculations";
-import { walletBackupSchema } from "@shared/wallet-backup-schema";
-import type { WalletDataset } from "@shared/types";
 
 function downloadText(filename: string, content: string, type: string) {
   const url = URL.createObjectURL(new Blob([content], { type }));
@@ -79,7 +82,7 @@ export function ImportsView() {
     clearRecordFilters();
     setAllPeriod();
     if (review) setRecordFilters({ paymentStatus: "needs_review" });
-    navigate("/records");
+    void navigate("/records");
   }
 
   async function action(work: () => Promise<void>, label: string) {
@@ -177,14 +180,18 @@ export function ImportsView() {
         title="Import / Export"
         description="Backups and exports load complete history before creating the file."
       >
-        <Button disabled={busy} variant="outline" onClick={() => void exportData("json")}>
+        <Button disabled={busy} variant="outline" onClick={() => finishAction(exportData("json"))}>
           <Download className="h-4 w-4" />
           JSON backup
         </Button>
-        <Button disabled={busy} variant="outline" onClick={() => void exportData("csv")}>
+        <Button disabled={busy} variant="outline" onClick={() => finishAction(exportData("csv"))}>
           Records CSV
         </Button>
-        <Button disabled={busy} variant="outline" onClick={() => void exportData("period")}>
+        <Button
+          disabled={busy}
+          variant="outline"
+          onClick={() => finishAction(exportData("period"))}
+        >
           Selected period CSV
         </Button>
       </PageHeader>
@@ -197,7 +204,9 @@ export function ImportsView() {
         getSnapshot={getBackupDataset}
         onReview={() => openRecords(true)}
         onRecords={() => openRecords()}
-        onCards={() => navigate("/cards")}
+        onCards={() => {
+          void navigate("/cards");
+        }}
       />
       {!isAllHistoryComplete ? (
         <p className="mb-4 text-sm text-muted-foreground">

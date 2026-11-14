@@ -1,13 +1,15 @@
 import { expect, test } from "vitest";
+
 import { mockWalletData } from "./mock-data";
-import type { WalletRecord } from "./types";
 import { reportDataset } from "../src/lib/preferences";
 import { calculateMerchantSpending } from "./merchant-analytics";
+
+import type { WalletRecord } from "./types";
 
 const range = { from: "2026-02-01", to: "2026-02-28" };
 function record(id: string, patch: Partial<WalletRecord> = {}): WalletRecord {
   return {
-    ...mockWalletData.records[0],
+    ...mockWalletData.records[0]!,
     id,
     type: "expense",
     amount: 10,
@@ -51,8 +53,8 @@ test("only financial purchases in the selected range contribute to the gross mer
 });
 test("merchant totals respect hidden-account preference and explicit account selection", () => {
   const data = structuredClone(mockWalletData),
-    visible = data.accounts[0],
-    hidden = data.accounts[1];
+    visible = data.accounts[0]!,
+    hidden = data.accounts[1]!;
   visible.isVisible = true;
   hidden.isVisible = false;
   data.settings.includeHiddenAccountsInReports = false;
@@ -60,12 +62,12 @@ test("merchant totals respect hidden-account preference and explicit account sel
     record("visible", { accountId: visible.id }),
     record("hidden", { accountId: hidden.id, amount: 20 }),
   ];
-  expect(calculateMerchantSpending(reportDataset(data).records, range)[0].total).toBe(400);
-  expect(calculateMerchantSpending(reportDataset(data, hidden.id).records, range)[0].total).toBe(
+  expect(calculateMerchantSpending(reportDataset(data).records, range)[0]!.total).toBe(400);
+  expect(calculateMerchantSpending(reportDataset(data, hidden.id).records, range)[0]!.total).toBe(
     800,
   );
   data.settings.includeHiddenAccountsInReports = true;
-  expect(calculateMerchantSpending(reportDataset(data).records, range)[0].total).toBe(1200);
+  expect(calculateMerchantSpending(reportDataset(data).records, range)[0]!.total).toBe(1200);
 });
 test("unnamed purchases remain visible and distinct merchant spelling is preserved", () => {
   const rows = calculateMerchantSpending(
@@ -78,6 +80,6 @@ test("unnamed purchases remain visible and distinct merchant spelling is preserv
     range,
   );
   expect(rows).toHaveLength(3);
-  expect(rows[0]).toMatchObject({ name: "Unspecified merchant", purchases: 2, total: 800 });
+  expect(rows[0]!).toMatchObject({ name: "Unspecified merchant", purchases: 2, total: 800 });
   expect(calculateMerchantSpending([], range)).toEqual([]);
 });

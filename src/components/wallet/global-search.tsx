@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,7 +61,7 @@ export function GlobalSearch() {
     changeOpen(false);
     if (action.type === "new-record") {
       requestNewRecord();
-      navigate("/records");
+      void navigate("/records");
     } else if (action.type === "records") {
       if (action.filters.paymentStatus === "needs_review") openReviewQueue();
       else {
@@ -68,9 +69,9 @@ export function GlobalSearch() {
         setAllPeriod();
         setRecordFilters(action.filters);
       }
-      navigate("/records");
+      void navigate("/records");
     } else {
-      navigate(action.href);
+      void navigate(action.href);
     }
   }
 

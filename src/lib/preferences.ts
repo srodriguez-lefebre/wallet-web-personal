@@ -1,5 +1,5 @@
-import type { SettingsPatch } from "../../shared/schemas";
-import type { WalletDataset, WalletSettings } from "../../shared/types";
+import type { SettingsPatch } from "@shared/schemas";
+import type { WalletDataset, WalletSettings } from "@shared/types";
 
 export function resolveTheme(
   theme: WalletSettings["theme"],

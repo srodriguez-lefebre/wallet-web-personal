@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { apiOperations, findApiOperation } from "./api-contract.js";
 
 const samplePath = (path: string) =>

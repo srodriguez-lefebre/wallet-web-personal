@@ -1,6 +1,11 @@
 import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRef, useState, type FormEvent } from "react";
+import { formatMoney } from "@shared/calculations";
+import { investmentTypeLabels } from "@shared/constants";
+import { investmentPatchSchema } from "@shared/schemas";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,9 +21,6 @@ import {
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney } from "@shared/calculations";
-import { investmentTypeLabels } from "@shared/constants";
-import { investmentPatchSchema } from "@shared/schemas";
 
 export function InvestmentDetailView() {
   const { investmentId } = useParams();
@@ -36,7 +38,12 @@ export function InvestmentDetailView() {
     return (
       <div>
         <PageHeader title="Investment not found" description="This investment does not exist." />
-        <Button variant="outline" onClick={() => navigate("/investments")}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/investments");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
@@ -98,7 +105,12 @@ export function InvestmentDetailView() {
         >
           Update current value
         </Button>
-        <Button variant="outline" onClick={() => navigate("/investments")}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/investments");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Investments
         </Button>
@@ -220,7 +232,9 @@ export function InvestmentDetailView() {
           <form
             aria-label="Update investment valuation"
             className="space-y-4"
-            onSubmit={saveCurrentValue}
+            onSubmit={(event) => {
+              finishAction(saveCurrentValue(event));
+            }}
           >
             <label className="block space-y-2">
               <span className="text-sm font-medium">Current value ({investment.currency})</span>

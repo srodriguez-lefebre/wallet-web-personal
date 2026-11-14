@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
+import { walletDataHealth } from "@shared/data-quality";
+
+import type { WalletDataset } from "@shared/types";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
-import { walletDataHealth } from "@shared/data-quality";
-import type { WalletDataset } from "@shared/types";
 
 interface Props {
   getSnapshot: () => Promise<WalletDataset>;
@@ -60,7 +62,13 @@ export function DataHealthPanel({ getSnapshot, onReview, onRecords, onCards }: P
     <Card className="mb-4">
       <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-3">
         <CardTitle>Data check</CardTitle>
-        <Button variant="outline" disabled={busy} onClick={check}>
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            void check();
+          }}
+        >
           {busy ? "Checking..." : "Check complete history"}
         </Button>
       </CardHeader>

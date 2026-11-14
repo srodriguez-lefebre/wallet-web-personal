@@ -1,15 +1,17 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
-import type { RecordFilters } from "@shared/types";
+
 import { WalletNotifications } from "./wallet-notifications";
+
+import type { RecordFilters } from "@shared/types";
+import type { ReactNode } from "react";
 
 const state = vi.hoisted(() => ({
   dataset: {} as typeof mockWalletData,
   complete: true,
-  filters: {} as RecordFilters,
+  filters: {},
   period: "month",
   writes: vi.fn(),
 }));
@@ -55,7 +57,12 @@ function Location() {
 function button(label: string) {
   return tree!.root
     .findAllByType("button")
-    .find((node) => node.props["aria-label"] === label || node.children.join("") === label)!;
+    .find(
+      (node) =>
+        node.props["aria-label"] === label ||
+        node.children.map((child) => (typeof child === "object" ? "" : String(child))).join("") ===
+          label,
+    )!;
 }
 async function mount() {
   await act(async () => {
@@ -96,7 +103,7 @@ afterEach(async () => {
 
 test("incomplete history withholds counts and actionable partial items", async () => {
   state.complete = false;
-  state.dataset.records = [{ ...mockWalletData.records[0], paymentStatus: "needs_review" }];
+  state.dataset.records = [{ ...mockWalletData.records[0]!, paymentStatus: "needs_review" }];
   await mount();
   expect(tree!.root.findAllByProps({ "aria-label": "Pending notifications" })).toHaveLength(0);
   await open();
@@ -108,7 +115,7 @@ test("incomplete history withholds counts and actionable partial items", async (
 test("review notification opens all-history queue and clears unrelated filters without writes", async () => {
   state.dataset.records = [
     {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       occurredAt: "2020-01-01T12:00:00Z",
       paymentStatus: "needs_review",
     },
@@ -126,7 +133,7 @@ test("review notification opens all-history queue and clears unrelated filters w
 
 test("counts overdue and due-soon visible debts and unpaid closed archived cards, and opens their destinations", async () => {
   const debt = {
-    ...mockWalletData.debts[0],
+    ...mockWalletData.debts[0]!,
     status: "active" as const,
     isVisible: true,
   };
@@ -185,7 +192,7 @@ test("counts overdue and due-soon visible debts and unpaid closed archived cards
       currency: "UYU",
       amountInLimitCurrency: 50,
       exchangeRateToLimitCurrency: 1,
-      categoryId: mockWalletData.categories[0].id,
+      categoryId: mockWalletData.categories[0]!.id,
       accountImpactAtCreation: false,
       occurredAt: "2026-09-10T12:00:00Z",
     },
@@ -202,9 +209,12 @@ test("counts overdue and due-soon visible debts and unpaid closed archived cards
   expect(state.period).toBe("all");
   await open();
   await act(async () => button("Open statement Archived card").props.onClick());
-  expect(tree!.root.findByType("output").children.join("")).toBe(
-    "/cards/archived?statementId=closed",
-  );
+  expect(
+    tree!.root
+      .findByType("output")
+      .children.map((child) => (typeof child === "object" ? "" : String(child)))
+      .join(""),
+  ).toBe("/cards/archived?statementId=closed");
   expect(state.writes).not.toHaveBeenCalled();
 });
 

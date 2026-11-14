@@ -2,6 +2,7 @@ import { chmod, mkdir, open, readFile, rename, unlink, writeFile } from "node:fs
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+
 import { LOCAL_DATABASE_URL } from "./database.js";
 
 export const workspace = fileURLToPath(new URL("../../.local-wallet/", import.meta.url));

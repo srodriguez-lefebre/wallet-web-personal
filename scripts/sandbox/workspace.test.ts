@@ -2,7 +2,9 @@ import * as fs from "node:fs/promises";
 import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
 import { expect, test, vi } from "vitest";
+
 import { acquireWorkspaceLock } from "./workspace.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {

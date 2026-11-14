@@ -1,12 +1,15 @@
-import { PGlite } from "@electric-sql/pglite";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { Server } from "node:http";
+
+import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, expect, test } from "vitest";
+
 import { applyMigrations, installLocalTransport } from "./database.js";
 import { createSandboxServer } from "./server.js";
 import { configureLocalEnvironment, LOCAL_ACCESS_CODE } from "./workspace.js";
+
+import type { Server } from "node:http";
 import type { MailRunResult } from "./mail.js";
 import type { WalletDataset } from "../../shared/types.js";
 
@@ -93,8 +96,8 @@ test("worker executes actual Apps Script into the local API and persists labels 
   const result = (await run.json()) as MailRunResult;
   expect(run.status, JSON.stringify(result)).toBe(200);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.deliveries[0].status).toBe(201);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.deliveries[0]!.status).toBe(201);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
   const wallet = await fetch(`${origin}/api/wallet`, {
     headers: { Authorization: `Bearer ${session}` },
   });
@@ -107,7 +110,7 @@ test("worker executes actual Apps Script into the local API and persists labels 
   });
   expect(retried.status).toBe(200);
   const replay = (await (await post("/__sandbox/run", {})).json()) as MailRunResult;
-  expect(replay.deliveries[0].status).toBe(200);
+  expect(replay.deliveries[0]!.status).toBe(200);
   expect((await pg.query("SELECT id FROM records")).rows).toHaveLength(1);
 }, 30_000);
 
@@ -152,7 +155,7 @@ test("HTTP sandbox saves bank mappings and actual script imports debit and owned
   expect(partial.threads.find((row) => row.id === transferThread.id)?.labels).toContain(
     "Wallet/Pendiente",
   );
-  expect(partial.threads.find((row) => row.id === transferThread.id)?.messages[0].isRead).toBe(
+  expect(partial.threads.find((row) => row.id === transferThread.id)?.messages[0]!.isRead).toBe(
     false,
   );
   expect(partial.logs.join(" ")).toMatch(/origen/i);
@@ -199,7 +202,7 @@ test("a new message on a processed thread becomes pending and unsupported mail i
   const state = (await (await fetch(`${origin}/__sandbox/state`)).json()) as {
     threads: { id: string }[];
   };
-  const oldId = state.threads[0].id;
+  const oldId = state.threads[0]!.id;
   expect(
     (
       await post("/__sandbox/messages", {

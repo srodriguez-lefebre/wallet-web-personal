@@ -1,4 +1,5 @@
 import { z, type ZodType } from "zod";
+
 import {
   accountPatchSchema,
   accountSchema,
@@ -71,7 +72,7 @@ const cardRecordParams = z.object({ id: uuidSchema, recordId: uuidSchema });
 const cardPaymentParams = z.object({ id: uuidSchema, paymentId: uuidSchema });
 const cardStatementParams = z.object({ id: uuidSchema, statementId: uuidSchema });
 
-const entities: Record<string, ZodType> = {
+const entities = {
   recordTemplates: recordTemplateSchema.extend({ id: uuidSchema }),
   accounts: accountSchema.extend({ id: uuidSchema }),
   categories: categorySchema.extend({ id: uuidSchema }),
@@ -148,10 +149,11 @@ function operationResponse(operationId: string): ZodType {
       status: z.enum(["ok", "partial", "overdue", "over_limit"]),
     });
   }
-  const [entity, action] = operationId.split(".");
+  const [entity = "", action] = operationId.split(".");
   if (action === "delete") return z.object({ deleted: z.literal(true) });
-  if (!entities[entity]) throw new Error(`Missing response schema for ${operationId}`);
-  return action === "list" ? z.array(entities[entity]) : entities[entity];
+  if (!(entity in entities)) throw new Error(`Missing response schema for ${operationId}`);
+  const response = entities[entity as keyof typeof entities];
+  return action === "list" ? z.array(response) : response;
 }
 const op = <T extends Omit<ApiOperation, "response">>(definition: T) => ({
   ...definition,

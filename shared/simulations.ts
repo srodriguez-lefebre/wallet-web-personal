@@ -1,11 +1,13 @@
 import { differenceInCalendarDays, endOfMonth } from "date-fns";
-import type { WalletDataset } from "./types.js";
+
 import {
   calculateSummary,
   calculateVisibleBalance,
   formatMoney,
   monthKey,
 } from "./calculations.js";
+
+import type { WalletDataset } from "./types.js";
 
 export function calculateEndOfMonthProjection(dataset: WalletDataset, dailySpend: number) {
   const remainingDays = Math.max(

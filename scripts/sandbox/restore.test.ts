@@ -1,8 +1,10 @@
-import { PGlite } from "@electric-sql/pglite";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+
+import { PGlite } from "@electric-sql/pglite";
 import { expect, test, vi } from "vitest";
+
 import { restoreLocalDatabase } from "./restore.js";
 
 test("a rejected replacement leaves the active database and mailbox intact", async () => {

@@ -1,5 +1,7 @@
 import { FormEvent, useState } from "react";
 import { LockKeyhole, WalletCards } from "lucide-react";
+
+import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/providers/auth-provider";
@@ -31,7 +33,12 @@ export function UnlockView() {
           </p>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleSubmit(event));
+            }}
+          >
             <label className="block space-y-2">
               <span className="text-sm font-medium">Token</span>
               <input

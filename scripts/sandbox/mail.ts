@@ -71,7 +71,7 @@ export function runMailAutomation(
           .filter((thread) => {
             const labels = [...query.matchAll(/(-?)label:"([^"]+)"/g)];
             if (
-              !labels.every(([, excluded, name]) =>
+              !labels.every(([, excluded, name = ""]) =>
                 excluded ? !thread.labels.includes(name) : thread.labels.includes(name),
               )
             )
@@ -160,7 +160,7 @@ export function runMailWorker(input: MailRunInput): Promise<MailRunResult> {
       clearTimeout(timer);
       resolve(result);
     });
-    worker.once("error", (error) => {
+    worker.once("error", (error: Error) => {
       clearTimeout(timer);
       reject(error);
     });

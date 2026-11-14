@@ -1,7 +1,7 @@
-import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
-import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
-import type { MailIngestionInput } from "../../shared/schemas.js";
+
+import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
+
 import {
   categoryImportWarning,
   isReviewCategory,
@@ -29,6 +29,9 @@ import {
   merchantTokenSequenceMatch,
   pickLongestMerchantMatch,
 } from "./normalization.js";
+
+import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
+import type { MailIngestionInput } from "../../shared/schemas.js";
 
 export class IngestionInProgressError extends Error {}
 

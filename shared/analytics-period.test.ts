@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+
 import { calculateSummary } from "./calculations";
 import { mockWalletData } from "./mock-data";
 afterEach(() => vi.useRealTimers());

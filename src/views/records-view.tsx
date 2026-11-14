@@ -2,6 +2,39 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import * as Popover from "@radix-ui/react-popover";
 import { Check, ChevronDown, Copy, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
+import { findExchangeRate } from "@shared/money";
+import {
+  countNewReviews,
+  currentReviewIssues,
+  getMerchantCorrections,
+  isReviewCategory,
+  normalizeBankMerchant,
+  recordReviewDate,
+  splitImportNote,
+} from "@shared/record-review";
+import {
+  calculateAccountBalances,
+  formatMoney,
+  groupRecordsByDay,
+  isCategoryOrDescendant,
+  recordsForDateRange,
+} from "@shared/calculations";
+import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@shared/constants";
+
+import type { RecordPatch } from "@shared/schemas";
+import type {
+  Category,
+  CurrencyCode,
+  PaymentStatus,
+  PaymentType,
+  RecordType,
+  RecordFilters,
+  RecordGoalAssociation,
+  WalletDataset,
+  WalletRecord,
+} from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -22,37 +55,7 @@ import {
 import { useActionToast } from "@/lib/use-action-toast";
 import { cn, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { findExchangeRate } from "@shared/money";
-import {
-  countNewReviews,
-  currentReviewIssues,
-  getMerchantCorrections,
-  isReviewCategory,
-  normalizeBankMerchant,
-  recordReviewDate,
-  splitImportNote,
-} from "@shared/record-review";
-import type { RecordPatch } from "@shared/schemas";
 import { recordAccountAmount, scaleConvertedAmount } from "@/lib/record-form-money";
-import {
-  calculateAccountBalances,
-  formatMoney,
-  groupRecordsByDay,
-  isCategoryOrDescendant,
-  recordsForDateRange,
-} from "@shared/calculations";
-import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@shared/constants";
-import type {
-  Category,
-  CurrencyCode,
-  PaymentStatus,
-  PaymentType,
-  RecordType,
-  RecordFilters,
-  RecordGoalAssociation,
-  WalletDataset,
-  WalletRecord,
-} from "@shared/types";
 
 const paymentMethodClasses: Record<PaymentType, string> = {
   cash: "bg-muted text-muted-foreground",
@@ -1120,7 +1123,12 @@ export function RecordsView() {
               Adjust type, amount, account, category, goals, and payment status.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleSubmit(event));
+            }}
+          >
             {statusOnlyCancellation && (
               <p role="status" className="text-sm text-muted-foreground">
                 Cancelling preserves the original record and excludes it from balances.
@@ -1600,7 +1608,9 @@ export function RecordsView() {
                     type="button"
                     variant="destructive"
                     disabled={Boolean(editingLinkedRefund)}
-                    onClick={handleDeleteEditingRecord}
+                    onClick={() => {
+                      finishAction(handleDeleteEditingRecord());
+                    }}
                   >
                     <Trash2 className="h-4 w-4" />
                     Delete

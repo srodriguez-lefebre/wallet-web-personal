@@ -1,6 +1,8 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+
 import { sendError } from "./response.js";
+
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const DEFAULT_SESSION_TTL_SECONDS = 45 * 24 * 60 * 60;
 

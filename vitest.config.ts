@@ -1,11 +1,16 @@
 import { mergeConfig } from "vite";
 import { defineConfig } from "vitest/config";
+
 import viteConfig from "./vite.config";
 
 export default mergeConfig(
   viteConfig,
   defineConfig({
-    // Database integration files start PostgreSQL runtimes; bound memory contention.
-    test: { maxWorkers: 1 },
+    // Two isolated workers share a migrated cluster, never fixture rows.
+    test: {
+      maxWorkers: 2,
+      globalSetup: ["./scripts/sandbox/postgres-global.ts"],
+      environmentOptions: { jsdom: { url: "http://test.local" } },
+    },
   }),
 );

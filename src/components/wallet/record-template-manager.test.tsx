@@ -1,9 +1,11 @@
-import type { PropsWithChildren } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { beforeEach, afterEach, test, expect, vi } from "vitest";
-import { mockWalletData } from "../../../shared/mock-data";
-import type { RecordTemplate, WalletDataset } from "../../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import { RecordTemplateManager } from "./record-template-manager";
+
+import type { RecordTemplate, WalletDataset } from "@shared/types";
+import type { PropsWithChildren } from "react";
 const actions = vi.hoisted(() => ({
   add: vi.fn(),
   update: vi.fn(),
@@ -52,14 +54,14 @@ beforeEach(() => {
   dataset = structuredClone(mockWalletData);
   dataset.accounts = [
     {
-      ...dataset.accounts[0],
+      ...dataset.accounts[0]!,
       id: accountId,
       currency: "UYU",
       isActive: true,
       isVisible: true,
     },
   ];
-  dataset.categories = [{ ...dataset.categories[0], id: categoryId }];
+  dataset.categories = [{ ...dataset.categories[0]!, id: categoryId }];
   dataset.settings.primaryAccountId = accountId;
   dataset.settings.defaultAccountId = accountId;
   dataset.settings.primaryCurrency = "UYU";
@@ -120,7 +122,7 @@ test("settings manager creates reusable configuration without inserting financia
       accountId,
     }),
   );
-  const payload = actions.add.mock.calls[0][0];
+  const payload = actions.add.mock.calls[0]![0];
   for (const key of ["occurredAt", "accountAmount", "exchangeRateToPrimary", "goalIds", "debtId"])
     expect(payload).not.toHaveProperty(key);
   expect(dataset.records).toEqual(before);
@@ -183,7 +185,7 @@ test("retry reconciles a committed create whose refresh failed", async () => {
   expect(tree!.root.findByProps({ role: "alert" })).toBeDefined();
   actions.read.mockResolvedValue({
     ...dataset,
-    recordTemplates: [{ ...actions.add.mock.calls[0][0], id: templateId }],
+    recordTemplates: [{ ...actions.add.mock.calls[0]![0], id: templateId }],
   });
   await submit();
   expect(actions.read).toHaveBeenCalledTimes(1);

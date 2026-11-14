@@ -14,6 +14,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  calculateCreditCardCategoryUsage,
+  calculateCreditCardSummaries,
+  buildExpenseComparisonSeries,
+  dateRangeForMonth,
+  formatMoney,
+  relativeDateRanges,
+  relativeMonthKeys,
+} from "@shared/calculations";
+
+import type { CreditCard, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -32,16 +45,6 @@ import { selectPendingCardStatements } from "@/lib/cards-presentation";
 import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import {
-  calculateCreditCardCategoryUsage,
-  calculateCreditCardSummaries,
-  buildExpenseComparisonSeries,
-  dateRangeForMonth,
-  formatMoney,
-  relativeDateRanges,
-  relativeMonthKeys,
-} from "@shared/calculations";
-import type { CreditCard, CurrencyCode } from "@shared/types";
 
 const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
 const fieldClassName =
@@ -240,7 +243,12 @@ export function CardsView() {
               Configure the card identity, limit and billing dates.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
+          <form
+            className="grid gap-4 md:grid-cols-2"
+            onSubmit={(event) => {
+              finishAction(submit(event));
+            }}
+          >
             <label className="space-y-2">
               <span className="text-sm font-medium">Name</span>
               <input
@@ -374,11 +382,13 @@ export function CardsView() {
               key={summary.card.id}
               role="link"
               tabIndex={0}
-              onClick={() => navigate(`/cards/${summary.card.id}`)}
+              onClick={() => {
+                void navigate(`/cards/${summary.card.id}`);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  navigate(`/cards/${summary.card.id}`);
+                  void navigate(`/cards/${summary.card.id}`);
                 }
               }}
               className={`cursor-pointer transition hover:border-primary/50 hover:shadow-md ${!summary.card.isActive ? "opacity-60" : ""}`}
@@ -489,7 +499,7 @@ export function CardsView() {
                         onKeyDown={(event) => event.stopPropagation()}
                         onClick={(event) => {
                           event.stopPropagation();
-                          navigate(entry.href);
+                          void navigate(entry.href);
                         }}
                       >
                         <span className="block">
@@ -519,7 +529,7 @@ export function CardsView() {
                     style={{ backgroundColor: summary.card.color }}
                     onClick={(event) => {
                       event.stopPropagation();
-                      navigate(`/cards/${summary.card.id}`);
+                      void navigate(`/cards/${summary.card.id}`);
                     }}
                   >
                     Open

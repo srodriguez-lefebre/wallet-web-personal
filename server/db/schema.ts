@@ -15,6 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
 import type { MerchantCorrection } from "../../shared/types.js";
 
 export const accountTypeEnum = pgEnum("account_type", [

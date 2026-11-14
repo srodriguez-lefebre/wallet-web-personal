@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { ThemeProvider } from "@/providers/theme-provider";

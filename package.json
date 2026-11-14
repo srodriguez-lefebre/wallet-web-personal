@@ -19,12 +19,13 @@
     "api:spec": "tsx scripts/generate-openapi.ts",
     "api:spec:check": "tsx scripts/generate-openapi.ts --check",
     "test:api-contract": "vitest run shared/api-contract.test.ts",
-    "check": "npm run lint && npm test && npm run build && npm run api:spec:check",
+    "check": "npm run format:check && npm run lint && npm test && npm run build && npm run api:spec:check",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "db:import-wallet-records": "node scripts/import-wallet-records.mjs",
-    "db:import-merchant-rules": "node scripts/import-merchant-rules.mjs"
+    "db:import-merchant-rules": "node scripts/import-merchant-rules.mjs",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
     "@eslint/js": "^9.39.1",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^24.10.2",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.7",
@@ -66,9 +68,11 @@
     "embedded-postgres": "^18.4.0-beta.17",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
     "globals": "^16.5.0",
+    "jsdom": "^26.1.0",
     "pg": "^8.23.1",
     "postcss": "^8.5.6",
     "prettier": "^3.7.4",

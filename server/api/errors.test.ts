@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { translateDatabaseError } from "./errors.js";
 
 describe("database error translation", () => {

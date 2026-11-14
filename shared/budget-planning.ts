@@ -1,5 +1,6 @@
 import { monthKey, relativeMonthKeys } from "./calculations.js";
 import { isFinancialRecord } from "./record-status.js";
+
 import type { Budget, Category, CurrencyCode, WalletDataset } from "./types.js";
 
 export interface BudgetProposal {
@@ -89,7 +90,7 @@ export function buildBudgetPlan(
       record.currency === dataset.settings.primaryCurrency ? 1 : record.exchangeRateToPrimary;
     const amount = record.amount * rate;
     if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(amount)) monthly[index] = null;
-    else if (monthly[index] !== null) monthly[index] += amount;
+    else if (monthly[index] !== null) monthly[index] = (monthly[index] ?? 0) + amount;
     amounts.set(category.id, monthly);
   }
   const proposals = [...amounts]

@@ -1,7 +1,9 @@
-import type { PGlite } from "@electric-sql/pglite";
 import { getTableColumns, getTableName, type Table } from "drizzle-orm";
 import { z } from "zod";
+
 import * as schema from "../../server/db/schema.js";
+
+import type { PGlite } from "@electric-sql/pglite";
 
 type Row = Record<string, unknown>;
 const rows = z.array(z.record(z.string(), z.unknown()));
@@ -55,12 +57,12 @@ export async function importSnapshot(pg: PGlite, input: unknown) {
       const values = entries.map(([key, value]) =>
         key === defer
           ? null
-          : value !== null && columns[key].dataType === "json"
+          : value !== null && columns[key]!.dataType === "json"
             ? JSON.stringify(value)
             : value,
       );
       await tx.query(
-        `INSERT INTO ${quote(getTableName(table))} (${entries.map(([key]) => quote(columns[key].name)).join(",")}) VALUES (${values.map((_, index) => `$${index + 1}`).join(",")})`,
+        `INSERT INTO ${quote(getTableName(table))} (${entries.map(([key]) => quote(columns[key]!.name)).join(",")}) VALUES (${values.map((_, index) => `$${index + 1}`).join(",")})`,
         values,
       );
     };
@@ -78,7 +80,7 @@ export async function importSnapshot(pg: PGlite, input: unknown) {
         for (const row of items) {
           if (row[defer])
             await tx.query(
-              `UPDATE ${quote(getTableName(table))} SET ${quote(getTableColumns(table)[defer].name)} = $1 WHERE id = $2`,
+              `UPDATE ${quote(getTableName(table))} SET ${quote(getTableColumns(table)[defer]!.name)} = $1 WHERE id = $2`,
               [row[defer], row.id],
             );
         }

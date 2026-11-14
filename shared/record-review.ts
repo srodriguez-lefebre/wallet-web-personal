@@ -18,7 +18,7 @@ export function isReviewCategory<T extends Pick<Category, "name"> & { systemKey?
 export function splitImportNote(note: string | undefined) {
   if (!note) return { note, history: [] as string[] };
   const parts = note.split(" | ");
-  const imported = /^(Auto Itaú|Auto Wallet|Imported from )/.test(parts[0]);
+  const imported = /^(Auto Itaú|Auto Wallet|Imported from )/.test(parts[0] ?? "");
   if (!imported) return { note, history: [] as string[] };
   const history = parts.filter(
     (part) =>

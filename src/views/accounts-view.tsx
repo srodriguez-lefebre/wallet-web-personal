@@ -1,6 +1,12 @@
 import { FormEvent, useRef, useState } from "react";
 import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateAccountBalances, formatMoney } from "@shared/calculations";
+import { accountTypeLabels } from "@shared/constants";
+
+import type { Account, AccountType, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -16,9 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import { calculateAccountBalances, formatMoney } from "@shared/calculations";
-import { accountTypeLabels } from "@shared/constants";
-import type { Account, AccountType, CurrencyCode } from "@shared/types";
 
 interface AccountDraft {
   id: string;
@@ -107,12 +110,12 @@ export function AccountsView() {
 
   function openAccountRecords(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
-    navigate("/records");
+    void navigate("/records");
   }
 
   function openAccountAnalytics(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
-    navigate("/analytics");
+    void navigate("/analytics");
   }
 
   function startEditingAccounts() {
@@ -349,7 +352,12 @@ export function AccountsView() {
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button disabled={isWorking} onClick={saveAccountEdits}>
+            <Button
+              disabled={isWorking}
+              onClick={() => {
+                finishAction(saveAccountEdits());
+              }}
+            >
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -391,7 +399,12 @@ export function AccountsView() {
                     Create an account for cash, bank, card, savings, or custom use.
                   </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={handleCreateAccount}>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    finishAction(handleCreateAccount(event));
+                  }}
+                >
                   <fieldset disabled={isWorking || Boolean(createdAccountId)} className="space-y-4">
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Name</span>

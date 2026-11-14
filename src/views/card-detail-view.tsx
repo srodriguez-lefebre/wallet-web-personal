@@ -2,6 +2,11 @@ import { type FormEvent, useMemo, useRef, useState } from "react";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ArrowLeft, Pencil, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
+
+import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { CategoryPicker } from "@/components/wallet/category-picker";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
@@ -21,8 +26,6 @@ import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
 import { localDateInput } from "@/lib/date-input";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
-import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
 const field =
   "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -265,7 +268,12 @@ export function CardDetailView() {
   return (
     <div className="space-y-6">
       <ActionToast toast={toast} />
-      <Button variant="ghost" onClick={() => navigate("/cards")}>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          void navigate("/cards");
+        }}
+      >
         <ArrowLeft className="mr-2 h-4 w-4" /> Cards
       </Button>
       <PageHeader
@@ -287,7 +295,12 @@ export function CardDetailView() {
               Card-only movements stay outside Records unless you choose an account impact.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4 md:grid-cols-3" onSubmit={submitMovement}>
+          <form
+            className="grid gap-4 md:grid-cols-3"
+            onSubmit={(event) => {
+              finishAction(submitMovement(event));
+            }}
+          >
             <label className="space-y-2">
               <span className="text-sm font-medium">Amount</span>
               <input
@@ -546,7 +559,12 @@ export function CardDetailView() {
             <CardTitle>Pay statement</CardTitle>
           </CardHeader>
           <CardContent>
-            <form className="grid gap-4 md:grid-cols-4" onSubmit={submitPayment}>
+            <form
+              className="grid gap-4 md:grid-cols-4"
+              onSubmit={(event) => {
+                finishAction(submitPayment(event));
+              }}
+            >
               <div className="flex gap-2">
                 <input
                   className={field}

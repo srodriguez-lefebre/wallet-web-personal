@@ -1,5 +1,6 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { sendError } from "./response.js";
+
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export function requireMethod(req: VercelRequest, res: VercelResponse, allowed: string[]) {
   if (!req.method || !allowed.includes(req.method)) {

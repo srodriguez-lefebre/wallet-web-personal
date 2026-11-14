@@ -10,6 +10,10 @@ import {
   parseISO,
   startOfDay,
 } from "date-fns";
+
+import { findExchangeRate } from "./money.js";
+import { isFinancialRecord, isPrimaryReportingRecord } from "./record-status.js";
+
 import type {
   Account,
   AccountBalance,
@@ -31,8 +35,6 @@ import type {
   WalletDataset,
   WalletRecord,
 } from "./types.js";
-import { findExchangeRate } from "./money.js";
-import { isFinancialRecord, isPrimaryReportingRecord } from "./record-status.js";
 
 export function toPrimaryCurrency(amount: number, recordRate = 1) {
   return amount * recordRate;
@@ -1115,7 +1117,7 @@ export function buildExpenseComparisonSeries(dataset: WalletDataset, ranges: Dat
 }
 
 export function buildExpenseSequenceComparisonSeries(dataset: WalletDataset, ranges: DateRange[]) {
-  const [twoPeriodsAgo, previous, current] = ranges.map((range) => {
+  const [twoPeriodsAgo = [], previous = [], current = []] = ranges.map((range) => {
     let cumulative = 0;
     return recordsForDateRange(dataset.records, range)
       .filter((record) => record.type === "expense" && isPrimaryReportingRecord(record))

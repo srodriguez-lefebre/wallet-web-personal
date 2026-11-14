@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { recordSchema } from "../../shared/schemas.js";
 import {
@@ -55,12 +56,13 @@ async function pending() {
     "select pending_amount from debts where id=$1",
     [debtId],
   );
-  return Number(result.rows[0].pending_amount);
+  return Number(result.rows[0]!.pending_amount);
 }
 
 test("reimport skips persisted deterministic IDs after an imported record is edited, while adding new rows", async () => {
   const original = input();
   const [saved] = await importWalletRecords([original]);
+  if (!saved) throw new Error("Expected synthetic imported record");
   await updateRecord(saved.id, { amount: 50 });
   const created = await importWalletRecords([
     original,
@@ -75,6 +77,7 @@ test("reimport skips persisted deterministic IDs after an imported record is edi
 test("reimport skips soft-deleted deterministic identities and still inserts new history", async () => {
   const original = input();
   const [saved] = await importWalletRecords([original]);
+  if (!saved) throw new Error("Expected synthetic imported record");
   await deleteRecord(saved.id);
   expect(
     await importWalletRecords([original, input({ occurredAt: "2026-06-22T12:00:00.000Z" })]),
@@ -88,7 +91,7 @@ test("an ordinary record cannot be attached to a debt through PATCH", async () =
   await expect(updateRecord(saved.id, { debtId })).rejects.toThrow();
   await updateRecord(saved.id, { amount: 10 });
   expect(await pending()).toBe(100);
-  expect((await getWalletDataset()).records[0].debtId).toBeUndefined();
+  expect((await getWalletDataset()).records[0]!.debtId).toBeUndefined();
 });
 
 test.each(["single", "bulk", "CSV"])(

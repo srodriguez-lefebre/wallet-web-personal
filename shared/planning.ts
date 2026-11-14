@@ -1,4 +1,5 @@
 import { isOpenDebt } from "./calculations.js";
+
 import type { CurrencyCode, Debt, GoalProgress, Investment } from "./types.js";
 
 // Entity dates represent calendar dates. Clock hours must not change urgency.

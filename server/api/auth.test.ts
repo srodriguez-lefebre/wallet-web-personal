@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+
 import { createSessionToken, isValidApiToken, isValidSessionToken } from "./auth.js";
 
 afterEach(() => {

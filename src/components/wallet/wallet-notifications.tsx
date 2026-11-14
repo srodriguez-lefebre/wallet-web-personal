@@ -2,12 +2,13 @@ import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatMoney } from "@shared/calculations";
+import { debtDirectionLabels } from "@shared/constants";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { walletAttention } from "@/lib/wallet-attention";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney } from "@shared/calculations";
-import { debtDirectionLabels } from "@shared/constants";
 
 export function WalletNotifications() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export function WalletNotifications() {
       setAllPeriod();
     }
     setOpen(false);
-    navigate(href);
+    void navigate(href);
   }
 
   return (

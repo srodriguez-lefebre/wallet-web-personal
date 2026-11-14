@@ -2,10 +2,12 @@
  * Run: npx tsx scripts/sandbox/qa.ts (http://127.0.0.1:4175).
  * Stop: POST /__qa/stop or Ctrl+C. No .env, backup, or .local-wallet access.
  */
-import { PGlite } from "@electric-sql/pglite";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+
+import { PGlite } from "@electric-sql/pglite";
 import { createServer as createViteServer } from "vite";
+
 import { applyMigrations, installLocalTransport } from "./database.js";
 import { configureLocalEnvironment } from "./workspace.js";
 

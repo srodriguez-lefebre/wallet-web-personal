@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
+
 import { sql } from "drizzle-orm";
-import type { DbClient } from "../db/client.js";
+
 import { merchantAliases, merchants } from "../db/schema.js";
 import { normalizeMerchantTerm } from "./normalization.js";
+
+import type { DbClient } from "../db/client.js";
 
 export interface MerchantRuleLearning {
   merchantName: string;

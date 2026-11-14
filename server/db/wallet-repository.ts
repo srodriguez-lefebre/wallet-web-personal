@@ -1,3 +1,5 @@
+import { createHash, randomUUID } from "node:crypto";
+
 import {
   and,
   desc,
@@ -13,7 +15,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
-import { createHash, randomUUID } from "node:crypto";
+
 import { createDb, type DbClient } from "./client.js";
 import { isReviewCategory, splitImportNote } from "../../shared/record-review.js";
 import {
@@ -43,30 +45,6 @@ import {
   settings,
   tags,
 } from "./schema.js";
-import type {
-  Account,
-  Budget,
-  Category,
-  CreditCard,
-  CreditCardPayment,
-  CreditCardPaymentAllocation,
-  CreditCardRecord,
-  CreditCardStatement,
-  Debt,
-  ExchangeRate,
-  Goal,
-  GoalReservation,
-  GoalReservationMovement,
-  RecordGoalAssociation,
-  InstallmentPlan,
-  Investment,
-  RecurringDebt,
-  Tag,
-  WalletDataset,
-  WalletRecord,
-  RecordTemplate,
-  WalletSettings,
-} from "../../shared/types.js";
 import {
   accountSchema,
   budgetSchema,
@@ -107,6 +85,31 @@ import {
 import { decodeRecordCursor, encodeRecordCursor } from "../api/record-cursor.js";
 import { findExchangeRate } from "../../shared/money.js";
 import { isFinancialRecord } from "../../shared/record-status.js";
+
+import type {
+  Account,
+  Budget,
+  Category,
+  CreditCard,
+  CreditCardPayment,
+  CreditCardPaymentAllocation,
+  CreditCardRecord,
+  CreditCardStatement,
+  Debt,
+  ExchangeRate,
+  Goal,
+  GoalReservation,
+  GoalReservationMovement,
+  RecordGoalAssociation,
+  InstallmentPlan,
+  Investment,
+  RecurringDebt,
+  Tag,
+  WalletDataset,
+  WalletRecord,
+  RecordTemplate,
+  WalletSettings,
+} from "../../shared/types.js";
 
 type Db = DbClient;
 type NewAccount = Omit<Account, "id">;
@@ -169,12 +172,14 @@ function groupIds<T extends { [key: string]: string }>(rows: T[], key: keyof T, 
   return rows.reduce<Record<string, string[]>>((groups, row) => {
     const groupKey = row[key];
     const groupValue = row[value];
+    if (groupKey === undefined || groupValue === undefined) throw new Error("Missing relation key");
     groups[groupKey] = [...(groups[groupKey] ?? []), groupValue];
     return groups;
   }, {});
 }
 
-function mapAccount(row: typeof accounts.$inferSelect): Account {
+function mapAccount(row: typeof accounts.$inferSelect | undefined): Account {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -189,7 +194,8 @@ function mapAccount(row: typeof accounts.$inferSelect): Account {
   };
 }
 
-function mapCategory(row: typeof categories.$inferSelect): Category {
+function mapCategory(row: typeof categories.$inferSelect | undefined): Category {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -200,7 +206,8 @@ function mapCategory(row: typeof categories.$inferSelect): Category {
   };
 }
 
-function mapTag(row: typeof tags.$inferSelect): Tag {
+function mapTag(row: typeof tags.$inferSelect | undefined): Tag {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -209,7 +216,8 @@ function mapTag(row: typeof tags.$inferSelect): Tag {
   };
 }
 
-function mapRecordTemplate(row: typeof recordTemplates.$inferSelect): RecordTemplate {
+function mapRecordTemplate(row: typeof recordTemplates.$inferSelect | undefined): RecordTemplate {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -280,10 +288,9 @@ export async function createRecordTemplate(value: Omit<RecordTemplate, "id">, db
     ]),
   );
   if (!result.rows.length) {
-    const [{ count }] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(recordTemplates);
-    if (count >= 100) throw conflictError("The template library is limited to 100 templates");
+    const [countRow] = await db.select({ count: sql<number>`count(*)::int` }).from(recordTemplates);
+    if ((countRow?.count ?? 0) >= 100)
+      throw conflictError("The template library is limited to 100 templates");
     throw referenceNotFoundError("Choose active references for this template");
   }
   const [row] = await db.select().from(recordTemplates).where(eq(recordTemplates.id, id));
@@ -325,10 +332,11 @@ export async function deleteRecordTemplate(id: string, db: Db = createDb()) {
 }
 
 function mapRecord(
-  row: typeof records.$inferSelect,
+  row: typeof records.$inferSelect | undefined,
   tagIdsByRecord: Record<string, string[]>,
   goalAssociationsByRecord: Record<string, RecordGoalAssociation[]> = {},
 ): WalletRecord {
+  if (!row) throw new Error("Database mutation returned no row");
   const goalAssociations = goalAssociationsByRecord[row.id] ?? [];
   const legacy = splitImportNote(optional(row.note));
   const importHistory = [...new Set([...(row.importHistory ?? []), ...legacy.history])];
@@ -368,7 +376,8 @@ function mapRecord(
   };
 }
 
-function mapCreditCard(row: typeof creditCards.$inferSelect): CreditCard {
+function mapCreditCard(row: typeof creditCards.$inferSelect | undefined): CreditCard {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -385,7 +394,10 @@ function mapCreditCard(row: typeof creditCards.$inferSelect): CreditCard {
   };
 }
 
-function mapCreditCardPayment(row: typeof creditCardPayments.$inferSelect): CreditCardPayment {
+function mapCreditCardPayment(
+  row: typeof creditCardPayments.$inferSelect | undefined,
+): CreditCardPayment {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     creditCardId: row.creditCardId,
@@ -401,7 +413,10 @@ function mapCreditCardPayment(row: typeof creditCardPayments.$inferSelect): Cred
   };
 }
 
-function mapCreditCardRecord(row: typeof creditCardRecords.$inferSelect): CreditCardRecord {
+function mapCreditCardRecord(
+  row: typeof creditCardRecords.$inferSelect | undefined,
+): CreditCardRecord {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     creditCardId: row.creditCardId,
@@ -450,7 +465,8 @@ function mapCreditCardPaymentAllocation(
   };
 }
 
-function mapGoal(row: typeof goals.$inferSelect, tagIds: string[] = []): Goal {
+function mapGoal(row: typeof goals.$inferSelect | undefined, tagIds: string[] = []): Goal {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -526,7 +542,8 @@ function groupGoalAssociations(rows: Array<typeof recordGoals.$inferSelect>) {
   }, {});
 }
 
-function mapBudget(row: typeof budgets.$inferSelect): Budget {
+function mapBudget(row: typeof budgets.$inferSelect | undefined): Budget {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -542,7 +559,8 @@ function mapBudget(row: typeof budgets.$inferSelect): Budget {
   };
 }
 
-function mapExchangeRate(row: typeof exchangeRates.$inferSelect): ExchangeRate {
+function mapExchangeRate(row: typeof exchangeRates.$inferSelect | undefined): ExchangeRate {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     fromCurrency: row.fromCurrency as ExchangeRate["fromCurrency"],
@@ -553,7 +571,8 @@ function mapExchangeRate(row: typeof exchangeRates.$inferSelect): ExchangeRate {
   };
 }
 
-function mapInvestment(row: typeof investments.$inferSelect): Investment {
+function mapInvestment(row: typeof investments.$inferSelect | undefined): Investment {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -567,7 +586,8 @@ function mapInvestment(row: typeof investments.$inferSelect): Investment {
   };
 }
 
-function mapDebt(row: typeof debts.$inferSelect): Debt {
+function mapDebt(row: typeof debts.$inferSelect | undefined): Debt {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -588,7 +608,8 @@ function mapDebt(row: typeof debts.$inferSelect): Debt {
   };
 }
 
-function mapRecurringDebt(row: typeof recurringDebts.$inferSelect): RecurringDebt {
+function mapRecurringDebt(row: typeof recurringDebts.$inferSelect | undefined): RecurringDebt {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -605,7 +626,10 @@ function mapRecurringDebt(row: typeof recurringDebts.$inferSelect): RecurringDeb
   };
 }
 
-function mapInstallmentPlan(row: typeof installmentPlans.$inferSelect): InstallmentPlan {
+function mapInstallmentPlan(
+  row: typeof installmentPlans.$inferSelect | undefined,
+): InstallmentPlan {
+  if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
     name: row.name,
@@ -1591,7 +1615,7 @@ export async function payCreditCardStatement(
   const [payment] = await db
     .select()
     .from(creditCardPayments)
-    .where(eq(creditCardPayments.id, String(result.rows[0].id)));
+    .where(eq(creditCardPayments.id, String(result.rows[0]!.id)));
   return mapCreditCardPayment(payment);
 }
 
@@ -2453,8 +2477,9 @@ export async function createRecord(input: NewRecord, db: Db = createDb()) {
   } catch (error) {
     cardMutationError(error);
   }
-  const rows = results[locks.length + guards.length];
+  const rows = results[locks.length + guards.length] as (typeof records.$inferSelect)[];
   const row = rows[0];
+  if (!row) throw new Error("Database mutation returned no record");
   const goalRows = await db.select().from(recordGoals).where(eq(recordGoals.recordId, row.id));
   return mapRecord(row, { [row.id]: input.tagIds }, groupGoalAssociations(goalRows));
 }
@@ -2469,7 +2494,10 @@ export async function createRecordsBulk(
     throw validationError(
       "Debt-linked records must be created through the debt payment action. Restore a complete JSON backup for existing payment history.",
     );
+  if (importIds && importIds.length !== inputs.length)
+    throw new Error("Import IDs must match records");
   const ids = importIds ?? inputs.map(() => randomUUID());
+  // These arrays map the same inputs and always have matching indices.
   const resolvedByInput = await Promise.all(
     inputs.map((input) => resolveGoalAssociations(input, db)),
   );
@@ -2480,20 +2508,20 @@ export async function createRecordsBulk(
   const movementsByInput = await Promise.all(
     inputs.map((input, index) =>
       buildRecordReservationMovements(
-        ids[index],
+        ids[index]!,
         input,
-        resolvedByInput[index],
+        resolvedByInput[index]!,
         db,
         unresolvedAutomaticByInput[index],
       ),
     ),
   );
   const associationsByInput = resolvedByInput.map((items, index) =>
-    items.filter((item) => !unresolvedAutomaticByInput[index].goalIds.has(item.goalId)),
+    items.filter((item) => !unresolvedAutomaticByInput[index]!.goalIds.has(item.goalId)),
   );
   const queries: unknown[] = [];
   inputs.forEach((input, index) => {
-    const id = ids[index];
+    const id = ids[index]!;
     if (input.creditCardId && input.categoryId) queries.push(genericCardPurchaseGuard(input, db));
     queries.push(
       db.insert(records).values({
@@ -2520,8 +2548,9 @@ export async function createRecordsBulk(
             : decimal(input.exchangeRateToLimitCurrency),
         occurredAt: new Date(input.occurredAt),
         note:
-          [input.note, ...unresolvedAutomaticByInput[index].warnings].filter(Boolean).join(" | ") ||
-          null,
+          [input.note, ...unresolvedAutomaticByInput[index]!.warnings]
+            .filter(Boolean)
+            .join(" | ") || null,
         isFixed: input.isFixed ?? false,
         debtId: input.debtId ?? null,
       }),
@@ -2551,7 +2580,7 @@ export async function createRecordsBulk(
       queries.push(
         db.insert(recordTags).values(input.tagIds.map((tagId) => ({ recordId: id, tagId }))),
       );
-    const associations = associationsByInput[index];
+    const associations = associationsByInput[index]!;
     queries.push(...recordGoalWriteQueries(id, input, associations, db));
   });
   queries.push(...recordReservationWriteQueries(movementsByInput.flat(), db));
@@ -3029,8 +3058,9 @@ export async function updateRecord(id: string, input: RecordPatch, db: Db = crea
   } catch (error) {
     recordCardMutationError(error);
   }
-  const rows = results[locks.length + guards.length];
+  const rows = results[locks.length + guards.length] as (typeof records.$inferSelect)[];
   const row = rows[0];
+  if (!row) throw new Error("Database mutation returned no record");
   const goalRows = await db.select().from(recordGoals).where(eq(recordGoals.recordId, id));
   return mapRecord(row, { [id]: merged.tagIds }, groupGoalAssociations(goalRows));
 }
@@ -3274,8 +3304,7 @@ export async function deleteGoal(id: string, db: Db = createDb()) {
       having sum(case when type in ('reserve','restore') then amount else -amount end) > 0`),
   ];
   const results = await db.batch(queries as unknown as Parameters<Db["batch"]>[0]);
-  const row = results[2][0];
-  return Boolean(row);
+  return (results[2] as unknown[]).length > 0;
 }
 
 export async function createGoalReservation(input: NewGoalReservation, db: Db = createDb()) {
@@ -3923,7 +3952,7 @@ export async function upsertSettings(input: WalletSettings, db: Db = createDb())
 
   const [row] =
     existing.length > 0
-      ? await db.update(settings).set(values).where(eq(settings.id, existing[0].id)).returning()
+      ? await db.update(settings).set(values).where(eq(settings.id, existing[0]!.id)).returning()
       : await db.insert(settings).values(values).returning();
 
   return mapSettings(row);

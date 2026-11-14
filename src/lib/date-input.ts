@@ -5,6 +5,8 @@ export function localDateInput(value: Date | string = new Date()): string {
 }
 export function dateInputToIso(value: string): string {
   const [year, month, day] = value.split("-").map(Number);
+  if (year === undefined || month === undefined || day === undefined)
+    throw new Error("Invalid calendar date");
   const date = new Date(year, month - 1, day, 12, 0, 0, 0);
   if (localDateInput(date) !== value) throw new Error("Invalid calendar date");
   return date.toISOString();

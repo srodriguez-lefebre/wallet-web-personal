@@ -1,11 +1,13 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { InvestmentDetailView } from "./investment-detail-view";
 
+import type { PropsWithChildren } from "react";
+
 const state = vi.hoisted(() => ({
-  dataset: undefined as unknown,
+  dataset: ((): unknown => undefined)(),
   id: "",
   update: vi.fn(),
   messages: [] as Array<{ status: string; message: string }>,
@@ -44,7 +46,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const dataset = structuredClone(mockWalletData);
   state.dataset = dataset;
-  state.id = dataset.investments[0].id;
+  state.id = dataset.investments[0]!.id;
   state.update.mockResolvedValue(undefined);
   state.messages = [];
 });

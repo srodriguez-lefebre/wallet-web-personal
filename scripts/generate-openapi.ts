@@ -1,8 +1,10 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
+
 import { z, type ZodType } from "zod";
 import { stringify } from "yaml";
-import { apiOperations } from "../shared/api-contract.js";
+
+import { apiOperations, type ApiOperation } from "../shared/api-contract.js";
 
 const root = resolve(import.meta.dirname, "..");
 const outputPath = resolve(root, "contracts/openapi.yaml");
@@ -12,7 +14,7 @@ function jsonSchema(schema: ZodType | undefined) {
   return schema ? z.toJSONSchema(schema, { unrepresentable: "any" }) : undefined;
 }
 
-function parameters(operation: (typeof apiOperations)[number]) {
+function parameters(operation: ApiOperation) {
   const result: unknown[] = [];
   for (const [location, schema] of [
     ["path", operation.params],
@@ -34,7 +36,7 @@ function parameters(operation: (typeof apiOperations)[number]) {
 }
 
 const paths: Record<string, Record<string, unknown>> = {};
-for (const operation of apiOperations) {
+for (const operation of apiOperations as readonly ApiOperation[]) {
   const successSchema = jsonSchema(operation.response);
   const responses: Record<string, unknown> = {
     [operation.successStatus]: {

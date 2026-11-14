@@ -7,10 +7,11 @@ import {
   recordGoalAssociationSchema,
   recordCreateSchema,
   uuidSchema,
-} from "../../shared/schemas";
-import { recordFingerprint } from "../../shared/record-identity";
-import { findExchangeRate } from "../../shared/money";
-import type { WalletDataset, WalletRecord } from "../../shared/types";
+} from "@shared/schemas";
+import { recordFingerprint } from "@shared/record-identity";
+import { findExchangeRate } from "@shared/money";
+
+import type { WalletDataset, WalletRecord } from "@shared/types";
 
 export type ImportRecord = Omit<WalletRecord, "id">;
 export interface CsvPreview {
@@ -61,13 +62,19 @@ export function parseCsv(text: string): Array<Record<string, string>> {
   return rows.map((values, i) => {
     if (values.length !== headers.length)
       throw new Error(`CSV row ${i + 2} has ${values.length} fields; expected ${headers.length}.`);
-    return Object.fromEntries(headers.map((h, j) => [h, values[j]]));
+    return Object.fromEntries(headers.map((h, j) => [h, values[j] ?? ""]));
   });
 }
 
 const csvCell = (value: unknown) => {
   const text =
-    value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
+    value === undefined
+      ? ""
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : typeof value === "string"
+          ? value
+          : JSON.stringify(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 };
 const csvFields = [

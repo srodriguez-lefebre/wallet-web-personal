@@ -1,6 +1,8 @@
-import { afterAll, beforeAll, expect, test } from "vitest";
 import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, expect, test } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { serveWalletApi } from "../../scripts/sandbox/http.js";
 import { findApiOperation } from "../../shared/api-contract.js";
@@ -56,7 +58,7 @@ async function request(path: string, method = "GET", input?: unknown) {
   });
   const payload = (await response.json()) as { data: Record<string, unknown>; error: unknown };
   if (response.ok) {
-    const operation = findApiOperation(method, path.split("?")[0]);
+    const operation = findApiOperation(method, path.split("?")[0]!);
     expect(operation).toBeDefined();
     const parsed = operation!.response.safeParse(payload.data);
     expect(parsed.success, JSON.stringify(parsed.error?.issues)).toBe(true);
@@ -79,6 +81,7 @@ test("authenticated template CRUD persists through HTTP reload and never creates
   const created = await request("/api/record-templates", "POST", template);
   expect(created.response.status).toBe(201);
   const id = created.payload.data.id;
+  if (typeof id !== "string") throw new Error("Missing synthetic resource ID");
   expect((await request("/api/record-templates")).payload.data).toContainEqual(
     expect.objectContaining({ ...template, id }),
   );
@@ -128,6 +131,7 @@ test("authenticated real HTTP routes match concrete response contracts", async (
   });
   expect(created.response.status).toBe(201);
   const id = created.payload.data.id;
+  if (typeof id !== "string") throw new Error("Missing synthetic resource ID");
   expect((await request(`/api/records/${id}`, "PATCH", { note: "Updated" })).response.status).toBe(
     200,
   );
@@ -184,8 +188,48 @@ test("confirmed backup restore persists associations and rolls back every write 
   expect(restored.response.status).toBe(200);
   expect((await getWalletDataset()).records).toEqual(before.records);
   const broken = structuredClone(before);
-  broken.categories[0].parentId = randomUUID();
+  broken.categories[0]!.parentId = randomUUID();
   await expect(restoreWalletBackup(broken)).rejects.toThrow();
   expect((await getWalletDataset()).records).toEqual(before.records);
   expect((await getWalletDataset()).accounts).toEqual(before.accounts);
+});
+
+test("nested card summary uses the real authenticated router and matches persisted movements after reload", async () => {
+  const created = await request("/api/cards", "POST", {
+    name: "Synthetic summary card",
+    issuer: "Test bank",
+    lastFour: "4242",
+    creditLimit: 1000,
+    limitCurrency: "UYU",
+    closingDay: 20,
+    dueDay: 5,
+    color: "blue",
+    icon: "card",
+    isActive: true,
+  });
+  expect(created.response.status).toBe(201);
+  const cardId = created.payload.data.id;
+  if (typeof cardId !== "string") throw new Error("Missing synthetic card ID");
+  const consumption = await request(`/api/cards/${cardId}/records`, "POST", {
+    kind: "purchase",
+    amount: 75,
+    currency: "UYU",
+    amountInLimitCurrency: 75,
+    exchangeRateToLimitCurrency: 1,
+    categoryId,
+    occurredAt: "2026-10-12T12:00:00.000Z",
+  });
+  expect(consumption.response.status).toBe(201);
+  for (let reload = 0; reload < 2; reload++) {
+    const summary = await request(`/api/cards/${cardId}/summary`);
+    expect(summary.response.status).toBe(200);
+    expect(summary.payload.data).toMatchObject({
+      card: { id: cardId, creditLimit: 1000 },
+      usedLimit: 75,
+      availableLimit: 925,
+      outstanding: [{ currency: "UYU", amount: 75 }],
+    });
+  }
+  const invalid = await request("/api/cards/not-a-uuid/summary");
+  expect(invalid.response.status).toBe(400);
 });

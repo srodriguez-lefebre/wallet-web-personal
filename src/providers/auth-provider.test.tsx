@@ -1,12 +1,14 @@
+// @vitest-environment jsdom
 import { useEffect } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act, render, type RenderResult } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { AuthProvider, useAuth } from "./auth-provider";
 import { createSession } from "../services/auth-service";
 
 vi.mock("@/services/auth-service");
 let context: ReturnType<typeof useAuth>,
-  tree: ReactTestRenderer | undefined,
+  tree: RenderResult | undefined,
   storage: Map<string, string>;
 function Consumer() {
   const value = useAuth();
@@ -29,28 +31,25 @@ beforeEach(() => {
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
   };
-  vi.stubGlobal(
-    "window",
-    Object.assign(new EventTarget(), {
-      localStorage,
-      sessionStorage: { getItem: () => null, removeItem: vi.fn() },
-      atob,
-      setTimeout,
-      clearTimeout,
-    }),
-  );
-  vi.stubGlobal("document", Object.assign(new EventTarget(), { visibilityState: "visible" }));
+  vi.spyOn(window, "localStorage", "get").mockReturnValue({
+    ...localStorage,
+    length: 0,
+    clear: () => storage.clear(),
+    key: () => null,
+  });
+  window.sessionStorage.clear();
 });
 afterEach(async () => {
   if (tree) await act(async () => tree!.unmount());
   tree = undefined;
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 async function mount() {
   await act(async () => {
-    tree = create(
+    tree = render(
       <AuthProvider>
         <Consumer />
       </AuthProvider>,

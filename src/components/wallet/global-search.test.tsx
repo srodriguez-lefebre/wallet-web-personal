@@ -1,15 +1,17 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
-import type { RecordFilters } from "@shared/types";
+
 import { GlobalSearch } from "./global-search";
 import { AppShell } from "../layout/app-shell";
 
+import type { RecordFilters } from "@shared/types";
+import type { ReactNode } from "react";
+
 const state = vi.hoisted(() => ({
   dataset: {} as typeof mockWalletData,
-  filters: {} as RecordFilters,
+  filters: {},
   period: "month",
   writes: vi.fn(),
   draft: vi.fn(),
@@ -176,12 +178,12 @@ test("composing, repeated and ordinary text keys do not open search or navigate"
 
 test("account and category selections clear stale filters and open their all-history records", async () => {
   state.dataset.accounts[0] = {
-    ...state.dataset.accounts[0],
+    ...state.dataset.accounts[0]!,
     name: "Unique account",
     isVisible: true,
     isActive: true,
   };
-  state.dataset.categories[0].name = "Unique category";
+  state.dataset.categories[0]!.name = "Unique category";
   await mount();
   await open();
   await query("unique account");
@@ -197,7 +199,7 @@ test("account and category selections clear stale filters and open their all-his
   await act(async () => button("Unique category").props.onClick());
   expect(state.filters).toEqual({
     type: "all",
-    categoryId: state.dataset.categories[0].id,
+    categoryId: state.dataset.categories[0]!.id,
   });
   expect(state.writes).not.toHaveBeenCalled();
 });
@@ -219,7 +221,7 @@ test("text search and the review command replace unrelated filters without claim
 test("entity selection uses detail routes and New record only opens a draft", async () => {
   state.dataset.creditCards = [
     {
-      ...state.dataset.creditCards[0],
+      ...state.dataset.creditCards[0]!,
       id: "card-one",
       name: "Unique card",
       isActive: true,

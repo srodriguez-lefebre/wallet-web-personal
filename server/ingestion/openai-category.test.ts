@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { inferCategoryWithOpenAi } from "./openai-category";
 
 const categories = [
@@ -38,7 +39,7 @@ test("a bank descriptor gets sufficient output budget, purchase context and a va
   expect(await inferCategoryWithOpenAi("HDP HURBAN FOOD MONTE", categories, diagnostic)).toBe(
     "restaurant",
   );
-  const request = JSON.parse(fetchMock.mock.calls[0][1].body);
+  const request = JSON.parse(fetchMock.mock.calls[0]![1].body);
   expect(request.max_output_tokens).toBeGreaterThanOrEqual(2048);
   expect(request.reasoning).toEqual({ effort: "low" });
   expect(request.store).toBe(false);
@@ -130,5 +131,5 @@ test("a configured non-reasoning model does not receive GPT-5-only parameters", 
     }),
   );
   expect(await inferCategoryWithOpenAi("Unknown", categories)).toBe("restaurant");
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning).toBeUndefined();
+  expect(JSON.parse(fetchMock.mock.calls[0]![1].body).reasoning).toBeUndefined();
 });

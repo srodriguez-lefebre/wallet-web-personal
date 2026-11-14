@@ -1,11 +1,13 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { CardDetailView } from "./card-detail-view";
 import { CardsView } from "./cards-view";
 import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
+
+import type { ReactNode } from "react";
 
 let dataset = structuredClone(mockWalletData);
 const payment = vi.hoisted(() => vi.fn());
@@ -76,7 +78,7 @@ beforeEach(() => {
     currency: "USD",
     amountInLimitCurrency: (index + 1) * 100,
     exchangeRateToLimitCurrency: 1,
-    categoryId: dataset.categories[0].id,
+    categoryId: dataset.categories[0]!.id,
     accountImpactAtCreation: false,
     occurredAt: "2020-01-10",
   }));
@@ -104,8 +106,8 @@ async function detail(query = "") {
 
 test("purchase and payment history use Uruguay's local day and preserve calendar dates", async () => {
   vi.stubEnv("TZ", "America/Montevideo");
-  dataset.creditCardRecords[0].occurredAt = "2026-11-13T02:38:00Z";
-  dataset.creditCardRecords[1].occurredAt = "2026-11-13";
+  dataset.creditCardRecords[0]!.occurredAt = "2026-11-13T02:38:00Z";
+  dataset.creditCardRecords[1]!.occurredAt = "2026-11-13";
   dataset.creditCardPayments = [
     {
       id: "night-payment",
@@ -127,8 +129,8 @@ test("purchase and payment history use Uruguay's local day and preserve calendar
 test("Cards distinguishes the open cycle from actual closed statement debt", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-13T15:00:00Z"));
-  dataset.creditCards[0].closingDay = 3;
-  dataset.creditCards[0].dueDay = 12;
+  dataset.creditCards[0]!.closingDay = 3;
+  dataset.creditCards[0]!.dueDay = 12;
   dataset.creditCardStatements = [];
   dataset.creditCardRecords = [];
   await act(async () => {
@@ -166,7 +168,7 @@ test("Cards distinguishes the open cycle from actual closed statement debt", asy
         currency: "USD",
         amountInLimitCurrency: 100,
         exchangeRateToLimitCurrency: 1,
-        categoryId: dataset.categories[0].id,
+        categoryId: dataset.categories[0]!.id,
         accountImpactAtCreation: false,
         occurredAt: "2026-10-20",
       },
@@ -191,7 +193,7 @@ test.each(["2026-11-13T02:38:00.123Z", "2026-11-13"])(
   "editing a movement preserves an unchanged original date: %s",
   async (occurredAt) => {
     vi.stubEnv("TZ", "America/Montevideo");
-    dataset.creditCardRecords = [{ ...dataset.creditCardRecords[0], occurredAt }];
+    dataset.creditCardRecords = [{ ...dataset.creditCardRecords[0]!, occurredAt }];
     dataset.creditCardStatements = [];
     await detail();
     await act(async () => tree!.root.findByProps({ title: "Edit" }).props.onClick());
@@ -199,7 +201,7 @@ test.each(["2026-11-13T02:38:00.123Z", "2026-11-13"])(
       occurredAt.includes("T") ? "2026-11-12" : "2026-11-13",
     );
     await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-    expect(updateMovement.mock.calls[0][2].occurredAt).toBe(occurredAt);
+    expect(updateMovement.mock.calls[0]![2].occurredAt).toBe(occurredAt);
   },
 );
 test("detail defaults to the oldest actual debt and honors the exact statement query", async () => {
@@ -221,7 +223,7 @@ test("changing a statement updates the query selection and clears the previous p
     .find((select) =>
       select.findAllByType("option").some((option) => option.children.includes("External payment")),
     )!;
-  await act(async () => bank.props.onChange({ target: { value: dataset.accounts[0].id } }));
+  await act(async () => bank.props.onChange({ target: { value: dataset.accounts[0]!.id } }));
   await act(async () =>
     tree!.root
       .findByProps({ placeholder: "Amount debited" })
@@ -268,8 +270,8 @@ test("paying from a statement link submits the exact selected statement", async 
   );
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(payment).toHaveBeenCalledTimes(1);
-  expect(payment.mock.calls[0].slice(0, 2)).toEqual(["card", "later"]);
-  expect(payment.mock.calls[0][2]).toMatchObject({
+  expect(payment.mock.calls[0]!.slice(0, 2)).toEqual(["card", "later"]);
+  expect(payment.mock.calls[0]![2]).toMatchObject({
     amount: 100,
     currency: "USD",
     amountInLimitCurrency: 100,

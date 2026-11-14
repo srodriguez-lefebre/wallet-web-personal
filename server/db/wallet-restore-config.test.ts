@@ -1,6 +1,8 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { neonConfig } from "@neondatabase/serverless";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { getWalletBackup, getWalletDataset } from "./wallet-repository.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
@@ -105,7 +107,7 @@ test("legacy restore retains ingestion committed after preparation and before th
   const transport = neonConfig.fetchFunction!;
   let injected = false;
   neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
-    const body = JSON.parse(String(options.body)) as { queries?: { query: string }[] };
+    const body = JSON.parse(options.body as string) as { queries?: { query: string }[] };
     if (!injected && body.queries?.some((item) => item.query.includes("LOCK TABLE"))) {
       injected = true;
       await fixture.pool.query(

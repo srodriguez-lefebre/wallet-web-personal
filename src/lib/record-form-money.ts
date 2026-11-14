@@ -1,4 +1,4 @@
-import type { CurrencyCode } from "../../shared/types";
+import type { CurrencyCode } from "@shared/types";
 
 /** Hidden same-currency fields follow the edited amount; unchanged history keeps its bank amount. */
 export function recordAccountAmount(

@@ -1,10 +1,12 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import type { ReactNode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { WalletDataset } from "../../shared/types";
-import { formatMoney } from "../../shared/calculations";
+import { mockWalletData } from "@shared/mock-data";
+import { formatMoney } from "@shared/calculations";
+
 import { AnalyticsView } from "./analytics-view";
+
+import type { WalletDataset } from "@shared/types";
+import type { ReactNode } from "react";
 
 let dataset: WalletDataset, historyComplete: boolean, assistantReads: number;
 vi.mock("@/providers/wallet-provider", () => ({
@@ -65,7 +67,7 @@ beforeEach(() => {
   dataset.settings.includeHiddenAccountsInReports = true;
   dataset.records = [
     {
-      ...dataset.records[0],
+      ...dataset.records[0]!,
       id: "purchase",
       amount: 10,
       currency: "USD",
@@ -89,14 +91,19 @@ test("merchant table displays frozen spending once and explains the gross purcha
   });
   const table = tree!.root.findByType("table");
   expect(table.findAllByType("tr")).toHaveLength(2);
-  expect(table.findByType("caption").children.join("")).toContain(
-    "Gross spending; refunds are not deducted",
-  );
-  expect(table.findAllByType("td").map((cell) => cell.children.join(""))).toEqual([
-    "1",
-    formatMoney(400, "UYU"),
-    formatMoney(400, "UYU"),
-  ]);
+  expect(
+    table
+      .findByType("caption")
+      .children.map((child) => (typeof child === "object" ? "" : String(child)))
+      .join(""),
+  ).toContain("Gross spending; refunds are not deducted");
+  expect(
+    table
+      .findAllByType("td")
+      .map((cell) =>
+        cell.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
+      ),
+  ).toEqual(["1", formatMoney(400, "UYU"), formatMoney(400, "UYU")]);
 });
 test("merchant table withholds partial totals and shows a clear empty state for a complete period", async () => {
   historyComplete = false;
@@ -112,7 +119,7 @@ test("merchant table withholds partial totals and shows a clear empty state for 
 });
 test("merchant table limits rows to the ten largest merchants", async () => {
   dataset.records = Array.from({ length: 12 }, (_, index) => ({
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     id: String(index),
     counterpartyName: `Shop ${index}`,
     amount: index + 1,
@@ -122,8 +129,8 @@ test("merchant table limits rows to the ten largest merchants", async () => {
   });
   const rows = tree!.root.findByType("tbody").findAllByType("tr");
   expect(rows).toHaveLength(10);
-  expect(rows[0].findByType("th").children).toEqual(["Shop 11"]);
-  expect(rows[9].findByType("th").children).toEqual(["Shop 2"]);
+  expect(rows[0]!.findByType("th").children).toEqual(["Shop 11"]);
+  expect(rows[9]!.findByType("th").children).toEqual(["Shop 2"]);
 });
 
 test("a budget with missing FX displays a missing-rate placeholder for spent and progress", async () => {
@@ -142,7 +149,7 @@ test("a budget with missing FX displays a missing-rate placeholder for spent and
   ];
   dataset.records = [
     {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       type: "expense",
       currency: "UYU",
       amount: 50,
@@ -160,10 +167,14 @@ test("a budget with missing FX displays a missing-rate placeholder for spent and
   const budget = tree!.root
     .findAllByType("button")
     .find((button) => button.findAllByType("p").some((p) => p.children.includes("USD budget")))!;
-  const spent = budget.findAllByType("p")[1];
-  expect(spent.children.join("")).toContain("Falta cotización");
-  expect(spent.children.join("")).not.toContain("NaN");
-  expect(budget.findAllByType("p")[2].children).toEqual(["Falta cotización"]);
+  const spent = budget.findAllByType("p")[1]!;
+  expect(
+    spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
+  ).toContain("Falta cotización");
+  expect(
+    spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
+  ).not.toContain("NaN");
+  expect(budget.findAllByType("p")[2]!.children).toEqual(["Falta cotización"]);
 });
 
 test("opens budget creation from analytics using the selected month and fresh full history", async () => {
@@ -173,10 +184,10 @@ test("opens budget creation from analytics using the selected month and fresh fu
   expect(assistantReads).toBe(0);
   const trigger = tree!.root
     .findAllByType("button")
-    .find((node) => node.children.includes("Budget assistant"));
+    .find((node) => node.children.includes("Budget assistant"))!;
   expect(trigger).toBeDefined();
   await act(async () => {
-    trigger!.props.onClick();
+    trigger.props.onClick();
   });
   expect(assistantReads).toBe(1);
   expect(tree!.root.findByProps({ "aria-label": "Target month" }).props.value).toBe("2026-02");

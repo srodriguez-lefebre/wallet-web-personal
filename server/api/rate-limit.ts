@@ -1,9 +1,12 @@
-import type { VercelRequest } from "@vercel/node";
 import { createHmac } from "node:crypto";
+
 import { eq } from "drizzle-orm";
+
 import { createDb } from "../db/client.js";
 import { authAttempts } from "../db/schema.js";
 import { sessionSigningSecret } from "./auth.js";
+
+import type { VercelRequest } from "@vercel/node";
 
 const WINDOW_MS = 15 * 60_000;
 const MAX_FAILURES = 5;

@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, expect, test } from "vitest";
+
 import { createDb } from "../../server/db/client.js";
 import { accounts, records } from "../../server/db/schema.js";
 import { getWalletDataset } from "../../server/db/wallet-repository.js";
@@ -87,16 +88,16 @@ afterAll(async () => {
 test("reconstructs snapshot associations and exact amounts through the real repository", async () => {
   await importSnapshot(pg, snapshot);
   const result = await getWalletDataset();
-  expect(result.accounts[0].initialBalance).toBe(500.25);
+  expect(result.accounts[0]!.initialBalance).toBe(500.25);
   expect(result.categories).toHaveLength(1);
-  expect(result.records[0].occurredAt).toBe("2026-06-21T12:00:00.000Z");
-  expect(result.records[0].goalAssociations?.[0]).toMatchObject({
+  expect(result.records[0]!.occurredAt).toBe("2026-06-21T12:00:00.000Z");
+  expect(result.records[0]!.goalAssociations?.[0]).toMatchObject({
     goalId,
     allocatedAmount: 5,
     useReserved: false,
   });
   expect(result.recordTemplates).toHaveLength(1);
-  expect(result.recordTemplates![0]).toMatchObject(snapshot.recordTemplates[0]);
+  expect(result.recordTemplates![0]!).toMatchObject(snapshot.recordTemplates[0]!);
 });
 
 test("Neon batches roll back earlier financial writes when a later write fails", async () => {
@@ -105,7 +106,7 @@ test("Neon batches roll back earlier financial writes when a later write fails",
     db.batch([
       db.update(accounts).set({ initialBalance: "900" }),
       db.insert(records).values({
-        ...snapshot.records[0],
+        ...snapshot.records[0]!,
         id: "00000000-0000-4000-8000-000000000099",
         accountId: "00000000-0000-4000-8000-000000000098",
         amount: "1",
@@ -115,16 +116,17 @@ test("Neon batches roll back earlier financial writes when a later write fails",
     ]),
   ).rejects.toThrow();
   const [account] = await db.select().from(accounts);
+  if (!account) throw new Error("Expected synthetic fixture row");
   expect(account.initialBalance).toBe("500.25");
   const result = await db.execute(sql`select 123.45::numeric as amount`);
-  expect(result.rows[0]).toEqual({ amount: "123.45" });
+  expect(result.rows[0]!).toEqual({ amount: "123.45" });
 });
 
 test("invalid snapshot restores none of its rows and leaves existing data intact", async () => {
   await expect(
     importSnapshot(pg, {
       ...snapshot,
-      accounts: [{ ...snapshot.accounts[0], id: "invalid" }],
+      accounts: [{ ...snapshot.accounts[0]!, id: "invalid" }],
     }),
   ).rejects.toThrow();
   const result = await pg.query("select initial_balance from accounts");

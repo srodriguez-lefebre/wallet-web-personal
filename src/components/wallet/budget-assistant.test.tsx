@@ -1,9 +1,11 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../../shared/mock-data";
-import { budgetSchema } from "../../../shared/schemas";
-import type { Budget, WalletDataset } from "../../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+import { budgetSchema } from "@shared/schemas";
+
 import { BudgetAssistant } from "./budget-assistant";
+
+import type { Budget, WalletDataset } from "@shared/types";
 
 const food = "10000000-0000-4000-8000-000000000001";
 const travel = "10000000-0000-4000-8000-000000000002";
@@ -45,7 +47,9 @@ const text = () =>
     .join(" ") +
   tree!.root
     .findAllByType("button")
-    .map((node) => node.children.join(""))
+    .map((node) =>
+      node.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
+    )
     .join(" ");
 const button = (label: string) =>
   tree!.root.findAllByType("button").find((node) => node.children.includes(label))!;
@@ -79,7 +83,7 @@ beforeEach(() => {
     { id: travel, name: "Travel", color: "#654321", icon: "plane" },
   ];
   server.records = [food, travel].map((categoryId, index) => ({
-    ...server.records[0],
+    ...server.records[0]!,
     id: String(index),
     type: "expense",
     amount: 100.01,
@@ -114,14 +118,14 @@ test("loads complete history, explains monthly scope and saves edited chosen pro
   await save();
   expect(reads).toBe(2);
   expect(server.budgets).toHaveLength(1);
-  expect(server.budgets[0]).toMatchObject({
+  expect(server.budgets[0]!).toMatchObject({
     categoryId: food,
     limitAmount: 55.25,
     period: "monthly",
     currency: "UYU",
     isActive: true,
   });
-  expect(server.budgets[0].accountId).toBeUndefined();
+  expect(server.budgets[0]!.accountId).toBeUndefined();
   expect(text()).toContain("1 confirmed");
 });
 
@@ -199,7 +203,7 @@ test("fresh active conflicts in different currencies and hidden scopes skip writ
   await mount();
   server.budgets = [
     {
-      ...mockWalletData.budgets[0],
+      ...mockWalletData.budgets[0]!,
       id: "other",
       categoryId: food,
       currency: "USD",
@@ -209,7 +213,7 @@ test("fresh active conflicts in different currencies and hidden scopes skip writ
   ];
   await save();
   expect(writes.map((value) => value.categoryId)).toEqual([travel]);
-  expect(server.budgets[0].currency).toBe("USD");
+  expect(server.budgets[0]!.currency).toBe("USD");
   expect(text()).toContain("Existing active budget");
 });
 
@@ -251,15 +255,15 @@ test("initial load failure shows a retry and waits for full history before offer
 test("preexisting budgets and missing frozen FX disable the affected proposals", async () => {
   server.budgets = [
     {
-      ...mockWalletData.budgets[0],
+      ...mockWalletData.budgets[0]!,
       id: "already",
       categoryId: food,
       currency: "USD",
       isActive: true,
     },
   ];
-  server.records[1].currency = "USD";
-  server.records[1].exchangeRateToPrimary = 0;
+  server.records[1]!.currency = "USD";
+  server.records[1]!.exchangeRateToPrimary = 0;
   await mount();
   expect(tree!.root.findByProps({ "aria-label": "Select Food" }).props.disabled).toBe(true);
   expect(tree!.root.findByProps({ "aria-label": "Select Travel" }).props.disabled).toBe(true);

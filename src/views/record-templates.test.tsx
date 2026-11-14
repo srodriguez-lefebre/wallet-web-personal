@@ -1,9 +1,11 @@
-import type { PropsWithChildren } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { RecordTemplate, WalletDataset } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import { RecordsView } from "./records-view";
+
+import type { RecordTemplate, WalletDataset } from "@shared/types";
+import type { PropsWithChildren } from "react";
 const actions = vi.hoisted(() => ({
   addTemplate: vi.fn(),
   updateTemplate: vi.fn(),
@@ -94,19 +96,19 @@ beforeEach(() => {
   });
   dataset = structuredClone(mockWalletData);
   dataset.goals = [];
-  dataset.accounts[0].currency = "UYU";
+  dataset.accounts[0]!.currency = "UYU";
   dataset.settings.primaryCurrency = "UYU";
   dataset.records = [
     {
-      ...dataset.records[0],
+      ...dataset.records[0]!,
       occurredAt: "2026-10-01T12:00:00Z",
       type: "expense",
       amount: 10,
       currency: "USD",
-      accountId: dataset.accounts[0].id,
+      accountId: dataset.accounts[0]!.id,
       accountAmount: 410,
       exchangeRateToPrimary: 41,
-      categoryId: dataset.categories[0].id,
+      categoryId: dataset.categories[0]!.id,
       tagIds: [],
       goalIds: [],
       goalAssociations: [],
@@ -144,8 +146,8 @@ function template(): RecordTemplate {
     type: "expense",
     amount: 10,
     currency: "USD",
-    accountId: dataset.accounts[0].id,
-    categoryId: dataset.categories[0].id,
+    accountId: dataset.accounts[0]!.id,
+    categoryId: dataset.categories[0]!.id,
     paymentType: "debit",
   };
 }
@@ -172,7 +174,7 @@ test("new movements do not expose template management", async () => {
 test("editing a movement does not expose template management", async () => {
   await mount();
   await act(async () =>
-    tree!.root.findAllByProps({ role: "button", tabIndex: 0 })[0].props.onClick(),
+    tree!.root.findAllByProps({ role: "button", tabIndex: 0 })[0]!.props.onClick(),
   );
   expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
 });
@@ -185,7 +187,7 @@ test("using a template writes nothing until confirmation then freezes the new da
   expect(actions.addRecord).not.toHaveBeenCalled();
   expect(tree!.root.findByType("form")).toBeDefined();
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-  const value = actions.addRecord.mock.calls[0][0];
+  const value = actions.addRecord.mock.calls[0]![0];
   expect(value.accountAmount).toBe(440);
   expect(value.exchangeRateToPrimary).toBe(44);
   expect(value.occurredAt).toBe("2026-10-03T12:00:00.000Z");
@@ -194,7 +196,7 @@ test("using a template writes nothing until confirmation then freezes the new da
 });
 test("an archived financial destination leaves an invalid draft that cannot be confirmed", async () => {
   dataset.recordTemplates = [template()];
-  dataset.accounts[0].isActive = false;
+  dataset.accounts[0]!.isActive = false;
   newRecordRequestId = 1;
   newRecordTemplateId = "saved";
   await mount();
@@ -244,7 +246,7 @@ test("a global new-record request starts fresh after a failed save", async () =>
 });
 
 test("needs-review records display an amber status label", async () => {
-  dataset.records[0].paymentStatus = "needs_review";
+  dataset.records[0]!.paymentStatus = "needs_review";
   await mount();
   const labels = tree!.root
     .findAllByType("span")

@@ -1,5 +1,6 @@
-import type { CurrencyCode, WalletDataset, WalletRecord } from "./types.js";
 import { isFinancialRecord } from "./record-status.js";
+
+import type { CurrencyCode, WalletDataset, WalletRecord } from "./types.js";
 
 const active = (row: object) => !(row as { deletedAt?: string | null }).deletedAt;
 const positive = (value: number | undefined) =>

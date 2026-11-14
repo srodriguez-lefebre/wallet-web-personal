@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { neonConfig } from "@neondatabase/serverless";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { recordSchema } from "../../shared/schemas.js";
 import {
@@ -67,7 +68,7 @@ async function balance() {
   const result = await fixture.pool.query<{ amount: string }>(
     "select coalesce(sum(case when type in ('reserve','restore') then amount else -amount end),0) as amount from goal_reservation_movements",
   );
-  return Number(result.rows[0].amount);
+  return Number(result.rows[0]!.amount);
 }
 
 test("independent repeated closes release the ledger once", async () => {
@@ -83,8 +84,8 @@ test("independent repeated closes release the ledger once", async () => {
   );
   expect(releases.rows).toEqual([{ amount: "60.00" }]);
   const dataset = await getWalletDataset();
-  expect(dataset.goals[0].status).toBe("completed");
-  expect(dataset.records[0].id).toBe(record.id);
+  expect(dataset.goals[0]!.status).toBe("completed");
+  expect(dataset.records[0]!.id).toBe(record.id);
 });
 
 test("clearing a review changes no reservation consumption after a later reserve", async () => {
@@ -107,7 +108,7 @@ test("closing races with expense reconciliation and reservations without recreat
     reserve(),
   ]);
   expect(await balance()).toBe(0);
-  expect((await getWalletDataset()).goals[0].status).toBe("completed");
+  expect((await getWalletDataset()).goals[0]!.status).toBe("completed");
   await expect(reserve()).rejects.toThrow();
 });
 
@@ -117,7 +118,7 @@ test("a concurrent note edit preserves the completed status", async () => {
     updateGoal(goalId, { status: "completed" }),
     updateGoal(goalId, { note: "History retained" }),
   ]);
-  const goal = (await getWalletDataset()).goals[0];
+  const goal = (await getWalletDataset()).goals[0]!;
   expect(goal).toMatchObject({
     status: "completed",
     note: "History retained",
@@ -148,7 +149,7 @@ test.each([
       proceed = resolve;
     });
     neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
-      const body = JSON.parse(String(options?.body)) as { queries?: { query: string }[] };
+      const body = JSON.parse(options?.body as string) as { queries?: { query: string }[] };
       if (body.queries?.some((query) => query.query.includes('insert into "records"'))) {
         prepared();
         await closed;
@@ -170,8 +171,8 @@ test.each([
       );
       proceed();
       const result = await creation;
-      expect((Array.isArray(result) ? result[0] : result).goalIds).toEqual([]);
-      expect((await getWalletDataset()).records[0].goalIds).toEqual([]);
+      expect((Array.isArray(result) ? result[0]! : result).goalIds).toEqual([]);
+      expect((await getWalletDataset()).records[0]!.goalIds).toEqual([]);
       expect(await balance()).toBe(change === "close" ? 0 : 100);
     } finally {
       proceed();
@@ -191,7 +192,7 @@ test("concurrent goal date edits cannot commit an invalid automatic capture inte
     release = resolve;
   });
   neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
-    const body = JSON.parse(String(options?.body)) as { queries?: { query: string }[] };
+    const body = JSON.parse(options?.body as string) as { queries?: { query: string }[] };
     if (body.queries?.some((query) => query.query.includes('update "goals"'))) {
       arrivals += 1;
       if (arrivals === 2) release();
@@ -207,8 +208,8 @@ test("concurrent goal date edits cannot commit an invalid automatic capture inte
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
     const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
     expect(rejected).toHaveLength(1);
-    expect(rejected[0].reason).toMatchObject({ status: 409, code: "CONFLICT" });
-    const goal = (await getWalletDataset()).goals[0];
+    expect(rejected[0]!.reason).toMatchObject({ status: 409, code: "CONFLICT" });
+    const goal = (await getWalletDataset()).goals[0]!;
     expect(goal.autoCaptureStart! <= goal.autoCaptureEnd!).toBe(true);
   } finally {
     neonConfig.fetchFunction = transport;
@@ -231,7 +232,7 @@ test("independent expense connections cap consumption at the current numeric bal
   const result = await fixture.pool.query<{ amount: string }>(
     "select sum(amount) as amount from goal_reservation_movements where type='consume'",
   );
-  expect(Number(result.rows[0].amount)).toBe(100);
+  expect(Number(result.rows[0]!.amount)).toBe(100);
 });
 
 test("independent connections cannot archive and recreate an invisible reserve", async () => {
@@ -267,7 +268,7 @@ test("a stale concurrent edit returns a conflict and leaves the committed record
   // Hold both prepared mutation batches so each read the same initial record.
   // The real PostgreSQL row lock and snapshot guard decide which one commits.
   neonConfig.fetchFunction = async (url: string, options: RequestInit) => {
-    const body = JSON.parse(String(options?.body)) as { queries?: { query: string }[] };
+    const body = JSON.parse(options?.body as string) as { queries?: { query: string }[] };
     if (body.queries?.some((query) => query.query.includes("date_trunc('milliseconds'"))) {
       arrivals += 1;
       if (arrivals === 2) release();
@@ -283,7 +284,7 @@ test("a stale concurrent edit returns a conflict and leaves the committed record
     expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
     const rejected = outcomes.filter((outcome) => outcome.status === "rejected");
     expect(rejected).toHaveLength(1);
-    expect(rejected[0].reason).toMatchObject({ status: 409, code: "CONFLICT" });
+    expect(rejected[0]!.reason).toMatchObject({ status: 409, code: "CONFLICT" });
   } finally {
     neonConfig.fetchFunction = transport;
   }

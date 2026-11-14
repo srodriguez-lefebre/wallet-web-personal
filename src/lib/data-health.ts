@@ -1,6 +1,7 @@
 import { readStorage, writeStorage } from "./storage";
-import type { WalletDataset } from "../../shared/types";
-export { walletDataHealth, summarizeCsvPreview } from "../../shared/data-quality";
+
+import type { WalletDataset } from "@shared/types";
+export { walletDataHealth, summarizeCsvPreview } from "@shared/data-quality";
 
 export interface BackupReceipt {
   requestedAt: string;

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+
 import { restoreLocalDatabase } from "./restore.js";
 import { acquireWorkspaceLock, snapshotFile, workspace, writePrivateJson } from "./workspace.js";
 
@@ -10,12 +11,12 @@ if (
     (arg, index) =>
       arg !== "--reset" && arg !== "--backup" && !(backupIndex >= 0 && index === backupIndex + 1),
   ) ||
-  (backupIndex >= 0 && (!args[backupIndex + 1] || args[backupIndex + 1].startsWith("--")))
+  (backupIndex >= 0 && (!args[backupIndex + 1] || args[backupIndex + 1]?.startsWith("--")))
 )
   throw new Error("Usage: npm run sandbox:setup -- --backup <file> [--reset]");
 const source = backupIndex >= 0 ? path.resolve(args[backupIndex + 1] ?? "") : snapshotFile;
 const text = await readFile(source, "utf8");
-const snapshot = JSON.parse(text);
+const snapshot: unknown = JSON.parse(text);
 const release = await acquireWorkspaceLock();
 try {
   const counts = await restoreLocalDatabase(snapshot, workspace, args.includes("--reset"));

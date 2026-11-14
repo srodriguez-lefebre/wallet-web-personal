@@ -1,11 +1,14 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { randomUUID } from "node:crypto";
+
 import { ZodError, type ZodSchema } from "zod";
+
 import { uuidSchema } from "../../shared/schemas.js";
 import { HttpError, translateDatabaseError } from "./errors.js";
 import { sendError } from "./response.js";
 
-export function parseBody(req: VercelRequest) {
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
+export function parseBody(req: VercelRequest): unknown {
   if (typeof req.body === "string") return req.body ? JSON.parse(req.body) : {};
   return req.body ?? {};
 }

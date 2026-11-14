@@ -1,4 +1,5 @@
 import { getTableColumns, getTableName, sql, type Table } from "drizzle-orm";
+
 import { createDb, type DbClient } from "./client.js";
 import * as schema from "./schema.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
@@ -54,7 +55,7 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
         throw validationError(
           "The backup cannot preserve a merchant category; include merchant rules or restore matching categories",
         );
-      return { ...merchant, categoryId: matches[0].id };
+      return { ...merchant, categoryId: matches[0]!.id };
     });
     snapshot.merchantAliases = currentAliases;
   }
@@ -101,12 +102,12 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
       ([key, value]) => columns[key] && value !== undefined,
     );
     const values = entries.map(([key, value]) =>
-      key === defer ? null : columns[key].dataType === "json" ? JSON.stringify(value) : value,
+      key === defer ? null : columns[key]!.dataType === "json" ? JSON.stringify(value) : value,
     );
     queries.push(
       db.execute(
         sql`INSERT INTO ${table} (${sql.join(
-          entries.map(([key]) => sql.identifier(columns[key].name)),
+          entries.map(([key]) => sql.identifier(columns[key]!.name)),
           sql`, `,
         )}) VALUES (${sql.join(
           values.map((value) => sql`${value}`),
@@ -125,7 +126,7 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
         if (row[defer])
           queries.push(
             db.execute(
-              sql`UPDATE ${table} SET ${sql.identifier(getTableColumns(table)[defer].name)} = ${row[defer]} WHERE id = ${row.id}`,
+              sql`UPDATE ${table} SET ${sql.identifier(getTableColumns(table)[defer]!.name)} = ${row[defer]} WHERE id = ${row.id}`,
             ),
           );
   }
@@ -133,7 +134,7 @@ export async function restoreWalletBackup(input: unknown, db: DbClient = createD
     queries.push(
       db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`),
     );
-  insert(schema.settings, dataset.settings as unknown as Record<string, unknown>);
+  insert(schema.settings, dataset.settings);
   for (const record of dataset.records) {
     for (const tagId of record.tagIds) insert(schema.recordTags, { recordId: record.id, tagId });
     const links = record.goalAssociations.length

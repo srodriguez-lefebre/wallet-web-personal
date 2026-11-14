@@ -1,10 +1,12 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { RecordFilters, WalletDataset } from "../../shared/types";
-import { recordCreateSchema } from "../../shared/schemas";
+import { mockWalletData } from "@shared/mock-data";
+import { recordCreateSchema } from "@shared/schemas";
+
 import { RecordsView } from "./records-view";
+
+import type { RecordFilters, WalletDataset } from "@shared/types";
+import type { ReactNode } from "react";
 
 const update = vi.hoisted(() => vi.fn());
 const add = vi.hoisted(() => vi.fn());
@@ -138,9 +140,9 @@ beforeEach(() => {
       type: "expense",
       amount: 100,
       currency: "UYU",
-      accountId: dataset.accounts[0].id,
+      accountId: dataset.accounts[0]!.id,
       accountAmount: 100,
-      categoryId: dataset.categories[0].id,
+      categoryId: dataset.categories[0]!.id,
       creditCardId: "test-card",
       tagIds: [],
       goalIds: [],
@@ -163,7 +165,7 @@ async function openRecord() {
   await act(async () => {
     tree = create(<RecordsView />);
   });
-  await act(async () => tree!.root.findAllByProps({ role: "button" })[0].props.onClick());
+  await act(async () => tree!.root.findAllByProps({ role: "button" })[0]!.props.onClick());
 }
 
 test("the queue toggle opens global review from a manually filtered Needs review view", async () => {
@@ -277,7 +279,7 @@ test("removing a card sends JSON null and preserves an unchanged precise timesta
   await act(async () => paymentType.props.onChange({ target: { value: "debit" } }));
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(update).toHaveBeenCalledTimes(1);
-  expect(update.mock.calls[0][1]).toMatchObject({
+  expect(update.mock.calls[0]![1]).toMatchObject({
     creditCardId: null,
     occurredAt: preciseDate,
   });
@@ -285,7 +287,7 @@ test("removing a card sends JSON null and preserves an unchanged precise timesta
 
 test("bank-refund editing locks financial inputs and submits only metadata", async () => {
   dataset.records[0] = {
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     type: "income",
     amount: 40,
     accountAmount: 40,
@@ -302,8 +304,8 @@ test("bank-refund editing locks financial inputs and submits only metadata", asy
       currency: "UYU",
       amountInLimitCurrency: 100,
       exchangeRateToLimitCurrency: 1,
-      categoryId: dataset.categories[0].id,
-      accountId: dataset.accounts[0].id,
+      categoryId: dataset.categories[0]!.id,
+      accountId: dataset.accounts[0]!.id,
       accountAmount: 40,
       accountImpactAtCreation: true,
       occurredAt: preciseDate,
@@ -320,7 +322,7 @@ test("bank-refund editing locks financial inputs and submits only metadata", asy
       .props.onChange({ target: { value: "Confirmed" } }),
   );
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-  const payload = update.mock.calls[0][1];
+  const payload = update.mock.calls[0]![1];
   expect(payload.note).toBe("Confirmed");
   for (const key of [
     "amount",
@@ -358,7 +360,7 @@ test("new income and transfers cannot select a credit card", async () => {
 
 test("clicking the active review queue again restores the previous period and filters", async () => {
   dataset.records.push({
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     id: "review-old",
     occurredAt: "2019-01-01T12:00:00Z",
     paymentStatus: "needs_review",
@@ -383,9 +385,9 @@ test("clicking the active review queue again restores the previous period and fi
 test("a default foreign credit card starts in its limit currency rather than the bank currency", async () => {
   dataset.settings.defaultPaymentType = "credit";
   dataset.settings.defaultCreditCardId = "test-card";
-  dataset.creditCards[0].limitCurrency = "USD";
-  dataset.accounts[0].currency = "UYU";
-  dataset.settings.primaryAccountId = dataset.accounts[0].id;
+  dataset.creditCards[0]!.limitCurrency = "USD";
+  dataset.accounts[0]!.currency = "UYU";
+  dataset.settings.primaryAccountId = dataset.accounts[0]!.id;
   await act(async () => {
     tree = create(<RecordsView />);
   });
@@ -405,7 +407,7 @@ test("a default foreign credit card starts in its limit currency rather than the
 
 test("an unknown-bank purchase can be resolved as card-only without a bank account", async () => {
   dataset.records[0] = {
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     accountId: undefined,
     accountAmount: undefined,
     creditCardId: undefined,
@@ -428,16 +430,16 @@ test("an unknown-bank purchase can be resolved as card-only without a bank accou
       .disabled,
   ).toBe(false);
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
-  expect(update.mock.calls[0][1]).toMatchObject({
+  expect(update.mock.calls[0]![1]).toMatchObject({
     creditCardId: "test-card",
     paymentStatus: "cleared",
   });
-  expect(update.mock.calls[0][1].accountId).toBeUndefined();
+  expect(update.mock.calls[0]![1].accountId).toBeUndefined();
 });
 
 test("an unresolved review record can be cancelled without inventing destinations or FX", async () => {
   dataset.records[0] = {
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     currency: "EUR",
     accountId: undefined,
     accountAmount: undefined,
@@ -467,7 +469,7 @@ test("an unresolved review record can be cancelled without inventing destination
 
 test("review queue clears incompatible filters and includes drafts outside the selected month", async () => {
   dataset.records.push({
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     id: "old-draft",
     occurredAt: "2019-01-01T12:00:00Z",
     paymentStatus: "needs_review",
@@ -505,10 +507,10 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
   const accountId = "11111111-1111-4111-8111-111111111111",
     categoryId = "22222222-2222-4222-8222-222222222222",
     tagId = "33333333-3333-4333-8333-333333333333";
-  dataset.accounts[0].id = accountId;
-  dataset.categories[0].id = categoryId;
+  dataset.accounts[0]!.id = accountId;
+  dataset.categories[0]!.id = categoryId;
   dataset.records[0] = {
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     accountId,
     categoryId,
     currency: "USD",
@@ -531,7 +533,7 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
     counterpartyName: "Repeat shop",
     note: "Template note",
   };
-  dataset.accounts[0].currency = "UYU";
+  dataset.accounts[0]!.currency = "UYU";
   dataset.settings.primaryCurrency = "UYU";
   dataset.exchangeRates = [
     {
@@ -565,7 +567,7 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
   });
   expect(add).toHaveBeenCalledOnce();
   expect(update).not.toHaveBeenCalled();
-  const payload = add.mock.calls[0][0];
+  const payload = add.mock.calls[0]![0];
   expect(payload).toMatchObject({
     amount: 100,
     currency: "USD",
@@ -585,7 +587,7 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
 
 test("duplicate with no current quote stays editable and sends no write", async () => {
   dataset.records[0] = {
-    ...dataset.records[0],
+    ...dataset.records[0]!,
     currency: "EUR",
     creditCardId: undefined,
     paymentType: "debit",
@@ -594,7 +596,7 @@ test("duplicate with no current quote stays editable and sends no write", async 
   };
   dataset.exchangeRates = [];
   dataset.settings.primaryCurrency = "UYU";
-  dataset.accounts[0].currency = "UYU";
+  dataset.accounts[0]!.currency = "UYU";
   await openRecord();
   await act(async () =>
     tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
@@ -605,8 +607,8 @@ test("duplicate with no current quote stays editable and sends no write", async 
 });
 
 test("duplicate does not reuse inactive cards or accounts and retains its form after a failed save", async () => {
-  dataset.creditCards[0].isActive = false;
-  dataset.accounts[0].isActive = false;
+  dataset.creditCards[0]!.isActive = false;
+  dataset.accounts[0]!.isActive = false;
   await openRecord();
   await act(async () =>
     tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
@@ -616,14 +618,14 @@ test("duplicate does not reuse inactive cards or accounts and retains its form a
     .find((select) =>
       select
         .findAllByType("option")
-        .some((option) => option.props.value === dataset.accounts[1].id),
+        .some((option) => option.props.value === dataset.accounts[1]!.id),
     )!;
-  expect(accountSelect.props.value).not.toBe(dataset.accounts[0].id);
+  expect(accountSelect.props.value).not.toBe(dataset.accounts[0]!.id);
   expect(
     tree!.root.findAllByType("select").some((select) => select.props.value === "card:test-card"),
   ).toBe(false);
   await act(async () =>
-    accountSelect.props.onChange({ target: { value: dataset.accounts[1].id } }),
+    accountSelect.props.onChange({ target: { value: dataset.accounts[1]!.id } }),
   );
   add.mockRejectedValue(new Error("Offline"));
   await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
@@ -657,7 +659,7 @@ test("a submitted duplicate persists as a separate record after a canonical relo
       [sourceId, accountId, categoryId, randomUUID()],
     );
     dataset = await getWalletDataset();
-    const original = structuredClone(dataset.records[0]);
+    const original = structuredClone(dataset.records[0]!);
     add.mockImplementation(createRecord);
     await openRecord();
     await act(async () =>
@@ -667,8 +669,8 @@ test("a submitted duplicate persists as a separate record after a canonical relo
     await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
     const reloaded = await getWalletDataset();
     expect(reloaded.records).toHaveLength(2);
-    expect(reloaded.records.find((record) => record.id === sourceId)).toEqual(original);
-    expect(reloaded.records.find((record) => record.id !== sourceId)).toMatchObject({
+    expect(reloaded.records.find((record) => record.id === sourceId)!).toEqual(original);
+    expect(reloaded.records.find((record) => record.id !== sourceId)!).toMatchObject({
       amount: 100,
       currency: "USD",
       accountAmount: 4200,
@@ -688,8 +690,8 @@ test("editing a bank-backed purchase cannot select Card only", async () => {
 });
 
 test("editing an existing card-only purchase retains Card only", async () => {
-  dataset.records[0].accountId = undefined;
-  dataset.records[0].accountAmount = undefined;
+  dataset.records[0]!.accountId = undefined;
+  dataset.records[0]!.accountAmount = undefined;
   await openRecord();
   expect(
     tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),

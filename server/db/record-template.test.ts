@@ -1,5 +1,7 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import * as repository from "./wallet-repository.js";
 import * as schemas from "../../shared/schemas.js";
@@ -100,7 +102,7 @@ test("templates reject malformed, inactive and archived references without mutat
   await expect(repository.updateRecordTemplate(template.id, { amount: 30 })).rejects.toThrow(
     /reference|active/i,
   );
-  expect((await repository.listRecordTemplates())[0].amount).toBe(25);
+  expect((await repository.listRecordTemplates())[0]!.amount).toBe(25);
 });
 
 test("deleting a tag keeps its template while clearing the optional tag reference", async () => {
@@ -108,7 +110,7 @@ test("deleting a tag keeps its template while clearing the optional tag referenc
   const template = await repository.createRecordTemplate({ ...input, tagId: tag.id });
   expect(await repository.deleteTag(tag.id)).toBe(true);
   expect(
-    (await repository.listRecordTemplates()).find((item) => item.id === template.id),
+    (await repository.listRecordTemplates()).find((item) => item.id === template.id)!,
   ).toMatchObject({ name: "Groceries", tagId: undefined });
 });
 

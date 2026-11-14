@@ -1,15 +1,18 @@
 import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test";
 import { processMailIngestion } from "./process-mail-ingestion";
 import * as classification from "./openai-category";
-import type { MailIngestionInput } from "../../shared/schemas";
 import { createDb } from "../db/client";
 import { getWalletDataset, patchSettings, updateRecord } from "../db/wallet-repository";
 import { categoryImportWarning, countNewReviews } from "../../shared/record-review";
 import { resolveCategory } from "./process-mail-ingestion";
 import { walletBackupSchema } from "../../shared/schemas";
 import { restoreWalletBackup } from "../db/wallet-restore";
+
+import type { MailIngestionInput } from "../../shared/schemas";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
@@ -141,7 +144,7 @@ test("review saves and undo persist, and corrected merchants only auto-apply aft
   const automatic = await processMailIngestion(input("ERBOT SA MONTE"));
   expect(automatic.status).toBe("created");
   expect(
-    (await getWalletDataset()).records.find((record) => record.id === automatic.recordId),
+    (await getWalletDataset()).records.find((record) => record.id === automatic.recordId)!,
   ).toMatchObject({
     categoryId: foodId,
     importMerchant: "ERBOT SA MONTE",

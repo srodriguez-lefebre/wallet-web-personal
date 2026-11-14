@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { AccountBalance, WalletDataset } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import { groupAccountLiquidity } from "./account-presentation";
 import {
   cardLimitWarning,
@@ -8,8 +8,10 @@ import {
   selectPendingCardStatements,
 } from "./cards-presentation";
 
+import type { AccountBalance, WalletDataset } from "@shared/types";
+
 test("liquidity groups original currencies and excludes hidden, inactive and non-liquid accounts", () => {
-  const account = mockWalletData.accounts[0];
+  const account = mockWalletData.accounts[0]!;
   const rows = [
     { ...account, currency: "UYU", type: "bank" },
     { ...account, currency: "USD", type: "cash" },
@@ -86,7 +88,7 @@ test("agenda uses actual debt on archived cards, sorts deadlines, and classifies
     ["3", "soon", 7],
     ["0", "later", 8],
   ]);
-  expect(entries[0]).toMatchObject({
+  expect(entries[0]!).toMatchObject({
     dueAmountInLimitCurrency: 100,
     card: { isActive: false },
   });
@@ -94,7 +96,7 @@ test("agenda uses actual debt on archived cards, sorts deadlines, and classifies
 test("refunds remove zero debt and future payments do not hide a current obligation", () => {
   const data = fixture();
   data.creditCardRecords.push({
-    ...data.creditCardRecords[2],
+    ...data.creditCardRecords[2]!,
     id: "refund",
     kind: "refund",
     originalRecordId: "purchase-2",
@@ -115,9 +117,9 @@ test("refunds remove zero debt and future payments do not hide a current obligat
     "3",
     "0",
   ]);
-  data.creditCardPayments[0].occurredAt = "2026-10-02T12:00:00Z";
-  data.creditCardPayments[0].amountInLimitCurrency = 40;
-  expect(selectPendingCardStatements(data, asOf)[0].dueAmountInLimitCurrency).toBe(60);
+  data.creditCardPayments[0]!.occurredAt = "2026-10-02T12:00:00Z";
+  data.creditCardPayments[0]!.amountInLimitCurrency = 40;
+  expect(selectPendingCardStatements(data, asOf)[0]!.dueAmountInLimitCurrency).toBe(60);
 });
 test("detail honors a requested statement and otherwise opens the oldest actual unpaid statement", () => {
   const data = fixture();
@@ -134,15 +136,15 @@ test("limit warnings start at eighty percent and become critical at one hundred"
 
 test("agenda keeps native currency breakdown after a payment in the limit currency", () => {
   const data = fixture();
-  data.creditCardStatements = [data.creditCardStatements[2]];
+  data.creditCardStatements = [data.creditCardStatements[2]!];
   data.creditCardRecords = [
     {
-      ...data.creditCardRecords[2],
+      ...data.creditCardRecords[2]!,
       amountInLimitCurrency: 4000,
       exchangeRateToLimitCurrency: 40,
     },
   ];
-  data.creditCards[0].limitCurrency = "UYU";
+  data.creditCards[0]!.limitCurrency = "UYU";
   data.creditCardPayments = [
     {
       id: "payment",
@@ -163,10 +165,10 @@ test("agenda keeps native currency breakdown after a payment in the limit curren
       amountInLimitCurrency: 2000,
     },
   ];
-  expect(selectPendingCardStatements(data, asOf)[0]).toMatchObject({
+  expect(selectPendingCardStatements(data, asOf)[0]!).toMatchObject({
     dueAmountInLimitCurrency: 2000,
     currencyBreakdown: [{ currency: "USD", amount: 50 }],
   });
-  data.creditCardStatements[0].closedAt = "2026-10-04T12:00:00Z";
+  data.creditCardStatements[0]!.closedAt = "2026-10-04T12:00:00Z";
   expect(selectPendingCardStatements(data, asOf)).toEqual([]);
 });

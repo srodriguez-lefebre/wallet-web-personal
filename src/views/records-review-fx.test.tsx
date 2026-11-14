@@ -1,9 +1,11 @@
-import type { PropsWithChildren } from "react";
 import { act, create, type ReactTestRenderer, type ReactTestInstance } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { WalletDataset } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import { RecordsView } from "./records-view";
+
+import type { WalletDataset } from "@shared/types";
+import type { PropsWithChildren } from "react";
 
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;
@@ -74,14 +76,14 @@ beforeEach(() => {
   dataset.goals = [];
   dataset.exchangeRates = [];
   dataset.settings.primaryCurrency = "UYU";
-  dataset.accounts[0].currency = "UYU";
+  dataset.accounts[0]!.currency = "UYU";
   dataset.records = [
     {
-      ...dataset.records[0],
+      ...dataset.records[0]!,
       type: "expense",
       amount: 100,
       currency: "EUR",
-      accountId: dataset.accounts[0].id,
+      accountId: dataset.accounts[0]!.id,
       accountAmount: 4500,
       creditCardId: undefined,
       paymentType: "debit",
@@ -140,7 +142,7 @@ test.each([false, true])(
     );
     await submit();
     expect(update).toHaveBeenCalledTimes(1);
-    const payload = update.mock.calls[0][1];
+    const payload = update.mock.calls[0]![1];
     expect(payload.note).toBe("Reviewed merchant note");
     for (const key of [
       "exchangeRateToPrimary",
@@ -159,9 +161,9 @@ test.each([false, true])(
 );
 
 test("review metadata can be saved while the imported account and category remain unknown", async () => {
-  dataset.records[0].accountId = undefined;
-  dataset.records[0].accountAmount = undefined;
-  dataset.records[0].categoryId = undefined;
+  dataset.records[0]!.accountId = undefined;
+  dataset.records[0]!.accountAmount = undefined;
+  dataset.records[0]!.categoryId = undefined;
   await open();
   await change(tree!.root.findByProps({ placeholder: "Optional description" }), "Bank to identify");
   expect(
@@ -169,7 +171,7 @@ test("review metadata can be saved while the imported account and category remai
       .disabled,
   ).toBe(false);
   await submit();
-  expect(update.mock.calls[0][1]).toMatchObject({
+  expect(update.mock.calls[0]![1]).toMatchObject({
     note: "Bank to identify",
     categoryId: null,
   });
@@ -179,11 +181,11 @@ test("editing the review category keeps unknown FX and all financial fields out 
   await open();
   await change(
     tree!.root.findByType("form").findByProps({ "aria-label": "Category" }),
-    dataset.categories[1].id,
+    dataset.categories[1]!.id,
   );
   await submit();
-  expect(update.mock.calls[0][1]).toEqual({
-    categoryId: dataset.categories[1].id,
+  expect(update.mock.calls[0]![1]).toEqual({
+    categoryId: dataset.categories[1]!.id,
     counterpartyName: "Pago Amigo",
     note: "Ingreso mensual",
     tagIds: [],
@@ -206,7 +208,7 @@ test("clearing with a valid primary rate preserves the recorded bank conversion"
   await change(rate(), "50");
   await clearStatus();
   await submit();
-  expect(update.mock.calls[0][1]).toMatchObject({
+  expect(update.mock.calls[0]![1]).toMatchObject({
     exchangeRateToPrimary: 50,
     accountAmount: 4500,
     paymentStatus: "cleared",
@@ -259,14 +261,14 @@ test.each(["amount", "bank amount", "date", "type", "currency", "payment type", 
 );
 
 test("a valid primary rate does not replace a missing bank conversion after switching accounts", async () => {
-  dataset.accounts[1].currency = "BRL";
+  dataset.accounts[1]!.currency = "BRL";
   await open();
   await change(rate(), "50");
   await change(
     tree!.root
       .findAllByType("select")
-      .find((select) => select.props.value === dataset.accounts[0].id)!,
-    dataset.accounts[1].id,
+      .find((select) => select.props.value === dataset.accounts[0]!.id)!,
+    dataset.accounts[1]!.id,
   );
   await submit();
   expect(update).not.toHaveBeenCalled();
@@ -314,7 +316,7 @@ test("changing an existing card's frozen conversion requires primary FX", async 
       isActive: true,
     },
   ];
-  Object.assign(dataset.records[0], {
+  Object.assign(dataset.records[0]!, {
     creditCardId: "existing-card",
     paymentType: "credit",
     amountInLimitCurrency: 100,
@@ -331,12 +333,12 @@ test("changing an existing card's frozen conversion requires primary FX", async 
 });
 
 test("changing goal allocations requires primary FX", async () => {
-  dataset.goals = [structuredClone(mockWalletData.goals[0])];
+  dataset.goals = [structuredClone(mockWalletData.goals[0]!)];
   await open();
   await act(async () =>
     tree!.root
       .findAllByType("button")
-      .find((button) => button.children.includes(dataset.goals[0].name))!
+      .find((button) => button.children.includes(dataset.goals[0]!.name))!
       .props.onClick(),
   );
   await submit();

@@ -1,6 +1,7 @@
+import { findExchangeRate } from "@shared/money";
+
 import type { RecordTemplate, WalletDataset, WalletRecord } from "@shared/types";
 import type { RecordTemplatePatch } from "@shared/schemas";
-import { findExchangeRate } from "@shared/money";
 
 export function templateFromRecord(record: WalletRecord, name: string): Omit<RecordTemplate, "id"> {
   return {

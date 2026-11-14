@@ -2,7 +2,15 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   verify:
@@ -14,4 +22,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Both runtimes ship their binaries/WASM inside npm packages; npm's cache
+      # above retains their archives. Do not cache initialized fixture databases.
       - run: npm run check

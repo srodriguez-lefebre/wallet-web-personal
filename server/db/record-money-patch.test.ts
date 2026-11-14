@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { updateRecord } from "./wallet-repository.js";
 

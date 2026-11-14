@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { createSession } from "@/services/auth-service";
 import { readStorage, removeStorage, writeStorage } from "@/lib/storage";
 
@@ -27,7 +28,7 @@ function clearStoredSession() {
 
 function getTokenExpiration(token: string) {
   try {
-    const [payload] = token.split(".");
+    const [payload = ""] = token.split(".");
     const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
     const paddedPayload = normalizedPayload.padEnd(
       Math.ceil(normalizedPayload.length / 4) * 4,

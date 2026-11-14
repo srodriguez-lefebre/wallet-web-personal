@@ -1,11 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { findApiOperation } from "@shared/api-contract";
+
 import {
   createRecordTemplate,
   deleteRecordTemplate,
   listRecordTemplates,
   updateRecordTemplate,
 } from "./wallet-api";
-import { findApiOperation } from "../../shared/api-contract";
 
 afterEach(() => vi.unstubAllGlobals());
 test("template client sends authenticated CRUD requests that match the shared contract", async () => {
@@ -26,7 +27,7 @@ test("template client sends authenticated CRUD requests that match the shared co
     expect(headers.get("Authorization")).toBe("Bearer session");
     expect(headers.get("X-Client-Operation-Id")).toBe(operation.operationId);
     if ("body" in operation)
-      expect(operation.body.safeParse(JSON.parse(String(init.body))).success).toBe(true);
+      expect(operation.body.safeParse(JSON.parse(init.body as string)).success).toBe(true);
     return Response.json({
       data:
         operation.method === "GET"

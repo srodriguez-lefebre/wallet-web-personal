@@ -1,7 +1,9 @@
-import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@shared/calculations";
 import { calculateGoalFundingPlan } from "@shared/planning";
+
 import type { GoalProgress } from "@shared/types";
+
+import { Badge } from "@/components/ui/badge";
 
 const messages = {
   funded: "Target funded",

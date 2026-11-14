@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   creditCardPaymentSchema,
   creditCardRecordSchema,
@@ -74,7 +75,7 @@ describe("credit-card validation", () => {
 
     expect(result.success).toBe(false);
     if (result.success) return;
-    expect(result.error.issues.map((issue) => issue.path[0])).toEqual(
+    expect(result.error.issues.map((issue) => issue.path[0]!)).toEqual(
       expect.arrayContaining([
         "categoryId",
         "amountInLimitCurrency",

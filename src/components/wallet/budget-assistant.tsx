@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { buildBudgetPlan, conflictingCategoryBudgets } from "@shared/budget-planning";
+import { formatMoney, monthKey } from "@shared/calculations";
+import { budgetSchema } from "@shared/schemas";
+
+import type { BudgetPlan, BudgetProposal } from "@shared/budget-planning";
+import type { WalletDataset } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { reportDataset } from "@/lib/preferences";
 import { useWallet } from "@/providers/wallet-provider";
-import { buildBudgetPlan, conflictingCategoryBudgets } from "@shared/budget-planning";
-import { formatMoney, monthKey } from "@shared/calculations";
-import { budgetSchema } from "@shared/schemas";
-import type { BudgetPlan, BudgetProposal } from "@shared/budget-planning";
-import type { WalletDataset } from "@shared/types";
 
 type Choice = { selected: boolean; amount: string };
 type Outcome = "confirmed" | "reconciled" | "conflict" | "uncertain" | "unavailable";
@@ -88,7 +91,7 @@ export function BudgetAssistant({
     );
   }
   function completed(id: string) {
-    return ["confirmed", "reconciled", "conflict", "unavailable"].includes(outcomes[id]);
+    return ["confirmed", "reconciled", "conflict", "unavailable"].includes(outcomes[id] ?? "");
   }
   const selected =
     plan?.proposals.filter(
@@ -402,7 +405,12 @@ export function BudgetAssistant({
         </p>
       ) : null}
       {!loading && !history ? (
-        <Button variant="outline" onClick={reloadHistory}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void reloadHistory();
+          }}
+        >
           Retry loading history
         </Button>
       ) : null}
@@ -410,16 +418,22 @@ export function BudgetAssistant({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             disabled={busy || loading || !selected.length || invalidAmounts || !!planningError}
-            onClick={save}
+            onClick={() => {
+              void save();
+            }}
           >
             {busy ? "Saving…" : error ? "Reconcile and retry" : "Create selected budgets"}
           </Button>
           <Button
             variant="outline"
             disabled={busy || loading}
-            onClick={async () => {
-              resetPlanning();
-              await reloadHistory();
+            onClick={() => {
+              finishAction(
+                (async () => {
+                  resetPlanning();
+                  await reloadHistory();
+                })(),
+              );
             }}
           >
             Reload proposals

@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
 import * as classification from "../ingestion/openai-category.js";
 import { calculateCreditCardSummary } from "../../shared/calculations.js";
-import type { MailIngestionInput } from "../../shared/schemas.js";
 import { createGoal, createGoalReservation, getWalletDataset } from "./wallet-repository.js";
+
+import type { MailIngestionInput } from "../../shared/schemas.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 beforeAll(async () => {
@@ -83,17 +86,17 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
   await processMailIngestion(event);
   const data = await getWalletDataset();
   expect(data.records).toHaveLength(1);
-  expect(data.records[0]).toMatchObject({
+  expect(data.records[0]!).toMatchObject({
     paymentStatus: "needs_review",
     creditCardId: cardId,
     goalIds: [],
   });
-  expect(data.records[0].importHistory?.some((entry) => entry.includes("Automatic goal"))).toBe(
+  expect(data.records[0]!.importHistory?.some((entry) => entry.includes("Automatic goal"))).toBe(
     true,
   );
   expect(data.creditCardRecords).toHaveLength(1);
-  expect(calculateCreditCardSummary(data, data.creditCards[0]).usedLimit).toBe(50);
-  expect(data.goalReservations[0].amount).toBe(100);
+  expect(calculateCreditCardSummary(data, data.creditCards[0]!).usedLimit).toBe(50);
+  expect(data.goalReservations[0]!.amount).toBe(100);
   expect((await fixture.pool.query("select status from ingestion_events")).rows).toEqual([
     { status: "completed" },
   ]);

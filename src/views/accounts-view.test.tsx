@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { createActionToastRunner } from "../lib/action-toast-runner";
 import { AccountsView } from "./accounts-view";
+
+import type { ReactNode } from "react";
 
 const actions = vi.hoisted(() => ({
   addAccount: vi.fn(),
@@ -44,7 +46,7 @@ beforeEach(() => {
   complete = true;
   dataset = structuredClone(mockWalletData);
   dataset.accounts = dataset.accounts.slice(0, 2);
-  dataset.settings.primaryAccountId = dataset.accounts[0].id;
+  dataset.settings.primaryAccountId = dataset.accounts[0]!.id;
   actions.addAccount.mockResolvedValue("created");
   actions.updateAccount.mockResolvedValue(undefined);
   actions.deleteAccount.mockResolvedValue(undefined);
@@ -80,7 +82,7 @@ test("saving unchanged drafts sends no account or settings mutations", async () 
 test("save failure retains drafts and retries only the unfinished changes", async () => {
   actions.updateAccount.mockImplementation(async (id: string) => {
     if (
-      id === dataset.accounts[1].id &&
+      id === dataset.accounts[1]!.id &&
       actions.updateAccount.mock.calls.filter((call) => call[0] === id).length === 1
     )
       throw new Error("Offline");
@@ -88,27 +90,23 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
   await edit();
   const names = tree!.root.findAllByProps({ placeholder: "Account name" });
   await act(async () => {
-    names[0].props.onChange({ target: { value: "First edited" } });
-    names[1].props.onChange({ target: { value: "Second edited" } });
+    names[0]!.props.onChange({ target: { value: "First edited" } });
+    names[1]!.props.onChange({ target: { value: "Second edited" } });
   });
   await act(async () => {
-    await save()
-      .props.onClick()
-      .catch(() => {});
+    save().props.onClick();
   });
   expect(
     tree!.root.findAllByProps({ placeholder: "Account name" }).map((input) => input.props.value),
   ).toEqual(["First edited", "Second edited"]);
   await act(async () => {
-    await save()
-      .props.onClick()
-      .catch(() => {});
+    save().props.onClick();
   });
   expect(
-    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[0].id),
+    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[0]!.id),
   ).toHaveLength(1);
   expect(
-    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[1].id),
+    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[1]!.id),
   ).toHaveLength(2);
 });
 test("creating succeeds once even when the primary-account step needs a retry", async () => {
@@ -121,10 +119,10 @@ test("creating succeeds once even when the primary-account step needs a retry", 
       .props.onChange({ target: { value: "New bank" } }),
   );
   await act(async () => {
-    await submit().catch(() => {});
+    submit();
   });
   await act(async () => {
-    await submit().catch(() => {});
+    submit();
   });
   expect(actions.addAccount).toHaveBeenCalledTimes(1);
   expect(actions.setPrimaryAccount).toHaveBeenCalledTimes(2);
@@ -173,7 +171,7 @@ test("a successful archive is not repeated when another account save fails", asy
   actions.updateAccount.mockRejectedValueOnce(new Error("Offline"));
   await edit();
   await act(async () =>
-    tree!.root.findAllByProps({ "aria-label": "Archive account" })[0].props.onClick(),
+    tree!.root.findAllByProps({ "aria-label": "Archive account" })[0]!.props.onClick(),
   );
   await act(async () =>
     tree!.root
@@ -209,19 +207,23 @@ test("primary selection is single flight and a failure remains visible", async (
 });
 
 test("revealing a hidden account preserves the existing account cards and their balance values", async () => {
-  dataset.accounts[1].isVisible = false;
+  dataset.accounts[1]!.isVisible = false;
   await mount();
   const accountCards = () =>
     tree!.root.findAllByType("div").filter((node) => node.props.role === "button");
   expect(accountCards()).toHaveLength(1);
-  const originalBalance = accountCards()[0]
+  const originalBalance = accountCards()[0]!
     .findByProps({ className: "text-3xl font-semibold" })
-    .children.join("");
+    .children.map((child) => (typeof child === "object" ? "" : String(child)))
+    .join("");
   await act(async () =>
     tree!.root.findByProps({ "aria-label": "Show hidden accounts" }).props.onClick(),
   );
   expect(accountCards()).toHaveLength(2);
   expect(
-    accountCards()[0].findByProps({ className: "text-3xl font-semibold" }).children.join(""),
+    accountCards()[0]!
+      .findByProps({ className: "text-3xl font-semibold" })
+      .children.map((child) => (typeof child === "object" ? "" : String(child)))
+      .join(""),
   ).toBe(originalBalance);
 });

@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
+import { mockWalletData } from "@shared/mock-data";
+
 import { paymentDefaults, reportDataset, resolveTheme } from "./preferences";
-import { mockWalletData } from "../../shared/mock-data";
 test("choosing debit explicitly clears the old card in JSON", () => {
   expect(JSON.parse(JSON.stringify(paymentDefaults("debit")))).toEqual({
     defaultPaymentType: "debit",
@@ -17,7 +18,7 @@ test("hidden accounts are excluded from reports unless opted in or explicitly se
   data.settings.includeHiddenAccountsInReports = false;
   const hidden = data.accounts.find((a) => !a.isVisible)!;
   data.records.push({
-    ...data.records[0],
+    ...data.records[0]!,
     id: "hidden-report",
     accountId: hidden.id,
   });

@@ -27,7 +27,7 @@ export function normalizeGlobalSearch(value: string): string {
 
 export function globalSearchResults(dataset: WalletDataset, query: string): GlobalSearchResult[] {
   const normalized = normalizeGlobalSearch(query);
-  const sections = [
+  const sections: Array<[string, string, string]> = [
     ["dashboard", "Dashboard", "/"],
     ["accounts", "Accounts", "/accounts"],
     ["cards", "Cards", "/cards"],

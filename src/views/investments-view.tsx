@@ -1,6 +1,13 @@
 import { FormEvent, useRef, useState } from "react";
 import { Edit3, Eye, EyeOff, Landmark, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatMoney } from "@shared/calculations";
+import { investmentTypeLabels } from "@shared/constants";
+import { summarizeInvestmentsByCurrency } from "@shared/planning";
+
+import type { CurrencyCode, Investment } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,10 +24,6 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney } from "@shared/calculations";
-import { investmentTypeLabels } from "@shared/constants";
-import { summarizeInvestmentsByCurrency } from "@shared/planning";
-import type { CurrencyCode, Investment } from "@shared/types";
 
 interface InvestmentDraft {
   id: string;
@@ -283,7 +286,7 @@ export function InvestmentsView() {
       setIsVisible(true);
       setNote("");
       setIsCreateOpen(false);
-      navigate(`/investments/${id}`);
+      void navigate(`/investments/${id}`);
     } catch (error) {
       setEditError(error instanceof Error ? error.message : "Could not create investment.");
     } finally {
@@ -314,7 +317,12 @@ export function InvestmentsView() {
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button disabled={isSaving} onClick={saveInvestmentEdits}>
+            <Button
+              disabled={isSaving}
+              onClick={() => {
+                finishAction(saveInvestmentEdits());
+              }}
+            >
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -359,7 +367,12 @@ export function InvestmentsView() {
                     Add a manual investment to track current value and performance.
                   </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={handleCreateInvestment}>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    finishAction(handleCreateInvestment(event));
+                  }}
+                >
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Name</span>
                     <input
@@ -689,7 +702,9 @@ export function InvestmentsView() {
                     <button
                       key={investment.id}
                       type="button"
-                      onClick={() => navigate(`/investments/${investment.id}`)}
+                      onClick={() => {
+                        void navigate(`/investments/${investment.id}`);
+                      }}
                       className="w-full rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                     >
                       <div>
@@ -772,7 +787,9 @@ export function InvestmentsView() {
           <CardContent className="space-y-3">
             <form
               className="grid gap-2 sm:grid-cols-[1fr_120px_100px_auto]"
-              onSubmit={handleAddInstallment}
+              onSubmit={(event) => {
+                finishAction(handleAddInstallment(event));
+              }}
             >
               <input
                 className="h-10 rounded-md border bg-background px-3 text-sm"

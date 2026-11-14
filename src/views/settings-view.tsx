@@ -15,6 +15,11 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+import type { ActionToastOptions } from "@/lib/action-toast-runner";
+import type { Category, CurrencyCode, Tag } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,10 +37,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/providers/auth-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import { paymentDefaults } from "@/lib/preferences";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Category, CurrencyCode, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -109,7 +112,7 @@ export function SettingsView() {
 
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
-    navigate("/records");
+    void navigate("/records");
   }
 
   async function handleAddBudget(event: FormEvent) {
@@ -478,7 +481,9 @@ export function SettingsView() {
             aria-label={`Save ${category.name}`}
             title="Save"
             disabled={!isDirty}
-            onClick={() => handleSaveCategory(category)}
+            onClick={() => {
+              finishAction(handleSaveCategory(category));
+            }}
           >
             <Save className="h-4 w-4" />
           </Button>
@@ -495,7 +500,9 @@ export function SettingsView() {
                   ? "Delete category and children"
                   : "Delete"
             }
-            onClick={() => handleDeleteCategory(category.id)}
+            onClick={() => {
+              finishAction(handleDeleteCategory(category.id));
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -680,7 +687,12 @@ export function SettingsView() {
                       Create a parent category or select a parent to create a child.
                     </DialogDescription>
                   </DialogHeader>
-                  <form className="space-y-4" onSubmit={handleAddCategory}>
+                  <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                      finishAction(handleAddCategory(event));
+                    }}
+                  >
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Name</span>
                       <input
@@ -802,7 +814,12 @@ export function SettingsView() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <form className="grid gap-2 sm:grid-cols-[1fr_auto_auto]" onSubmit={handleAddTag}>
+              <form
+                className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"
+                onSubmit={(event) => {
+                  finishAction(handleAddTag(event));
+                }}
+              >
                 <input
                   value={newTagName}
                   onChange={(event) => setNewTagName(event.target.value)}
@@ -876,7 +893,9 @@ export function SettingsView() {
                         aria-label={`Save ${tag.name}`}
                         title="Save"
                         disabled={!isDirty}
-                        onClick={() => handleSaveTag(tag)}
+                        onClick={() => {
+                          finishAction(handleSaveTag(tag));
+                        }}
                       >
                         <Save className="h-4 w-4" />
                       </Button>
@@ -886,7 +905,9 @@ export function SettingsView() {
                         size="icon"
                         aria-label={`Delete ${tag.name}`}
                         title="Delete"
-                        onClick={() => handleDeleteTag(tag.id)}
+                        onClick={() => {
+                          finishAction(handleDeleteTag(tag.id));
+                        }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -908,7 +929,9 @@ export function SettingsView() {
           <CardContent className="space-y-4">
             <form
               className="grid gap-2 md:grid-cols-[1fr_140px_1fr_auto]"
-              onSubmit={handleAddBudget}
+              onSubmit={(event) => {
+                finishAction(handleAddBudget(event));
+              }}
             >
               <input
                 value={newBudgetName}
@@ -1007,7 +1030,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/accounts")}
+              onClick={() => {
+                void navigate("/accounts");
+              }}
             >
               Accounts
               <ArrowRight className="h-4 w-4" />
@@ -1015,7 +1040,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/goals")}
+              onClick={() => {
+                void navigate("/goals");
+              }}
             >
               Goals
               <Target className="h-4 w-4" />
@@ -1023,12 +1050,20 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/investments")}
+              onClick={() => {
+                void navigate("/investments");
+              }}
             >
               Investments
               <ArrowRight className="h-4 w-4" />
             </Button>
-            <Button variant="outline" className="justify-between" onClick={() => navigate("/data")}>
+            <Button
+              variant="outline"
+              className="justify-between"
+              onClick={() => {
+                void navigate("/data");
+              }}
+            >
               Data
               <Upload className="h-4 w-4" />
             </Button>

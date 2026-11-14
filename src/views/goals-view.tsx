@@ -12,6 +12,12 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
+
+import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,9 +35,6 @@ import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { formatCalendarDate, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
-import { goalStatusLabels } from "@shared/constants";
-import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
 interface GoalDraft {
   id: string;
@@ -267,7 +270,7 @@ export function GoalsView() {
     setTargetAmount("");
     setDeadline("");
     setIsCreateOpen(false);
-    navigate(`/goals/${id}`);
+    void navigate(`/goals/${id}`);
   }
 
   async function handleReserve(event: FormEvent) {
@@ -317,7 +320,11 @@ export function GoalsView() {
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button onClick={saveGoalEdits}>
+            <Button
+              onClick={() => {
+                finishAction(saveGoalEdits());
+              }}
+            >
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -346,7 +353,12 @@ export function GoalsView() {
                     Set the target, choose a color, and connect it to a tag.
                   </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={handleCreateGoal}>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    finishAction(handleCreateGoal(event));
+                  }}
+                >
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Name</span>
                     <input
@@ -674,11 +686,13 @@ export function GoalsView() {
                 key={item.goal.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/goals/${item.goal.id}`)}
+                onClick={() => {
+                  void navigate(`/goals/${item.goal.id}`);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    navigate(`/goals/${item.goal.id}`);
+                    void navigate(`/goals/${item.goal.id}`);
                   }
                 }}
                 className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
@@ -777,7 +791,12 @@ export function GoalsView() {
                   Create or reopen a visible goal to reserve money.
                 </p>
               )}
-              <form className="space-y-4" onSubmit={handleReserve}>
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  finishAction(handleReserve(event));
+                }}
+              >
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Goal</span>
                   <select

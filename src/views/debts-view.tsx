@@ -1,5 +1,4 @@
 import { FormEvent, useMemo, useState, useRef } from "react";
-import { localDateInput, dateInputToIso } from "@/lib/date-input";
 import {
   Banknote,
   CheckCircle2,
@@ -12,6 +11,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
+import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
+import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
+
+import type { CurrencyCode, Debt, DebtDirection, DebtStatus, RecurringDebt } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
+import { localDateInput, dateInputToIso } from "@/lib/date-input";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -30,10 +37,6 @@ import { CategoryPicker } from "@/components/wallet/category-picker";
 import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
-import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
-import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
-import type { CurrencyCode, Debt, DebtDirection, DebtStatus, RecurringDebt } from "@shared/types";
 
 type DebtTab = "open" | "recurring" | "closed";
 
@@ -875,7 +878,12 @@ export function DebtsView() {
               Category is required. Account can stay empty until payment.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleDebtSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleDebtSubmit(event));
+            }}
+          >
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span>Name</span>
@@ -1086,7 +1094,12 @@ export function DebtsView() {
             </DialogTitle>
             <DialogDescription>Monthly rules create one open debt per due month.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleRecurringSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleRecurringSubmit(event));
+            }}
+          >
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span>Name</span>
@@ -1278,7 +1291,12 @@ export function DebtsView() {
               This creates a normal wallet record linked to the debt.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handlePaymentSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handlePaymentSubmit(event));
+            }}
+          >
             <label className="space-y-1 text-sm">
               <span>Amount</span>
               <input

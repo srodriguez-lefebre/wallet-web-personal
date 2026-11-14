@@ -1,5 +1,8 @@
+import { randomUUID } from "node:crypto";
+
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
+
 import {
   applyMigrations,
   installLocalTransport,
@@ -24,7 +27,6 @@ import {
 } from "./wallet-repository.js";
 import { records } from "./schema.js";
 import { calculateAccountBalances, calculateGoalProgress } from "../../shared/calculations.js";
-import { randomUUID } from "node:crypto";
 
 const pg = new PGlite();
 const accountId = "00000000-0000-4000-8000-000000000001";
@@ -117,9 +119,9 @@ test.each(["cleared", "needs_review"])(
     const totals = calculateAccountBalances(before).map((account) => account.totalBalance);
     await updateGoal(goalId, { status: "completed" });
     const after = await getWalletDataset();
-    expect(after.goals[0]).toMatchObject({ status: "completed", autoCaptureEnabled: false });
+    expect(after.goals[0]!).toMatchObject({ status: "completed", autoCaptureEnabled: false });
     expect(after.goalReservations).toEqual([]);
-    expect(calculateGoalProgress(after)[0].spent).toBe(40);
+    expect(calculateGoalProgress(after)[0]!.spent).toBe(40);
     expect(after.records).toEqual(before.records);
     expect(calculateAccountBalances(after).map((account) => account.totalBalance)).toEqual(totals);
     const released = await pg.query(
@@ -147,8 +149,8 @@ test("closing rolls back the goal and all releases if a release fails", async ()
   try {
     await expect(updateGoal(goalId, { status: "completed" })).rejects.toThrow();
     const dataset = await getWalletDataset();
-    expect(dataset.goals[0].status).toBe("active");
-    expect(dataset.goalReservations[0].amount).toBe(100);
+    expect(dataset.goals[0]!.status).toBe("active");
+    expect(dataset.goalReservations[0]!.amount).toBe(100);
     expect(dataset.goalReservationMovements).toHaveLength(1);
   } finally {
     await pg.exec(
@@ -189,7 +191,7 @@ test("concurrent partial releases cannot overdraw the SQL ledger", async () => {
     [80, 80].map((amount) => releaseGoalReservation({ goalId, accountId, amount })),
   );
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
-  expect((await listGoalReservations())[0].amount).toBe(20);
+  expect((await listGoalReservations())[0]!.amount).toBe(20);
 });
 
 test("concurrent expenses consume only the available reserve", async () => {
@@ -198,7 +200,7 @@ test("concurrent expenses consume only the available reserve", async () => {
   const ledger = await pg.query<{ amount: string }>(
     "select sum(case when type in ('reserve','restore') then amount else -amount end) as amount from goal_reservation_movements",
   );
-  expect(Number(ledger.rows[0].amount)).toBe(0);
+  expect(Number(ledger.rows[0]!.amount)).toBe(0);
 });
 
 test("legacy goalIds empty patch removes links and restores consumed reserve", async () => {
@@ -206,8 +208,8 @@ test("legacy goalIds empty patch removes links and restores consumed reserve", a
   const record = await createRecord(input());
   const updated = await updateRecord(record.id, { goalIds: [] });
   expect(updated?.goalAssociations).toEqual([]);
-  expect((await listGoalReservations())[0].amount).toBe(100);
-  expect((await getWalletDataset()).records[0].goalIds).toEqual([]);
+  expect((await listGoalReservations())[0]!.amount).toBe(100);
+  expect((await getWalletDataset()).records[0]!.goalIds).toEqual([]);
 });
 
 test("amount patch rejects an existing allocation exceeding the new amount", async () => {
@@ -215,7 +217,7 @@ test("amount patch rejects an existing allocation exceeding the new amount", asy
     input({ amount: 100, goalAssociations: [{ goalId, allocatedAmount: 80 }] }),
   );
   await expect(updateRecord(record.id, { amount: 50 })).rejects.toThrow();
-  expect((await getWalletDataset()).records[0].amount).toBe(100);
+  expect((await getWalletDataset()).records[0]!.amount).toBe(100);
 });
 
 test("creation schema rejects excess allocation", () => {
@@ -235,7 +237,7 @@ test("date changes re-evaluate automatic associations while preserving manual li
     "update goals set auto_capture_enabled=true, auto_capture_start='2026-06-01', auto_capture_end='2026-06-30'",
   );
   const automatic = await createRecord(input({ goalIds: [] }));
-  expect(automatic.goalAssociations?.[0].assignmentSource).toBe("date_rule");
+  expect(automatic.goalAssociations?.[0]!.assignmentSource).toBe("date_rule");
   expect(
     (
       await updateRecord(automatic.id, {
@@ -322,7 +324,7 @@ test.each(["create", "bulk", "update"])(
     const reviewInput = input({ goalIds: [], accountId: undefined, paymentStatus: "needs_review" });
     const record =
       action === "bulk"
-        ? (await createRecordsBulk([reviewInput]))[0]
+        ? (await createRecordsBulk([reviewInput]))[0]!
         : action === "update"
           ? (await updateRecord(
               (await createRecord({ ...reviewInput, occurredAt: "2026-07-01T12:00:00.000Z" })).id,
@@ -330,7 +332,7 @@ test.each(["create", "bulk", "update"])(
             ))!
           : await createRecord(reviewInput);
     expect(record.goalIds).toEqual([]);
-    expect((await getWalletDataset()).records[0].id).toBe(record.id);
+    expect((await getWalletDataset()).records[0]!.id).toBe(record.id);
     expect(record.note).toContain("automatic capture skipped");
     expect(await listGoalReservations()).toEqual([]);
   },
@@ -349,7 +351,7 @@ test("wallet roundtrip retains legacy goal tag mappings", async () => {
   const tagId = "00000000-0000-4000-8000-000000000004";
   await pg.query("insert into tags (id,name,color) values ($1,'Legacy','blue')", [tagId]);
   await pg.query("insert into goal_tags (goal_id,tag_id) values ($1,$2)", [goalId, tagId]);
-  expect((await getWalletDataset(createDb())).goals[0].tagIds).toEqual([tagId]);
+  expect((await getWalletDataset(createDb())).goals[0]!.tagIds).toEqual([tagId]);
   expect((await updateGoal(goalId, { name: "Updated" }))?.tagIds).toEqual([tagId]);
 });
 
@@ -359,7 +361,7 @@ test("full release racing a consumption preserves a nonnegative ledger", async (
   const ledger = await pg.query<{ amount: string }>(
     "select sum(case when type in ('reserve','restore') then amount else -amount end) as amount from goal_reservation_movements",
   );
-  expect(Number(ledger.rows[0].amount)).toBe(0);
+  expect(Number(ledger.rows[0]!.amount)).toBe(0);
 });
 
 test("archive racing an expense and a new reservation leaves no invisible reserve", async () => {
@@ -387,7 +389,7 @@ test("reversing already consumed reserved income rolls back the record change", 
   await createRecord(input({ amount: 80 }));
   await expect(deleteRecord(income.id)).rejects.toThrow();
   expect((await getWalletDataset()).records.map((record) => record.id)).toContain(income.id);
-  expect((await listGoalReservations())[0].amount).toBe(20);
+  expect((await listGoalReservations())[0]!.amount).toBe(20);
 });
 
 test("disabled monetary flags do not require an unused currency conversion", async () => {
@@ -431,9 +433,9 @@ test("the ingestion helper applies automatic capture and reserve consumption in 
     ...prepared.queries,
   ] as unknown as Parameters<typeof db.batch>[0]);
   const dataset = await getWalletDataset();
-  expect(dataset.records[0].goalAssociations?.[0]).toMatchObject({
+  expect(dataset.records[0]!.goalAssociations?.[0]).toMatchObject({
     goalId,
     assignmentSource: "date_rule",
   });
-  expect(dataset.goalReservations[0].amount).toBe(60);
+  expect(dataset.goalReservations[0]!.amount).toBe(60);
 });

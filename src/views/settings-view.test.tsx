@@ -1,8 +1,10 @@
 import { act, create } from "react-test-renderer";
 import { afterEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { SettingsPatch } from "../../shared/schemas";
+import { mockWalletData } from "@shared/mock-data";
+
 import { SettingsView } from "./settings-view";
+
+import type { SettingsPatch } from "@shared/schemas";
 
 const update = vi.hoisted(() => vi.fn());
 const addTag = vi.hoisted(() => vi.fn());
@@ -56,7 +58,7 @@ test("failed tag creation preserves the draft and handles the rejected request",
     });
     const form = tree.root.findByProps({ placeholder: "New tag" }).parent!;
     await act(async () => {
-      await expect(form.props.onSubmit({ preventDefault: vi.fn() })).resolves.toBeUndefined();
+      expect(form.props.onSubmit({ preventDefault: vi.fn() })).toBeUndefined();
     });
     expect(tree.root.findByProps({ placeholder: "New tag" }).props.value).toBe("Retain draft");
     expect(addTag).toHaveBeenCalledTimes(1);
@@ -94,6 +96,6 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
     await queue;
   });
   expect(persisted.theme).toBe("dark");
-  expect(update.mock.calls[1][0]).not.toHaveProperty("includeHiddenAccountsInReports");
+  expect(update.mock.calls[1]![0]).not.toHaveProperty("includeHiddenAccountsInReports");
   await act(async () => tree.unmount());
 });

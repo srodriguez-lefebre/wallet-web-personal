@@ -6,13 +6,8 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
-import { readStorage, writeStorage } from "@/lib/storage";
-import { useAuth } from "@/providers/auth-provider";
-import * as walletApi from "@/services/wallet-api";
-import { WalletSync } from "@/lib/wallet-sync";
-import { importRecordBatches } from "@/lib/record-import";
-import { useTheme } from "@/providers/theme-provider";
+import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
+
 import type {
   GoalPatch,
   InvestmentPatch,
@@ -20,7 +15,6 @@ import type {
   RecordTemplatePatch,
   SettingsPatch,
 } from "@shared/schemas";
-import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
 import type {
   Account,
   Budget,
@@ -42,6 +36,14 @@ import type {
   WalletRecord,
   RecordTemplate,
 } from "@shared/types";
+
+import { Button } from "@/components/ui/button";
+import { readStorage, writeStorage } from "@/lib/storage";
+import { useAuth } from "@/providers/auth-provider";
+import * as walletApi from "@/services/wallet-api";
+import { WalletSync } from "@/lib/wallet-sync";
+import { importRecordBatches } from "@/lib/record-import";
+import { useTheme } from "@/providers/theme-provider";
 
 type PeriodMode = "month" | "custom" | "all";
 
@@ -199,7 +201,7 @@ const emptyDataset: WalletDataset = {
 function sessionOwnerKey(token: string | null) {
   if (!token) return null;
   try {
-    const encoded = token.split(".")[0];
+    const encoded = token.split(".")[0] ?? "";
     const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
     const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
     return (JSON.parse(atob(normalized)) as { sub?: string }).sub ?? null;
@@ -490,8 +492,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
-    if (selectedPeriodMode === "month" && months.length > 0 && !months.includes(selectedMonth)) {
-      queueMicrotask(() => setSelectedMonthState(months[0]));
+    const firstMonth = months[0];
+    if (selectedPeriodMode === "month" && firstMonth && !months.includes(selectedMonth)) {
+      queueMicrotask(() => setSelectedMonthState(firstMonth));
     }
   }, [dataset.records, selectedMonth, selectedPeriodMode]);
 

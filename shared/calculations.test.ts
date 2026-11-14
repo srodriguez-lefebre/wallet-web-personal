@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import {
   applyDebtPayment,
   buildDueRecurringDebtInstances,
@@ -41,7 +42,7 @@ describe("wallet calculations", () => {
       occurredAt: "2026-06-21T12:00:00Z",
     };
     const budget = {
-      ...mockWalletData.budgets[0],
+      ...mockWalletData.budgets[0]!,
       limitAmount: 100,
       currency: "USD" as const,
       categoryId: undefined,
@@ -51,17 +52,17 @@ describe("wallet calculations", () => {
       isActive: true,
     };
     const dataset = { ...mockWalletData, records: [record], budgets: [budget], exchangeRates: [] };
-    expect(calculateBudgetProgress(dataset, "2026-06")[0].spent).toBe(10);
+    expect(calculateBudgetProgress(dataset, "2026-06")[0]!.spent).toBe(10);
     expect(
       calculateBudgetProgress(
         { ...dataset, budgets: [{ ...budget, currency: "UYU" }] },
         "2026-06",
-      )[0].spent,
+      )[0]!.spent,
     ).toBe(400);
     const missing = calculateBudgetProgress(
       { ...dataset, budgets: [{ ...budget, currency: "EUR" }] },
       "2026-06",
-    )[0];
+    )[0]!;
     expect(Number.isNaN(missing.spent)).toBe(true);
     const goalDataset = {
       ...dataset,
@@ -82,12 +83,12 @@ describe("wallet calculations", () => {
       ],
       budgets: [{ ...budget, goalId: "goal-budget" }],
     };
-    expect(calculateBudgetProgress(goalDataset, "2026-06")[0].spent).toBe(2);
+    expect(calculateBudgetProgress(goalDataset, "2026-06")[0]!.spent).toBe(2);
     expect(
       calculateBudgetProgress(
         { ...goalDataset, budgets: [{ ...budget, goalId: "different-goal" }] },
         "2026-06",
-      )[0].spent,
+      )[0]!.spent,
     ).toBe(0);
   });
   it("includes valid review records in bank balances, goals, budgets and reports", () => {
@@ -140,7 +141,7 @@ describe("wallet calculations", () => {
     };
     const account = base.accounts.find((item) => item.id === "acc-bank")!;
     const record = {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       type: "expense" as const,
       accountId: account.id,
       amount: 10,
@@ -179,7 +180,7 @@ describe("wallet calculations", () => {
     };
     const account = base.accounts.find((item) => item.id === "acc-bank")!;
     const record = {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       type: "expense" as const,
       accountId: account.id,
       amount: 10,
@@ -224,7 +225,7 @@ describe("wallet calculations", () => {
       isActive: true,
     };
     const record = {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       type: "expense" as const,
       creditCardId: card.id,
       amount: 100,
@@ -277,7 +278,7 @@ describe("wallet calculations", () => {
       creditLimit: 1000,
     };
     const review = {
-      ...mockWalletData.records[0],
+      ...mockWalletData.records[0]!,
       id: "review",
       type: "expense" as const,
       categoryId: undefined,
@@ -351,8 +352,8 @@ describe("wallet calculations", () => {
 
   it("calculates account balances from initial balances and records", () => {
     const balances = calculateAccountBalances(mockWalletData);
-    const bank = balances.find((item) => item.account.id === "acc-bank");
-    const hidden = balances.find((item) => item.account.id === "acc-hidden");
+    const bank = balances.find((item) => item.account.id === "acc-bank")!;
+    const hidden = balances.find((item) => item.account.id === "acc-hidden")!;
 
     expect(bank?.balance).toBe(89913);
     expect(bank?.totalBalance).toBe(104913);
@@ -410,7 +411,7 @@ describe("wallet calculations", () => {
 
   it("groups expenses by category", () => {
     const categories = calculateCategoryExpenses(mockWalletData, "2026-06");
-    const housing = categories.find((item) => item.id === "cat-housing");
+    const housing = categories.find((item) => item.id === "cat-housing")!;
 
     expect(housing?.value).toBe(18500);
     expect(categories[0]?.id).toBe("cat-housing");
@@ -465,7 +466,7 @@ describe("wallet calculations", () => {
 
   it("calculates goal progress with reserved money and directly associated expenses", () => {
     const goals = calculateGoalProgress(mockWalletData);
-    const trip = goals.find((item) => item.goal.id === "goal-trip");
+    const trip = goals.find((item) => item.goal.id === "goal-trip")!;
 
     expect(trip?.reserved).toBe(15000);
     expect(trip?.spent).toBe(9200);
@@ -484,7 +485,7 @@ describe("wallet calculations", () => {
         allocatedAmount: 3000,
       },
     ];
-    const trip = calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip");
+    const trip = calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")!;
 
     expect(trip?.spent).toBe(3000);
     expect(trip?.committed).toBe(18000);
@@ -516,7 +517,7 @@ describe("wallet calculations", () => {
 
   it("calculates budget status", () => {
     const budgets = calculateBudgetProgress(mockWalletData, "2026-06");
-    const general = budgets.find((item) => item.budget.id === "budget-general");
+    const general = budgets.find((item) => item.budget.id === "budget-general")!;
 
     expect(general?.spent).toBe(35030);
     expect(general?.status).toBe("ok");
@@ -638,7 +639,7 @@ describe("wallet calculations", () => {
     );
 
     expect(instances.map((debt) => debt.recurringMonth)).toEqual(["2026-07", "2026-08"]);
-    expect(instances[0]).toMatchObject({
+    expect(instances[0]!).toMatchObject({
       name: "Mobile contract - 2026-07",
       dueAt: "2026-07-03T12:00:00.000Z",
       pendingAmount: 1200,
@@ -670,7 +671,7 @@ describe("wallet calculations", () => {
   it("groups records by day", () => {
     const groups = groupRecordsByDay(mockWalletData.records);
 
-    expect(groups["2026-06-14"]).toHaveLength(2);
+    expect(groups["2026-06-14"]!).toHaveLength(2);
   });
 
   it("tracks one card limit across currencies without changing an account on purchase", () => {

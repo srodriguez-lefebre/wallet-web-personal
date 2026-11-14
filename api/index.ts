@@ -1,4 +1,3 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { findApiOperation } from "../shared/api-contract.js";
 import {
   accountSchema,
@@ -128,6 +127,8 @@ import {
 import { restoreWalletBackup } from "../server/db/wallet-restore.js";
 import { importWalletRecords } from "../server/db/record-import.js";
 
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
 // Single router Serverless Function. Vercel's Hobby plan caps a deployment at
 // 12 functions, so vercel.json rewrites every `/api/*` request here and the
 // original path is dispatched below.
@@ -138,7 +139,7 @@ function pathSegments(req: VercelRequest) {
     return path.split("/").filter(Boolean);
   }
 
-  const pathname = (req.url ?? "").split("?")[0];
+  const pathname = (req.url ?? "").split("?")[0] ?? "";
   const segments = pathname.split("/").filter(Boolean);
   if (segments[0] === "api") segments.shift();
   return segments;

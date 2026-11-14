@@ -1,6 +1,8 @@
 import { debtDueState, selectDebtsByDueDate } from "@shared/planning";
-import type { WalletDataset } from "@shared/types";
+
 import { selectPendingCardStatements } from "./cards-presentation";
+
+import type { WalletDataset } from "@shared/types";
 
 /** Current attention items are independent of the selected reporting period. */
 export function walletAttention(dataset: WalletDataset, asOf = new Date()) {

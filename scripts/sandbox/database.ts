@@ -1,13 +1,15 @@
-import type { PGlite, Transaction } from "@electric-sql/pglite";
-import { neonConfig } from "@neondatabase/serverless";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+
+import { neonConfig } from "@neondatabase/serverless";
+
+import type { PGlite, Transaction } from "@electric-sql/pglite";
 
 export const LOCAL_DATABASE_URL = "postgresql://local:local@wallet.local/wallet";
 
 // Keep the real Neon and Drizzle query/result path, changing only the transport.
 export function installLocalTransport(pg: PGlite) {
-  const previousFetch = neonConfig.fetchFunction;
+  const previousFetch: unknown = neonConfig.fetchFunction;
   const previousEndpoint = neonConfig.fetchEndpoint;
   neonConfig.fetchEndpoint = "http://wallet.local/sql";
   neonConfig.fetchFunction = async (input: string, options: RequestInit) => {
@@ -18,7 +20,8 @@ export function installLocalTransport(pg: PGlite) {
     ) {
       throw new Error("Sandbox refused a non-local database connection");
     }
-    const body = JSON.parse(String(options.body)) as {
+    if (typeof options.body !== "string") throw new Error("Local SQL requires a JSON string body");
+    const body = JSON.parse(options.body) as {
       query?: string;
       params?: unknown[];
       queries?: Array<{ query: string; params: unknown[] }>;

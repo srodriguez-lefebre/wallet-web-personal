@@ -1,10 +1,12 @@
 import { act, create } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { PropsWithChildren } from "react";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { RecordsView } from "./records-view";
 
-const state = vi.hoisted(() => ({ dataset: undefined as unknown, update: vi.fn() }));
+import type { PropsWithChildren } from "react";
+
+const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)(), update: vi.fn() }));
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({
     dataset: state.dataset,
@@ -71,12 +73,12 @@ afterEach(async () => {
 });
 async function edit(amount: number, accountAmount: number) {
   const dataset = structuredClone(mockWalletData),
-    account = dataset.accounts[0];
+    account = dataset.accounts[0]!;
   account.currency = "UYU";
   dataset.settings.primaryCurrency = "UYU";
   dataset.records = [
     {
-      ...dataset.records[0],
+      ...dataset.records[0]!,
       id: "editing-test",
       type: "expense",
       currency: "USD",
@@ -122,7 +124,7 @@ async function submit() {
   await act(async () => {
     await tree!.root.findByType("form").props.onSubmit({ preventDefault: vi.fn() });
   });
-  return state.update.mock.calls[0][1];
+  return state.update.mock.calls[0]![1];
 }
 
 test("clearing then retyping an edited amount retains its original bank conversion", async () => {

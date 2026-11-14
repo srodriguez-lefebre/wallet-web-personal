@@ -16,23 +16,6 @@ import {
 import { ArrowLeft, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { PageHeader } from "@/components/page/page-header";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { BudgetAssistant } from "@/components/wallet/budget-assistant";
-import { AccountStateSummary } from "@/components/wallet/account-state-summary";
-import { CategoryIcon } from "@/components/wallet/category-icon";
-import { useWallet } from "@/providers/wallet-provider";
 import {
   calculateAccountBalances,
   buildExpenseComparisonSeries,
@@ -60,8 +43,26 @@ import {
   calculateAllowedDailySpend,
   calculateEndOfMonthProjection,
 } from "@shared/simulations";
-import { reportDataset } from "@/lib/preferences";
 import { calculateMerchantSpending } from "@shared/merchant-analytics";
+
+import { PageHeader } from "@/components/page/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { BudgetAssistant } from "@/components/wallet/budget-assistant";
+import { AccountStateSummary } from "@/components/wallet/account-state-summary";
+import { CategoryIcon } from "@/components/wallet/category-icon";
+import { useWallet } from "@/providers/wallet-provider";
+import { reportDataset } from "@/lib/preferences";
 
 export function AnalyticsView() {
   const [budgetAssistantOpen, setBudgetAssistantOpen] = useState(false);
@@ -154,7 +155,9 @@ export function AnalyticsView() {
     comparisonPeriods,
   );
   const savingsRate = calculateSavingsRate(summary.income, summary.expenses);
-  const previousSummary = calculateSummaryForDateRange(analyticsDataset, comparisonPeriods[1]);
+  const previousPeriod = comparisonPeriods[1];
+  if (!previousPeriod) throw new Error("Analytics requires a previous comparison period");
+  const previousSummary = calculateSummaryForDateRange(analyticsDataset, previousPeriod);
   const previousSavingsRate = calculateSavingsRate(
     previousSummary.income,
     previousSummary.expenses,
@@ -173,7 +176,7 @@ export function AnalyticsView() {
       ...filters,
       accountId: filters.accountId ?? selectedAccount?.id,
     });
-    navigate("/records");
+    void navigate("/records");
   }
 
   return (
@@ -587,7 +590,9 @@ export function AnalyticsView() {
               </button>
               <button
                 type="button"
-                onClick={() => navigate("/")}
+                onClick={() => {
+                  void navigate("/");
+                }}
                 className="rounded-md bg-sky-50 p-3 text-left transition hover:bg-sky-100 dark:bg-sky-950/40 dark:hover:bg-sky-950"
               >
                 <p className="text-muted-foreground">Flow</p>

@@ -1,4 +1,9 @@
 import { useState, type FormEvent } from "react";
+import { currencySchema, goalPatchSchema, goalSchema, type GoalPatch } from "@shared/schemas";
+
+import type { Account, CurrencyCode, Goal } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -8,8 +13,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { buildGoalUpdatePayload, type GoalUpdateDraft } from "@/lib/goal-update";
-import { currencySchema, goalPatchSchema, goalSchema, type GoalPatch } from "@shared/schemas";
-import type { Account, CurrencyCode, Goal } from "@shared/types";
 
 function goalDraft(goal: Goal): GoalUpdateDraft {
   return {
@@ -93,7 +96,13 @@ export function GoalEditDialog({
             Update the goal details and automatic capture settings.
           </DialogDescription>
         </DialogHeader>
-        <form aria-label="Edit goal details" className="space-y-4" onSubmit={submit}>
+        <form
+          aria-label="Edit goal details"
+          className="space-y-4"
+          onSubmit={(event) => {
+            finishAction(submit(event));
+          }}
+        >
           <fieldset disabled={pending} className="space-y-4">
             <label className="block space-y-1">
               <span>Name</span>

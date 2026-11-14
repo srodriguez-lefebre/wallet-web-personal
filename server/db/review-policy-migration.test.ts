@@ -1,6 +1,7 @@
-import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+
+import { PGlite } from "@electric-sql/pglite";
 import { expect, test } from "vitest";
 
 test("review policy migration restores only matching live linked purchases and reconciles existing debt payments", async () => {
@@ -86,7 +87,7 @@ test("review policy migration restores only matching live linked purchases and r
           "SELECT pending_amount FROM debts WHERE id=$1",
           [debtId],
         )
-      ).rows[0].pending_amount,
+      ).rows[0]!.pending_amount,
     ).toBe("10.00");
     await pg.query("UPDATE debts SET pending_amount=100 WHERE id=$1", [debtId]);
     await pg.transaction(async (tx) => {
@@ -105,7 +106,7 @@ test("review policy migration restores only matching live linked purchases and r
           "SELECT pending_amount FROM debts WHERE id=$1",
           [debtId],
         )
-      ).rows[0].pending_amount,
+      ).rows[0]!.pending_amount,
     ).toBe("80.00");
     expect(
       (
@@ -113,7 +114,7 @@ test("review policy migration restores only matching live linked purchases and r
           "SELECT pending_amount FROM debts WHERE id=$1",
           [unknownDebtId],
         )
-      ).rows[0].pending_amount,
+      ).rows[0]!.pending_amount,
     ).toBeNull();
     await pg.query("UPDATE records SET payment_status='cleared' WHERE id=$1", [debtRecord]);
     expect(
@@ -122,7 +123,7 @@ test("review policy migration restores only matching live linked purchases and r
           "SELECT pending_amount FROM debts WHERE id=$1",
           [debtId],
         )
-      ).rows[0].pending_amount,
+      ).rows[0]!.pending_amount,
     ).toBe("80.00");
     await pg.query("UPDATE records SET payment_status='cancelled' WHERE id=$1", [debtRecord]);
     expect(
@@ -131,7 +132,7 @@ test("review policy migration restores only matching live linked purchases and r
           "SELECT pending_amount FROM debts WHERE id=$1",
           [debtId],
         )
-      ).rows[0].pending_amount,
+      ).rows[0]!.pending_amount,
     ).toBe("100.00");
   } finally {
     await pg.close();

@@ -1,7 +1,9 @@
-import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
 import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+
+import { PGlite } from "@electric-sql/pglite";
+
 import { applyMigrations } from "./database.js";
 import { importSnapshot } from "./snapshot.js";
 import { writePrivateJson } from "./workspace.js";

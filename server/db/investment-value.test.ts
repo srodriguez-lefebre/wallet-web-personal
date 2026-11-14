@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, expect, test } from "vitest";
+
 import {
   installLocalTransport,
   LOCAL_DATABASE_URL,
@@ -27,7 +28,7 @@ afterAll(async () => {
 });
 test("a zero valuation persists through the real SQL repository and reload without changing cost or date", async () => {
   await updateInvestment(id, { currentValue: 0 });
-  expect((await getWalletDataset()).investments.find((item) => item.id === id)).toMatchObject({
+  expect((await getWalletDataset()).investments.find((item) => item.id === id)!).toMatchObject({
     currentValue: 0,
     amountInvested: 100,
     currency: "USD",

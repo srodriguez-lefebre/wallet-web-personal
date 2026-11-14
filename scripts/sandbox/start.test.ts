@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+
 import { expect, test, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -107,9 +108,9 @@ test.each(stages.flatMap((stage) => signals.map((signal) => [stage, signal] as c
       await state.started;
       const handler = process
         .listeners(signal)
-        .find((listener) => !previous.get(signal)!.has(listener));
+        .find((listener) => !previous.get(signal)!.has(listener))!;
       expect(handler, "startup must already handle cancellation").toBeDefined();
-      handler!(signal);
+      handler(signal);
       if (stage !== "lock")
         expect(await readFile(path.join(state.directory, "process.lock"), "utf8")).toBe("owned");
       expect(state.events).not.toContain("release");
@@ -118,7 +119,7 @@ test.each(stages.flatMap((stage) => signals.map((signal) => [stage, signal] as c
       expect(state.events.filter((event) => stages.includes(event))).toEqual(
         stages.slice(0, stages.indexOf(stage) + 1),
       );
-      expect(state.events.at(-1)).toBe("release");
+      expect(state.events.at(-1)!).toBe("release");
       if (stage !== "lock") expect(state.events).toContain("database.close");
       if (["vite", "listen"].includes(stage)) expect(state.events).toContain("vite.close");
       if (stage === "listen") expect(state.events).toContain("server.close");

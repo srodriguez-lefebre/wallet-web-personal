@@ -1,11 +1,13 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { VercelRequest, VercelResponse } from "@vercel/node";
 import handler from "../../api/index.js";
 
-export async function readJson(req: IncomingMessage) {
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+
+export async function readJson(req: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of req) {
+  for await (const value of req) {
+    const chunk = value as Buffer;
     size += chunk.length;
     if (size > 2_000_000) throw new Error("Request body exceeds 2 MB");
     chunks.push(chunk);

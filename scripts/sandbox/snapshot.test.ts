@@ -1,5 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { expect, test } from "vitest";
+
 import { applyMigrations } from "./database.js";
 import { importSnapshot } from "./snapshot.js";
 

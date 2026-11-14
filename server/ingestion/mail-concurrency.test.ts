@@ -1,7 +1,10 @@
-import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { processMailIngestion } from "./process-mail-ingestion.js";
+
 import type { MailIngestionInput } from "../../shared/schemas.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;

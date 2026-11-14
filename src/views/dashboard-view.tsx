@@ -21,16 +21,6 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { PageHeader } from "@/components/page/page-header";
-import { ActionToast } from "@/components/ui/action-toast";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CategoryIcon } from "@/components/wallet/category-icon";
-import { MetricCard } from "@/components/wallet/metric-card";
-import { DebtNetBadge } from "@/components/wallet/debt-net-badge";
-import { useActionToast } from "@/lib/use-action-toast";
-import { useWallet } from "@/providers/wallet-provider";
-import { reportDataset } from "@/lib/preferences";
 import {
   calculateAccountBalanceAtDate,
   calculateAccountBalances,
@@ -48,7 +38,19 @@ import {
   relativeMonthKeys,
 } from "@shared/calculations";
 import { debtDirectionLabels, goalStatusLabels } from "@shared/constants";
+
 import type { DateRange } from "@shared/types";
+
+import { PageHeader } from "@/components/page/page-header";
+import { ActionToast } from "@/components/ui/action-toast";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CategoryIcon } from "@/components/wallet/category-icon";
+import { MetricCard } from "@/components/wallet/metric-card";
+import { DebtNetBadge } from "@/components/wallet/debt-net-badge";
+import { useActionToast } from "@/lib/use-action-toast";
+import { useWallet } from "@/providers/wallet-provider";
+import { reportDataset } from "@/lib/preferences";
 
 export function DashboardView() {
   const navigate = useNavigate();
@@ -100,7 +102,7 @@ export function DashboardView() {
 
   function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
-    navigate("/records");
+    void navigate("/records");
   }
 
   async function settleDebt(debt: (typeof dataset.debts)[number]) {
@@ -194,7 +196,9 @@ export function DashboardView() {
           detail="Income minus expenses"
           icon={<Landmark className="h-4 w-4" />}
           tone={summary.cashFlow >= 0 ? "success" : "danger"}
-          onClick={() => navigate("/analytics")}
+          onClick={() => {
+            void navigate("/analytics");
+          }}
         />
       </div>
 
@@ -354,11 +358,13 @@ export function DashboardView() {
                       key={item.goal.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => navigate(`/goals/${item.goal.id}`)}
+                      onClick={() => {
+                        void navigate(`/goals/${item.goal.id}`);
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          navigate(`/goals/${item.goal.id}`);
+                          void navigate(`/goals/${item.goal.id}`);
                         }
                       }}
                       className="cursor-pointer rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
@@ -438,11 +444,13 @@ export function DashboardView() {
                       key={debt.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => navigate("/debts")}
+                      onClick={() => {
+                        void navigate("/debts");
+                      }}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          navigate("/debts");
+                          void navigate("/debts");
                         }
                       }}
                       className="cursor-pointer rounded-md border p-3 transition hover:border-primary/50 hover:bg-secondary"
@@ -494,7 +502,7 @@ export function DashboardView() {
                           size="sm"
                           onClick={(event) => {
                             event.stopPropagation();
-                            navigate("/debts");
+                            void navigate("/debts");
                           }}
                         >
                           <CheckCircle2 className="h-4 w-4" />

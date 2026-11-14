@@ -1,9 +1,9 @@
-import type { PGlite } from "@electric-sql/pglite";
-import type { IncomingMessage, ServerResponse } from "node:http";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
+
 import { z } from "zod";
+
 import { getWalletDataset } from "../../server/db/wallet-repository.js";
 import { json, readJson, serveWalletApi } from "./http.js";
 import {
@@ -14,6 +14,9 @@ import {
 } from "./mail.js";
 import { writePrivateJson } from "./workspace.js";
 import { panelHtml } from "./panel.js";
+
+import type { IncomingMessage, ServerResponse } from "node:http";
+import type { PGlite } from "@electric-sql/pglite";
 
 const messageSchema = z.object({
   from: z.string().min(1).max(500),
@@ -49,7 +52,7 @@ export async function createSandboxServer(options: {
 }) {
   let mailbox: Mailbox;
   try {
-    mailbox = JSON.parse(await readFile(options.mailboxPath, "utf8"));
+    mailbox = JSON.parse(await readFile(options.mailboxPath, "utf8")) as Mailbox;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     const dataset = await getWalletDataset();
@@ -193,7 +196,7 @@ export async function createSandboxServer(options: {
             {
               error:
                 error instanceof z.ZodError
-                  ? error.issues[0].message
+                  ? (error.issues[0]?.message ?? "Invalid sandbox request")
                   : error instanceof Error
                     ? error.message
                     : "Sandbox request failed",

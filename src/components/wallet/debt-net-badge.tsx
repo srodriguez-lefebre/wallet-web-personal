@@ -1,6 +1,8 @@
-import { Badge } from "@/components/ui/badge";
 import { formatMoney, calculateVisibleDebtSummary } from "@shared/calculations";
+
 import type { CurrencyCode } from "@shared/types";
+
+import { Badge } from "@/components/ui/badge";
 export function DebtNetBadge({
   summary,
   currency,
