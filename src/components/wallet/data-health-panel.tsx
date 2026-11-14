@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { walletDataHealth } from "@shared/data-quality";
 
-import type { WalletDataset } from "@shared/types";
+import type { WalletBackup, WalletDataset } from "@shared/types";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 
 interface Props {
-  getSnapshot: () => Promise<WalletDataset>;
+  getSnapshot: () => Promise<WalletDataset | WalletBackup>;
   onReview: () => void;
   onRecords: () => void;
   onCards: () => void;

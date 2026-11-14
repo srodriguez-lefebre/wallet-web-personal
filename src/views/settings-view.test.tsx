@@ -6,9 +6,11 @@ import { SettingsView } from "./settings-view";
 
 import type { SettingsPatch } from "@shared/schemas";
 
-import * as walletApi from "@/services/wallet-api";
-
-const auth = vi.hoisted(() => ({ lock: vi.fn(), token: undefined as string | undefined }));
+const auth = vi.hoisted(() => ({
+  lock: vi.fn(),
+  token: undefined as string | undefined,
+  client: { "auth.session": vi.fn(), "auth.lockAll": vi.fn() },
+}));
 const update = vi.hoisted(() => vi.fn());
 const addTag = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
@@ -108,8 +110,8 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
 test("the optional lock-all control appears only when supported and clears the local session after success", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   auth.token = "synthetic-session";
-  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: true });
-  const revoke = vi.spyOn(walletApi, "lockAllSessions").mockResolvedValue({ locked: true });
+  auth.client["auth.session"].mockResolvedValue({ revocable: true });
+  const revoke = auth.client["auth.lockAll"].mockResolvedValue({ locked: true });
   let tree!: ReturnType<typeof create>;
   await act(async () => {
     tree = create(<SettingsView />);
@@ -122,7 +124,7 @@ test("the optional lock-all control appears only when supported and clears the l
     await act(async () => {
       button!.props.onClick();
     });
-    expect(revoke).toHaveBeenCalledWith("synthetic-session");
+    expect(revoke).toHaveBeenCalledExactlyOnceWith();
     expect(auth.lock).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => tree.unmount());
@@ -131,7 +133,7 @@ test("the optional lock-all control appears only when supported and clears the l
 test("disabled revocation never renders the lock-all action", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   auth.token = "synthetic-session";
-  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: false });
+  auth.client["auth.session"].mockResolvedValue({ revocable: false });
   let tree!: ReturnType<typeof create>;
   await act(async () => {
     tree = create(<SettingsView />);

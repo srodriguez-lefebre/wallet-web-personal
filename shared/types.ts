@@ -1,5 +1,7 @@
 export type CurrencyCode = "UYU" | "USD" | "EUR" | "BRL" | "ARS";
 
+export type WalletBackup = import("zod").infer<typeof import("./schemas.js").walletBackupSchema>;
+
 export type RecordType = "expense" | "income" | "transfer";
 
 export type AccountType =

@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { formatMoney, recordsForDateRange } from "@shared/calculations";
 import { walletBackupSchema } from "@shared/wallet-backup-schema";
 
-import type { WalletDataset } from "@shared/types";
+import type { WalletBackup } from "@shared/types";
 
 import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
@@ -56,7 +56,7 @@ export function ImportsView() {
   const running = useRef(false);
   const [receipt, setReceipt] = useState(readBackupReceipt);
   const [message, setMessage] = useState("");
-  const [backup, setBackup] = useState<WalletDataset | null>(null);
+  const [backup, setBackup] = useState<WalletBackup | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const activeAccountId = accountId || dataset.accounts.find((a) => a.isActive)?.id || "";
   const expenseCategoryId = expenseId || dataset.categories[0]?.id || "";
@@ -168,7 +168,7 @@ export function ImportsView() {
     if (!file) return;
     await action(async () => {
       const parsed = walletBackupSchema.parse(JSON.parse(await file.text()));
-      setBackup(parsed as WalletDataset);
+      setBackup(parsed);
       setMessage("Backup validated. Review its contents and confirm replacement below.");
     }, "Validate backup");
   }

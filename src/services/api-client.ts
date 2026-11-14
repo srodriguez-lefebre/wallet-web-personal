@@ -23,7 +23,7 @@ type ClientMethod<Id extends ApiOperationId> =
     : (input: ClientInput<Id>) => Promise<OperationResponse<Id>>;
 export type WalletClient = { [Id in ApiOperationId]: ClientMethod<Id> };
 interface ClientOptions {
-  onUnauthorized?: () => void;
+  onUnauthorized?: (token: string) => void;
   getIngestToken?: () => string | null;
   retryDelayMs?: number;
 }
@@ -110,11 +110,16 @@ export function createWalletClient(
         "X-Client-Operation-Id": operation.operationId,
       });
       if (body !== undefined) headers.set("Content-Type", "application/json");
+      const requestToken =
+        operation.auth === "none"
+          ? null
+          : operation.auth === "ingest"
+            ? options.getIngestToken?.()
+            : getToken();
       if (operation.auth !== "none") {
-        const token = operation.auth === "ingest" ? options.getIngestToken?.() : getToken();
-        if (!token)
+        if (!requestToken)
           throw new WalletApiError("Unlock Wallet before making this request", "UNAUTHORIZED", 401);
-        headers.set("Authorization", `Bearer ${token}`);
+        headers.set("Authorization", `Bearer ${requestToken}`);
       }
       let response: Response;
       try {
@@ -135,7 +140,7 @@ export function createWalletClient(
       }
       // Authentication is acted on even when the upstream body is HTML or empty.
       if (response.status === 401) {
-        if (operation.auth === "session") options.onUnauthorized?.();
+        if (operation.auth === "session" && requestToken) options.onUnauthorized?.(requestToken);
         throw new WalletApiError("Invalid or expired session", "UNAUTHORIZED", 401);
       }
       if (operation.method === "GET" && attempt === 0 && transientStatus.has(response.status)) {

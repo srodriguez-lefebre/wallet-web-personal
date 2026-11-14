@@ -1,112 +1,103 @@
-# Paquete4 · checkpoint local
+# Paquete 4 · checkpoint de transporte
 
-Base708309dc029bd5d7e2c5a0b16372f6ac1120b744, rama refactor/04-entity-cache-views,
-worktree /home/santi/proyectos/wallet-web-personal-package4. Checkout candidato3
-/home/santi/proyectos/wallet-web-personal sigue limpio en708309dc y no se modifica.
-No push/PR/preview, cambios remotos, migraciones, secretos ni Apps Script.
+Plan: `docs/refactor-2026-11-14/PACKAGE4-PLAN.md` (local, ignorado).
+Worktree: `/home/santi/proyectos/wallet-web-personal-package4`.
+Rama: `refactor/04-entity-cache-views`. Este archivo registra un avance parcial;
+Query, la caché por entidad y la separación completa de vistas siguen pendientes.
 
-Plan: docs/refactor-2026-11-14/PACKAGE4-PLAN.md (local ignorado).
+## Base publicada y presupuesto
 
-# SDD ledger — plan: docs/refactor-2026-11-14/PACKAGE4-PLAN.md
+- PR #9: main `f1cd16f97085ca4e201037c87fffec300afa5d24`.
+- PR #10: main `098cb9d6e7f34b31d2378451d88a5b791786aaf2`.
+- PR #11: https://github.com/srodriguez-lefebre/wallet-web-personal/pull/11,
+  main `670164637a44b60a641c76a563bf5e186343b765`.
+- Se usaron 3 de los 5 PRs autorizados. Todavía no existe PR del paquete 4.
+- La migración 0022 ya está aplicada: journal anterior intacto, una sola fila
+  añadida, sin migraciones pendientes. No repetirla ni reproducir las 0015–0020.
+- Main se integró mediante merge normal en `b43b15219fc9c20c1236ee05284ce9df68f1f6e6`,
+  sin reescribir `300db452`, `708309dc` ni historia publicada. Ese checkpoint ya está
+  en GitHub y su preview está READY: `dpl_4oPMx7rD2M93ynsgNWzm6DQLdNxn`.
 
-Ruling: helper de workspace de skills cloud no está en filesystem local; ledger
-manual tracked aquí, con tests/logs en /tmp. Costo: retomar desde este archivo y
-commits en lugar del helper, sin descartar evidencia.
-Ruling: tool create_worktree confirmó Cloud worktrees are unavailable; fallback
-Git en directorio hermano del mismo repo para no tocar .gitignore del candidato3.
-Dependencias propias instaladas desde lockfile; ninguna env o metadata copiada.
-Pre-flight: tipos response actuales son ZodType amplio; preservar runtime/schema
-mientras se hace explícita la relación operationId→response para el cliente.
+El bloqueo de publicación por 0022 está resuelto. Se pueden subir commits compatibles
+validados a la rama de trabajo; conservar el flujo normal de PR, CI y merge.
+No se permiten force push, saltos de CI ni cambios de secretos o permisos.
 
-Bloqueo externo de publicación3 (no repetir solicitudes ni ampliar permisos):
+## Task 1 · cliente derivado del contrato, completa
 
-- Falta hostname o ID del endpoint productivo y rama/ventana de recuperación Neon
-  vistos desde un origen independiente de envlocal. No hace falta secreto alguno.
-- .env y .env.local sólo coinciden entre sí; Vercel DATABASE_URL sensible no admite
-  readback. get_project aporta metadata de deploy, no storage/hostname.
-- Conexiones Vercel del proyecto404 Connector Project not found; lista integración
-  Neon403 sin permiso de listar configuración. No reintentar sin evidencia nueva.
-- No Vercel CLI ni Neon CLI instaladas/configuradas; GH CLI autorizado sólo GitHub.
-- Chrome estuvo desconectado. Se recuperó después: consola Neon muestra Log in to Neon, sin sesión existente. Pestaña dejada para login del dueño; no se pulsó SSO ni se aceptaron permisos.
-- Camino seguro: sesión existente Neon/Vercel recuperada y lectura de endpoint,
-  branch y recovery metadata, o metadatos no secretos del dueño. Después preflight
-  READ ONLY con fingerprint antes de conectar y guards de journal/schema. No
-  explorar puertos de debugging, logs con secretos, crear claves ni copiar DB real.
+Commit `300db45211870f239a1bd010d9dab66df310f3ea` preserva schemas runtime y OpenAPI,
+y conserva la relación operationId → respuesta. El cliente tiene métodos tipados,
+params/query/body, AbortSignal, errores no JSON legibles, callback 401 y un único
+retry GET transitorio. Las mutaciones no se reintentan; unlock no envía la sesión
+ni ingest puede reutilizarla.
 
-Estado: task1 preparado y validado, sin consumidores UI. Tareas2–5 pendientes; esto no es el paquete4 completo.
-PRs usados2/5 (#9,#10); candidato3 sin publicar; esta rama será un único PR4 futuro.
+Revisión independiente: se corrigió el único hallazgo, body opcional cuando el
+objeto era obligatorio. Tres aserciones TypeScript RED → GREEN lo protegen.
+Check original: 100 archivos / 743 pruebas; sandbox: 10 / 104. La integración con
+main pasó check 100 / 749 en `/tmp/wallet-package4-main-integration-check.log`.
 
-## Publicación segura parcial solicitada después
+## Task 2a · consumidores del transporte, completa
 
-Se revisaron vercel.json y CI: preview automático de ramas, CI Actions sólo
-pull_request y pushmain. Sin ignoreCommand/deploymentEnabled configurados. No se
-verificó un marcador de mensaje para omitir sólo Vercel; no se cambió configuración
-ni se usó skipci. Referencia oficial consultada: https://vercel.com/docs/project-configuration/git-configuration
+WalletProvider (57 llamadas), Settings y AuthProvider usan los métodos del
+contrato. Se retiraron `wallet-api.ts`, `auth-service.ts` y el evento global de 401. AuthProvider comparte una instancia estable y actualiza la sesión en memoria
+y en el getter a la vez. Un 401 identifica el token usado por la llamada: una
+respuesta tardía de A no puede cerrar una sesión B posterior, incluso entre tabs.
 
-Subido únicamente40c2cdaa1222e993b306a237bf1cae53a1e036c9 a
-origin/refactor/03-contract-router. GitHub branch API confirma head; commitstatus
-Vercel success, preview READY dpl_3tSxsfdKdK7yQ4E35Tsnmc7YDPW3, URL
-wallet-web-personal-kx9cxj6d6.vercel.app. Raíz/health302 porprotección, sin bypass ni
-prueba autenticada. No CI Actions aún porque nohayPR. No se cambió main ni alias.
-Candidato3 708 se conserva local; rama4 hereda708 y tiene la misma excepción por
-0022: no subir este head ni crear PR4hasta verificar/aplicar la ampliación.
+El tipo WalletBackup deriva del schema y conserva metadata nullable. El snapshot
+para exportación se encola sin publicarlo en el dataset activo. Restore admite
+backups y datasets; los chequeos de salud mantienen las referencias archivadas.
+WalletSync todavía recarga el snapshot completo después de mutaciones.
 
-Task1: cliente nuevo sin consumidor UI. Métodos/params/query/body/respuesta desde
-contrato, separación de sesión/ingest, callback401 antesdeJSON, errores legibles,
-AbortSignal, retryúnico GETtransitorio/ningunamutación. Registro de schemas mantiene
-tipos de response sin modificar OpenAPI. No retirar wrappers/provider hasta
-integración del paquete4. Baseline acotado2/5pass.
-Setup: npmci ignore-scripts omitió symlinks de libpq; npmrebuild del paquete oficial
-@embedded-postgres/linux-x64 los restauró. No cambió lockfile, schema ni prod.
-RED inicial por módulo cliente faltante; pruebas funcionales detectaron prefijoAPI
-duplicado y quedaron GREEN2/18. Revisión independiente encontró body opcional en
-tipos cuando el objeto es obligatorio. Tres aserciones TypeScript RED→GREEN
-(body ahora opcional sólo si schema acepta undefined; query sigue normalizando{}).
-Target final2/19pass; tscgreen. Fullcheck4 final100/743pass, exit0: formato, lint, tests, build y OpenAPI. OpenAPI/lockfile/schema sin cambios. Logs /tmp/wallet-package4-check4.log y /tmp/wallet-package4-review-green.log. No otros hallazgos de revisión.
+Evidencia RED → GREEN:
 
-## Puerta y siguiente paso
+- Auth client faltante: 4 fallos; identidad del token en 401: 1 fallo / 16 pass.
+- Retiro del evento global: 1 fallo / 4 pass.
+- Consumidores todavía usando el transporte anterior: 18 fallos / 4 pass.
+- Regresión enfocada final de auth, provider, Settings y plantillas: 6 / 55 pass.
+- HTTP real contra PGlite y migraciones: 1 / 1 pass. Comprueba unlock sintético,
+  crear/editar/releer record, pagar deuda y reintentar sin duplicarla, tarjeta,
+  backup, restore y reload. El servidor y la DB se cierran.
 
-Task1 validado como preparación aislada, no integración UI. Check completo final
-100archivos/743tests exit0. La revisión señaló sólo body opcional; corregido con
-aserciones TypeScript RED→GREEN y suite final verde. No hallazgos abiertos ni
-minors diferidos. Sandbox explícito: exit0, 10 archivos/104tests; /tmp/wallet-package4-sandbox.log.
-No se ejecutó QA autenticada real ni se dejaron servidores. Nuevos métodos aún
-no tienen consumidores de UI; el bundle de la app conserva su hash anterior.
+Validación final del código: `WALLET_TEST_WORKERS=1 npm run check`, exit 0,
+102 archivos / 756 pruebas, formato, lint, build y OpenAPI verdes.
+Log: `/tmp/wallet-package4-transport-final-check.log`.
+`WALLET_TEST_WORKERS=1 npm run sandbox:check`, exit 0, 11 / 105.
+Log: `/tmp/wallet-package4-transport-sandbox.log`.
+Un callback de cierre del nuevo fixture HTTP tuvo un error TypeScript; se corrigió
+antes de la validación final. No se omite ningún fallo del check anterior.
 
-Futuro: integrar main mediante merge normal cuando se publique3, sin reescribir
-este commit ni708/40. Task2–5 siguen pendientes; un único PR4cuando todo su paquete
-esté validado y compatible. Nunca publicar este head apilado mientras0022 esté
-sin verificar/aplicar. No activar revocación, crear secretos o tocar Apps Script.
+## Rulings registrados
 
-Paso externo concreto: Santiago inicia sesión en Neon en la pestaña existente de
-Chrome HP (console.neon.tech; mostraba Log in to Neon), con su cuenta ya creada.
-No compartir password/token/URL completa. Entonces leer proyecto/rama/hostname y
-metadata de recuperación; comparar host con huella local, preflight READ ONLY del
-journal/schema y guards del checkpoint3 antes de aplicar sólo ampliación compatible.
-Alternativa: facilitar sólo hostname/ID, rama/proyecto y ventana de recuperación
-verificados. CLI GitHub no sustituye autorización Neon; Vercel/Neon CLI no tienen
-configuración disponible y la integración Vercel dio403. No introducir bypass.
+- Los helpers cloud de skills no están en el filesystem: se usa este ledger y Git.
+  Coste: retomar por commits y logs locales en lugar de scripts del workspace.
+- La herramienta de worktrees devolvió “Cloud worktrees are unavailable”: se usó
+  Git en un directorio hermano del mismo repo. No se copiaron envs ni metadata.
+  Coste: verificar el cwd explícito antes de cada cambio.
+- Se conserva la API snapshot para pestañas viejas hasta migrar todos los consumers.
+  Coste: el ahorro de red de la caché por entidad todavía no está implementado.
+- Backup tiene tipo inferido propio; no se fuerza un cast a WalletDataset ni se
+  normalizan campos perdiendo metadata. Coste: los consumidores deben distinguirlos.
+- Excepción puntual de `react-hooks/refs` en la construcción del cliente: el factory
+  guarda callbacks y no lee la ref durante render. No se deshabilita la regla en
+  configuración. Coste: mantener ese contrato de construcción pura en el futuro.
 
-Commits: títulos descriptivos, sin Co-authored-by; no reescribir historia ni publicar este head bajo la excepción0022.
+## Producción y siguiente paso
 
-## Integración con main publicado (actualiza bloqueos anteriores)
+PR #11: CI head `43611856122` y main `43612282124`, ambos success. Producción READY
+`dpl_ANvFnKmCHVtdQYFvHWTDg4ynDyNY`, alias `wallet-web-personal.vercel.app` sobre main
+`6701646`. Después de la confirmación explícita de Santiago, smoke GET sin sesión:
+portada 200; health y records/:id 401 JSON con no-store. El deployment concreto
+responde 302 por protección; no hubo bypass ni pruebas con sesión real.
 
-PR11 fusionado en670164637a44b60a641c76a563bf5e186343b765, CIhead43611856122
-success y CImain43612282124success. Vercelproduction READY
-dpl_ANvFnKmCHVtdQYFvHWTDg4ynDyNY y aliaswallet-web-personal.vercel.app mismoSHA.
-Migración0022yaaplicada, postflight pending[], journal0–21intacto/única22añadida;
-no FK/droplegacy/revocación/secreto nuevo. Rama diagnóstica targetverification no
-se integra. 3/5PRusados. Se levantó la excepcióndepush4, despuésdeintegrarmain y
-validarheadexacto. Todavía noPR4: unpaquetecompleto, máximo5total.
+Continuar Task 2b: TanStack Query y queries reference/records/analytics/cards,
+bootstrap que siembra cachés e invalidación selectiva. Mantener paridad de balances,
+búsqueda, reportes y exportación antes de retirar historial del snapshot.
+Después migrar Records/Cards y el kit de formularios. Hay borradores mecánicos no
+aplicados ni validados en `/tmp/wallet-extract-record-components.mjs`,
+`/tmp/wallet-extract-card-form.mjs` y `/tmp/wallet-card-forms-test.txt`; inspeccionarlos
+antes de usarlos. No hay cambios de esas pantallas en el árbol pendiente.
 
-Merge normal deorigin/main sobre300db45 sinreescribirhistoria ni perder708. El
-fullcheck de integración se inició sin cambios adicionales en código productivo.
-Ruling: callback401recibeeltokenusado yAuthProvidercompara la sesiónvigente:
-unarespuestaantiguaA no debe cerrarnuevaB. Clienteestable congetteractual y
-unlockpúblico usa el mismotransporte; retener listenerlegacy hasta migrarwrappers.
-Coste: coexistenciatemporal documentada, sin wire incompatible ni bloqueo de tabs.
-
-Integración verificada: npmruncheck exit0,100archivos/749tests; formato/lint/build/
-OpenAPIgreen. Log /tmp/wallet-package4-main-integration-check.log. El código del
-cliente300 permanece intacto. SiguienteTDD: authclient4regresiones de sesión; todavía
-noafirmarintegraciónQuery ni retiroWalletSync. NoCo-authored-by en commitsnuevos.
+Una revisión de todo el paquete y CI del SHA exacto son obligatorias antes del único
+PR 4. No activar revocación, crear secretos, ejecutar drop legacy o reparar huérfanos.
+Apps Script activo permanece intacto; su actualización se coordina desde el editor
+Google de Chrome cuando el bundle compatible y sus fixtures estén probados.
+Los commits nuevos deben tener títulos descriptivos y ningún Co-authored-by.

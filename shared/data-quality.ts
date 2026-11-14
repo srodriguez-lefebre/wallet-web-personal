@@ -1,13 +1,13 @@
 import { isFinancialRecord } from "./record-status.js";
 
-import type { CurrencyCode, WalletDataset, WalletRecord } from "./types.js";
+import type { CurrencyCode, WalletBackup, WalletDataset, WalletRecord } from "./types.js";
 
 const active = (row: object) => !(row as { deletedAt?: string | null }).deletedAt;
 const positive = (value: number | undefined) =>
   value !== undefined && Number.isFinite(value) && value > 0;
 
 /** Use a complete backup so archived dictionaries remain available for history. */
-export function walletDataHealth(dataset: WalletDataset) {
+export function walletDataHealth(dataset: WalletDataset | WalletBackup) {
   const records = dataset.records.filter(active),
     financial = records.filter(isFinancialRecord);
   const accounts = new Map(dataset.accounts.map((row) => [row.id, row]));

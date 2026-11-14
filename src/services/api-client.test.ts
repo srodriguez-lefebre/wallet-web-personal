@@ -248,3 +248,24 @@ test("body objects stay required even when their inner fields have defaults", ()
     ClientInput<"records.list"> | undefined
   >();
 });
+
+test("401 identifies the session used by the failed request even after replacement", async () => {
+  let token = "synthetic-session-A";
+  let release!: (response: Response) => void;
+  const unauthorized = vi.fn();
+  vi.stubGlobal(
+    "fetch",
+    () =>
+      new Promise<Response>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const pending = createWalletClient(() => token, { onUnauthorized: unauthorized })[
+    "accounts.list"
+  ]();
+  const rejected = expect(pending).rejects.toMatchObject({ status: 401 });
+  token = "synthetic-session-B";
+  release(new Response(null, { status: 401 }));
+  await rejected;
+  expect(unauthorized).toHaveBeenCalledWith("synthetic-session-A");
+});

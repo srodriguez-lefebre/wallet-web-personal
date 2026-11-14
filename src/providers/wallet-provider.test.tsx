@@ -5,8 +5,9 @@ import { act, render, type RenderResult } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-import * as api from "../services/wallet-api";
 import { WalletProvider, useWallet } from "./wallet-provider";
+
+import type { WalletClient } from "@/services/api-client";
 
 const cacheReferenceFixture = () => ({
   settings: {
@@ -24,11 +25,26 @@ const cacheReferenceFixture = () => ({
   exchangeRates: [],
   recordTemplates: [],
 });
-const auth = vi.hoisted(() => ({ token: "test-session", lock: vi.fn() }));
+const api = vi.hoisted(() => ({
+  "wallet.bootstrap": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "records.create": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "recordTemplates.create": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "accounts.delete": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "records.delete": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "recordTemplates.delete": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "wallet.get": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "wallet.backup": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "investments.patch": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+  "recordTemplates.patch": vi.fn<(...args: unknown[]) => Promise<unknown>>(),
+}));
+const auth = vi.hoisted(() => ({
+  token: "test-session",
+  lock: vi.fn(),
+  client: api as unknown as WalletClient,
+}));
 const theme = vi.hoisted(() => ({ setTheme: vi.fn() }));
 vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
 vi.mock("@/providers/theme-provider", () => ({ useTheme: () => theme }));
-vi.mock("@/services/wallet-api");
 let context: ReturnType<typeof useWallet>;
 let tree: RenderResult | undefined;
 
@@ -169,7 +185,7 @@ test("template quick-use request preserves its identifier until consumed without
   await act(async () => context.requestNewRecord("00000000-0000-4000-8000-000000000001"));
   expect(context.newRecordTemplateId).toBe("00000000-0000-4000-8000-000000000001");
   expect(context.newRecordRequestId).not.toBe(0);
-  expect(api.createRecord).not.toHaveBeenCalled();
+  expect(api["records.create"]).not.toHaveBeenCalled();
   await act(async () => context.consumeNewRecordRequest());
   expect(context.newRecordTemplateId).toBeNull();
   expect(context.newRecordRequestId).toBe(0);
@@ -208,16 +224,16 @@ test("template actions publish only the canonical reloaded library and retain re
     ...structuredClone(mockWalletData),
     recordTemplates: [template],
   };
-  vi.mocked(api.createRecordTemplate).mockResolvedValue(template);
-  vi.mocked(api.getWallet).mockResolvedValue(canonical);
+  vi.mocked(api["recordTemplates.create"]).mockResolvedValue(template);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(canonical);
   await act(async () => {
     expect(await context.addRecordTemplate(value)).toBe(template.id);
   });
   expect(context.dataset.recordTemplates).toEqual([template]);
   expect(context.dataset.records).toEqual(canonical.records);
   const changed = { ...template, name: "Morning coffee" };
-  vi.mocked(api.updateRecordTemplate).mockResolvedValue(changed);
-  vi.mocked(api.getWallet).mockResolvedValue({
+  vi.mocked(api["recordTemplates.patch"]).mockResolvedValue(changed);
+  vi.mocked(api["wallet.get"]).mockResolvedValue({
     ...canonical,
     recordTemplates: [changed],
   });
@@ -225,8 +241,8 @@ test("template actions publish only the canonical reloaded library and retain re
     await context.updateRecordTemplate(template.id, { name: changed.name });
   });
   expect(context.dataset.recordTemplates).toEqual([changed]);
-  vi.mocked(api.deleteRecordTemplate).mockResolvedValue({ deleted: true });
-  vi.mocked(api.getWallet).mockResolvedValue({
+  vi.mocked(api["recordTemplates.delete"]).mockResolvedValue({ deleted: true });
+  vi.mocked(api["wallet.get"]).mockResolvedValue({
     ...canonical,
     recordTemplates: [],
   });
@@ -234,7 +250,7 @@ test("template actions publish only the canonical reloaded library and retain re
     await context.deleteRecordTemplate(template.id);
   });
   expect(context.dataset.recordTemplates).toEqual([]);
-  expect(api.createRecord).not.toHaveBeenCalled();
+  expect(api["records.create"]).not.toHaveBeenCalled();
 });
 
 test("failed template writes preserve the library and expose the failure", async () => {
@@ -245,7 +261,7 @@ test("failed template writes preserve the library and expose the failure", async
       </WalletProvider>,
     );
   });
-  vi.mocked(api.createRecordTemplate).mockRejectedValue(new Error("Template limit"));
+  vi.mocked(api["recordTemplates.create"]).mockRejectedValue(new Error("Template limit"));
   await act(async () => {
     await expect(
       context.addRecordTemplate({
@@ -270,11 +286,11 @@ test("all history includes the oldest review draft on its local calendar date", 
       paymentStatus: "needs_review",
     },
   ];
-  vi.mocked(api.bootstrapWallet).mockResolvedValue({
+  vi.mocked(api["wallet.bootstrap"]).mockResolvedValue({
     ...bootstrap,
     dataset: data,
   });
-  vi.mocked(api.getWallet).mockResolvedValue(data);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(data);
   await act(async () => {
     tree = render(
       <WalletProvider>
@@ -300,16 +316,17 @@ test("investment valuation sends a partial patch and reloads canonical cost and 
   const investment = context.dataset.investments[0]!;
   const reloaded = structuredClone(mockWalletData);
   reloaded.investments.find((item) => item.id === investment.id)!.currentValue = 0;
-  vi.mocked(api.updateInvestment).mockResolvedValue({
+  vi.mocked(api["investments.patch"]).mockResolvedValue({
     ...investment,
     currentValue: 0,
   });
-  vi.mocked(api.getWallet).mockResolvedValue(reloaded);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(reloaded);
   await act(async () => {
     await context.updateInvestment(investment.id, { currentValue: 0 });
   });
-  expect(api.updateInvestment).toHaveBeenCalledExactlyOnceWith("test-session", investment.id, {
-    currentValue: 0,
+  expect(api["investments.patch"]).toHaveBeenCalledExactlyOnceWith({
+    params: { id: investment.id },
+    body: { currentValue: 0 },
   });
   expect(context.dataset.investments.find((item) => item.id === investment.id)!).toMatchObject({
     currentValue: 0,
@@ -322,8 +339,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   auth.token = "test-session";
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  vi.mocked(api.bootstrapWallet).mockResolvedValue(bootstrap);
-  vi.mocked(api.getWallet).mockResolvedValue(structuredClone(mockWalletData));
+  vi.mocked(api["wallet.bootstrap"]).mockResolvedValue(bootstrap);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(structuredClone(mockWalletData));
 });
 afterEach(async () => {
   if (tree) await act(async () => tree?.unmount());
@@ -342,10 +359,10 @@ test("account archive refresh retains durable records returned by server", async
     );
   });
   const before = context.dataset.records.length;
-  vi.mocked(api.deleteAccount).mockResolvedValue({ deleted: true });
+  vi.mocked(api["accounts.delete"]).mockResolvedValue({ deleted: true });
   const canonical = structuredClone(mockWalletData);
   canonical.accounts[0]!.isActive = false;
-  vi.mocked(api.getWallet).mockResolvedValue(canonical);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(canonical);
   await act(async () => {
     await context.deleteAccount(canonical.accounts[0]!.id);
   });
@@ -362,14 +379,14 @@ test("successful write plus failed reload rejects and preserves visible error fe
       </WalletProvider>,
     );
   });
-  vi.mocked(api.deleteRecord).mockResolvedValue({ deleted: true });
-  vi.mocked(api.getWallet).mockRejectedValue(new Error("offline"));
+  vi.mocked(api["records.delete"]).mockResolvedValue({ deleted: true });
+  vi.mocked(api["wallet.get"]).mockRejectedValue(new Error("offline"));
   await act(async () => {
     await expect(context.deleteRecord("record")).rejects.toThrow(/saved.*refresh/i);
   });
   expect(context.isAllHistoryComplete).toBe(false);
   expect(tree?.container.textContent).toContain("offline");
-  vi.mocked(api.getWallet).mockResolvedValue({
+  vi.mocked(api["wallet.get"]).mockResolvedValue({
     ...mockWalletData,
     records: [],
   });
@@ -401,7 +418,7 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
     removeItem: () => {},
   });
   let resolve!: (value: typeof bootstrap) => void;
-  vi.mocked(api.bootstrapWallet).mockReturnValue(
+  vi.mocked(api["wallet.bootstrap"]).mockReturnValue(
     new Promise((done) => {
       resolve = done;
     }),
@@ -413,15 +430,15 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
       </WalletProvider>,
     );
   });
-  vi.mocked(api.deleteRecord).mockResolvedValue({ deleted: true });
-  vi.mocked(api.getWallet).mockResolvedValue({
+  vi.mocked(api["records.delete"]).mockResolvedValue({ deleted: true });
+  vi.mocked(api["wallet.get"]).mockResolvedValue({
     ...mockWalletData,
     records: [],
   });
   await act(async () => {
     await context.deleteRecord("record");
   });
-  vi.mocked(api.getWallet).mockResolvedValue(mockWalletData);
+  vi.mocked(api["wallet.get"]).mockResolvedValue(mockWalletData);
   await act(async () => {
     resolve(bootstrap);
   });
@@ -449,7 +466,7 @@ test("cached bootstrap failure remains visible and storage quota does not break 
     clear: () => {},
     removeItem: () => {},
   });
-  vi.mocked(api.bootstrapWallet).mockRejectedValue(new Error("offline cached refresh"));
+  vi.mocked(api["wallet.bootstrap"]).mockRejectedValue(new Error("offline cached refresh"));
   await act(async () => {
     tree = render(
       <WalletProvider>
@@ -477,8 +494,8 @@ test("a complete backup can include archived history without publishing it into 
   const activeCount = context.dataset.records.length;
   const backup = structuredClone(mockWalletData);
   backup.records.push({ ...backup.records[0]!, id: "archived-history" });
-  vi.mocked(api.getWalletBackup).mockResolvedValue(backup);
-  let exported: typeof backup | undefined;
+  vi.mocked(api["wallet.backup"]).mockResolvedValue(backup);
+  let exported: Awaited<ReturnType<typeof context.getBackupDataset>> | undefined;
   await act(async () => {
     exported = await context.getBackupDataset();
   });
@@ -507,7 +524,7 @@ test("a pending write cannot recreate private cached data after the wallet is cl
     );
   });
   let release!: () => void;
-  vi.mocked(api.deleteRecord).mockImplementation(
+  vi.mocked(api["records.delete"]).mockImplementation(
     () =>
       new Promise((resolve) => {
         release = () => resolve({ deleted: true });

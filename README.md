@@ -505,3 +505,12 @@ está probado con dos sesiones sintéticas y queda desactivado hasta aprobación
 La caché de referencia legacy que requiere sub deja de persistirse con tokens
 versionados; el cliente consulta la API normalmente y el paquete de caché por
 entidad retira esa persistencia.
+
+### Transporte del cliente durante el refactor
+
+`src/services/api-client.ts` crea los métodos desde `shared/api-contract.ts`.
+AuthProvider comparte una instancia estable: el callback de un 401 identifica
+la sesión que hizo la llamada y no cierra una sesión posterior. GET reintenta
+una vez ante fallos transitorios; las mutaciones no se reintentan. Los backups
+conservan su tipo y metadata propios. WalletSync aún recarga el snapshot canónico
+hasta completar la migración de caché por entidad.

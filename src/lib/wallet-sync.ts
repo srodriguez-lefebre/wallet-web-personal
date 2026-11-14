@@ -39,7 +39,7 @@ export class WalletSync<T> {
     });
   }
 
-  snapshot(load: () => Promise<T>): Promise<T> {
+  snapshot<R>(load: () => Promise<R>): Promise<R> {
     return this.enqueue(load);
   }
 

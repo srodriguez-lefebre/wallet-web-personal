@@ -39,7 +39,6 @@ import { paymentDefaults } from "@/lib/preferences";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useAuth } from "@/providers/auth-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import { getSessionCapabilities, lockAllSessions } from "@/services/wallet-api";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -66,12 +65,12 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { lock, expiresAt, token } = useAuth();
+  const { lock, expiresAt, token, client } = useAuth();
   const [sessionControl, setSessionControl] = useState<"disabled" | "ready" | "busy">("disabled");
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    void getSessionCapabilities(token)
+    void client["auth.session"]()
       .then((result) => {
         if (!cancelled) setSessionControl(result.revocable ? "ready" : "disabled");
       })
@@ -81,12 +80,12 @@ export function SettingsView() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [client, token]);
   const { toast, runAction } = useActionToast();
   async function closeAllSessions() {
     if (!token || sessionControl !== "ready") return;
     setSessionControl("busy");
-    const ok = await runSettingAction(() => lockAllSessions(token), {
+    const ok = await runSettingAction(() => client["auth.lockAll"](), {
       processing: "Locking all sessions...",
       success: "All sessions locked",
       error: "Could not lock all sessions",

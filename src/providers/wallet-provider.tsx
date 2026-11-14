@@ -35,6 +35,7 @@ import type {
   RecurringDebt,
   Tag,
   WalletDataset,
+  WalletBackup,
   WalletRecord,
 } from "@shared/types";
 
@@ -44,7 +45,6 @@ import { readReferenceCache, writeReferenceCache } from "@/lib/wallet-reference-
 import { WalletSync } from "@/lib/wallet-sync";
 import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
-import * as walletApi from "@/services/wallet-api";
 
 type PeriodMode = "month" | "custom" | "all";
 
@@ -161,8 +161,8 @@ interface WalletContextValue {
   isAllHistoryComplete: boolean;
   loadMoreRecords: () => Promise<void>;
   getCompleteDataset: () => Promise<WalletDataset>;
-  getBackupDataset: () => Promise<WalletDataset>;
-  restoreBackup: (backup: WalletDataset) => Promise<void>;
+  getBackupDataset: () => Promise<WalletBackup>;
+  restoreBackup: (backup: WalletDataset | WalletBackup) => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -239,7 +239,7 @@ function defaultRecordAccountId(dataset: WalletDataset) {
 }
 
 export function WalletProvider({ children }: PropsWithChildren) {
-  const { token, lock } = useAuth();
+  const { token, lock, client } = useAuth();
   const { setTheme } = useTheme();
   const [initialCache] = useState(() => readReferenceCache(token));
   const [hasCachedDataset] = useState(() => Boolean(initialCache));
@@ -325,11 +325,6 @@ export function WalletProvider({ children }: PropsWithChildren) {
     setSelectedPeriodMode("custom");
   }
 
-  function requireToken() {
-    if (!token) throw new Error("Missing API token");
-    return token;
-  }
-
   const [sync] = useState(
     () =>
       new WalletSync<WalletDataset>((next) => {
@@ -353,8 +348,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
     // snapshot. One epoch owns both reads so edits invalidate the entire load.
     void sync
       .read(async () => {
-        await walletApi.bootstrapWallet(token!);
-        return walletApi.getWallet(token!);
+        await client["wallet.bootstrap"]({ body: { recordsLimit: 200, recordsCursor: null } });
+        return client["wallet.get"]();
       })
       .then((result) => {
         if (!cancelled && result) setHasLoaded(true);
@@ -373,7 +368,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       cancelled = true;
       sync.deactivate();
     };
-  }, [sync, token]);
+  }, [client, sync, token]);
 
   useEffect(() => {
     setTheme(dataset.settings.theme);
@@ -382,7 +377,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function getCompleteDataset() {
     setPendingReads((count) => count + 1);
     try {
-      const result = await sync.refresh(() => walletApi.getWallet(requireToken()));
+      const result = await sync.refresh(() => client["wallet.get"]());
       setHasLoaded(true);
       return result;
     } catch (error) {
@@ -396,7 +391,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function getBackupDataset() {
     setPendingReads((count) => count + 1);
     try {
-      return await sync.snapshot(() => walletApi.getWalletBackup(requireToken()));
+      return await sync.snapshot(() => client["wallet.backup"]());
     } finally {
       setPendingReads((count) => Math.max(0, count - 1));
     }
@@ -419,7 +414,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       if (!token) throw new Error("Missing API token");
       setPendingMutations((count) => count + 1);
       try {
-        const result = await sync.mutate(write, () => walletApi.getWallet(token));
+        const result = await sync.mutate(write, () => client["wallet.get"]());
         setHasLoaded(true);
         return result;
       } catch (error) {
@@ -429,12 +424,12 @@ export function WalletProvider({ children }: PropsWithChildren) {
         setPendingMutations((count) => Math.max(0, count - 1));
       }
     },
-    [sync, token],
+    [client, sync, token],
   );
   const refreshCardStatements = useCallback(async () => {
     if (!token) throw new Error("Missing API token");
-    await mutate(() => walletApi.refreshCardStatements(token));
-  }, [mutate, token]);
+    await mutate(() => client["cards.refreshStatements"]());
+  }, [client, mutate, token]);
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
@@ -474,26 +469,26 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addAccount(value: Omit<Account, "id">) {
-    return (await mutate(() => walletApi.createAccount(requireToken(), value))).id;
+    return (await mutate(() => client["accounts.create"]({ body: value }))).id;
   }
   async function updateAccount(id: string, value: Omit<Account, "id">) {
-    await mutate(() => walletApi.updateAccount(requireToken(), id, value));
+    await mutate(() => client["accounts.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteAccount(id: string) {
-    await mutate(() => walletApi.deleteAccount(requireToken(), id));
+    await mutate(() => client["accounts.delete"]({ params: { id: id } }));
     setRecordFiltersState((current) => ({
       ...current,
       accountId: current.accountId === id ? undefined : current.accountId,
     }));
   }
   async function addCategory(value: Omit<Category, "id">) {
-    return (await mutate(() => walletApi.createCategory(requireToken(), value))).id;
+    return (await mutate(() => client["categories.create"]({ body: value }))).id;
   }
   async function updateCategory(id: string, value: Omit<Category, "id">) {
-    await mutate(() => walletApi.updateCategory(requireToken(), id, value));
+    await mutate(() => client["categories.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteCategory(id: string) {
-    await mutate(() => walletApi.deleteCategory(requireToken(), id));
+    await mutate(() => client["categories.delete"]({ params: { id: id } }));
     setRecordFiltersState((current) => ({
       ...current,
       // Archiving a parent also reassigns its children.
@@ -501,158 +496,162 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
   async function addCreditCard(value: Omit<CreditCard, "id">) {
-    return (await mutate(() => walletApi.createCreditCard(requireToken(), value))).id;
+    return (await mutate(() => client["cards.create"]({ body: value }))).id;
   }
   async function updateCreditCard(id: string, value: Omit<CreditCard, "id">) {
-    await mutate(() => walletApi.updateCreditCard(requireToken(), id, value));
+    await mutate(() => client["cards.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteCreditCard(id: string) {
-    await mutate(() => walletApi.deleteCreditCard(requireToken(), id));
+    await mutate(() => client["cards.delete"]({ params: { id: id } }));
   }
   async function addTag(value: Omit<Tag, "id">) {
-    return (await mutate(() => walletApi.createTag(requireToken(), value))).id;
+    return (await mutate(() => client["tags.create"]({ body: value }))).id;
   }
   async function updateTag(id: string, value: Omit<Tag, "id">) {
-    await mutate(() => walletApi.updateTag(requireToken(), id, value));
+    await mutate(() => client["tags.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteTag(id: string) {
-    await mutate(() => walletApi.deleteTag(requireToken(), id));
+    await mutate(() => client["tags.delete"]({ params: { id: id } }));
     setRecordFiltersState((current) => ({
       ...current,
       tagId: current.tagId === id ? undefined : current.tagId,
     }));
   }
   async function addGoal(value: Omit<Goal, "id">) {
-    return (await mutate(() => walletApi.createGoal(requireToken(), value))).id;
+    return (await mutate(() => client["goals.create"]({ body: value }))).id;
   }
   async function updateGoal(id: string, value: GoalPatch) {
-    await mutate(() => walletApi.updateGoal(requireToken(), id, value));
+    await mutate(() => client["goals.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteGoal(id: string) {
-    await mutate(() => walletApi.deleteGoal(requireToken(), id));
+    await mutate(() => client["goals.delete"]({ params: { id: id } }));
   }
   async function addBudget(value: Omit<Budget, "id">) {
-    return (await mutate(() => walletApi.createBudget(requireToken(), value))).id;
+    return (await mutate(() => client["budgets.create"]({ body: value }))).id;
   }
   async function addRecordTemplate(value: Omit<RecordTemplate, "id">) {
-    return (await mutate(() => walletApi.createRecordTemplate(requireToken(), value))).id;
+    return (await mutate(() => client["recordTemplates.create"]({ body: value }))).id;
   }
   async function updateRecordTemplate(id: string, value: RecordTemplatePatch) {
-    await mutate(() => walletApi.updateRecordTemplate(requireToken(), id, value));
+    await mutate(() => client["recordTemplates.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteRecordTemplate(id: string) {
-    await mutate(() => walletApi.deleteRecordTemplate(requireToken(), id));
+    await mutate(() => client["recordTemplates.delete"]({ params: { id: id } }));
   }
   async function updateBudget(id: string, value: Omit<Budget, "id">) {
-    await mutate(() => walletApi.updateBudget(requireToken(), id, value));
+    await mutate(() => client["budgets.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteBudget(id: string) {
-    await mutate(() => walletApi.deleteBudget(requireToken(), id));
+    await mutate(() => client["budgets.delete"]({ params: { id: id } }));
   }
   async function addInvestment(value: Omit<Investment, "id">) {
-    return (await mutate(() => walletApi.createInvestment(requireToken(), value))).id;
+    return (await mutate(() => client["investments.create"]({ body: value }))).id;
   }
   async function updateInvestment(id: string, value: InvestmentPatch) {
-    await mutate(() => walletApi.updateInvestment(requireToken(), id, value));
+    await mutate(() => client["investments.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteInvestment(id: string) {
-    await mutate(() => walletApi.deleteInvestment(requireToken(), id));
+    await mutate(() => client["investments.delete"]({ params: { id: id } }));
   }
   async function addInstallmentPlan(value: Omit<InstallmentPlan, "id">) {
-    return (await mutate(() => walletApi.createInstallmentPlan(requireToken(), value))).id;
+    return (await mutate(() => client["installmentPlans.create"]({ body: value }))).id;
   }
   async function updateInstallmentPlan(id: string, value: Omit<InstallmentPlan, "id">) {
-    await mutate(() => walletApi.updateInstallmentPlan(requireToken(), id, value));
+    await mutate(() => client["installmentPlans.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteInstallmentPlan(id: string) {
-    await mutate(() => walletApi.deleteInstallmentPlan(requireToken(), id));
+    await mutate(() => client["installmentPlans.delete"]({ params: { id: id } }));
   }
   async function addDebt(value: Omit<Debt, "id">) {
-    return (await mutate(() => walletApi.createDebt(requireToken(), value))).id;
+    return (await mutate(() => client["debts.create"]({ body: value }))).id;
   }
   async function updateDebt(id: string, value: Omit<Debt, "id">) {
-    await mutate(() => walletApi.updateDebt(requireToken(), id, value));
+    await mutate(() => client["debts.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteDebt(id: string) {
-    await mutate(() => walletApi.deleteDebt(requireToken(), id));
+    await mutate(() => client["debts.delete"]({ params: { id: id } }));
   }
   async function addRecurringDebt(value: Omit<RecurringDebt, "id">) {
-    return (await mutate(() => walletApi.createRecurringDebt(requireToken(), value))).id;
+    return (await mutate(() => client["recurringDebts.create"]({ body: value }))).id;
   }
   async function updateRecurringDebt(id: string, value: Omit<RecurringDebt, "id">) {
-    await mutate(() => walletApi.updateRecurringDebt(requireToken(), id, value));
+    await mutate(() => client["recurringDebts.patch"]({ params: { id: id }, body: value }));
   }
   async function deleteRecurringDebt(id: string) {
-    await mutate(() => walletApi.deleteRecurringDebt(requireToken(), id));
+    await mutate(() => client["recurringDebts.delete"]({ params: { id: id } }));
   }
-  async function restoreBackup(backup: WalletDataset) {
-    await mutate(() => walletApi.restoreWallet(requireToken(), backup));
+  async function restoreBackup(backup: WalletDataset | WalletBackup) {
+    await mutate(() => client["wallet.restore"]({ body: backup }));
   }
 
   async function addRecord(record: Omit<WalletRecord, "id">) {
-    await mutate(() => walletApi.createRecord(requireToken(), record));
+    await mutate(() => client["records.create"]({ body: record }));
   }
   async function updateRecord(id: string, record: RecordPatch) {
-    return mutate(() => walletApi.updateRecord(requireToken(), id, record));
+    return mutate(() => client["records.patch"]({ params: { id: id }, body: record }));
   }
   async function deleteRecord(id: string) {
-    await mutate(() => walletApi.deleteRecord(requireToken(), id));
+    await mutate(() => client["records.delete"]({ params: { id: id } }));
   }
   async function importRecords(records: Array<Omit<WalletRecord, "id">>) {
     return mutate(async () => {
-      const complete = await walletApi.getWallet(requireToken());
+      const complete = await client["wallet.get"]();
       return importRecordBatches(records, complete.records, (batch) =>
-        walletApi.importRecords(requireToken(), batch),
+        client["records.import"]({ body: { records: batch } }),
       );
     });
   }
   async function updateWalletSettings(settings: SettingsPatch) {
-    await mutate(() => walletApi.updateSettings(requireToken(), settings));
+    await mutate(() => client["settings.patch"]({ body: settings }));
   }
   async function addCreditCardPayment(
     id: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId">,
   ) {
-    await mutate(() => walletApi.createCreditCardPayment(requireToken(), id, payment));
+    await mutate(() => client["cardPayments.create"]({ params: { id: id }, body: payment }));
   }
 
   async function addCreditCardRecord(
     id: string,
     value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() => walletApi.createCreditCardRecord(requireToken(), id, value));
+    await mutate(() => client["cardRecords.create"]({ params: { id: id }, body: value }));
   }
   async function addCreditCardRefund(
     id: string,
     value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() => walletApi.createCreditCardRefund(requireToken(), id, value));
+    await mutate(() => client["cardRecords.refund"]({ params: { id: id }, body: value }));
   }
   async function updateCreditCardRecord(
     id: string,
     movementId: string,
     value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() => walletApi.updateCreditCardRecord(requireToken(), id, movementId, value));
+    await mutate(() =>
+      client["cardRecords.patch"]({ params: { id: id, recordId: movementId }, body: value }),
+    );
   }
   async function deleteCreditCardRecord(id: string, movementId: string) {
-    await mutate(() => walletApi.deleteCreditCardRecord(requireToken(), id, movementId));
+    await mutate(() => client["cardRecords.delete"]({ params: { id: id, recordId: movementId } }));
   }
   async function deleteCreditCardPayment(id: string, paymentId: string) {
-    await mutate(() => walletApi.deleteCreditCardPayment(requireToken(), id, paymentId));
+    await mutate(() => client["cardPayments.delete"]({ params: { id: id, paymentId: paymentId } }));
   }
   async function payCreditCardStatement(
     id: string,
     statementId: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">,
   ) {
-    await mutate(() => walletApi.payCreditCardStatement(requireToken(), id, statementId, payment));
+    await mutate(() =>
+      client["cardStatements.pay"]({ params: { id: id, statementId: statementId }, body: payment }),
+    );
   }
   async function addGoalReservation(value: Omit<GoalReservation, "id">) {
-    await mutate(() => walletApi.createGoalReservation(requireToken(), value));
+    await mutate(() => client["goalReservations.create"]({ body: value }));
   }
   async function deleteGoalReservation(id: string) {
-    await mutate(() => walletApi.deleteGoalReservation(requireToken(), id));
+    await mutate(() => client["goalReservations.delete"]({ params: { id: id } }));
   }
   async function releaseGoalReservation(value: {
     goalId: string;
@@ -660,13 +659,18 @@ export function WalletProvider({ children }: PropsWithChildren) {
     amount: number;
     note?: string;
   }) {
-    await mutate(() => walletApi.releaseGoalReservation(requireToken(), value));
+    await mutate(() => client["goalReservations.release"]({ body: value }));
   }
   async function recordDebtPayment(
     id: string,
-    payment: Parameters<typeof walletApi.recordDebtPayment>[2],
+    payment: Parameters<WalletContextValue["recordDebtPayment"]>[1],
   ) {
-    await mutate(() => walletApi.recordDebtPayment(requireToken(), id, payment));
+    await mutate(() =>
+      client["debts.pay"]({
+        params: { id: id },
+        body: { ...payment, idempotencyKey: payment.idempotencyKey ?? crypto.randomUUID() },
+      }),
+    );
   }
   async function toggleAccountVisibility(id: string) {
     const account = dataset.accounts.find((item) => item.id === id);
