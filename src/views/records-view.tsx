@@ -271,6 +271,7 @@ export function RecordsView() {
     recordFilters,
     setRecordFilters,
     clearRecordFilters,
+    isReviewQueueOpen,
     openReviewQueue,
     closeReviewQueue,
     addRecord,
@@ -855,7 +856,7 @@ export function RecordsView() {
   }
 
   function toggleReviewQueue() {
-    if (recordFilters.paymentStatus === "needs_review") {
+    if (isReviewQueueOpen) {
       closeReviewQueue();
       return;
     }
@@ -1187,7 +1188,7 @@ export function RecordsView() {
           variant="outline"
           onClick={toggleReviewQueue}
           aria-label="Open review queue"
-          aria-pressed={recordFilters.paymentStatus === "needs_review"}
+          aria-pressed={isReviewQueueOpen}
         >
           Needs review{" "}
           {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
@@ -1201,8 +1202,7 @@ export function RecordsView() {
         </Button>
       </PageHeader>
 
-      {selectedPeriodMode === "all" &&
-        recordFilters.paymentStatus === "needs_review" && (
+      {selectedPeriodMode === "all" && isReviewQueueOpen && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <p className="text-sm text-muted-foreground" role="status">
               Review queue · All dates
@@ -1926,11 +1926,13 @@ export function RecordsView() {
             </select>
             <select
               value={recordFilters.paymentStatus ?? "all"}
-              onChange={(event) =>
-                setRecordFilters({
+              onChange={(event) => {
+                if (isReviewQueueOpen && event.target.value === "all")
+                  closeReviewQueue();
+                else setRecordFilters({
                   paymentStatus: event.target.value as PaymentStatus | "all",
-                })
-              }
+                });
+              }}
               className={fieldClassName}
             >
               <option value="all">All statuses</option>
@@ -2055,7 +2057,7 @@ export function RecordsView() {
                     aria-label={`Remove ${label} filter`}
                     title={value}
                     onClick={() => {
-                      if (key === "paymentStatus" && recordFilters.paymentStatus === "needs_review")
+                      if (key === "paymentStatus" && isReviewQueueOpen)
                         closeReviewQueue();
                       else setRecordFilters({ [key]: undefined });
                       if (key === "note") setShowNoteFilter(false);

@@ -17,6 +17,7 @@ let dataset: WalletDataset;
 let filters: RecordFilters;
 let periodMode: "month" | "all";
 let historyComplete: boolean;
+let isReviewQueueOpen: boolean;
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({
     dataset,
@@ -32,6 +33,7 @@ vi.mock("@/providers/wallet-provider", () => ({
     setAllPeriod,
     openReviewQueue,
     closeReviewQueue,
+    isReviewQueueOpen,
     addRecord: add,
     updateRecord: update,
     deleteRecord: vi.fn(),
@@ -89,7 +91,9 @@ beforeEach(() => {
   filters = {};
   periodMode = "month";
   historyComplete = true;
+  isReviewQueueOpen = false;
   clearFilters.mockImplementation(() => {
+    isReviewQueueOpen = false;
     filters = {};
   });
   setAllPeriod.mockImplementation(() => {
@@ -100,11 +104,13 @@ beforeEach(() => {
   });
   let previous: { filters: RecordFilters; period: "month" | "all" } | undefined;
   openReviewQueue.mockImplementation(() => {
-    previous = { filters: { ...filters }, period: periodMode };
+    isReviewQueueOpen = true;
+    previous ??= { filters: { ...filters }, period: periodMode };
     filters = { paymentStatus: "needs_review" };
     periodMode = "all";
   });
   closeReviewQueue.mockImplementation(() => {
+    isReviewQueueOpen = false;
     filters = previous?.filters ?? { ...filters, paymentStatus: "all" };
     periodMode = previous?.period ?? periodMode;
     previous = undefined;
@@ -161,6 +167,34 @@ async function openRecord() {
     tree!.root.findAllByProps({ role: "button" })[0].props.onClick(),
   );
 }
+
+test("the queue toggle opens global review from a manually filtered Needs review view", async () => {
+  filters = { accountId: "bank", paymentStatus: "needs_review" };
+  await act(async () => { tree = create(<RecordsView />); });
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(false);
+  await act(async () => tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick());
+  expect(openReviewQueue).toHaveBeenCalledOnce();
+  expect(closeReviewQueue).not.toHaveBeenCalled();
+  await act(async () => tree!.update(<RecordsView />));
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(true);
+  await act(async () => tree!.root.findByProps({ "aria-label": "Remove Status filter" }).props.onClick());
+  await act(async () => tree!.update(<RecordsView />));
+  expect(filters).toEqual({ accountId: "bank", paymentStatus: "needs_review" });
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(false);
+});
+
+test.each(["cleared", "needs_review"] as const)("Status All exits the global queue and restores the previous %s filter", async (status) => {
+  filters = { accountId: "bank", paymentStatus: status, note: "manual note" };
+  const previous = { ...filters };
+  await act(async () => { tree = create(<RecordsView />); });
+  await act(async () => tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick());
+  await act(async () => tree!.update(<RecordsView />));
+  const statusSelect = tree!.root.findAllByType("select").find((select) => select.props.value === "needs_review")!;
+  await act(async () => statusSelect.props.onChange({ target: { value: "all" } }));
+  expect(closeReviewQueue).toHaveBeenCalledOnce();
+  expect(filters).toEqual(previous);
+  expect(periodMode).toBe("month");
+});
 
 test("Note receives focus only when explicitly opened, including after removal", async () => {
   const focus = vi.fn();

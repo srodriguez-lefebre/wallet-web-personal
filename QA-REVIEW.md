@@ -3,7 +3,8 @@
 Base: `87b6b0bff6ca14540a09830cc8f2c965181b2d14`.
 Rama: `fix/qa-records-card-context`. Verificación: 13–14 de noviembre de 2026.
 No se modificaron registros reales, credenciales, migraciones, contratos API ni
-cálculos de dinero. No se hizo merge ni despliegue.
+cálculos de dinero. La publicación posterior requiere CI del commit exacto y
+se realiza mediante PR y el despliegue normal de main.
 
 ## Contexto consultado
 
@@ -38,7 +39,9 @@ cálculos de dinero. No se hizo merge ni despliegue.
    agenda. Incluye los atrasados y permite abrir el estado exacto. El total
    adeudado se etiqueta Outstanding. No se cambió el cálculo financiero.
 4. WalletProvider conserva período, mes, rango personalizado y todos los filtros
-   antes de abrir la cola global. El botón y la × de Status restauran el contexto,
+   antes de abrir la cola global, incluso si Status ya era Needs review manual.
+   El modo de cola se identifica por su contexto de retorno, no por ese filtro.
+   El botón, la × de Status y Status → All restauran el contexto completo,
    también tras navegar fuera de Records. Notificaciones y búsqueda usan la
    misma entrada. Clear all/Reset y una búsqueda nueva descartan explícitamente
    el contexto anterior. No se persiste este estado de navegación tras recargar.
@@ -64,12 +67,20 @@ fijas de septiembre/noviembre de 2026; los ciclos abiertos siguen el reloj actua
    septiembre/QA Cash, sin las restricciones anteriores. Ver un nuevo y un visto.
    Salir con el botón, repetir y salir con la × de Status: se recuperan los
    filtros. Repetir navegando a Cards y volviendo antes de cerrar la cola.
+   Repetir con Status = Needs review manual, QA Bank, noviembre y Note
+   `New pending`: entrar desde Notifications, reabrir desde Search > Review
+   records y elegir Status > All statuses. Deben volver noviembre, QA Bank,
+   Needs review y la nota; el botón de cola debe quedar desactivado. Reabrir y
+   cerrar con la × o el botón debe conservar ese mismo contexto.
 3. En el fixture, Save and mark reviewed debe reducir la cola a uno; Undo la
    devuelve a dos. Recargar y reabrir la cola verifica el estado canónico de la
    API. No repetir este paso en producción con datos reales.
 4. Abrir Categories, llegar a QA Category 45 y seleccionarla. Verificar scroll,
    cierre, foco de vuelta al selector y fondo opaco en Light/Dark (Settings >
    Theme). Probar viewport de 390 px sin scroll horizontal.
+   Abrir con clic: el foco pasa a Categories dentro del panel; pulsar Escape.
+   Reabrir con Enter desde Category, Tab hasta Others y Escape. En ambos casos
+   el panel debe desaparecer y el foco volver a Category sin cambiar filtros.
 5. Add filter · Note debe permitir escribir inmediatamente; cerrar/quitar y
    reabrir debe reenfocarlo. Restaurar un filtro existente no debe enfocarlo.
 6. Dashboard/Records muestran QA Night purchase el 12/11 a las 23:38 en Uruguay;
@@ -96,9 +107,15 @@ curl.exe -X POST http://127.0.0.1:4175/__qa/stop
 - Viewport de 390 px: ancho del documento 390 px, selector entre x=37 y x=353.67.
   Se seleccionó la última categoría, cerró y devolvió el foco a Category.
   Se restableció el tamaño del navegador al terminar.
-- Escape no pudo confirmarse mediante la automatización del navegador: el panel
-  permaneció abierto al enviar esa tecla. No se cambió ese manejo de Radix; se
-  deja explícitamente para comprobación manual independiente.
+- Seguimiento del 14/11: Escape verificado en Chromium/Vivaldi con apertura por
+  clic y por Enter. Se comprobó foco dentro del panel (Categories y, tras Tab,
+  Others), desaparición del panel, `aria-expanded=false` y foco en Category.
+  No se reprodujo un defecto; no fue necesario modificar Radix ni su manejo de
+  teclado. Esto resuelve el caso que había quedado sin verificar inicialmente.
+- Seguimiento de la cola: navegador confirmó entrada desde Status manual Needs
+  review + noviembre + QA Bank + Note `New pending`, apertura por Notifications,
+  reapertura por Search sin perder el snapshot y restauración por Status All.
+  También confirmó la restauración por la × después de navegar a Cards y volver.
 - No hay una nueva suite E2E automatizada: el recorrido anterior fue una sesión
   de navegador y el script permite repetirla. Los tests React no reemplazan esa
   comprobación visual.
@@ -109,7 +126,15 @@ curl.exe -X POST http://127.0.0.1:4175/__qa/stop
   se corrigió y `npm run build` pasó después. El `npm run check` final terminó
   con código 0: lint, 75 archivos / 646 pruebas aprobadas / una omitida, build y
   `api:spec:check`. Log local: `C:/Users/savar/AppData/Local/Temp/wallet-qa-final-check.log`.
-  El servidor sintético se detuvo y se verificó que el puerto 4175 no quedó abierto.
+  Ese servidor se detuvo; se volvió a iniciar únicamente para la revisión
+  independiente solicitada. El comando de parada figura arriba.
+- Check del seguimiento: `npm run check` terminó con código 0, con 75 archivos,
+  650 pruebas aprobadas y una omitida por permisos POSIX en Windows; lint, build
+  y contrato API también pasaron. Log:
+  `C:/Users/savar/AppData/Local/Temp/wallet-qa-followup-check.log`.
+  Las regresiones nuevas fallaron antes de corregir el modo de cola y Status All.
+- Antes del PR se actualizó origin/main y seguía en `87b6b0b`; se revisó el diff
+  completo y no hubo cambios concurrentes, secretos, datos reales ni migraciones.
 
 Comandos de revisión:
 

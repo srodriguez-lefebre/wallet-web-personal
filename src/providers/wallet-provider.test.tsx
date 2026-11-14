@@ -14,6 +14,30 @@ vi.mock("@/services/wallet-api");
 let context: ReturnType<typeof useWallet>;
 let tree: ReactTestRenderer | undefined;
 
+test("a manual Needs review filter remains distinct from the global queue", async () => {
+  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  await act(async () => {
+    context.setCustomDateRange({ from: "2020-06-03", to: "2020-06-20" });
+    context.setRecordFilters({ accountId: "bank", creditCardId: "card", paymentStatus: "needs_review", categoryId: "category", tagId: "tag", goalId: "goal", note: "manual note", search: "merchant", type: "expense" });
+  });
+  const previous = { filters: context.recordFilters, range: context.selectedDateRange };
+  expect(context.isReviewQueueOpen).toBe(false);
+  // Notifications and global search call this same action, including when the
+  // manual status filter already equals needs_review.
+  for (let pass = 0; pass < 2; pass++) {
+    await act(async () => context.openReviewQueue());
+    expect(context.isReviewQueueOpen).toBe(true);
+    expect(context.selectedPeriodMode).toBe("all");
+    expect(context.recordFilters).toEqual({ type: "all", paymentStatus: "needs_review" });
+    await act(async () => context.openReviewQueue());
+    await act(async () => context.closeReviewQueue());
+    expect(context.isReviewQueueOpen).toBe(false);
+    expect(context.selectedPeriodMode).toBe("custom");
+    expect(context.selectedDateRange).toEqual(previous.range);
+    expect(context.recordFilters).toEqual(previous.filters);
+  }
+});
+
 test.each(["month", "custom", "all"] as const)(
   "review queue restores the %s context across reentry and dismiss",
   async (mode) => {

@@ -4,7 +4,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +66,7 @@ interface WalletContextValue {
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
+  isReviewQueueOpen: boolean;
   openReviewQueue: () => void;
   closeReviewQueue: () => void;
   addAccount: (account: Omit<Account, "id">) => Promise<string>;
@@ -387,7 +387,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }),
   );
   // Provider scope keeps the return context when Records unmounts on navigation.
-  const reviewReturnContext = useRef<{
+  const [reviewReturnContext, setReviewReturnContext] = useState<{
     filters: RecordFilters;
     month: string;
     mode: PeriodMode;
@@ -395,21 +395,21 @@ export function WalletProvider({ children }: PropsWithChildren) {
   } | null>(null);
 
   function openReviewQueue() {
-    if (!reviewReturnContext.current && recordFilters.paymentStatus !== "needs_review") {
-      reviewReturnContext.current = {
-        filters: { ...recordFilters },
-        month: selectedMonth,
-        mode: selectedPeriodMode,
-        range: { ...customDateRange },
-      };
-    }
+    // Manual Needs review is still a normal filter. Only an existing return
+    // context identifies the global queue and protects its original snapshot.
+    setReviewReturnContext((previous) => previous ?? {
+      filters: { ...recordFilters },
+      month: selectedMonth,
+      mode: selectedPeriodMode,
+      range: { ...customDateRange },
+    });
     setRecordFiltersState({ type: "all", paymentStatus: "needs_review" });
     setSelectedPeriodMode("all");
   }
 
   function closeReviewQueue() {
-    const previous = reviewReturnContext.current;
-    reviewReturnContext.current = null;
+    const previous = reviewReturnContext;
+    setReviewReturnContext(null);
     if (previous) {
       setRecordFiltersState(previous.filters);
       setSelectedMonthState(previous.month);
@@ -571,7 +571,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   function setRecordFilters(filters: RecordFilters) {
     if ("paymentStatus" in filters && filters.paymentStatus !== "needs_review")
-      reviewReturnContext.current = null;
+      setReviewReturnContext(null);
     setRecordFiltersState((current) => ({
       ...current,
       ...filters,
@@ -579,12 +579,12 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   function clearRecordFilters() {
-    reviewReturnContext.current = null;
+    setReviewReturnContext(null);
     setRecordFiltersState({ type: "all" });
   }
 
   function requestNewRecord(templateId?: string) {
-    reviewReturnContext.current = null;
+    setReviewReturnContext(null);
     setRecordFiltersState({
       type: "all",
       accountId: defaultRecordAccountId(dataset),
@@ -904,6 +904,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         recordFilters,
         setRecordFilters,
         clearRecordFilters,
+        isReviewQueueOpen: reviewReturnContext !== null,
         openReviewQueue,
         closeReviewQueue,
         addAccount,

@@ -39,8 +39,9 @@ comportamiento desplegado.
 - Tarjetas: apertura del estado exacto desde las notificaciones y advertencias
   al 80%/100% del límite.
 - Movimientos: cola de revisión global, independiente del período y los filtros;
-  un segundo clic o quitar su filtro de estado recupera el período y los filtros
-  anteriores, también después de navegar a otra vista. Clear all y Reset siguen
+  un segundo clic, quitar su filtro de estado o elegir Status > All recupera el
+  período y los filtros anteriores, incluso Needs review manual y después de
+  navegar a otra vista. Clear all y Reset siguen
   limpiando los filtros de forma explícita. Duplicación como
   borrador nuevo, con fecha y cotizaciones actuales, sin copiar pagos de deuda.
 - Análisis: Top merchants después de los cuatro bloques originales; diez
