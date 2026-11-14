@@ -21,16 +21,8 @@ test("hidden accounts are excluded from reports unless opted in or explicitly se
     id: "hidden-report",
     accountId: hidden.id,
   });
-  expect(
-    reportDataset(data).records.some((r) => r.id === "hidden-report"),
-  ).toBe(false);
-  expect(
-    reportDataset(data, hidden.id).records.some(
-      (r) => r.id === "hidden-report",
-    ),
-  ).toBe(true);
+  expect(reportDataset(data).records.some((r) => r.id === "hidden-report")).toBe(false);
+  expect(reportDataset(data, hidden.id).records.some((r) => r.id === "hidden-report")).toBe(true);
   data.settings.includeHiddenAccountsInReports = true;
-  expect(
-    reportDataset(data).records.some((r) => r.id === "hidden-report"),
-  ).toBe(true);
+  expect(reportDataset(data).records.some((r) => r.id === "hidden-report")).toBe(true);
 });

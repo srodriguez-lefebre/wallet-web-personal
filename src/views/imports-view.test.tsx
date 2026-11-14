@@ -34,12 +34,8 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   const data = structuredClone(mockWalletData);
-  data.accounts = [
-    { ...data.accounts[0], id: "00000000-0000-4000-8000-000000000001" },
-  ];
-  data.categories = [
-    { ...data.categories[0], id: "00000000-0000-4000-8000-000000000002" },
-  ];
+  data.accounts = [{ ...data.accounts[0], id: "00000000-0000-4000-8000-000000000001" }];
+  data.categories = [{ ...data.categories[0], id: "00000000-0000-4000-8000-000000000002" }];
   data.records = [
     {
       ...data.records[0],
@@ -77,9 +73,7 @@ test("JSON export downloads complete archived history and remembers only date an
     }),
   );
   vi.stubGlobal("document", { createElement: () => anchor });
-  const createUrl = vi
-    .spyOn(URL, "createObjectURL")
-    .mockReturnValue("blob:local");
+  const createUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:local");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
   const backup = structuredClone(state.dataset);
   backup.records.push(
@@ -102,16 +96,10 @@ test("JSON export downloads complete archived history and remembers only date an
   expect(state.complete).not.toHaveBeenCalled();
   expect(anchor.click).toHaveBeenCalledTimes(1);
   expect(anchor.download).toMatch(/^wallet-backup-.*Z\.json$/);
-  const downloaded = JSON.parse(
-    await (createUrl.mock.calls[0][0] as Blob).text(),
-  );
+  const downloaded = JSON.parse(await (createUrl.mock.calls[0][0] as Blob).text());
   expect(downloaded.records).toHaveLength(backup.records.length);
   const receipt = JSON.parse(stored.get("wallet-last-backup-export")!);
-  expect(Object.keys(receipt).sort()).toEqual([
-    "cardRecords",
-    "records",
-    "requestedAt",
-  ]);
+  expect(Object.keys(receipt).sort()).toEqual(["cardRecords", "records", "requestedAt"]);
   expect(receipt.records).toBe(backup.records.length);
 });
 test("two import clicks do not submit two financial batches", async () => {

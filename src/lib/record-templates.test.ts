@@ -77,11 +77,7 @@ test("a saved template prepares a draft with today's card rate without writing o
     categoryId: "missing",
     tagId: "missing",
   };
-  const result = prepareTemplateDraft(
-    template,
-    data,
-    new Date("2026-10-03T12:00:00Z"),
-  );
+  const result = prepareTemplateDraft(template, data, new Date("2026-10-03T12:00:00Z"));
   expect(result.limitRate).toBe("44");
   expect(result.value.accountId).toBe(data.accounts[0].id);
   expect(result.value.categoryId).toBeUndefined();

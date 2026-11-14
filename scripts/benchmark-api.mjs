@@ -36,14 +36,36 @@ const percentile = (values, fraction) => {
   return sorted[Math.ceil(sorted.length * fraction) - 1];
 };
 
-console.log(JSON.stringify({
-  runs,
-  durationMs: {
-    p50: Math.round(percentile(samples.map((sample) => sample.durationMs), 0.5)),
-    p95: Math.round(percentile(samples.map((sample) => sample.durationMs), 0.95)),
-  },
-  payloadBytes: {
-    p50: percentile(samples.map((sample) => sample.bytes), 0.5),
-    p95: percentile(samples.map((sample) => sample.bytes), 0.95),
-  },
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      runs,
+      durationMs: {
+        p50: Math.round(
+          percentile(
+            samples.map((sample) => sample.durationMs),
+            0.5,
+          ),
+        ),
+        p95: Math.round(
+          percentile(
+            samples.map((sample) => sample.durationMs),
+            0.95,
+          ),
+        ),
+      },
+      payloadBytes: {
+        p50: percentile(
+          samples.map((sample) => sample.bytes),
+          0.5,
+        ),
+        p95: percentile(
+          samples.map((sample) => sample.bytes),
+          0.95,
+        ),
+      },
+    },
+    null,
+    2,
+  ),
+);

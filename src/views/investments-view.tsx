@@ -1,15 +1,5 @@
-﻿import { FormEvent, useRef, useState } from "react";
-import {
-  Edit3,
-  Eye,
-  EyeOff,
-  Landmark,
-  Plus,
-  ReceiptText,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { FormEvent, useRef, useState } from "react";
+import { Edit3, Eye, EyeOff, Landmark, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { PageHeader } from "@/components/page/page-header";
 import { Button } from "@/components/ui/button";
@@ -88,17 +78,15 @@ export function InvestmentsView() {
   const saving = useRef(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
-  const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(
-    () => buildInvestmentDrafts(dataset.investments),
+  const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(() =>
+    buildInvestmentDrafts(dataset.investments),
   );
   const [name, setName] = useState("");
   const [type, setType] = useState<Investment["type"]>("fund");
   const [amountInvested, setAmountInvested] = useState("");
   const [currentValue, setCurrentValue] = useState("");
   const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [startedAt, setStartedAt] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+  const [startedAt, setStartedAt] = useState(new Date().toISOString().slice(0, 10));
   const [isVisible, setIsVisible] = useState(true);
   const [note, setNote] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -112,8 +100,7 @@ export function InvestmentsView() {
 
   async function handleAddInstallment(event: FormEvent) {
     event.preventDefault();
-    const account =
-      dataset.accounts.find((item) => item.isActive) ?? dataset.accounts[0];
+    const account = dataset.accounts.find((item) => item.isActive) ?? dataset.accounts[0];
     const category = dataset.categories[0];
     const totalAmount = Number(installmentAmount);
     const installmentsTotal = Number(installmentCount);
@@ -163,10 +150,7 @@ export function InvestmentsView() {
     setIsEditing(false);
   }
 
-  function updateInvestmentDraft(
-    investmentIdToUpdate: string,
-    patch: Partial<InvestmentDraft>,
-  ) {
+  function updateInvestmentDraft(investmentIdToUpdate: string, patch: Partial<InvestmentDraft>) {
     setInvestmentDrafts((current) =>
       current.map((draft) =>
         draft.id === investmentIdToUpdate
@@ -206,9 +190,7 @@ export function InvestmentsView() {
     );
 
     if (invalidDraft) {
-      setEditError(
-        "Review name, invested amount, and current value for each investment.",
-      );
+      setEditError("Review name, invested amount, and current value for each investment.");
       return;
     }
 
@@ -248,9 +230,7 @@ export function InvestmentsView() {
       setEditError("");
       setIsEditing(false);
     } catch (error) {
-      setEditError(
-        error instanceof Error ? error.message : "Could not save investments.",
-      );
+      setEditError(error instanceof Error ? error.message : "Could not save investments.");
     } finally {
       saving.current = false;
       setIsSaving(false);
@@ -269,9 +249,7 @@ export function InvestmentsView() {
       invested <= 0 ||
       current < 0
     ) {
-      setEditError(
-        "Enter a name, positive acquisition cost, and current value of zero or more.",
-      );
+      setEditError("Enter a name, positive acquisition cost, and current value of zero or more.");
       return;
     }
 
@@ -307,9 +285,7 @@ export function InvestmentsView() {
       setIsCreateOpen(false);
       navigate(`/investments/${id}`);
     } catch (error) {
-      setEditError(
-        error instanceof Error ? error.message : "Could not create investment.",
-      );
+      setEditError(error instanceof Error ? error.message : "Could not create investment.");
     } finally {
       saving.current = false;
       setIsSaving(false);
@@ -329,24 +305,12 @@ export function InvestmentsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={
-                showHidden
-                  ? "Hide hidden investments"
-                  : "Show hidden investments"
-              }
+              aria-label={showHidden ? "Hide hidden investments" : "Show hidden investments"}
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
-            <Button
-              variant="outline"
-              disabled={isSaving}
-              onClick={cancelEditingInvestments}
-            >
+            <Button variant="outline" disabled={isSaving} onClick={cancelEditingInvestments}>
               <X className="h-4 w-4" />
               Cancel
             </Button>
@@ -369,18 +333,10 @@ export function InvestmentsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={
-                showHidden
-                  ? "Hide hidden investments"
-                  : "Show hidden investments"
-              }
+              aria-label={showHidden ? "Hide hidden investments" : "Show hidden investments"}
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Dialog
               open={isCreateOpen}
@@ -400,8 +356,7 @@ export function InvestmentsView() {
                 <DialogHeader>
                   <DialogTitle>New investment</DialogTitle>
                   <DialogDescription>
-                    Add a manual investment to track current value and
-                    performance.
+                    Add a manual investment to track current value and performance.
                   </DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={handleCreateInvestment}>
@@ -419,9 +374,7 @@ export function InvestmentsView() {
                       <span className="text-sm font-medium">Type</span>
                       <select
                         value={type}
-                        onChange={(event) =>
-                          setType(event.target.value as Investment["type"])
-                        }
+                        onChange={(event) => setType(event.target.value as Investment["type"])}
                         className={inputClassName}
                       >
                         {investmentTypeOptions.map((option) => (
@@ -435,9 +388,7 @@ export function InvestmentsView() {
                       <span className="text-sm font-medium">Currency</span>
                       <select
                         value={currency}
-                        onChange={(event) =>
-                          setCurrency(event.target.value as CurrencyCode)
-                        }
+                        onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
                         className={inputClassName}
                       >
                         <option value="UYU">UYU</option>
@@ -454,9 +405,7 @@ export function InvestmentsView() {
                       <input
                         value={amountInvested}
                         onChange={(event) =>
-                          setAmountInvested(
-                            limitDecimalPlaces(event.target.value),
-                          )
+                          setAmountInvested(limitDecimalPlaces(event.target.value))
                         }
                         type="number"
                         className={inputClassName}
@@ -468,9 +417,7 @@ export function InvestmentsView() {
                       <span className="text-sm font-medium">Current value</span>
                       <input
                         value={currentValue}
-                        onChange={(event) =>
-                          setCurrentValue(event.target.value)
-                        }
+                        onChange={(event) => setCurrentValue(event.target.value)}
                         type="number"
                         className={inputClassName}
                         placeholder="Opcional"
@@ -493,9 +440,7 @@ export function InvestmentsView() {
                       <span className="text-sm font-medium">Visibility</span>
                       <select
                         value={isVisible ? "visible" : "hidden"}
-                        onChange={(event) =>
-                          setIsVisible(event.target.value === "visible")
-                        }
+                        onChange={(event) => setIsVisible(event.target.value === "visible")}
                         className={inputClassName}
                       >
                         <option value="visible">Visible</option>
@@ -531,15 +476,11 @@ export function InvestmentsView() {
       {!isEditing && portfolio.length > 0 ? (
         <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {portfolio.map((summary) => (
-            <Card
-              key={summary.currency}
-              aria-label={`${summary.currency} portfolio summary`}
-            >
+            <Card key={summary.currency} aria-label={`${summary.currency} portfolio summary`}>
               <CardHeader>
                 <CardTitle>{summary.currency} portfolio</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  {summary.count} investments ·{" "}
-                  {showHidden ? "including hidden" : "visible only"}
+                  {summary.count} investments · {showHidden ? "including hidden" : "visible only"}
                 </p>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
@@ -613,16 +554,8 @@ export function InvestmentsView() {
                             type="button"
                             variant="outline"
                             size="icon"
-                            aria-label={
-                              draft.isVisible
-                                ? "Hide investment"
-                                : "Show investment"
-                            }
-                            title={
-                              draft.isVisible
-                                ? "Hide investment"
-                                : "Show investment"
-                            }
+                            aria-label={draft.isVisible ? "Hide investment" : "Show investment"}
+                            title={draft.isVisible ? "Hide investment" : "Show investment"}
                             onClick={() =>
                               updateInvestmentDraft(draft.id, {
                                 isVisible: !draft.isVisible,
@@ -692,9 +625,7 @@ export function InvestmentsView() {
                             value={draft.amountInvested}
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
-                                amountInvested: limitDecimalPlaces(
-                                  event.target.value,
-                                ),
+                                amountInvested: limitDecimalPlaces(event.target.value),
                               })
                             }
                             type="number"
@@ -703,9 +634,7 @@ export function InvestmentsView() {
                           />
                         </label>
                         <label className="block space-y-2">
-                          <span className="text-sm font-medium">
-                            Current value
-                          </span>
+                          <span className="text-sm font-medium">Current value</span>
                           <input
                             value={draft.currentValue}
                             min="0"
@@ -751,12 +680,10 @@ export function InvestmentsView() {
                 </div>
               ) : (
                 visibleInvestments.map((investment) => {
-                  const gain =
-                    investment.currentValue - investment.amountInvested;
+                  const gain = investment.currentValue - investment.amountInvested;
                   const percentage =
                     investment.amountInvested > 0
-                      ? (investment.currentValue / investment.amountInvested) *
-                        100
+                      ? (investment.currentValue / investment.amountInvested) * 100
                       : 0;
                   return (
                     <button
@@ -774,26 +701,17 @@ export function InvestmentsView() {
                       <Progress
                         value={Math.min(100, percentage)}
                         className="mt-3"
-                        indicatorClassName={
-                          gain >= 0 ? "bg-emerald-500" : "bg-red-500"
-                        }
+                        indicatorClassName={gain >= 0 ? "bg-emerald-500" : "bg-red-500"}
                       />
                       <div className="mt-3 flex justify-between text-sm">
                         <span>Current</span>
                         <span className="font-semibold">
-                          {formatMoney(
-                            investment.currentValue,
-                            investment.currency,
-                          )}
+                          {formatMoney(investment.currentValue, investment.currency)}
                         </span>
                       </div>
                       <div className="mt-1 flex justify-between text-sm">
                         <span>Result</span>
-                        <span
-                          className={
-                            gain >= 0 ? "text-emerald-600" : "text-red-600"
-                          }
-                        >
+                        <span className={gain >= 0 ? "text-emerald-600" : "text-red-600"}>
                           {formatMoney(gain, investment.currency)}
                         </span>
                       </div>
@@ -806,20 +724,35 @@ export function InvestmentsView() {
         ) : (
           <Card>
             <CardHeader>
-              <CardTitle>{dataset.investments.length ? "No visible investments" : "No investments yet"}</CardTitle>
+              <CardTitle>
+                {dataset.investments.length ? "No visible investments" : "No investments yet"}
+              </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               {dataset.investments.length ? (
                 <>
                   <p className="text-sm text-muted-foreground">
-                    {isEditing ? "Show hidden investments or cancel your edits to see the portfolio." : "Show hidden investments to see your portfolio."}
+                    {isEditing
+                      ? "Show hidden investments or cancel your edits to see the portfolio."
+                      : "Show hidden investments to see your portfolio."}
                   </p>
-                  {!showHidden && <Button variant="outline" onClick={() => setShowHidden(true)}>Show hidden</Button>}
+                  {!showHidden && (
+                    <Button variant="outline" onClick={() => setShowHidden(true)}>
+                      Show hidden
+                    </Button>
+                  )}
                 </>
               ) : (
                 <>
-                  <p className="text-sm text-muted-foreground">Add an investment to track how much you invested and its current value.</p>
-                  <Button onClick={() => { setEditError(""); setIsCreateOpen(true); }}>
+                  <p className="text-sm text-muted-foreground">
+                    Add an investment to track how much you invested and its current value.
+                  </p>
+                  <Button
+                    onClick={() => {
+                      setEditError("");
+                      setIsCreateOpen(true);
+                    }}
+                  >
                     <Plus className="h-4 w-4" />
                     Add your first investment
                   </Button>
@@ -871,8 +804,7 @@ export function InvestmentsView() {
               </Button>
             </form>
             {dataset.installmentPlans.map((plan) => {
-              const percentage =
-                (plan.installmentsPaid / plan.installmentsTotal) * 100;
+              const percentage = (plan.installmentsPaid / plan.installmentsTotal) * 100;
               return (
                 <div key={plan.id} className="rounded-md border p-3">
                   <div className="flex justify-between gap-3">
@@ -890,9 +822,7 @@ export function InvestmentsView() {
                       <Button
                         size="sm"
                         variant="outline"
-                        disabled={
-                          plan.installmentsPaid >= plan.installmentsTotal
-                        }
+                        disabled={plan.installmentsPaid >= plan.installmentsTotal}
                         onClick={() =>
                           void updateInstallmentPlan(plan.id, {
                             ...plan,

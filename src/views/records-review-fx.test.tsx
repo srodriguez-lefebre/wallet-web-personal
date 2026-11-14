@@ -1,10 +1,5 @@
 import type { PropsWithChildren } from "react";
-import {
-  act,
-  create,
-  type ReactTestRenderer,
-  type ReactTestInstance,
-} from "react-test-renderer";
+import { act, create, type ReactTestRenderer, type ReactTestInstance } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "../../shared/mock-data";
 import type { WalletDataset } from "../../shared/types";
@@ -38,18 +33,8 @@ vi.mock("@/lib/use-action-toast", () => ({
   }),
 }));
 vi.mock("@/components/wallet/category-picker", () => ({
-  CategoryPicker: ({
-    value,
-    onChange,
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-  }) => (
-    <input
-      aria-label="Category"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+  CategoryPicker: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+    <input aria-label="Category" value={value} onChange={(event) => onChange(event.target.value)} />
   ),
 }));
 vi.mock("@/components/ui/dialog", () => {
@@ -118,25 +103,21 @@ async function open() {
   await act(async () => {
     tree = create(<RecordsView />);
   });
-  await act(async () =>
-    tree!.root.findByProps({ role: "button", tabIndex: 0 }).props.onClick(),
-  );
+  await act(async () => tree!.root.findByProps({ role: "button", tabIndex: 0 }).props.onClick());
 }
 async function change(field: ReactTestInstance, value: string) {
   await act(async () => field.props.onChange({ target: { value } }));
 }
 async function submit() {
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
 }
 function rate() {
-  return tree!.root
-    .findAllByType("input")
-    .find((input) => input.props.value === "0")!;
+  return tree!.root.findAllByType("input").find((input) => input.props.value === "0")!;
 }
 async function clearStatus() {
-  await act(async () => tree!.root.findByProps({ "aria-label": "Set status to Cleared" }).props.onClick());
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Set status to Cleared" }).props.onClick(),
+  );
 }
 
 test.each([false, true])(
@@ -182,14 +163,10 @@ test("review metadata can be saved while the imported account and category remai
   dataset.records[0].accountAmount = undefined;
   dataset.records[0].categoryId = undefined;
   await open();
-  await change(
-    tree!.root.findByProps({ placeholder: "Optional description" }),
-    "Bank to identify",
-  );
+  await change(tree!.root.findByProps({ placeholder: "Optional description" }), "Bank to identify");
   expect(
-    tree!.root
-      .findAllByType("button")
-      .find((button) => button.props.type === "submit")!.props.disabled,
+    tree!.root.findAllByType("button").find((button) => button.props.type === "submit")!.props
+      .disabled,
   ).toBe(false);
   await submit();
   expect(update.mock.calls[0][1]).toMatchObject({
@@ -237,67 +214,49 @@ test("clearing with a valid primary rate preserves the recorded bank conversion"
   });
 });
 
-test.each([
-  "amount",
-  "bank amount",
-  "date",
-  "type",
-  "currency",
-  "payment type",
-  "primary rate",
-])("changing %s cannot bypass missing FX as a metadata edit", async (field) => {
-  await open();
-  if (field === "amount")
-    await change(
-      tree!.root
-        .findAllByType("input")
-        .find((input) => input.props.type === "number")!,
-      "200",
-    );
-  if (field === "bank amount")
-    await change(
-      tree!.root
-        .findAllByType("input")
-        .find((input) => input.props.value === "4500")!,
-      "4600",
-    );
-  if (field === "date")
-    await change(
-      tree!.root.findByProps({ type: "datetime-local" }),
-      "2026-02-02T12:34",
-    );
-  if (field === "type")
-    await act(async () =>
-      tree!.root
-        .findAllByType("button")
-        .find((button) => button.children.includes("Income"))!
-        .props.onClick(),
-    );
-  if (field === "currency")
-    await change(
-      tree!.root
-        .findAllByType("select")
-        .find((select) => select.props.value === "EUR")!,
-      "USD",
-    );
-  if (field === "primary rate") await change(rate(), "");
-  if (field === "payment type") {
-    await change(
-      tree!.root
-        .findAllByType("select")
-        .find((select) => select.props.value === "debit")!,
-      "cash",
-    );
-    await change(
-      tree!.root
-        .findAllByType("select")
-        .find((select) => select.props.value === "UYU")!,
-      "EUR",
-    );
-  }
-  await submit();
-  expect(update).not.toHaveBeenCalled();
-});
+test.each(["amount", "bank amount", "date", "type", "currency", "payment type", "primary rate"])(
+  "changing %s cannot bypass missing FX as a metadata edit",
+  async (field) => {
+    await open();
+    if (field === "amount")
+      await change(
+        tree!.root.findAllByType("input").find((input) => input.props.type === "number")!,
+        "200",
+      );
+    if (field === "bank amount")
+      await change(
+        tree!.root.findAllByType("input").find((input) => input.props.value === "4500")!,
+        "4600",
+      );
+    if (field === "date")
+      await change(tree!.root.findByProps({ type: "datetime-local" }), "2026-02-02T12:34");
+    if (field === "type")
+      await act(async () =>
+        tree!.root
+          .findAllByType("button")
+          .find((button) => button.children.includes("Income"))!
+          .props.onClick(),
+      );
+    if (field === "currency")
+      await change(
+        tree!.root.findAllByType("select").find((select) => select.props.value === "EUR")!,
+        "USD",
+      );
+    if (field === "primary rate") await change(rate(), "");
+    if (field === "payment type") {
+      await change(
+        tree!.root.findAllByType("select").find((select) => select.props.value === "debit")!,
+        "cash",
+      );
+      await change(
+        tree!.root.findAllByType("select").find((select) => select.props.value === "UYU")!,
+        "EUR",
+      );
+    }
+    await submit();
+    expect(update).not.toHaveBeenCalled();
+  },
+);
 
 test("a valid primary rate does not replace a missing bank conversion after switching accounts", async () => {
   dataset.accounts[1].currency = "BRL";
@@ -332,9 +291,7 @@ test("a valid primary rate does not replace a missing card-limit conversion", as
   await open();
   await change(rate(), "50");
   await change(
-    tree!.root
-      .findAllByType("select")
-      .find((select) => select.props.value === "debit")!,
+    tree!.root.findAllByType("select").find((select) => select.props.value === "debit")!,
     "card:new-card",
   );
   await submit();

@@ -12,12 +12,7 @@ interface Props {
   onRecords: () => void;
   onCards: () => void;
 }
-export function DataHealthPanel({
-  getSnapshot,
-  onReview,
-  onRecords,
-  onCards,
-}: Props) {
+export function DataHealthPanel({ getSnapshot, onReview, onRecords, onCards }: Props) {
   const [result, setResult] = useState<{
     counts: ReturnType<typeof walletDataHealth>;
     checkedAt: string;
@@ -71,8 +66,8 @@ export function DataHealthPanel({
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Review complete history, including archived account and category
-          references. This check leaves your data unchanged.
+          Review complete history, including archived account and category references. This check
+          leaves your data unchanged.
         </p>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -107,9 +102,7 @@ export function DataHealthPanel({
               </Button>
             ) : null}
             {Object.values(result.counts).every((count) => count === 0) ? (
-              <p className="text-sm text-emerald-600">
-                No issues found by these checks.
-              </p>
+              <p className="text-sm text-emerald-600">No issues found by these checks.</p>
             ) : null}
           </>
         ) : null}

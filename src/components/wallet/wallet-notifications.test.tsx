@@ -55,10 +55,7 @@ function Location() {
 function button(label: string) {
   return tree!.root
     .findAllByType("button")
-    .find(
-      (node) =>
-        node.props["aria-label"] === label || node.children.join("") === label,
-    )!;
+    .find((node) => node.props["aria-label"] === label || node.children.join("") === label)!;
 }
 async function mount() {
   await act(async () => {
@@ -99,13 +96,9 @@ afterEach(async () => {
 
 test("incomplete history withholds counts and actionable partial items", async () => {
   state.complete = false;
-  state.dataset.records = [
-    { ...mockWalletData.records[0], paymentStatus: "needs_review" },
-  ];
+  state.dataset.records = [{ ...mockWalletData.records[0], paymentStatus: "needs_review" }];
   await mount();
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Pending notifications" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Pending notifications" })).toHaveLength(0);
   await open();
   expect(JSON.stringify(tree!.toJSON())).toContain("Loading complete history");
   expect(tree!.root.findAllByType("button")).toHaveLength(1);
@@ -121,18 +114,14 @@ test("review notification opens all-history queue and clears unrelated filters w
     },
   ];
   await mount();
-  expect(
-    tree!.root.findByProps({ "aria-label": "Pending notifications" }).children,
-  ).toEqual(["1"]);
+  expect(tree!.root.findByProps({ "aria-label": "Pending notifications" }).children).toEqual(["1"]);
   await open();
   await act(async () => button("Review 1 pending record").props.onClick());
   expect(state.filters).toEqual({ type: "all", paymentStatus: "needs_review" });
   expect(state.period).toBe("all");
   expect(tree!.root.findByType("output").children).toEqual(["/records"]);
   expect(state.writes).not.toHaveBeenCalled();
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Wallet notifications" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Wallet notifications" })).toHaveLength(0);
 });
 
 test("counts overdue and due-soon visible debts and unpaid closed archived cards, and opens their destinations", async () => {
@@ -202,9 +191,7 @@ test("counts overdue and due-soon visible debts and unpaid closed archived cards
     },
   ];
   await mount();
-  expect(
-    tree!.root.findByProps({ "aria-label": "Pending notifications" }).children,
-  ).toEqual(["3"]);
+  expect(tree!.root.findByProps({ "aria-label": "Pending notifications" }).children).toEqual(["3"]);
   await open();
   expect(JSON.stringify(tree!.toJSON())).not.toContain("Later debt");
   expect(JSON.stringify(tree!.toJSON())).not.toContain("Hidden debt");
@@ -223,17 +210,9 @@ test("counts overdue and due-soon visible debts and unpaid closed archived cards
 
 test("settled and empty information appears only inside the opened popover", async () => {
   await mount();
-  expect(JSON.stringify(tree!.toJSON())).not.toContain(
-    "All closed statements are settled",
-  );
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Pending notifications" }),
-  ).toHaveLength(0);
+  expect(JSON.stringify(tree!.toJSON())).not.toContain("All closed statements are settled");
+  expect(tree!.root.findAllByProps({ "aria-label": "Pending notifications" })).toHaveLength(0);
   await open();
-  expect(JSON.stringify(tree!.toJSON())).toContain(
-    "No pending reviews or debts due soon",
-  );
-  expect(JSON.stringify(tree!.toJSON())).toContain(
-    "All closed statements are settled",
-  );
+  expect(JSON.stringify(tree!.toJSON())).toContain("No pending reviews or debts due soon");
+  expect(JSON.stringify(tree!.toJSON())).toContain("All closed statements are settled");
 });

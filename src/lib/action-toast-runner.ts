@@ -7,10 +7,7 @@ export interface ActionToastOptions {
   error?: string;
 }
 
-export type ShowActionToast = (
-  status: ActionToastStatus,
-  message: string,
-) => void;
+export type ShowActionToast = (status: ActionToastStatus, message: string) => void;
 
 export function createActionToastRunner(showToast: ShowActionToast) {
   let activeActions = 0;

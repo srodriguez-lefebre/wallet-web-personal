@@ -266,7 +266,9 @@ export const mockWalletData: WalletDataset = {
       counterpartyName: "Aerolinea",
       tagIds: ["tag-trip"],
       goalIds: ["goal-trip"],
-      goalAssociations: [{ goalId: "goal-trip", assignmentSource: "manual", useReserved: true, reserveIncome: true }],
+      goalAssociations: [
+        { goalId: "goal-trip", assignmentSource: "manual", useReserved: true, reserveIncome: true },
+      ],
       paymentType: "credit",
       paymentStatus: "pending",
       exchangeRateToPrimary: 1,

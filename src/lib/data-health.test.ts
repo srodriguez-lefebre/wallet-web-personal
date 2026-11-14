@@ -95,10 +95,7 @@ test("backup filenames contain timestamps that are valid on Windows", () => {
   );
 });
 test("backup receipt contains only export date and counts", () => {
-  const saved = rememberBackupExport(
-    mockWalletData,
-    new Date("2026-10-03T12:00:00Z"),
-  );
+  const saved = rememberBackupExport(mockWalletData, new Date("2026-10-03T12:00:00Z"));
   expect(saved).toEqual({
     requestedAt: "2026-10-03T12:00:00.000Z",
     records: mockWalletData.records.length,

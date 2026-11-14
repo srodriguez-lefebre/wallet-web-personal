@@ -56,13 +56,9 @@ test("failed tag creation preserves the draft and handles the rejected request",
     });
     const form = tree.root.findByProps({ placeholder: "New tag" }).parent!;
     await act(async () => {
-      await expect(
-        form.props.onSubmit({ preventDefault: vi.fn() }),
-      ).resolves.toBeUndefined();
+      await expect(form.props.onSubmit({ preventDefault: vi.fn() })).resolves.toBeUndefined();
     });
-    expect(tree.root.findByProps({ placeholder: "New tag" }).props.value).toBe(
-      "Retain draft",
-    );
+    expect(tree.root.findByProps({ placeholder: "New tag" }).props.value).toBe("Retain draft");
     expect(addTag).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => tree.unmount());
@@ -89,9 +85,7 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
     tree = create(<SettingsView />);
   });
   await act(async () => {
-    tree.root
-      .findByProps({ "aria-label": "Theme" })
-      .props.onChange({ target: { value: "dark" } });
+    tree.root.findByProps({ "aria-label": "Theme" }).props.onChange({ target: { value: "dark" } });
     tree.root
       .findAllByType("button")
       .find((button) => button.props.className?.includes("self-end"))!
@@ -100,8 +94,6 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
     await queue;
   });
   expect(persisted.theme).toBe("dark");
-  expect(update.mock.calls[1][0]).not.toHaveProperty(
-    "includeHiddenAccountsInReports",
-  );
+  expect(update.mock.calls[1][0]).not.toHaveProperty("includeHiddenAccountsInReports");
   await act(async () => tree.unmount());
 });

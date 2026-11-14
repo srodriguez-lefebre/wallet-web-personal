@@ -21,7 +21,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { BudgetAssistant } from "@/components/wallet/budget-assistant";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
 import { CategoryIcon } from "@/components/wallet/category-icon";
@@ -59,12 +66,8 @@ import { calculateMerchantSpending } from "@shared/merchant-analytics";
 export function AnalyticsView() {
   const [budgetAssistantOpen, setBudgetAssistantOpen] = useState(false);
   const [budgetAssistantBusy, setBudgetAssistantBusy] = useState(false);
-  const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState<
-    string | undefined
-  >();
-  const [selectedIncomeCategoryId, setSelectedIncomeCategoryId] = useState<
-    string | undefined
-  >();
+  const [selectedExpenseCategoryId, setSelectedExpenseCategoryId] = useState<string | undefined>();
+  const [selectedIncomeCategoryId, setSelectedIncomeCategoryId] = useState<string | undefined>();
   const navigate = useNavigate();
   const {
     dataset,
@@ -100,11 +103,7 @@ export function AnalyticsView() {
           selectedDateRange,
           selectedExpenseCategoryId,
         )
-      : calculateCategoryExpenses(
-          analyticsDataset,
-          selectedMonth,
-          selectedExpenseCategoryId,
-        );
+      : calculateCategoryExpenses(analyticsDataset, selectedMonth, selectedExpenseCategoryId);
   const incomeCategories =
     selectedPeriodMode !== "month"
       ? calculateCategoryIncomeForDateRange(
@@ -112,34 +111,22 @@ export function AnalyticsView() {
           selectedDateRange,
           selectedIncomeCategoryId,
         )
-      : calculateCategoryIncome(
-          analyticsDataset,
-          selectedMonth,
-          selectedIncomeCategoryId,
-        );
+      : calculateCategoryIncome(analyticsDataset, selectedMonth, selectedIncomeCategoryId);
   const selectedExpenseCategory = selectedExpenseCategoryId
-    ? dataset.categories.find(
-        (category) => category.id === selectedExpenseCategoryId,
-      )
+    ? dataset.categories.find((category) => category.id === selectedExpenseCategoryId)
     : undefined;
   const selectedIncomeCategory = selectedIncomeCategoryId
-    ? dataset.categories.find(
-        (category) => category.id === selectedIncomeCategoryId,
-      )
+    ? dataset.categories.find((category) => category.id === selectedIncomeCategoryId)
     : undefined;
 
   function drillExpenseCategory(categoryId: string) {
-    if (
-      dataset.categories.some((category) => category.parentId === categoryId)
-    ) {
+    if (dataset.categories.some((category) => category.parentId === categoryId)) {
       setSelectedExpenseCategoryId(categoryId);
     }
   }
 
   function drillIncomeCategory(categoryId: string) {
-    if (
-      dataset.categories.some((category) => category.parentId === categoryId)
-    ) {
+    if (dataset.categories.some((category) => category.parentId === categoryId)) {
       setSelectedIncomeCategoryId(categoryId);
     }
   }
@@ -151,9 +138,7 @@ export function AnalyticsView() {
     analyticsDataset,
     recentMonthKeys(
       analyticsDataset.records,
-      selectedPeriodMode !== "month"
-        ? monthKey(selectedDateRange.to)
-        : selectedMonth,
+      selectedPeriodMode !== "month" ? monthKey(selectedDateRange.to) : selectedMonth,
       6,
     )
       .slice()
@@ -163,19 +148,13 @@ export function AnalyticsView() {
     selectedPeriodMode === "custom"
       ? relativeDateRanges(selectedDateRange, 3)
       : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
-  const expenseTrend = buildExpenseComparisonSeries(
-    analyticsDataset,
-    comparisonPeriods,
-  );
+  const expenseTrend = buildExpenseComparisonSeries(analyticsDataset, comparisonPeriods);
   const expenseSequenceTrend = buildExpenseSequenceComparisonSeries(
     analyticsDataset,
     comparisonPeriods,
   );
   const savingsRate = calculateSavingsRate(summary.income, summary.expenses);
-  const previousSummary = calculateSummaryForDateRange(
-    analyticsDataset,
-    comparisonPeriods[1],
-  );
+  const previousSummary = calculateSummaryForDateRange(analyticsDataset, comparisonPeriods[1]);
   const previousSavingsRate = calculateSavingsRate(
     previousSummary.income,
     previousSummary.expenses,
@@ -183,14 +162,9 @@ export function AnalyticsView() {
   const savingsRateChange = savingsRate - previousSavingsRate;
   const emergencyRunway = calculateEmergencyRunway(
     analyticsDataset,
-    selectedPeriodMode !== "month"
-      ? monthKey(selectedDateRange.to)
-      : selectedMonth,
+    selectedPeriodMode !== "month" ? monthKey(selectedDateRange.to) : selectedMonth,
   );
-  const projection = calculateEndOfMonthProjection(
-    analyticsDataset,
-    summary.dailyAverageExpense,
-  );
+  const projection = calculateEndOfMonthProjection(analyticsDataset, summary.dailyAverageExpense);
   const allowedDaily = calculateAllowedDailySpend(analyticsDataset);
   const recommendations = buildSavingsRecommendations(analyticsDataset);
 
@@ -206,16 +180,19 @@ export function AnalyticsView() {
     <div>
       <PageHeader
         eyebrow="Analytics"
-        title={
-          selectedAccount ? `${selectedAccount.name} analytics` : "Analytics"
-        }
+        title={selectedAccount ? `${selectedAccount.name} analytics` : "Analytics"}
         description={
           selectedAccount
             ? "Reports filtered by this account: records, categories, budgets, and monthly flow."
             : "Reports by category, month, account, cash flow, and balance trend."
         }
       >
-        <Dialog open={budgetAssistantOpen} onOpenChange={open => { if (!budgetAssistantBusy) setBudgetAssistantOpen(open); }}>
+        <Dialog
+          open={budgetAssistantOpen}
+          onOpenChange={(open) => {
+            if (!budgetAssistantBusy) setBudgetAssistantOpen(open);
+          }}
+        >
           <DialogTrigger asChild>
             <Button variant="outline" size="sm" onClick={() => setBudgetAssistantOpen(true)}>
               <Sparkles className="h-4 w-4" />
@@ -225,9 +202,13 @@ export function AnalyticsView() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create budgets from history</DialogTitle>
-              <DialogDescription>Review suggested category limits and choose which monthly budgets to create.</DialogDescription>
+              <DialogDescription>
+                Review suggested category limits and choose which monthly budgets to create.
+              </DialogDescription>
             </DialogHeader>
-            {budgetAssistantOpen ? <BudgetAssistant initialMonth={selectedMonth} onBusyChange={setBudgetAssistantBusy} /> : null}
+            {budgetAssistantOpen ? (
+              <BudgetAssistant initialMonth={selectedMonth} onBusyChange={setBudgetAssistantBusy} />
+            ) : null}
           </DialogContent>
         </Dialog>
         {selectedAccount ? (
@@ -259,9 +240,7 @@ export function AnalyticsView() {
           onClick={() => goToRecords({ type: "income" })}
           className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
         >
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Income
-          </p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Income</p>
           <p className="mt-2 text-2xl font-semibold text-emerald-600">
             {formatMoney(summary.income, dataset.settings.primaryCurrency)}
           </p>
@@ -271,9 +250,7 @@ export function AnalyticsView() {
           onClick={() => goToRecords({ type: "expense" })}
           className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
         >
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Expenses
-          </p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Expenses</p>
           <p className="mt-2 text-2xl font-semibold text-red-600">
             {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
           </p>
@@ -283,9 +260,7 @@ export function AnalyticsView() {
           onClick={() => goToRecords({ type: "all" })}
           className="rounded-md border bg-card p-4 text-left transition hover:border-primary/50 hover:bg-secondary"
         >
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Cash flow
-          </p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Cash flow</p>
           <p
             className={
               summary.cashFlow >= 0
@@ -297,14 +272,9 @@ export function AnalyticsView() {
           </p>
         </button>
         <div className="rounded-md border bg-card p-4">
-          <p className="text-xs font-semibold uppercase text-muted-foreground">
-            Daily average
-          </p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Daily average</p>
           <p className="mt-2 text-2xl font-semibold">
-            {formatMoney(
-              summary.dailyAverageExpense,
-              dataset.settings.primaryCurrency,
-            )}
+            {formatMoney(summary.dailyAverageExpense, dataset.settings.primaryCurrency)}
           </p>
         </div>
       </div>
@@ -356,8 +326,7 @@ export function AnalyticsView() {
               indicatorClassName="bg-sky-500"
             />
             <p className="text-sm text-muted-foreground">
-              Free balance divided by the average expenses of the previous three
-              months.
+              Free balance divided by the average expenses of the previous three months.
             </p>
           </CardContent>
         </Card>
@@ -371,10 +340,7 @@ export function AnalyticsView() {
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={expenseTrend}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} />
                 <YAxis
                   tickLine={false}
@@ -429,31 +395,13 @@ export function AnalyticsView() {
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlySeries}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={70} />
                 <Tooltip />
-                <Bar
-                  dataKey="cashFlow"
-                  fill="#2563EB"
-                  name="Cash flow"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="income"
-                  fill="#22C55E"
-                  name="Income"
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar
-                  dataKey="expenses"
-                  fill="#EF4444"
-                  name="Expenses"
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="cashFlow" fill="#2563EB" name="Cash flow" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="income" fill="#22C55E" name="Income" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="expenses" fill="#EF4444" name="Expenses" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -461,30 +409,55 @@ export function AnalyticsView() {
       </div>
 
       <Card className="mt-4">
-        <CardHeader><CardTitle>Top merchants</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Top merchants</CardTitle>
+        </CardHeader>
         <CardContent>
           {!isAllHistoryComplete ? (
-            <p className="text-sm text-muted-foreground" role="status">Loading complete history to compare merchants…</p>
+            <p className="text-sm text-muted-foreground" role="status">
+              Loading complete history to compare merchants…
+            </p>
           ) : merchants.length === 0 ? (
             <p className="text-sm text-muted-foreground">No recorded purchases in this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <caption className="mb-3 text-left text-muted-foreground">Recorded account purchases for the selected period. Gross spending; refunds are not deducted.</caption>
-                <thead><tr className="border-b text-left text-muted-foreground">
-                  <th scope="col" className="pb-2 font-medium">Merchant</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Purchases</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Spending</th>
-                  <th scope="col" className="pb-2 text-right font-medium">Average purchase</th>
-                </tr></thead>
-                <tbody>{merchants.map(merchant => (
-                  <tr key={merchant.key} className="border-b last:border-0">
-                    <th scope="row" className="py-3 text-left font-medium">{merchant.name}</th>
-                    <td className="py-3 text-right tabular-nums">{merchant.purchases}</td>
-                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.total, dataset.settings.primaryCurrency)}</td>
-                    <td className="py-3 text-right tabular-nums">{formatMoney(merchant.average, dataset.settings.primaryCurrency)}</td>
+                <caption className="mb-3 text-left text-muted-foreground">
+                  Recorded account purchases for the selected period. Gross spending; refunds are
+                  not deducted.
+                </caption>
+                <thead>
+                  <tr className="border-b text-left text-muted-foreground">
+                    <th scope="col" className="pb-2 font-medium">
+                      Merchant
+                    </th>
+                    <th scope="col" className="pb-2 text-right font-medium">
+                      Purchases
+                    </th>
+                    <th scope="col" className="pb-2 text-right font-medium">
+                      Spending
+                    </th>
+                    <th scope="col" className="pb-2 text-right font-medium">
+                      Average purchase
+                    </th>
                   </tr>
-                ))}</tbody>
+                </thead>
+                <tbody>
+                  {merchants.map((merchant) => (
+                    <tr key={merchant.key} className="border-b last:border-0">
+                      <th scope="row" className="py-3 text-left font-medium">
+                        {merchant.name}
+                      </th>
+                      <td className="py-3 text-right tabular-nums">{merchant.purchases}</td>
+                      <td className="py-3 text-right tabular-nums">
+                        {formatMoney(merchant.total, dataset.settings.primaryCurrency)}
+                      </td>
+                      <td className="py-3 text-right tabular-nums">
+                        {formatMoney(merchant.average, dataset.settings.primaryCurrency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
           )}
@@ -498,10 +471,7 @@ export function AnalyticsView() {
         <CardContent className="h-80 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={expenseSequenceTrend}>
-              <CartesianGrid
-                strokeDasharray="3 3"
-                stroke="hsl(var(--border))"
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="expense" tickLine={false} axisLine={false} />
               <YAxis
                 width={88}
@@ -512,9 +482,7 @@ export function AnalyticsView() {
                 }
               />
               <Tooltip
-                formatter={(value) =>
-                  formatMoney(Number(value), dataset.settings.primaryCurrency)
-                }
+                formatter={(value) => formatMoney(Number(value), dataset.settings.primaryCurrency)}
               />
               <Legend />
               <Line
@@ -559,11 +527,7 @@ export function AnalyticsView() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    setSelectedExpenseCategoryId(
-                      selectedExpenseCategory.parentId,
-                    )
-                  }
+                  onClick={() => setSelectedExpenseCategoryId(selectedExpenseCategory.parentId)}
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back
@@ -594,10 +558,7 @@ export function AnalyticsView() {
                   </Pie>
                   <Tooltip
                     formatter={(value) =>
-                      formatMoney(
-                        Number(value),
-                        dataset.settings.primaryCurrency,
-                      )
+                      formatMoney(Number(value), dataset.settings.primaryCurrency)
                     }
                   />
                 </PieChart>
@@ -611,10 +572,7 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Income</p>
                 <p className="font-semibold">
-                  {formatMoney(
-                    summary.income,
-                    dataset.settings.primaryCurrency,
-                  )}
+                  {formatMoney(summary.income, dataset.settings.primaryCurrency)}
                 </p>
               </button>
               <button
@@ -624,10 +582,7 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Expense</p>
                 <p className="font-semibold">
-                  {formatMoney(
-                    summary.expenses,
-                    dataset.settings.primaryCurrency,
-                  )}
+                  {formatMoney(summary.expenses, dataset.settings.primaryCurrency)}
                 </p>
               </button>
               <button
@@ -637,10 +592,7 @@ export function AnalyticsView() {
               >
                 <p className="text-muted-foreground">Flow</p>
                 <p className="font-semibold text-sky-700 dark:text-sky-300">
-                  {formatMoney(
-                    summary.cashFlow,
-                    dataset.settings.primaryCurrency,
-                  )}
+                  {formatMoney(summary.cashFlow, dataset.settings.primaryCurrency)}
                 </p>
               </button>
             </div>
@@ -653,18 +605,11 @@ export function AnalyticsView() {
                   className="flex items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
-                    <CategoryIcon
-                      icon={category.icon}
-                      color={category.color}
-                      size="sm"
-                    />
+                    <CategoryIcon icon={category.icon} color={category.color} size="sm" />
                     <p className="font-medium">{category.name}</p>
                   </div>
                   <p className="font-semibold">
-                    {formatMoney(
-                      category.value,
-                      dataset.settings.primaryCurrency,
-                    )}
+                    {formatMoney(category.value, dataset.settings.primaryCurrency)}
                   </p>
                 </button>
               ))}
@@ -684,9 +629,7 @@ export function AnalyticsView() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    setSelectedIncomeCategoryId(selectedIncomeCategory.parentId)
-                  }
+                  onClick={() => setSelectedIncomeCategoryId(selectedIncomeCategory.parentId)}
                 >
                   <ArrowLeft className="h-4 w-4" />
                   Back
@@ -717,10 +660,7 @@ export function AnalyticsView() {
                   </Pie>
                   <Tooltip
                     formatter={(value) =>
-                      formatMoney(
-                        Number(value),
-                        dataset.settings.primaryCurrency,
-                      )
+                      formatMoney(Number(value), dataset.settings.primaryCurrency)
                     }
                   />
                 </PieChart>
@@ -735,18 +675,11 @@ export function AnalyticsView() {
                   className="flex w-full items-center justify-between rounded-md border p-3 text-left transition hover:border-primary/50 hover:bg-secondary"
                 >
                   <div className="flex items-center gap-3">
-                    <CategoryIcon
-                      icon={category.icon}
-                      color={category.color}
-                      size="sm"
-                    />
+                    <CategoryIcon icon={category.icon} color={category.color} size="sm" />
                     <p className="font-medium">{category.name}</p>
                   </div>
                   <p className="font-semibold">
-                    {formatMoney(
-                      category.value,
-                      dataset.settings.primaryCurrency,
-                    )}
+                    {formatMoney(category.value, dataset.settings.primaryCurrency)}
                   </p>
                 </button>
               ))}
@@ -779,19 +712,18 @@ export function AnalyticsView() {
                     <p className="text-sm text-muted-foreground">
                       {Number.isFinite(budget.spent)
                         ? formatMoney(budget.spent, budget.budget.currency)
-                        : "Falta cotización"} of{" "}
-                      {formatMoney(
-                        budget.budget.limitAmount,
-                        budget.budget.currency,
-                      )}
+                        : "Falta cotización"}{" "}
+                      of {formatMoney(budget.budget.limitAmount, budget.budget.currency)}
                     </p>
                   </div>
                   <p className="font-semibold">
-                    {Number.isFinite(budget.percentage)?`${budget.percentage.toFixed(0)}%`:"Falta cotización"}
+                    {Number.isFinite(budget.percentage)
+                      ? `${budget.percentage.toFixed(0)}%`
+                      : "Falta cotización"}
                   </p>
                 </div>
                 <Progress
-                  value={Number.isFinite(budget.percentage)?budget.percentage:0}
+                  value={Number.isFinite(budget.percentage) ? budget.percentage : 0}
                   className="mt-3"
                   indicatorClassName={
                     budget.status === "exceeded"
@@ -821,9 +753,7 @@ export function AnalyticsView() {
                 </p>
               </div>
               <div className="rounded-md bg-secondary p-3">
-                <p className="text-sm text-muted-foreground">
-                  End-of-month projection
-                </p>
+                <p className="text-sm text-muted-foreground">End-of-month projection</p>
                 <p className="text-xl font-semibold">
                   {formatMoney(projection, dataset.settings.primaryCurrency)}
                 </p>
@@ -831,10 +761,7 @@ export function AnalyticsView() {
             </div>
             <div className="space-y-2">
               {recommendations.map((recommendation) => (
-                <div
-                  key={recommendation}
-                  className="rounded-md border p-3 text-sm"
-                >
+                <div key={recommendation} className="rounded-md border p-3 text-sm">
                   {recommendation}
                 </div>
               ))}

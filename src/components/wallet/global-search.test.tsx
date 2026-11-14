@@ -76,9 +76,7 @@ function button(label: string) {
       (node) =>
         node.props["aria-label"] === label ||
         node.children.includes(label) ||
-        node
-          .findAllByType("span")
-          .some((span) => span.children.includes(label)),
+        node.findAllByType("span").some((span) => span.children.includes(label)),
     )!;
 }
 async function mount(shell = false) {
@@ -103,9 +101,7 @@ async function open() {
   await act(async () => button("Search wallet").props.onClick());
 }
 async function query(value: string) {
-  await act(async () =>
-    tree!.root.findByType("input").props.onChange({ target: { value } }),
-  );
+  await act(async () => tree!.root.findByType("input").props.onChange({ target: { value } }));
 }
 async function shortcut(props: Partial<KeyboardEvent> = {}) {
   const event = new Event("keydown", { cancelable: true });
@@ -254,8 +250,7 @@ test("dialog focus callbacks focus its input and restore prior focus on closure"
         <GlobalSearch />
       </MemoryRouter>,
       {
-        createNodeMock: (node) =>
-          node.type === "input" ? { focus: inputFocus } : null,
+        createNodeMock: (node) => (node.type === "input" ? { focus: inputFocus } : null),
       },
     );
   });
@@ -264,9 +259,7 @@ test("dialog focus callbacks focus its input and restore prior focus on closure"
   content.onOpenAutoFocus(event);
   expect(inputFocus).toHaveBeenCalledTimes(1);
   await act(async () =>
-    tree!.root
-      .findByProps({ "data-dialog-root": true })
-      .props.onOpenChange(false),
+    tree!.root.findByProps({ "data-dialog-root": true }).props.onOpenChange(false),
   );
   content.onCloseAutoFocus(event);
   expect(priorFocus.focus).toHaveBeenCalledTimes(1);

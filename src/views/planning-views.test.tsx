@@ -52,7 +52,11 @@ const text = () => JSON.stringify(tree?.toJSON());
 test("completed goals do not show a remaining contribution plan", async () => {
   const progress = calculateGoalProgress(mockWalletData)[0];
   await act(async () => {
-    tree = create(<GoalFundingPlan progress={{ ...progress, goal: { ...progress.goal, status: "completed" } }} />);
+    tree = create(
+      <GoalFundingPlan
+        progress={{ ...progress, goal: { ...progress.goal, status: "completed" } }}
+      />,
+    );
   });
   expect(tree!.toJSON()).toBeNull();
 });
@@ -91,12 +95,8 @@ test("debt list puts undated amounts last and filters overdue without turning un
   await act(async () => {
     tree = create(<DebtsView />);
   });
-  expect(text().indexOf("Old debt")).toBeLessThan(
-    text().indexOf("Today's debt"),
-  );
-  expect(text().indexOf("Today's debt")).toBeLessThan(
-    text().indexOf("Undated unknown"),
-  );
+  expect(text().indexOf("Old debt")).toBeLessThan(text().indexOf("Today's debt"));
+  expect(text().indexOf("Today's debt")).toBeLessThan(text().indexOf("Undated unknown"));
   expect(text()).toContain("Due today");
   expect(text()).toContain("Amount pending");
   await act(async () => {
@@ -165,9 +165,7 @@ test("portfolio groups currencies and includes hidden investments only after the
   expect(text()).not.toContain("Hidden fund");
   expect(text()).toContain(formatMoney(12, "USD"));
   await act(async () => {
-    tree!.root
-      .findByProps({ "aria-label": "Show hidden investments" })
-      .props.onClick();
+    tree!.root.findByProps({ "aria-label": "Show hidden investments" }).props.onClick();
   });
   expect(text()).toContain("Hidden fund");
   expect(text()).toContain(formatMoney(112, "USD"));

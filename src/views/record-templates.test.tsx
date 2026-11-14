@@ -155,9 +155,7 @@ async function mount() {
   });
 }
 function button(text: string) {
-  return tree!.root
-    .findAllByType("button")
-    .find((b) => b.children.includes(text))!;
+  return tree!.root.findAllByType("button").find((b) => b.children.includes(text))!;
 }
 async function openSaved() {
   dataset.recordTemplates = [template()];
@@ -168,21 +166,15 @@ async function openSaved() {
 test("new movements do not expose template management", async () => {
   await mount();
   await act(async () => button("New").props.onClick());
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
   expect(JSON.stringify(tree!.toJSON())).not.toContain("Save as template");
 });
 test("editing a movement does not expose template management", async () => {
   await mount();
   await act(async () =>
-    tree!.root
-      .findAllByProps({ role: "button", tabIndex: 0 })[0]
-      .props.onClick(),
+    tree!.root.findAllByProps({ role: "button", tabIndex: 0 })[0].props.onClick(),
   );
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
 });
 test("records no longer contain the template library", async () => {
   await mount();
@@ -192,9 +184,7 @@ test("using a template writes nothing until confirmation then freezes the new da
   await openSaved();
   expect(actions.addRecord).not.toHaveBeenCalled();
   expect(tree!.root.findByType("form")).toBeDefined();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   const value = actions.addRecord.mock.calls[0][0];
   expect(value.accountAmount).toBe(440);
   expect(value.exchangeRateToPrimary).toBe(44);
@@ -213,17 +203,11 @@ test("an archived financial destination leaves an invalid draft that cannot be c
   expect(actions.addRecord).not.toHaveBeenCalled();
 });
 test("a failed record save retains an editable draft and allows a normal retry", async () => {
-  actions.addRecord.mockRejectedValueOnce(
-    new Error("Saved but refresh failed"),
-  );
+  actions.addRecord.mockRejectedValueOnce(new Error("Saved but refresh failed"));
   await openSaved();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(button("Add").props.disabled).toBe(false);
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(actions.addRecord).toHaveBeenCalledTimes(2);
   expect(actions.read).not.toHaveBeenCalled();
   expect(tree!.root.findAllByType("form")).toHaveLength(0);
@@ -250,19 +234,13 @@ test("pending record submissions remain single flight", async () => {
 test("a global new-record request starts fresh after a failed save", async () => {
   actions.addRecord.mockRejectedValueOnce(new Error("Response lost"));
   await openSaved();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(button("Add").props.disabled).toBe(false);
   newRecordRequestId = 2;
   newRecordTemplateId = null;
   await act(async () => tree!.update(<RecordsView />));
-  expect(JSON.stringify(tree!.toJSON())).not.toContain(
-    "save outcome is uncertain",
-  );
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(JSON.stringify(tree!.toJSON())).not.toContain("save outcome is uncertain");
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
 });
 
 test("needs-review records display an amber status label", async () => {
@@ -271,7 +249,5 @@ test("needs-review records display an amber status label", async () => {
   const labels = tree!.root
     .findAllByType("span")
     .filter((span) => span.children.includes("Needs review"));
-  expect(
-    labels.some((label) => label.props.className.includes("bg-amber")),
-  ).toBe(true);
+  expect(labels.some((label) => label.props.className.includes("bg-amber"))).toBe(true);
 });

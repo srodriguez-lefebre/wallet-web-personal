@@ -51,20 +51,17 @@ function fixture() {
   ];
   dataset.creditCardPayments = [];
   dataset.creditCardPaymentAllocations = [];
-  dataset.creditCardStatements = [
-    "2026-10-11",
-    "2026-10-03",
-    "2026-10-02",
-    "2026-10-10",
-  ].map((due, index) => ({
-    id: String(index),
-    creditCardId: "card",
-    cycleStart: "2026-08-01",
-    cycleEnd: "2026-08-31",
-    closedAt: "2026-09-01",
-    dueAt: `${due}T23:59:59.999Z`,
-    status: "paid",
-  }));
+  dataset.creditCardStatements = ["2026-10-11", "2026-10-03", "2026-10-02", "2026-10-10"].map(
+    (due, index) => ({
+      id: String(index),
+      creditCardId: "card",
+      cycleStart: "2026-08-01",
+      cycleEnd: "2026-08-31",
+      closedAt: "2026-09-01",
+      dueAt: `${due}T23:59:59.999Z`,
+      status: "paid",
+    }),
+  );
   dataset.creditCardRecords = dataset.creditCardStatements.map((statement) => ({
     id: `purchase-${statement.id}`,
     creditCardId: "card",
@@ -83,13 +80,7 @@ function fixture() {
 const asOf = new Date("2026-10-03T12:00:00Z");
 test("agenda uses actual debt on archived cards, sorts deadlines, and classifies calendar days", () => {
   const entries = selectPendingCardStatements(fixture(), asOf);
-  expect(
-    entries.map((entry) => [
-      entry.statement.id,
-      entry.urgency,
-      entry.daysUntilDue,
-    ]),
-  ).toEqual([
+  expect(entries.map((entry) => [entry.statement.id, entry.urgency, entry.daysUntilDue])).toEqual([
     ["2", "overdue", -1],
     ["1", "today", 0],
     ["3", "soon", 7],
@@ -119,14 +110,14 @@ test("refunds remove zero debt and future payments do not hide a current obligat
       occurredAt: "2026-10-04T12:00:00Z",
     },
   ];
-  expect(
-    selectPendingCardStatements(data, asOf).map((entry) => entry.statement.id),
-  ).toEqual(["1", "3", "0"]);
+  expect(selectPendingCardStatements(data, asOf).map((entry) => entry.statement.id)).toEqual([
+    "1",
+    "3",
+    "0",
+  ]);
   data.creditCardPayments[0].occurredAt = "2026-10-02T12:00:00Z";
   data.creditCardPayments[0].amountInLimitCurrency = 40;
-  expect(
-    selectPendingCardStatements(data, asOf)[0].dueAmountInLimitCurrency,
-  ).toBe(60);
+  expect(selectPendingCardStatements(data, asOf)[0].dueAmountInLimitCurrency).toBe(60);
 });
 test("detail honors a requested statement and otherwise opens the oldest actual unpaid statement", () => {
   const data = fixture();

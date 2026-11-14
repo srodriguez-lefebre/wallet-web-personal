@@ -57,10 +57,7 @@ export async function createSandboxServer(options: {
       threads: [],
       targets: {
         cards: Object.fromEntries(
-          dataset.creditCards.map((card) => [
-            card.lastFour,
-            { creditCardId: card.id },
-          ]),
+          dataset.creditCards.map((card) => [card.lastFour, { creditCardId: card.id }]),
         ),
       },
     };
@@ -112,19 +109,13 @@ export async function createSandboxServer(options: {
       }
       const body = await readJson(req);
       if (running) {
-        json(
-          res,
-          { error: "Mail trigger is running; wait for it to finish" },
-          409,
-        );
+        json(res, { error: "Mail trigger is running; wait for it to finish" }, 409);
         return;
       }
       switch (url.pathname) {
         case "/__sandbox/messages": {
           const parsed = messageSchema.parse(body);
-          let thread = mailbox.threads.find(
-            (entry) => entry.id === parsed.threadId,
-          );
+          let thread = mailbox.threads.find((entry) => entry.id === parsed.threadId);
           if (!thread) {
             thread = {
               id: randomUUID(),

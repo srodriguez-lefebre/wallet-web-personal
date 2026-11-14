@@ -28,22 +28,16 @@ test("a bank descriptor gets sufficient output budget, purchase context and a va
       status: "completed",
       output: [
         {
-          content: [
-            { type: "output_text", text: '{"categoryId":"restaurant"}' },
-          ],
+          content: [{ type: "output_text", text: '{"categoryId":"restaurant"}' }],
         },
       ],
       usage: { input_tokens: 100, output_tokens: 50 },
     }),
   );
   const diagnostic = vi.fn();
-  expect(
-    await inferCategoryWithOpenAi(
-      "HDP HURBAN FOOD MONTE",
-      categories,
-      diagnostic,
-    ),
-  ).toBe("restaurant");
+  expect(await inferCategoryWithOpenAi("HDP HURBAN FOOD MONTE", categories, diagnostic)).toBe(
+    "restaurant",
+  );
   const request = JSON.parse(fetchMock.mock.calls[0][1].body);
   expect(request.max_output_tokens).toBeGreaterThanOrEqual(2048);
   expect(request.reasoning).toEqual({ effort: "low" });
@@ -66,9 +60,7 @@ test("HTTP 200 with incomplete reasoning is diagnosed instead of looking like su
     }),
   );
   const diagnostic = vi.fn();
-  expect(
-    await inferCategoryWithOpenAi("HBO MAX", categories, diagnostic),
-  ).toBeNull();
+  expect(await inferCategoryWithOpenAi("HBO MAX", categories, diagnostic)).toBeNull();
   expect(diagnostic).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "failed",
@@ -79,10 +71,7 @@ test("HTTP 200 with incomplete reasoning is diagnosed instead of looking like su
 });
 test.each([
   ["empty_output", { status: "completed", output: [] }],
-  [
-    "invalid_category",
-    { status: "completed", output_text: '{"categoryId":"invented"}' },
-  ],
+  ["invalid_category", { status: "completed", output_text: '{"categoryId":"invented"}' }],
   ["invalid_json", { status: "completed", output_text: "not JSON" }],
   [
     "refused",
@@ -91,25 +80,16 @@ test.each([
       output: [{ content: [{ type: "refusal", refusal: "Cannot classify" }] }],
     },
   ],
-])(
-  "invalid model result %s stays unresolved with a reason",
-  async (reason, body) => {
-    fetchMock.mockResolvedValue(response(body));
-    const diagnostic = vi.fn();
-    expect(
-      await inferCategoryWithOpenAi("Unknown", categories, diagnostic),
-    ).toBeNull();
-    expect(diagnostic).toHaveBeenCalledWith(
-      expect.objectContaining({ outcome: "failed", reason }),
-    );
-  },
-);
+])("invalid model result %s stays unresolved with a reason", async (reason, body) => {
+  fetchMock.mockResolvedValue(response(body));
+  const diagnostic = vi.fn();
+  expect(await inferCategoryWithOpenAi("Unknown", categories, diagnostic)).toBeNull();
+  expect(diagnostic).toHaveBeenCalledWith(expect.objectContaining({ outcome: "failed", reason }));
+});
 test("missing credentials are reported without attempting a call", async () => {
   vi.stubEnv("OPENAI_API_KEY", "");
   const diagnostic = vi.fn();
-  expect(
-    await inferCategoryWithOpenAi("Unknown", categories, diagnostic),
-  ).toBeNull();
+  expect(await inferCategoryWithOpenAi("Unknown", categories, diagnostic)).toBeNull();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(diagnostic).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -120,15 +100,10 @@ test("missing credentials are reported without attempting a call", async () => {
 });
 test("HTTP errors omit upstream bodies and secrets from diagnostics", async () => {
   fetchMock.mockResolvedValue(
-    response(
-      { error: { message: "test-key-never-log private bank text" } },
-      429,
-    ),
+    response({ error: { message: "test-key-never-log private bank text" } }, 429),
   );
   const diagnostic = vi.fn();
-  expect(
-    await inferCategoryWithOpenAi("Unknown", categories, diagnostic),
-  ).toBeNull();
+  expect(await inferCategoryWithOpenAi("Unknown", categories, diagnostic)).toBeNull();
   expect(diagnostic).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "failed",
@@ -136,16 +111,12 @@ test("HTTP errors omit upstream bodies and secrets from diagnostics", async () =
       httpStatus: 429,
     }),
   );
-  expect(JSON.stringify(diagnostic.mock.calls)).not.toMatch(
-    /test-key-never-log|private bank/,
-  );
+  expect(JSON.stringify(diagnostic.mock.calls)).not.toMatch(/test-key-never-log|private bank/);
 });
 test("timeouts report a reason without discarding the expense", async () => {
   fetchMock.mockRejectedValue(new DOMException("timeout", "TimeoutError"));
   const diagnostic = vi.fn();
-  expect(
-    await inferCategoryWithOpenAi("Unknown", categories, diagnostic),
-  ).toBeNull();
+  expect(await inferCategoryWithOpenAi("Unknown", categories, diagnostic)).toBeNull();
   expect(diagnostic).toHaveBeenCalledWith(
     expect.objectContaining({ outcome: "failed", reason: "timeout" }),
   );
@@ -158,8 +129,6 @@ test("a configured non-reasoning model does not receive GPT-5-only parameters", 
       output_text: '{"categoryId":"restaurant"}',
     }),
   );
-  expect(await inferCategoryWithOpenAi("Unknown", categories)).toBe(
-    "restaurant",
-  );
+  expect(await inferCategoryWithOpenAi("Unknown", categories)).toBe("restaurant");
   expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning).toBeUndefined();
 });

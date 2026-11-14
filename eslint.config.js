@@ -7,14 +7,7 @@ import prettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: [
-      "dist",
-      "node_modules",
-      "coverage",
-      "docs",
-      ".vercel",
-      ".local-wallet",
-    ],
+    ignores: ["dist", "node_modules", "coverage", "docs", ".vercel", ".local-wallet"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -30,10 +23,7 @@ export default tseslint.config(
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": [
-        "warn",
-        { allowConstantExport: true },
-      ],
+      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
     },
   },
   {

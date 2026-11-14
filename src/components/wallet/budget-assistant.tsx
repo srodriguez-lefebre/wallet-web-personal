@@ -4,22 +4,14 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { reportDataset } from "@/lib/preferences";
 import { useWallet } from "@/providers/wallet-provider";
-import {
-  buildBudgetPlan,
-  conflictingCategoryBudgets,
-} from "@shared/budget-planning";
+import { buildBudgetPlan, conflictingCategoryBudgets } from "@shared/budget-planning";
 import { formatMoney, monthKey } from "@shared/calculations";
 import { budgetSchema } from "@shared/schemas";
 import type { BudgetPlan, BudgetProposal } from "@shared/budget-planning";
 import type { WalletDataset } from "@shared/types";
 
 type Choice = { selected: boolean; amount: string };
-type Outcome =
-  | "confirmed"
-  | "reconciled"
-  | "conflict"
-  | "uncertain"
-  | "unavailable";
+type Outcome = "confirmed" | "reconciled" | "conflict" | "uncertain" | "unavailable";
 const field =
   "h-10 w-full rounded-md border bg-card px-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-50";
 
@@ -54,11 +46,7 @@ export function BudgetAssistant({
       })
       .catch((reason) => {
         if (active.current)
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "Could not load complete history.",
-          );
+          setError(reason instanceof Error ? reason.message : "Could not load complete history.");
       })
       .finally(() => {
         if (active.current) setLoading(false);
@@ -87,10 +75,7 @@ export function BudgetAssistant({
     } catch (reason) {
       return {
         plan: null,
-        planningError:
-          reason instanceof Error
-            ? reason.message
-            : "Could not calculate proposals.",
+        planningError: reason instanceof Error ? reason.message : "Could not calculate proposals.",
       };
     }
   }, [history, targetMonth, margin, currentMonth]);
@@ -103,9 +88,7 @@ export function BudgetAssistant({
     );
   }
   function completed(id: string) {
-    return ["confirmed", "reconciled", "conflict", "unavailable"].includes(
-      outcomes[id],
-    );
+    return ["confirmed", "reconciled", "conflict", "unavailable"].includes(outcomes[id]);
   }
   const selected =
     plan?.proposals.filter(
@@ -119,12 +102,8 @@ export function BudgetAssistant({
       !Number.isFinite(Number(choiceFor(proposal).amount)) ||
       Number(choiceFor(proposal).amount) <= 0,
   );
-  const confirmed = Object.values(outcomes).filter(
-    (value) => value === "confirmed",
-  ).length;
-  const reconciled = Object.values(outcomes).filter(
-    (value) => value === "reconciled",
-  ).length;
+  const confirmed = Object.values(outcomes).filter((value) => value === "confirmed").length;
+  const reconciled = Object.values(outcomes).filter((value) => value === "reconciled").length;
   const skipped = Object.values(outcomes).filter(
     (value) => value === "conflict" || value === "unavailable",
   ).length;
@@ -142,11 +121,7 @@ export function BudgetAssistant({
     try {
       setHistory(await getCompleteDataset());
     } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Could not load complete history.",
-      );
+      setError(reason instanceof Error ? reason.message : "Could not load complete history.");
     } finally {
       setLoading(false);
     }
@@ -171,14 +146,10 @@ export function BudgetAssistant({
           const current = await getCompleteDataset();
           const currentBudgets = [...current.budgets];
           if (current.settings.primaryCurrency !== currentPlan.currency)
-            throw new Error(
-              "Primary currency changed. Reload proposals before saving.",
-            );
+            throw new Error("Primary currency changed. Reload proposals before saving.");
           for (const { proposal, amount } of batch) {
             if (!active.current) break;
-            const category = current.categories.find(
-              (value) => value.id === proposal.categoryId,
-            );
+            const category = current.categories.find((value) => value.id === proposal.categoryId);
             if (!category || category.parentId) {
               setOutcomes((values) => ({
                 ...values,
@@ -195,9 +166,7 @@ export function BudgetAssistant({
               setOutcomes((values) => ({
                 ...values,
                 [proposal.categoryId]:
-                  values[proposal.categoryId] === "uncertain"
-                    ? "reconciled"
-                    : "conflict",
+                  values[proposal.categoryId] === "uncertain" ? "reconciled" : "conflict",
               }));
               continue;
             }
@@ -229,8 +198,7 @@ export function BudgetAssistant({
         {
           processing: "Checking current budgets and saving selections…",
           success: "Budget selections processed. Review the results below.",
-          error:
-            "Budget batch stopped. Review the results and reconcile before retrying.",
+          error: "Budget batch stopped. Review the results and reconcile before retrying.",
         },
       );
     } catch (reason) {
@@ -249,9 +217,9 @@ export function BudgetAssistant({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        New monthly budgets apply every month. The target month only selects the
-        three earlier calendar months used for the estimate. Choose the current
-        month or an earlier month to use three complete months.
+        New monthly budgets apply every month. The target month only selects the three earlier
+        calendar months used for the estimate. Choose the current month or an earlier month to use
+        three complete months.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="space-y-1 text-sm font-medium">
@@ -299,17 +267,14 @@ export function BudgetAssistant({
               Source: {plan.sourceMonths.join(", ")} · Currency: {plan.currency}
             </p>
             <p className="mt-1">
-              Average = three-month spending ÷ 3, including months with no
-              expenses. Suggested limits round upward to the next cent after
-              adding the margin.
+              Average = three-month spending ÷ 3, including months with no expenses. Suggested
+              limits round upward to the next cent after adding the margin.
             </p>
             <p className="mt-1">
-              Uses report account preferences and frozen historical conversions.
-              Includes cleared and pending expenses; excludes cancelled and
-              review drafts. Subcategories roll into their main category. Linked
-              card entries are not added again. Direct card purchases without a
-              wallet record are excluded. Uncategorized expenses do not generate
-              budgets.
+              Uses report account preferences and frozen historical conversions. Includes cleared
+              and pending expenses; excludes cancelled and review drafts. Subcategories roll into
+              their main category. Linked card entries are not added again. Direct card purchases
+              without a wallet record are excluded. Uncategorized expenses do not generate budgets.
             </p>
             <p className="mt-1">
               Scope:{" "}
@@ -329,17 +294,12 @@ export function BudgetAssistant({
                 const choice = choiceFor(proposal);
                 const outcome = outcomes[proposal.categoryId];
                 const disabled =
-                  busy ||
-                  proposal.status !== "ready" ||
-                  completed(proposal.categoryId);
+                  busy || proposal.status !== "ready" || completed(proposal.categoryId);
                 const conflicts = history!.budgets.filter((budget) =>
                   proposal.conflictingBudgetIds.includes(budget.id),
                 );
                 return (
-                  <div
-                    key={proposal.categoryId}
-                    className="rounded-md border p-3"
-                  >
+                  <div key={proposal.categoryId} className="rounded-md border p-3">
                     <div className="flex items-center gap-3">
                       <input
                         type="checkbox"
@@ -393,17 +353,14 @@ export function BudgetAssistant({
                     </div>
                     {proposal.status === "missing_exchange_rate" ? (
                       <p className="mt-2 text-sm text-destructive">
-                        Historical exchange rate unavailable. This category
-                        cannot be estimated.
+                        Historical exchange rate unavailable. This category cannot be estimated.
                       </p>
                     ) : null}
                     {proposal.status === "conflict" ? (
                       <p className="mt-2 text-sm text-muted-foreground">
                         Existing active budget:{" "}
                         {conflicts
-                          .map(
-                            (budget) => `${budget.name} (${budget.currency})`,
-                          )
+                          .map((budget) => `${budget.name} (${budget.currency})`)
                           .join(", ")}
                         . Category scopes overlap; creation disabled.
                       </p>
@@ -440,9 +397,8 @@ export function BudgetAssistant({
       ) : null}
       {Object.keys(outcomes).length ? (
         <p role="status" className="text-sm">
-          {confirmed} confirmed · {reconciled} reconciled · {skipped} skipped.
-          Each budget is saved separately; a stopped batch can leave partial
-          saves.
+          {confirmed} confirmed · {reconciled} reconciled · {skipped} skipped. Each budget is saved
+          separately; a stopped batch can leave partial saves.
         </p>
       ) : null}
       {!loading && !history ? (
@@ -453,20 +409,10 @@ export function BudgetAssistant({
       {history ? (
         <div className="flex flex-wrap items-center gap-3">
           <Button
-            disabled={
-              busy ||
-              loading ||
-              !selected.length ||
-              invalidAmounts ||
-              !!planningError
-            }
+            disabled={busy || loading || !selected.length || invalidAmounts || !!planningError}
             onClick={save}
           >
-            {busy
-              ? "Saving…"
-              : error
-                ? "Reconcile and retry"
-                : "Create selected budgets"}
+            {busy ? "Saving…" : error ? "Reconcile and retry" : "Create selected budgets"}
           </Button>
           <Button
             variant="outline"

@@ -27,9 +27,9 @@ test("searches entity names with accents and distinguishes equal labels by their
     label: "Café",
     action: { type: "records", filters: { categoryId: "cat" } },
   });
-  expect(
-    results.find((result) => result.id === "search-records"),
-  ).toMatchObject({ action: { type: "records", filters: { search: "CAFE" } } });
+  expect(results.find((result) => result.id === "search-records")).toMatchObject({
+    action: { type: "records", filters: { search: "CAFE" } },
+  });
 });
 
 test("omits hidden or archived entities and gives individual results supported detail routes only", () => {
@@ -75,14 +75,10 @@ test("omits hidden or archived entities and gives individual results supported d
       isVisible: false,
     },
   ];
-  dataset.debts = [
-    { ...dataset.debts[0], id: "debt", name: "needle", isVisible: true },
-  ];
+  dataset.debts = [{ ...dataset.debts[0], id: "debt", name: "needle", isVisible: true }];
   const results = globalSearchResults(dataset, "needle");
   expect(
-    results
-      .filter((result) => result.kind !== "record-search")
-      .map((result) => result.action),
+    results.filter((result) => result.kind !== "record-search").map((result) => result.action),
   ).toEqual([
     { type: "navigate", href: "/cards/card%2Fone" },
     { type: "navigate", href: "/goals/goal%20one" },
@@ -93,18 +89,21 @@ test("omits hidden or archived entities and gives individual results supported d
 test("empty queries offer sections and draft/review commands; text searches stay bounded", () => {
   const dataset = structuredClone(mockWalletData);
   const commands = globalSearchResults(dataset, "  ");
-  expect(commands.find((result) => result.id === "new-record")?.action).toEqual(
-    { type: "new-record" },
-  );
-  expect(
-    commands.find((result) => result.id === "review-records")?.action,
-  ).toEqual({ type: "records", filters: { paymentStatus: "needs_review" } });
-  expect(
-    commands.find((result) => result.id === "section-records")?.action,
-  ).toEqual({ type: "records", filters: {} });
-  expect(
-    commands.find((result) => result.id === "section-debts")?.action,
-  ).toEqual({ type: "navigate", href: "/debts" });
+  expect(commands.find((result) => result.id === "new-record")?.action).toEqual({
+    type: "new-record",
+  });
+  expect(commands.find((result) => result.id === "review-records")?.action).toEqual({
+    type: "records",
+    filters: { paymentStatus: "needs_review" },
+  });
+  expect(commands.find((result) => result.id === "section-records")?.action).toEqual({
+    type: "records",
+    filters: {},
+  });
+  expect(commands.find((result) => result.id === "section-debts")?.action).toEqual({
+    type: "navigate",
+    href: "/debts",
+  });
   dataset.accounts = Array.from({ length: 60 }, (_, i) => ({
     ...dataset.accounts[0],
     id: `account-${i}`,

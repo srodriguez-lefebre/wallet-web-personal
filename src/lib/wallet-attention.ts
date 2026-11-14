@@ -5,9 +5,7 @@ import { selectPendingCardStatements } from "./cards-presentation";
 /** Current attention items are independent of the selected reporting period. */
 export function walletAttention(dataset: WalletDataset, asOf = new Date()) {
   return {
-    review: dataset.records.filter(
-      (record) => record.paymentStatus === "needs_review",
-    ).length,
+    review: dataset.records.filter((record) => record.paymentStatus === "needs_review").length,
     debts: selectDebtsByDueDate(
       dataset.debts.filter((debt) => debt.isVisible),
       { asOf },

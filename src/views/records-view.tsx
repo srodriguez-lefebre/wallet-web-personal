@@ -1,17 +1,7 @@
-﻿import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { format, parseISO } from "date-fns";
 import * as Popover from "@radix-ui/react-popover";
-import {
-  Check,
-  ChevronDown,
-  Copy,
-  Edit3,
-  FilterX,
-  Plus,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, Copy, Edit3, FilterX, Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -43,10 +33,7 @@ import {
   splitImportNote,
 } from "@shared/record-review";
 import type { RecordPatch } from "@shared/schemas";
-import {
-  recordAccountAmount,
-  scaleConvertedAmount,
-} from "@/lib/record-form-money";
+import { recordAccountAmount, scaleConvertedAmount } from "@/lib/record-form-money";
 import {
   calculateAccountBalances,
   formatMoney,
@@ -54,11 +41,7 @@ import {
   isCategoryOrDescendant,
   recordsForDateRange,
 } from "@shared/calculations";
-import {
-  paymentStatusLabels,
-  paymentTypeLabels,
-  recordTypeLabels,
-} from "@shared/constants";
+import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@shared/constants";
 import type {
   Category,
   CurrencyCode,
@@ -73,11 +56,9 @@ import type {
 
 const paymentMethodClasses: Record<PaymentType, string> = {
   cash: "bg-muted text-muted-foreground",
-  debit:
-    "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
+  debit: "bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300",
   credit: "bg-blue-50 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
-  transfer:
-    "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
+  transfer: "bg-violet-50 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300",
   other: "bg-muted text-muted-foreground",
 };
 
@@ -140,22 +121,13 @@ function CategoryFilterSelect({
         >
           <span className="flex min-w-0 items-center gap-2">
             {selectedCategory && (
-              <CategoryIcon
-                icon={selectedCategory.icon}
-                color={selectedCategory.color}
-                size="sm"
-              />
+              <CategoryIcon icon={selectedCategory.icon} color={selectedCategory.color} size="sm" />
             )}
             <span className="truncate">
-              {selectedCategory
-                ? formatCategoryName(categories, selectedCategory)
-                : emptyLabel}
+              {selectedCategory ? formatCategoryName(categories, selectedCategory) : emptyLabel}
             </span>
           </span>
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-muted-foreground"
-            aria-hidden
-          />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </Popover.Trigger>
       <Popover.Portal>
@@ -182,17 +154,11 @@ function CategoryFilterSelect({
               className="flex w-full min-w-0 items-center gap-2 rounded px-2 py-2 text-left text-sm hover:bg-secondary focus-visible:bg-secondary aria-pressed:bg-secondary"
               onClick={() => choose(category.id)}
             >
-              <CategoryIcon
-                icon={category.icon}
-                color={category.color}
-                size="sm"
-              />
+              <CategoryIcon icon={category.icon} color={category.color} size="sm" />
               <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                 {formatCategoryName(categories, category)}
               </span>
-              {category.id === value && (
-                <Check className="h-4 w-4 shrink-0" aria-hidden />
-              )}
+              {category.id === value && <Check className="h-4 w-4 shrink-0" aria-hidden />}
             </button>
           ))}
         </Popover.Content>
@@ -208,9 +174,7 @@ function defaultAccountId(dataset: WalletDataset) {
   return (
     activeVisibleAccounts.find(
       (account) =>
-        account.id ===
-        (dataset.settings.defaultAccountId ??
-          dataset.settings.primaryAccountId),
+        account.id === (dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId),
     )?.id ??
     activeVisibleAccounts[0]?.id ??
     dataset.accounts.find((account) => account.isActive)?.id ??
@@ -218,14 +182,10 @@ function defaultAccountId(dataset: WalletDataset) {
   );
 }
 
-function defaultDestinationAccountId(
-  dataset: WalletDataset,
-  sourceAccountId: string,
-) {
+function defaultDestinationAccountId(dataset: WalletDataset, sourceAccountId: string) {
   return (
     dataset.accounts.find(
-      (account) =>
-        account.isActive && account.isVisible && account.id !== sourceAccountId,
+      (account) => account.isActive && account.isVisible && account.id !== sourceAccountId,
     )?.id ?? ""
   );
 }
@@ -302,12 +262,9 @@ export function RecordsView() {
   const recordDraftRevision = useRef(0);
   const [type, setType] = useState<RecordType>("expense");
   const [accountId, setAccountId] = useState(defaultAccountId(dataset));
-  const [creditCardId, setCreditCardId] = useState(
-    recordFilters.creditCardId ?? "",
-  );
+  const [creditCardId, setCreditCardId] = useState(recordFilters.creditCardId ?? "");
   const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [exchangeRateToLimitCurrency, setExchangeRateToLimitCurrency] =
-    useState("1");
+  const [exchangeRateToLimitCurrency, setExchangeRateToLimitCurrency] = useState("1");
   const [destinationAccountId, setDestinationAccountId] = useState(
     defaultDestinationAccountId(dataset, defaultAccountId(dataset)),
   );
@@ -324,13 +281,9 @@ export function RecordsView() {
   const recordSubmission = useRef(false);
   const [note, setNote] = useState("");
   const [tagId, setTagId] = useState("");
-  const [goalAssociations, setGoalAssociations] = useState<
-    RecordGoalAssociation[]
-  >([]);
+  const [goalAssociations, setGoalAssociations] = useState<RecordGoalAssociation[]>([]);
   const [counterpartyName, setCounterpartyName] = useState("");
-  const [occurredAtLocal, setOccurredAtLocal] = useState(() =>
-    toDateTimeLocal(new Date()),
-  );
+  const [occurredAtLocal, setOccurredAtLocal] = useState(() => toDateTimeLocal(new Date()));
   const [paymentType, setPaymentType] = useState<PaymentType>("debit");
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>("cleared");
   const { toast, runAction } = useActionToast();
@@ -338,12 +291,8 @@ export function RecordsView() {
     (record) => record.paymentStatus === "needs_review",
   ).length;
   const newReviewCount = countNewReviews(dataset);
-  const reviewSeenThrough =
-    Date.parse(dataset.settings.reviewSeenThrough ?? "") || 0;
-  const merchantCorrections = useMemo(
-    () => getMerchantCorrections(dataset),
-    [dataset],
-  );
+  const reviewSeenThrough = Date.parse(dataset.settings.reviewSeenThrough ?? "") || 0;
+  const merchantCorrections = useMemo(() => getMerchantCorrections(dataset), [dataset]);
   const categories = useMemo(
     () => sortCategoriesForSelect(dataset.categories),
     [dataset.categories],
@@ -374,12 +323,9 @@ export function RecordsView() {
     editingId &&
     !editingLinkedRefund &&
     paymentStatus === "cancelled" &&
-    dataset.records.find((record) => record.id === editingId)?.paymentStatus ===
-      "needs_review",
+    dataset.records.find((record) => record.id === editingId)?.paymentStatus === "needs_review",
   );
-  const editingRecord = dataset.records.find(
-    (record) => record.id === editingId,
-  );
+  const editingRecord = dataset.records.find((record) => record.id === editingId);
   const originalGoalAssociations =
     editingRecord?.goalAssociations ??
     (editingRecord?.goalIds ?? []).map((goalId) => ({
@@ -402,46 +348,31 @@ export function RecordsView() {
     currency === editingRecord.currency &&
     (accountId || undefined) === editingRecord.accountId &&
     (!accountId ||
-      Number(accountAmount) ===
-        (editingRecord.accountAmount ?? editingRecord.amount)) &&
-    (destinationAccountId || undefined) ===
-      editingRecord.destinationAccountId &&
+      Number(accountAmount) === (editingRecord.accountAmount ?? editingRecord.amount)) &&
+    (destinationAccountId || undefined) === editingRecord.destinationAccountId &&
     destinationAmount === String(editingRecord.destinationAmount ?? "") &&
     (creditCardId || undefined) === editingRecord.creditCardId &&
-    Number(exchangeRateToLimitCurrency) ===
-      (editingRecord.exchangeRateToLimitCurrency ?? 1) &&
+    Number(exchangeRateToLimitCurrency) === (editingRecord.exchangeRateToLimitCurrency ?? 1) &&
     paymentType === editingRecord.paymentType &&
     occurredAtLocal === toDateTimeLocal(editingRecord.occurredAt) &&
-    JSON.stringify(goalAssociations) ===
-      JSON.stringify(originalGoalAssociations),
+    JSON.stringify(goalAssociations) === JSON.stringify(originalGoalAssociations),
   );
   const canSubmit =
     statusOnlyCancellation ||
     (reviewMetadataOnly && !hasInvalidGoalAllocation) ||
     (numericAmount > 0 &&
       Boolean(accountId || (type === "expense" && creditCardId)) &&
-      (type === "transfer"
-        ? Boolean(destinationAccountId)
-        : Boolean(categoryId)) &&
+      (type === "transfer" ? Boolean(destinationAccountId) : Boolean(categoryId)) &&
       !hasInvalidGoalAllocation);
-  function updateGoalAssociation(
-    goalId: string,
-    patch: Partial<RecordGoalAssociation>,
-  ) {
+  function updateGoalAssociation(goalId: string, patch: Partial<RecordGoalAssociation>) {
     setGoalAssociations((current) =>
       current.map((association) =>
-        association.goalId === goalId
-          ? { ...association, ...patch }
-          : association,
+        association.goalId === goalId ? { ...association, ...patch } : association,
       ),
     );
   }
   useEffect(() => {
-    if (
-      !newRecordRequestId ||
-      openedNewRecordRef.current === newRecordRequestId
-    )
-      return;
+    if (!newRecordRequestId || openedNewRecordRef.current === newRecordRequestId) return;
 
     queueMicrotask(() => {
       recordDraftRevision.current += 1;
@@ -464,14 +395,11 @@ export function RecordsView() {
       setCreditCardId(nextCard?.id ?? "");
       setCurrency(
         nextCard?.limitCurrency ??
-          dataset.accounts.find((account) => account.id === nextAccountId)
-            ?.currency ??
+          dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
           "UYU",
       );
       setExchangeRateToLimitCurrency("1");
-      setDestinationAccountId(
-        defaultDestinationAccountId(dataset, nextAccountId),
-      );
+      setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
       setCategoryId("");
       setAmount("");
       conversionBasis.current = {};
@@ -487,14 +415,9 @@ export function RecordsView() {
       setPaymentStatus(dataset.settings.defaultPaymentStatus);
       setGoalAssociations([]);
       if (newRecordTemplateId) {
-        const template = dataset.recordTemplates?.find(
-          (item) => item.id === newRecordTemplateId,
-        );
+        const template = dataset.recordTemplates?.find((item) => item.id === newRecordTemplateId);
         if (template) {
-          const { value, limitRate, problems } = prepareTemplateDraft(
-            template,
-            dataset,
-          );
+          const { value, limitRate, problems } = prepareTemplateDraft(template, dataset);
           setType(value.type);
           setAmount(String(value.amount));
           setCurrency(value.currency);
@@ -532,9 +455,7 @@ export function RecordsView() {
     const periodRecords =
       selectedPeriodMode !== "month"
         ? recordsForDateRange(dataset.records, selectedDateRange)
-        : dataset.records.filter((record) =>
-            record.occurredAt.startsWith(selectedMonth),
-          );
+        : dataset.records.filter((record) => record.occurredAt.startsWith(selectedMonth));
 
     return periodRecords
       .filter((record) =>
@@ -548,9 +469,7 @@ export function RecordsView() {
           : record.paymentStatus === recordFilters.paymentStatus,
       )
       .filter((record) =>
-        recordFilters.creditCardId
-          ? record.creditCardId === recordFilters.creditCardId
-          : true,
+        recordFilters.creditCardId ? record.creditCardId === recordFilters.creditCardId : true,
       )
       .filter((record) =>
         recordFilters.accountId
@@ -561,62 +480,35 @@ export function RecordsView() {
       .filter((record) =>
         recordFilters.categoryId
           ? record.categoryId &&
-            isCategoryOrDescendant(
-              dataset.categories,
-              record.categoryId,
-              recordFilters.categoryId,
-            )
+            isCategoryOrDescendant(dataset.categories, record.categoryId, recordFilters.categoryId)
           : true,
       )
       .filter((record) =>
-        recordFilters.tagId
-          ? record.tagIds.includes(recordFilters.tagId)
-          : true,
+        recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
       )
       .filter((record) =>
-        recordFilters.goalId
-          ? (record.goalIds ?? []).includes(recordFilters.goalId)
-          : true,
+        recordFilters.goalId ? (record.goalIds ?? []).includes(recordFilters.goalId) : true,
       )
       .filter((record) =>
-        (record.note ?? "")
-          .toLowerCase()
-          .includes((recordFilters.note ?? "").trim().toLowerCase()),
+        (record.note ?? "").toLowerCase().includes((recordFilters.note ?? "").trim().toLowerCase()),
       )
       .filter((record) => {
-        const category = dataset.categories.find(
-          (item) => item.id === record.categoryId,
-        );
+        const category = dataset.categories.find((item) => item.id === record.categoryId);
         const tags = record.tagIds
           .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
           .join(" ");
-        const categoryName = category
-          ? formatCategoryName(dataset.categories, category)
-          : "";
+        const categoryName = category ? formatCategoryName(dataset.categories, category) : "";
         const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${record.importMerchant ?? ""} ${tags} ${record.note ?? ""}`;
         return normalizeGlobalSearch(haystack).includes(
           normalizeGlobalSearch(recordFilters.search ?? ""),
         );
       })
-      .sort(
-        (a, b) =>
-          new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-      );
-  }, [
-    dataset,
-    recordFilters,
-    selectedDateRange,
-    selectedMonth,
-    selectedPeriodMode,
-  ]);
+      .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+  }, [dataset, recordFilters, selectedDateRange, selectedMonth, selectedPeriodMode]);
 
   const grouped = groupRecordsByDay(filteredRecords);
-  const filterCategory = categories.find(
-    (category) => category.id === recordFilters.categoryId,
-  );
-  const activeFilters: Array<
-    [keyof RecordFilters, string, string | undefined]
-  > = [
+  const filterCategory = categories.find((category) => category.id === recordFilters.categoryId);
+  const activeFilters: Array<[keyof RecordFilters, string, string | undefined]> = [
     [
       "type",
       "Type",
@@ -628,40 +520,33 @@ export function RecordsView() {
       "accountId",
       "Account",
       recordFilters.accountId &&
-        (dataset.accounts.find((item) => item.id === recordFilters.accountId)
-          ?.name ??
+        (dataset.accounts.find((item) => item.id === recordFilters.accountId)?.name ??
           "Unavailable"),
     ],
     [
       "creditCardId",
       "Card",
       recordFilters.creditCardId &&
-        (dataset.creditCards.find(
-          (item) => item.id === recordFilters.creditCardId,
-        )?.name ??
+        (dataset.creditCards.find((item) => item.id === recordFilters.creditCardId)?.name ??
           "Unavailable"),
     ],
     [
       "categoryId",
       "Category",
       recordFilters.categoryId &&
-        (filterCategory
-          ? formatCategoryName(categories, filterCategory)
-          : "Unavailable"),
+        (filterCategory ? formatCategoryName(categories, filterCategory) : "Unavailable"),
     ],
     [
       "tagId",
       "Tag",
       recordFilters.tagId &&
-        (dataset.tags.find((item) => item.id === recordFilters.tagId)?.name ??
-          "Unavailable"),
+        (dataset.tags.find((item) => item.id === recordFilters.tagId)?.name ?? "Unavailable"),
     ],
     [
       "goalId",
       "Goal",
       recordFilters.goalId &&
-        (dataset.goals.find((item) => item.id === recordFilters.goalId)?.name ??
-          "Unavailable"),
+        (dataset.goals.find((item) => item.id === recordFilters.goalId)?.name ?? "Unavailable"),
     ],
     [
       "paymentStatus",
@@ -692,14 +577,11 @@ export function RecordsView() {
     setCreditCardId(nextType === "expense" ? (defaultCard?.id ?? "") : "");
     setCurrency(
       (nextType === "expense" ? defaultCard?.limitCurrency : undefined) ??
-        dataset.accounts.find((account) => account.id === nextAccountId)
-          ?.currency ??
+        dataset.accounts.find((account) => account.id === nextAccountId)?.currency ??
         "UYU",
     );
     setExchangeRateToLimitCurrency("1");
-    setDestinationAccountId(
-      defaultDestinationAccountId(dataset, nextAccountId),
-    );
+    setDestinationAccountId(defaultDestinationAccountId(dataset, nextAccountId));
     setCategoryId("");
     setAmount("");
     setAccountAmount("");
@@ -752,17 +634,13 @@ export function RecordsView() {
     setAccountId(record.accountId ?? "");
     setCreditCardId(record.creditCardId ?? "");
     setCurrency(record.currency);
-    setExchangeRateToLimitCurrency(
-      String(record.exchangeRateToLimitCurrency ?? 1),
-    );
+    setExchangeRateToLimitCurrency(String(record.exchangeRateToLimitCurrency ?? 1));
     setDestinationAccountId(record.destinationAccountId ?? "");
     setCategoryId(record.categoryId ?? "");
     setAmount(String(record.amount));
     setAccountAmount(String(record.accountAmount ?? record.amount));
     setDestinationAmount(
-      record.destinationAmount === undefined
-        ? ""
-        : String(record.destinationAmount),
+      record.destinationAmount === undefined ? "" : String(record.destinationAmount),
     );
     conversionBasis.current = {
       source:
@@ -805,26 +683,17 @@ export function RecordsView() {
     if (!record) return;
     resetForm(record.type);
     const now = new Date();
-    const account = dataset.accounts.find(
-      (item) => item.id === record.accountId && item.isActive,
-    );
+    const account = dataset.accounts.find((item) => item.id === record.accountId && item.isActive);
     const card =
       record.type === "expense"
-        ? dataset.creditCards.find(
-            (item) => item.id === record.creditCardId && item.isActive,
-          )
+        ? dataset.creditCards.find((item) => item.id === record.creditCardId && item.isActive)
         : undefined;
     const destination = dataset.accounts.find(
-      (item) =>
-        item.id === record.destinationAccountId &&
-        item.isActive &&
-        item.id !== account?.id,
+      (item) => item.id === record.destinationAccountId && item.isActive && item.id !== account?.id,
     );
     setAccountId(account?.id ?? "");
     setCreditCardId(card?.id ?? "");
-    setDestinationAccountId(
-      record.type === "transfer" ? (destination?.id ?? "") : "",
-    );
+    setDestinationAccountId(record.type === "transfer" ? (destination?.id ?? "") : "");
     setCurrency(record.currency);
     setAmount(String(record.amount));
     setCategoryId(record.categoryId ?? "");
@@ -926,11 +795,7 @@ export function RecordsView() {
   function markReviewQueueSeen() {
     const newest = dataset.records
       .filter((record) => record.paymentStatus === "needs_review")
-      .reduce(
-        (latest, record) =>
-          Math.max(latest, Date.parse(recordReviewDate(record)) || 0),
-        0,
-      );
+      .reduce((latest, record) => Math.max(latest, Date.parse(recordReviewDate(record)) || 0), 0);
     if (newest > 0) {
       void runAction(
         () =>
@@ -961,12 +826,7 @@ export function RecordsView() {
     setDestinationAmount("");
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
     setExchangeRateToLimitCurrency(
-      card
-        ? String(
-            findExchangeRate(dataset.exchangeRates, next, card.limitCurrency) ??
-              "",
-          )
-        : "1",
+      card ? String(findExchangeRate(dataset.exchangeRates, next, card.limitCurrency) ?? "") : "1",
     );
   }
 
@@ -987,33 +847,15 @@ export function RecordsView() {
         : dateTimeLocalToIso(occurredAtLocal);
     const frozenPrimaryRate =
       Number(primaryRate) ||
-      findExchangeRate(
-        dataset.exchangeRates,
-        currency,
-        dataset.settings.primaryCurrency,
-        date,
-      );
+      findExchangeRate(dataset.exchangeRates, currency, dataset.settings.primaryCurrency, date);
     const sourceRate = account
-      ? findExchangeRate(
-          dataset.exchangeRates,
-          currency,
-          account.currency,
-          date,
-        )
+      ? findExchangeRate(dataset.exchangeRates, currency, account.currency, date)
       : 1;
-    const destination = dataset.accounts.find(
-      (item) => item.id === destinationAccountId,
-    );
+    const destination = dataset.accounts.find((item) => item.id === destinationAccountId);
     const destinationRate = destination
-      ? findExchangeRate(
-          dataset.exchangeRates,
-          currency,
-          destination.currency,
-          date,
-        )
+      ? findExchangeRate(dataset.exchangeRates, currency, destination.currency, date)
       : 1;
-    const unchangedAmount =
-      original?.amount === numericAmount && original.currency === currency;
+    const unchangedAmount = original?.amount === numericAmount && original.currency === currency;
     const sourceAmount = account
       ? recordAccountAmount(
           numericAmount,
@@ -1032,8 +874,7 @@ export function RecordsView() {
             destination.currency,
             destinationAmount,
             destinationRate,
-            unchangedAmount &&
-              original?.destinationAccountId === destinationAccountId,
+            unchangedAmount && original?.destinationAccountId === destinationAccountId,
           )
         : undefined;
     if (
@@ -1057,8 +898,7 @@ export function RecordsView() {
       accountId: accountId || undefined,
       accountAmount: sourceAmount,
       creditCardId: creditCardId || undefined,
-      destinationAccountId:
-        type === "transfer" ? destinationAccountId : undefined,
+      destinationAccountId: type === "transfer" ? destinationAccountId : undefined,
       destinationAmount: targetAmount,
       categoryId: type === "transfer" ? undefined : categoryId,
       counterpartyName: counterpartyName.trim() || undefined,
@@ -1084,27 +924,15 @@ export function RecordsView() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (recordSubmission.current) return;
-    if (
-      creditCardId &&
-      type !== "expense" &&
-      !editingLinkedRefund &&
-      !statusOnlyCancellation
-    ) {
+    if (creditCardId && type !== "expense" && !editingLinkedRefund && !statusOnlyCancellation) {
       setMoneyError(
         "Use Cards to refund a purchase. Income and transfers cannot select a credit card.",
       );
       return;
     }
     const nextRecord =
-      editingLinkedRefund || statusOnlyCancellation || reviewMetadataOnly
-        ? null
-        : buildRecord();
-    if (
-      !nextRecord &&
-      !editingLinkedRefund &&
-      !statusOnlyCancellation &&
-      !reviewMetadataOnly
-    )
+      editingLinkedRefund || statusOnlyCancellation || reviewMetadataOnly ? null : buildRecord();
+    if (!nextRecord && !editingLinkedRefund && !statusOnlyCancellation && !reviewMetadataOnly)
       return;
     recordSubmission.current = true;
     const revision = recordDraftRevision.current;
@@ -1190,8 +1018,7 @@ export function RecordsView() {
           aria-label="Open review queue"
           aria-pressed={isReviewQueueOpen}
         >
-          Needs review{" "}
-          {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
+          Needs review {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
           {isAllHistoryComplete && newReviewCount > 0 && (
             <Badge variant="warning">{newReviewCount} new</Badge>
           )}
@@ -1203,30 +1030,27 @@ export function RecordsView() {
       </PageHeader>
 
       {selectedPeriodMode === "all" && isReviewQueueOpen && (
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <p className="text-sm text-muted-foreground" role="status">
-              Review queue · All dates
-              {isAllHistoryComplete &&
-                ` · ${newReviewCount} new · ${reviewCount - newReviewCount} seen, still pending`}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={!isAllHistoryComplete || !newReviewCount}
-              onClick={markReviewQueueSeen}
-            >
-              Mark queue as seen
-            </Button>
-          </div>
-        )}
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <p className="text-sm text-muted-foreground" role="status">
+            Review queue · All dates
+            {isAllHistoryComplete &&
+              ` · ${newReviewCount} new · ${reviewCount - newReviewCount} seen, still pending`}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!isAllHistoryComplete || !newReviewCount}
+            onClick={markReviewQueueSeen}
+          >
+            Mark queue as seen
+          </Button>
+        </div>
+      )}
       {reviewUndo?.saved?.updatedAt && (
         <div className="mb-4 flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
           <span role="status">
             Saved review for{" "}
-            {reviewUndo.before.importMerchant ??
-              reviewUndo.before.counterpartyName ??
-              "record"}
-            .
+            {reviewUndo.before.importMerchant ?? reviewUndo.before.counterpartyName ?? "record"}.
           </span>
           <Button
             variant="outline"
@@ -1248,9 +1072,7 @@ export function RecordsView() {
       )}
       {merchantCorrections.size > 0 && (
         <details className="mb-4 rounded-md border bg-card p-3">
-          <summary className="cursor-pointer text-sm font-medium">
-            Merchant category rules
-          </summary>
+          <summary className="cursor-pointer text-sm font-medium">Merchant category rules</summary>
           <div className="mt-2 max-h-72 space-y-2 overflow-y-auto">
             {[...merchantCorrections.values()].map(({ record, category }) => (
               <label
@@ -1258,8 +1080,7 @@ export function RecordsView() {
                 className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-sm"
               >
                 <span className="min-w-0 [overflow-wrap:anywhere]">
-                  {record.importMerchant} ·{" "}
-                  {formatCategoryName(categories, category)}
+                  {record.importMerchant} · {formatCategoryName(categories, category)}
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <input
@@ -1280,9 +1101,7 @@ export function RecordsView() {
         </details>
       )}
 
-      {selectedAccountBalance ? (
-        <AccountStateSummary balance={selectedAccountBalance} />
-      ) : null}
+      {selectedAccountBalance ? <AccountStateSummary balance={selectedAccountBalance} /> : null}
 
       <Dialog
         open={isRecordDialogOpen}
@@ -1294,11 +1113,7 @@ export function RecordsView() {
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {editingId ? (
-                <Edit3 className="h-4 w-4" />
-              ) : (
-                <Plus className="h-4 w-4" />
-              )}
+              {editingId ? <Edit3 className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
               {editingId ? "Edit record" : "New record"}
             </DialogTitle>
             <DialogDescription>
@@ -1308,8 +1123,7 @@ export function RecordsView() {
           <form className="space-y-4" onSubmit={handleSubmit}>
             {statusOnlyCancellation && (
               <p role="status" className="text-sm text-muted-foreground">
-                Cancelling preserves the original record and excludes it from
-                balances.
+                Cancelling preserves the original record and excludes it from balances.
               </p>
             )}
             {templateNotice && (
@@ -1319,9 +1133,8 @@ export function RecordsView() {
             )}
             {editingLinkedRefund && (
               <p className="text-sm text-muted-foreground">
-                Bank-linked card refund amounts and payment details are managed
-                in Cards. You can edit its category, counterparty, goals, tags
-                and note here.
+                Bank-linked card refund amounts and payment details are managed in Cards. You can
+                edit its category, counterparty, goals, tags and note here.
               </p>
             )}
             {moneyError && (
@@ -1330,28 +1143,24 @@ export function RecordsView() {
               </p>
             )}
             <div className="grid grid-cols-3 gap-2 rounded-md bg-secondary p-1">
-              {(["expense", "income", "transfer"] as RecordType[]).map(
-                (item) => (
-                  <button
-                    key={item}
-                    disabled={Boolean(editingLinkedRefund)}
-                    type="button"
-                    onClick={() => {
-                      setType(item);
-                      setCategoryId("");
-                      setPaymentType(
-                        item === "transfer" ? "transfer" : "debit",
-                      );
-                      setCreditCardId("");
-                      if (item === "transfer") setGoalAssociations([]);
-                      if (!accountId) setAccountId(defaultAccountId(dataset));
-                    }}
-                    className={typeButtonClassName(item, type)}
-                  >
-                    {recordTypeLabels[item]}
-                  </button>
-                ),
-              )}
+              {(["expense", "income", "transfer"] as RecordType[]).map((item) => (
+                <button
+                  key={item}
+                  disabled={Boolean(editingLinkedRefund)}
+                  type="button"
+                  onClick={() => {
+                    setType(item);
+                    setCategoryId("");
+                    setPaymentType(item === "transfer" ? "transfer" : "debit");
+                    setCreditCardId("");
+                    if (item === "transfer") setGoalAssociations([]);
+                    if (!accountId) setAccountId(defaultAccountId(dataset));
+                  }}
+                  className={typeButtonClassName(item, type)}
+                >
+                  {recordTypeLabels[item]}
+                </button>
+              ))}
             </div>
 
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1365,20 +1174,10 @@ export function RecordsView() {
                     const source = conversionBasis.current.source;
                     const destination = conversionBasis.current.destination;
                     if (source)
-                      setAccountAmount(
-                        scaleConvertedAmount(
-                          source.converted,
-                          source.amount,
-                          next,
-                        ),
-                      );
+                      setAccountAmount(scaleConvertedAmount(source.converted, source.amount, next));
                     if (destination)
                       setDestinationAmount(
-                        scaleConvertedAmount(
-                          destination.converted,
-                          destination.amount,
-                          next,
-                        ),
+                        scaleConvertedAmount(destination.converted, destination.amount, next),
                       );
                     setAmount(next);
                   }}
@@ -1395,9 +1194,7 @@ export function RecordsView() {
                   <select
                     disabled={Boolean(editingLinkedRefund)}
                     value={currency}
-                    onChange={(event) =>
-                      changeCurrency(event.target.value as CurrencyCode)
-                    }
+                    onChange={(event) => changeCurrency(event.target.value as CurrencyCode)}
                     className={fieldClassName}
                   >
                     {["UYU", "USD", "EUR", "BRL", "ARS"].map((value) => (
@@ -1419,9 +1216,7 @@ export function RecordsView() {
                         <input
                           disabled={Boolean(editingLinkedRefund)}
                           value={primaryRate}
-                          onChange={(event) =>
-                            setPrimaryRate(event.target.value)
-                          }
+                          onChange={(event) => setPrimaryRate(event.target.value)}
                           placeholder={String(
                             findExchangeRate(
                               dataset.exchangeRates,
@@ -1436,23 +1231,17 @@ export function RecordsView() {
                       </label>
                     }
                     {accountId &&
-                      dataset.accounts.find((item) => item.id === accountId)
-                        ?.currency !== currency && (
+                      dataset.accounts.find((item) => item.id === accountId)?.currency !==
+                        currency && (
                         <label className="space-y-1 text-sm">
                           Account amount (
-                          {
-                            dataset.accounts.find(
-                              (item) => item.id === accountId,
-                            )?.currency
-                          }
+                          {dataset.accounts.find((item) => item.id === accountId)?.currency}
                           )
                           <input
                             disabled={Boolean(editingLinkedRefund)}
                             value={accountAmount}
                             onChange={(event) => {
-                              const next = limitDecimalPlaces(
-                                event.target.value,
-                              );
+                              const next = limitDecimalPlaces(event.target.value);
                               setAccountAmount(next);
                               conversionBasis.current.source =
                                 Number(amount) > 0 && Number(next) > 0
@@ -1469,9 +1258,8 @@ export function RecordsView() {
                       <label className="space-y-1 text-sm">
                         Received amount (
                         {
-                          dataset.accounts.find(
-                            (item) => item.id === destinationAccountId,
-                          )?.currency
+                          dataset.accounts.find((item) => item.id === destinationAccountId)
+                            ?.currency
                         }
                         )
                         <input
@@ -1497,9 +1285,7 @@ export function RecordsView() {
                         <input
                           disabled={Boolean(editingLinkedRefund)}
                           value={exchangeRateToLimitCurrency}
-                          onChange={(event) =>
-                            setExchangeRateToLimitCurrency(event.target.value)
-                          }
+                          onChange={(event) => setExchangeRateToLimitCurrency(event.target.value)}
                           className={fieldClassName}
                           inputMode="decimal"
                         />
@@ -1526,9 +1312,7 @@ export function RecordsView() {
                     setAccountAmount("");
                     conversionBasis.current.source = undefined;
                     if (!editingId && !creditCardId) {
-                      const next = dataset.accounts.find(
-                        (item) => item.id === nextId,
-                      );
+                      const next = dataset.accounts.find((item) => item.id === nextId);
                       if (next) changeCurrency(next.currency);
                       setPrimaryRate("");
                     }
@@ -1538,13 +1322,10 @@ export function RecordsView() {
                   {!(
                     type === "expense" &&
                     creditCardId &&
-                    dataset.records.find((record) => record.id === editingId)
-                      ?.accountId
+                    dataset.records.find((record) => record.id === editingId)?.accountId
                   ) && (
                     <option value="">
-                      {type === "expense" && creditCardId
-                        ? "Card only"
-                        : "Choose account"}
+                      {type === "expense" && creditCardId ? "Card only" : "Choose account"}
                     </option>
                   )}
                   {dataset.accounts
@@ -1558,9 +1339,7 @@ export function RecordsView() {
               </label>
               {type === "transfer" ? (
                 <label className="block space-y-2">
-                  <span className="text-sm font-medium">
-                    Destination account
-                  </span>
+                  <span className="text-sm font-medium">Destination account</span>
                   <select
                     disabled={Boolean(editingLinkedRefund)}
                     value={destinationAccountId}
@@ -1575,9 +1354,7 @@ export function RecordsView() {
                     {dataset.accounts
                       .filter(
                         (account) =>
-                          account.isActive &&
-                          account.isVisible &&
-                          account.id !== accountId,
+                          account.isActive && account.isVisible && account.id !== accountId,
                       )
                       .map((account) => (
                         <option key={account.id} value={account.id}>
@@ -1594,9 +1371,7 @@ export function RecordsView() {
                     value={categoryId}
                     onChange={setCategoryId}
                     inputClassName={fieldClassName}
-                    getLabel={(category) =>
-                      formatCategoryName(dataset.categories, category)
-                    }
+                    getLabel={(category) => formatCategoryName(dataset.categories, category)}
                   />
                 </div>
               )}
@@ -1636,9 +1411,7 @@ export function RecordsView() {
                     const value = event.target.value;
                     if (value.startsWith("card:")) {
                       const nextCardId = value.slice(5);
-                      const card = dataset.creditCards.find(
-                        (item) => item.id === nextCardId,
-                      );
+                      const card = dataset.creditCards.find((item) => item.id === nextCardId);
                       setCreditCardId(nextCardId);
                       setPaymentType("credit");
                       changeCurrency(card?.limitCurrency ?? "UYU");
@@ -1647,12 +1420,9 @@ export function RecordsView() {
                     }
                     setCreditCardId("");
                     setPaymentType(value as PaymentType);
-                    const nextAccountId =
-                      accountId || defaultAccountId(dataset);
+                    const nextAccountId = accountId || defaultAccountId(dataset);
                     setAccountId(nextAccountId);
-                    const account = dataset.accounts.find(
-                      (item) => item.id === nextAccountId,
-                    );
+                    const account = dataset.accounts.find((item) => item.id === nextAccountId);
                     if (account) changeCurrency(account.currency);
                   }}
                   className={fieldClassName}
@@ -1682,9 +1452,7 @@ export function RecordsView() {
                       .filter(
                         (goal) =>
                           goal.status === "active" ||
-                          goalAssociations.some(
-                            (association) => association.goalId === goal.id,
-                          ),
+                          goalAssociations.some((association) => association.goalId === goal.id),
                       )
                       .map((goal) => {
                         const association = goalAssociations.find(
@@ -1698,9 +1466,7 @@ export function RecordsView() {
                             onClick={() =>
                               setGoalAssociations((current) =>
                                 association
-                                  ? current.filter(
-                                      (item) => item.goalId !== goal.id,
-                                    )
+                                  ? current.filter((item) => item.goalId !== goal.id)
                                   : [
                                       ...current,
                                       {
@@ -1727,31 +1493,21 @@ export function RecordsView() {
                             }
                           >
                             {goal.name}
-                            {association?.assignmentSource === "date_rule"
-                              ? " · automatic"
-                              : ""}
+                            {association?.assignmentSource === "date_rule" ? " · automatic" : ""}
                           </button>
                         );
                       })}
                     {dataset.goals.length === 0 ? (
-                      <span className="text-xs text-muted-foreground">
-                        No active goals
-                      </span>
+                      <span className="text-xs text-muted-foreground">No active goals</span>
                     ) : null}
                   </div>
                   {goalAssociations.map((association) => {
-                    const goal = dataset.goals.find(
-                      (item) => item.id === association.goalId,
-                    );
+                    const goal = dataset.goals.find((item) => item.id === association.goalId);
                     if (!goal) return null;
-                    const key =
-                      type === "income" ? "reserveIncome" : "useReserved";
+                    const key = type === "income" ? "reserveIncome" : "useReserved";
 
                     return (
-                      <div
-                        key={goal.id}
-                        className="space-y-2 rounded-md border p-2"
-                      >
+                      <div key={goal.id} className="space-y-2 rounded-md border p-2">
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
@@ -1762,23 +1518,17 @@ export function RecordsView() {
                               })
                             }
                           />
-                          {type === "income"
-                            ? "Reserve this income again"
-                            : "Use reserved funds"}{" "}
-                          · {goal.name}
+                          {type === "income" ? "Reserve this income again" : "Use reserved funds"} ·{" "}
+                          {goal.name}
                         </label>
                         <label className="block space-y-1 text-xs text-muted-foreground">
                           <span>Amount for this goal</span>
                           <input
                             value={association.allocatedAmount ?? ""}
                             onChange={(event) => {
-                              const value = limitDecimalPlaces(
-                                event.target.value,
-                              );
+                              const value = limitDecimalPlaces(event.target.value);
                               updateGoalAssociation(goal.id, {
-                                allocatedAmount: value
-                                  ? Number(value)
-                                  : undefined,
+                                allocatedAmount: value ? Number(value) : undefined,
                               });
                             }}
                             className={fieldClassName}
@@ -1788,18 +1538,13 @@ export function RecordsView() {
                             step="0.01"
                             placeholder={
                               amount
-                                ? `Entire record (${formatMoney(
-                                    numericAmount,
-                                    currency,
-                                  )})`
+                                ? `Entire record (${formatMoney(numericAmount, currency)})`
                                 : "Entire record"
                             }
                           />
                           {association.allocatedAmount !== undefined &&
                           association.allocatedAmount > numericAmount ? (
-                            <span className="text-red-600">
-                              Cannot exceed the record amount.
-                            </span>
+                            <span className="text-red-600">Cannot exceed the record amount.</span>
                           ) : null}
                         </label>
                       </div>
@@ -1814,30 +1559,25 @@ export function RecordsView() {
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">Status</legend>
               <div className="grid grid-cols-2 gap-2 rounded-md bg-secondary p-1 sm:grid-cols-4">
-                {(
-                  [
-                    "cleared",
-                    "pending",
-                    "needs_review",
-                    "cancelled",
-                  ] as PaymentStatus[]
-                ).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    aria-label={`Set status to ${paymentStatusLabels[item]}`}
-                    aria-pressed={paymentStatus === item}
-                    disabled={Boolean(editingLinkedRefund)}
-                    onClick={() => setPaymentStatus(item)}
-                    className={
-                      paymentStatus === item
-                        ? "rounded-md bg-background px-2 py-2 text-sm font-medium shadow-sm"
-                        : "rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-background/60"
-                    }
-                  >
-                    {paymentStatusLabels[item]}
-                  </button>
-                ))}
+                {(["cleared", "pending", "needs_review", "cancelled"] as PaymentStatus[]).map(
+                  (item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      aria-label={`Set status to ${paymentStatusLabels[item]}`}
+                      aria-pressed={paymentStatus === item}
+                      disabled={Boolean(editingLinkedRefund)}
+                      onClick={() => setPaymentStatus(item)}
+                      className={
+                        paymentStatus === item
+                          ? "rounded-md bg-background px-2 py-2 text-sm font-medium shadow-sm"
+                          : "rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-background/60"
+                      }
+                    >
+                      {paymentStatusLabels[item]}
+                    </button>
+                  ),
+                )}
               </div>
             </fieldset>
 
@@ -1876,21 +1616,13 @@ export function RecordsView() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={closeRecordDialog}
-                >
+                <Button type="button" variant="outline" onClick={closeRecordDialog}>
                   <X className="h-4 w-4" />
                   Cancel
                 </Button>
               )}
               <Button type="submit" disabled={!canSubmit}>
-                {editingId ? (
-                  <Save className="h-4 w-4" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
+                {editingId ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                 {editingId ? "Save changes" : "Add"}
               </Button>
             </div>
@@ -1927,11 +1659,11 @@ export function RecordsView() {
             <select
               value={recordFilters.paymentStatus ?? "all"}
               onChange={(event) => {
-                if (isReviewQueueOpen && event.target.value === "all")
-                  closeReviewQueue();
-                else setRecordFilters({
-                  paymentStatus: event.target.value as PaymentStatus | "all",
-                });
+                if (isReviewQueueOpen && event.target.value === "all") closeReviewQueue();
+                else
+                  setRecordFilters({
+                    paymentStatus: event.target.value as PaymentStatus | "all",
+                  });
               }}
               className={fieldClassName}
             >
@@ -1943,9 +1675,7 @@ export function RecordsView() {
             </select>
             <select
               value={recordFilters.accountId ?? ""}
-              onChange={(event) =>
-                setRecordFilters({ accountId: event.target.value || undefined })
-              }
+              onChange={(event) => setRecordFilters({ accountId: event.target.value || undefined })}
               className={fieldClassName}
             >
               <option value="">Accounts</option>
@@ -1960,9 +1690,7 @@ export function RecordsView() {
               onChange={(event) =>
                 setRecordFilters({
                   creditCardId: event.target.value || undefined,
-                  accountId: event.target.value
-                    ? undefined
-                    : recordFilters.accountId,
+                  accountId: event.target.value ? undefined : recordFilters.accountId,
                 })
               }
               className={fieldClassName}
@@ -1991,9 +1719,7 @@ export function RecordsView() {
                   }}
                   rows={4}
                   value={recordFilters.note ?? ""}
-                  onChange={(event) =>
-                    setRecordFilters({ note: event.target.value })
-                  }
+                  onChange={(event) => setRecordFilters({ note: event.target.value })}
                   className={noteFieldClassName}
                   placeholder="Paste part of a note"
                 />
@@ -2028,8 +1754,7 @@ export function RecordsView() {
           <CardHeader>
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle>
-                {filteredRecords.length}{" "}
-                {filteredRecords.length === 1 ? "record" : "records"}
+                {filteredRecords.length} {filteredRecords.length === 1 ? "record" : "records"}
               </CardTitle>
               <div className="flex flex-wrap gap-2">
                 {!isSelectedRangeComplete ? (
@@ -2045,10 +1770,7 @@ export function RecordsView() {
               </div>
             </div>
             {appliedFilters.length > 0 && (
-              <div
-                className="flex flex-wrap items-center gap-2"
-                aria-label="Active filters"
-              >
+              <div className="flex flex-wrap items-center gap-2" aria-label="Active filters">
                 {appliedFilters.map(([key, label, value]) => (
                   <button
                     key={key}
@@ -2057,8 +1779,7 @@ export function RecordsView() {
                     aria-label={`Remove ${label} filter`}
                     title={value}
                     onClick={() => {
-                      if (key === "paymentStatus" && isReviewQueueOpen)
-                        closeReviewQueue();
+                      if (key === "paymentStatus" && isReviewQueueOpen) closeReviewQueue();
                       else setRecordFilters({ [key]: undefined });
                       if (key === "note") setShowNoteFilter(false);
                     }}
@@ -2095,7 +1816,9 @@ export function RecordsView() {
                 {isSelectedRangeComplete && appliedFilters.length > 0 && (
                   <ul className="list-disc space-y-1 pl-5 [overflow-wrap:anywhere]">
                     {appliedFilters.map(([key, label, value]) => (
-                      <li key={key}><strong>{label}</strong> · {value}</li>
+                      <li key={key}>
+                        <strong>{label}</strong> · {value}
+                      </li>
                     ))}
                   </ul>
                 )}
@@ -2104,21 +1827,15 @@ export function RecordsView() {
             {Object.entries(grouped).map(([day, records]) => (
               <div key={day}>
                 <div className="mb-2 flex items-center justify-between text-sm">
-                  <p className="font-semibold">
-                    {format(parseISO(day), "dd/MM/yyyy")}
-                  </p>
-                  <p className="text-muted-foreground">
-                    {records.length} records
-                  </p>
+                  <p className="font-semibold">{format(parseISO(day), "dd/MM/yyyy")}</p>
+                  <p className="text-muted-foreground">{records.length} records</p>
                 </div>
                 <div className="space-y-2">
                   {records.map((record) => {
                     const category = dataset.categories.find(
                       (item) => item.id === record.categoryId,
                     );
-                    const account = dataset.accounts.find(
-                      (item) => item.id === record.accountId,
-                    );
+                    const account = dataset.accounts.find((item) => item.id === record.accountId);
                     const creditCard = dataset.creditCards.find(
                       (item) => item.id === record.creditCardId,
                     );
@@ -2129,9 +1846,7 @@ export function RecordsView() {
                     const review = record.paymentStatus === "needs_review";
                     const parsedNote = splitImportNote(record.note);
                     const correction = record.importMerchant
-                      ? merchantCorrections.get(
-                          normalizeBankMerchant(record.importMerchant),
-                        )
+                      ? merchantCorrections.get(normalizeBankMerchant(record.importMerchant))
                       : undefined;
                     return (
                       <article
@@ -2170,10 +1885,7 @@ export function RecordsView() {
                               />
                               <p className="font-medium">
                                 {category
-                                  ? formatCategoryName(
-                                      dataset.categories,
-                                      category,
-                                    )
+                                  ? formatCategoryName(dataset.categories, category)
                                   : record.type === "transfer"
                                     ? "Transfer"
                                     : "Uncategorized"}
@@ -2191,16 +1903,13 @@ export function RecordsView() {
                               </Badge>
                               <Badge
                                 variant={
-                                  record.paymentStatus === "needs_review"
-                                    ? "warning"
-                                    : "muted"
+                                  record.paymentStatus === "needs_review" ? "warning" : "muted"
                                 }
                               >
                                 {paymentStatusLabels[record.paymentStatus]}
                               </Badge>
                               {review &&
-                                Date.parse(recordReviewDate(record)) >
-                                  reviewSeenThrough && (
+                                Date.parse(recordReviewDate(record)) > reviewSeenThrough && (
                                   <Badge variant="warning">New</Badge>
                                 )}
                             </div>
@@ -2208,8 +1917,7 @@ export function RecordsView() {
                               <span className="font-medium text-foreground">
                                 {[
                                   account?.name,
-                                  creditCard &&
-                                    `${creditCard.name} **** ${creditCard.lastFour}`,
+                                  creditCard && `${creditCard.name} **** ${creditCard.lastFour}`,
                                 ]
                                   .filter(Boolean)
                                   .join(" · ")}
@@ -2217,9 +1925,7 @@ export function RecordsView() {
                               {record.importMerchant || record.counterpartyName
                                 ? ` - ${record.importMerchant ?? record.counterpartyName}`
                                 : " - No counterparty"}
-                              {parsedNote.note
-                                ? ` - ${parsedNote.note}`
-                                : " - No note"}
+                              {parsedNote.note ? ` - ${parsedNote.note}` : " - No note"}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-1">
                               {tags.map((tag) =>
@@ -2292,18 +1998,14 @@ export function RecordsView() {
                             categories={reviewCategories}
                             suggestion={correction?.category}
                             autoApply={Boolean(
-                              correction?.record.merchantCorrection
-                                ?.autoApply &&
+                              correction?.record.merchantCorrection?.autoApply &&
                               correction.category.id === record.categoryId,
                             )}
                             busy={Boolean(reviewWrite)}
                             onSave={(patch) => void saveReview(record, patch)}
                           />
                         )}
-                        {Boolean(
-                          record.importHistory?.length ||
-                          parsedNote.history.length,
-                        ) && (
+                        {Boolean(record.importHistory?.length || parsedNote.history.length) && (
                           <div className="px-3 pb-3">
                             <ImportHistory record={record} />
                           </div>
@@ -2321,9 +2023,7 @@ export function RecordsView() {
                   disabled={isLoadingMoreRecords}
                   onClick={() => void loadMoreRecords()}
                 >
-                  {isLoadingMoreRecords
-                    ? "Loading records..."
-                    : "Load older records"}
+                  {isLoadingMoreRecords ? "Loading records..." : "Load older records"}
                 </Button>
               </div>
             ) : null}
@@ -2336,10 +2036,7 @@ export function RecordsView() {
 
 function ImportHistory({ record }: { record: WalletRecord }) {
   const history = [
-    ...new Set([
-      ...(record.importHistory ?? []),
-      ...splitImportNote(record.note).history,
-    ]),
+    ...new Set([...(record.importHistory ?? []), ...splitImportNote(record.note).history]),
   ];
   if (!history.length) return null;
   return (
@@ -2380,36 +2077,25 @@ function ReviewRecordActions({
   const issues = currentReviewIssues(record, dataset);
   const needsCategory = record.type !== "transfer" && !selectedCategory;
   const currentNeedsCategory =
-    record.type !== "transfer" &&
-    !categories.some((category) => category.id === record.categoryId);
+    record.type !== "transfer" && !categories.some((category) => category.id === record.categoryId);
   const canRemember = Boolean(
-    record.importMerchant &&
-    record.type === "expense" &&
-    record.paymentType !== "transfer",
+    record.importMerchant && record.type === "expense" && record.paymentType !== "transfer",
   );
   const canClear = !needsCategory && issues.length === 0;
   const reason =
-    [...issues, ...(currentNeedsCategory ? ["Choose a category"] : [])].join(
-      " · ",
-    ) || "Ready to review";
+    [...issues, ...(currentNeedsCategory ? ["Choose a category"] : [])].join(" · ") ||
+    "Ready to review";
 
   function save(clear: boolean) {
     onSave({
-      ...(selectedCategory && record.type !== "transfer"
-        ? { categoryId: selectedCategory }
-        : {}),
+      ...(selectedCategory && record.type !== "transfer" ? { categoryId: selectedCategory } : {}),
       ...(clear ? { paymentStatus: "cleared" } : {}),
-      ...(canRemember && ruleChoice !== undefined
-        ? { merchantAutoApply: ruleChoice }
-        : {}),
+      ...(canRemember && ruleChoice !== undefined ? { merchantAutoApply: ruleChoice } : {}),
     });
   }
 
   return (
-    <section
-      aria-label="Review actions"
-      className="space-y-2 border-t border-amber-400/40 p-3"
-    >
+    <section aria-label="Review actions" className="space-y-2 border-t border-amber-400/40 p-3">
       <p className="text-sm font-medium">{reason}</p>
       {record.type !== "transfer" && (
         <div className="max-w-sm">
@@ -2444,10 +2130,7 @@ function ReviewRecordActions({
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            checked={
-              ruleChoice ??
-              (autoApply && selectedCategory === record.categoryId)
-            }
+            checked={ruleChoice ?? (autoApply && selectedCategory === record.categoryId)}
             disabled={busy}
             onChange={(event) => setRuleChoice(event.target.checked)}
           />
@@ -2463,8 +2146,7 @@ function ReviewRecordActions({
             disabled={
               busy ||
               needsCategory ||
-              (selectedCategory === record.categoryId &&
-                ruleChoice === undefined)
+              (selectedCategory === record.categoryId && ruleChoice === undefined)
             }
             onClick={() => save(false)}
           >

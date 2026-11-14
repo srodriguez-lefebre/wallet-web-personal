@@ -49,11 +49,7 @@ test("data check uses one complete snapshot for repeated clicks and opens the re
   });
   const button = tree!.root
     .findAllByType("button")
-    .find((button) =>
-      button
-        .findAllByType("p")
-        .some((p) => p.children.includes("Needs review")),
-    )!;
+    .find((button) => button.findAllByType("p").some((p) => p.children.includes("Needs review")))!;
   expect(button.findAllByType("p")[1].children).toEqual(["1"]);
   await act(async () => button.props.onClick());
   expect(review).toHaveBeenCalledTimes(1);
@@ -74,9 +70,7 @@ test("a failed data check gives feedback and can be retried", async () => {
     );
   });
   await act(async () => tree!.root.findByType("button").props.onClick());
-  expect(tree!.root.findByProps({ role: "alert" }).children.join("")).toContain(
-    "Retry",
-  );
+  expect(tree!.root.findByProps({ role: "alert" }).children.join("")).toContain("Retry");
   await act(async () => tree!.root.findByType("button").props.onClick());
   expect(snapshot).toHaveBeenCalledTimes(2);
   expect(tree!.root.findAllByProps({ role: "alert" })).toHaveLength(0);

@@ -4,9 +4,7 @@ import { mockWalletData } from "./mock-data.js";
 
 function dataset() {
   const data = structuredClone(mockWalletData);
-  data.goals = [
-    { ...data.goals[0], id: "goal-trip", currency: "USD", targetAmount: 1000 },
-  ];
+  data.goals = [{ ...data.goals[0], id: "goal-trip", currency: "USD", targetAmount: 1000 }];
   data.goalReservations = [];
   data.records = [
     {

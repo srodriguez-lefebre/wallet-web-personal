@@ -20,12 +20,7 @@ import type {
   RecordTemplatePatch,
   SettingsPatch,
 } from "@shared/schemas";
-import {
-  availableMonthKeys,
-  dateKey,
-  dateRangeForMonth,
-  monthKey,
-} from "@shared/calculations";
+import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
 import type {
   Account,
   Budget,
@@ -70,32 +65,20 @@ interface WalletContextValue {
   openReviewQueue: () => void;
   closeReviewQueue: () => void;
   addAccount: (account: Omit<Account, "id">) => Promise<string>;
-  updateAccount: (
-    accountId: string,
-    account: Omit<Account, "id">,
-  ) => Promise<void>;
+  updateAccount: (accountId: string, account: Omit<Account, "id">) => Promise<void>;
   deleteAccount: (accountId: string) => Promise<void>;
   addRecord: (record: Omit<WalletRecord, "id">) => Promise<void>;
   importRecords: (records: Array<Omit<WalletRecord, "id">>) => Promise<number>;
   updateRecord: (recordId: string, record: RecordPatch) => Promise<WalletRecord>;
   deleteRecord: (recordId: string) => Promise<void>;
   addRecordTemplate: (template: Omit<RecordTemplate, "id">) => Promise<string>;
-  updateRecordTemplate: (
-    templateId: string,
-    template: RecordTemplatePatch,
-  ) => Promise<void>;
+  updateRecordTemplate: (templateId: string, template: RecordTemplatePatch) => Promise<void>;
   deleteRecordTemplate: (templateId: string) => Promise<void>;
   addCategory: (category: Omit<Category, "id">) => Promise<string>;
-  updateCategory: (
-    categoryId: string,
-    category: Omit<Category, "id">,
-  ) => Promise<void>;
+  updateCategory: (categoryId: string, category: Omit<Category, "id">) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   addCreditCard: (card: Omit<CreditCard, "id">) => Promise<string>;
-  updateCreditCard: (
-    cardId: string,
-    card: Omit<CreditCard, "id">,
-  ) => Promise<void>;
+  updateCreditCard: (cardId: string, card: Omit<CreditCard, "id">) => Promise<void>;
   deleteCreditCard: (cardId: string) => Promise<void>;
   addCreditCardPayment: (
     cardId: string,
@@ -103,26 +86,17 @@ interface WalletContextValue {
   ) => Promise<void>;
   addCreditCardRecord: (
     cardId: string,
-    movement: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) => Promise<void>;
   updateCreditCardRecord: (
     cardId: string,
     movementId: string,
-    movement: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) => Promise<void>;
   deleteCreditCardRecord: (cardId: string, movementId: string) => Promise<void>;
   addCreditCardRefund: (
     cardId: string,
-    movement: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    movement: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) => Promise<void>;
   payCreditCardStatement: (
     cardId: string,
@@ -137,9 +111,7 @@ interface WalletContextValue {
   addGoal: (goal: Omit<Goal, "id">) => Promise<string>;
   updateGoal: (goalId: string, goal: GoalPatch) => Promise<void>;
   deleteGoal: (goalId: string) => Promise<void>;
-  addGoalReservation: (
-    reservation: Omit<GoalReservation, "id">,
-  ) => Promise<void>;
+  addGoalReservation: (reservation: Omit<GoalReservation, "id">) => Promise<void>;
   deleteGoalReservation: (reservationId: string) => Promise<void>;
   releaseGoalReservation: (value: {
     goalId: string;
@@ -151,16 +123,10 @@ interface WalletContextValue {
   updateBudget: (budgetId: string, budget: Omit<Budget, "id">) => Promise<void>;
   deleteBudget: (budgetId: string) => Promise<void>;
   addInvestment: (investment: Omit<Investment, "id">) => Promise<string>;
-  updateInvestment: (
-    investmentId: string,
-    investment: InvestmentPatch,
-  ) => Promise<void>;
+  updateInvestment: (investmentId: string, investment: InvestmentPatch) => Promise<void>;
   deleteInvestment: (investmentId: string) => Promise<void>;
   addInstallmentPlan: (plan: Omit<InstallmentPlan, "id">) => Promise<string>;
-  updateInstallmentPlan: (
-    planId: string,
-    plan: Omit<InstallmentPlan, "id">,
-  ) => Promise<void>;
+  updateInstallmentPlan: (planId: string, plan: Omit<InstallmentPlan, "id">) => Promise<void>;
   deleteInstallmentPlan: (planId: string) => Promise<void>;
   addDebt: (debt: Omit<Debt, "id">) => Promise<string>;
   updateDebt: (debtId: string, debt: Omit<Debt, "id">) => Promise<void>;
@@ -177,9 +143,7 @@ interface WalletContextValue {
       idempotencyKey?: string;
     },
   ) => Promise<void>;
-  addRecurringDebt: (
-    recurringDebt: Omit<RecurringDebt, "id">,
-  ) => Promise<string>;
+  addRecurringDebt: (recurringDebt: Omit<RecurringDebt, "id">) => Promise<string>;
   updateRecurringDebt: (
     recurringDebtId: string,
     recurringDebt: Omit<RecurringDebt, "id">,
@@ -266,8 +230,7 @@ function readCachedDataset(token: string | null) {
       parsed.environment !== environment
     )
       return null;
-    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs)
-      return null;
+    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs) return null;
     return parsed;
   } catch {
     return null;
@@ -319,12 +282,8 @@ function allHistoryDateRange(records: WalletRecord[]): DateRange {
 
   const dates = records.map((record) => dateKey(record.occurredAt));
   return {
-    from: dates.reduce((oldest, current) =>
-      current < oldest ? current : oldest,
-    ),
-    to: dates.reduce((latest, current) =>
-      current > latest ? current : latest,
-    ),
+    from: dates.reduce((oldest, current) => (current < oldest ? current : oldest)),
+    to: dates.reduce((latest, current) => (current > latest ? current : latest)),
   };
 }
 
@@ -334,9 +293,7 @@ function defaultRecordAccountId(dataset: WalletDataset) {
   );
 
   return (
-    activeVisibleAccounts.find(
-      (account) => account.id === dataset.settings.primaryAccountId,
-    )?.id ??
+    activeVisibleAccounts.find((account) => account.id === dataset.settings.primaryAccountId)?.id ??
     activeVisibleAccounts[0]?.id ??
     dataset.accounts.find((account) => account.isActive)?.id
   );
@@ -359,14 +316,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
   const [pendingReads, setPendingReads] = useState(1);
   const isRefreshing = pendingReads > 0;
   const [loadError, setLoadError] = useState("");
-  const [selectedMonth, setSelectedMonthState] = useState(() =>
-    monthKey(new Date()),
-  );
-  const [selectedPeriodMode, setSelectedPeriodMode] =
-    useState<PeriodMode>("month");
-  const [customDateRange, setCustomDateRangeState] = useState(
-    defaultCustomDateRange,
-  );
+  const [selectedMonth, setSelectedMonthState] = useState(() => monthKey(new Date()));
+  const [selectedPeriodMode, setSelectedPeriodMode] = useState<PeriodMode>("month");
+  const [customDateRange, setCustomDateRangeState] = useState(defaultCustomDateRange);
   const selectedDateRange = useMemo(
     () =>
       selectedPeriodMode === "custom"
@@ -377,15 +329,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
     [customDateRange, dataset.records, selectedMonth, selectedPeriodMode],
   );
   const [newRecordRequestId, setNewRecordRequestId] = useState(0);
-  const [newRecordTemplateId, setNewRecordTemplateId] = useState<string | null>(
-    null,
-  );
-  const [recordFilters, setRecordFiltersState] = useState<RecordFilters>(
-    () => ({
-      type: "all",
-      accountId: defaultRecordAccountId(dataset),
-    }),
-  );
+  const [newRecordTemplateId, setNewRecordTemplateId] = useState<string | null>(null);
+  const [recordFilters, setRecordFiltersState] = useState<RecordFilters>(() => ({
+    type: "all",
+    accountId: defaultRecordAccountId(dataset),
+  }));
   // Provider scope keeps the return context when Records unmounts on navigation.
   const [reviewReturnContext, setReviewReturnContext] = useState<{
     filters: RecordFilters;
@@ -397,12 +345,15 @@ export function WalletProvider({ children }: PropsWithChildren) {
   function openReviewQueue() {
     // Manual Needs review is still a normal filter. Only an existing return
     // context identifies the global queue and protects its original snapshot.
-    setReviewReturnContext((previous) => previous ?? {
-      filters: { ...recordFilters },
-      month: selectedMonth,
-      mode: selectedPeriodMode,
-      range: { ...customDateRange },
-    });
+    setReviewReturnContext(
+      (previous) =>
+        previous ?? {
+          filters: { ...recordFilters },
+          month: selectedMonth,
+          mode: selectedPeriodMode,
+          range: { ...customDateRange },
+        },
+    );
     setRecordFiltersState({ type: "all", paymentStatus: "needs_review" });
     setSelectedPeriodMode("all");
   }
@@ -445,19 +396,14 @@ export function WalletProvider({ children }: PropsWithChildren) {
         setDataset({ ...next, recordTemplates: next.recordTemplates ?? [] });
         setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
-        if (token)
-          cacheDataset(next, { nextCursor: null, hasMore: false }, token);
+        if (token) cacheDataset(next, { nextCursor: null, hasMore: false }, token);
       }),
   );
   const [hasLoaded, setHasLoaded] = useState(hasCachedDataset);
   const [pendingMutations, setPendingMutations] = useState(0);
   const isMutating = pendingMutations > 0;
   const isAllHistoryComplete =
-    !recordsPage.hasMore &&
-    !isRefreshing &&
-    !isMutating &&
-    !loadError &&
-    hasLoaded;
+    !recordsPage.hasMore && !isRefreshing && !isMutating && !loadError && hasLoaded;
   const isSelectedRangeComplete = isAllHistoryComplete;
 
   useEffect(() => {
@@ -475,11 +421,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
       })
       .catch((error) => {
         if (!cancelled)
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Could not refresh cached wallet",
-          );
+          setLoadError(error instanceof Error ? error.message : "Could not refresh cached wallet");
       })
       .finally(() => {
         if (!cancelled) {
@@ -500,17 +442,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function getCompleteDataset() {
     setPendingReads((count) => count + 1);
     try {
-      const result = await sync.refresh(() =>
-        walletApi.getWallet(requireToken()),
-      );
+      const result = await sync.refresh(() => walletApi.getWallet(requireToken()));
       setHasLoaded(true);
       return result;
     } catch (error) {
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : "Could not load complete wallet",
-      );
+      setLoadError(error instanceof Error ? error.message : "Could not load complete wallet");
       throw error;
     } finally {
       setIsLoading(false);
@@ -520,9 +456,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function getBackupDataset() {
     setPendingReads((count) => count + 1);
     try {
-      return await sync.snapshot(() =>
-        walletApi.getWalletBackup(requireToken()),
-      );
+      return await sync.snapshot(() => walletApi.getWalletBackup(requireToken()));
     } finally {
       setPendingReads((count) => Math.max(0, count - 1));
     }
@@ -543,15 +477,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
   async function mutate<T>(write: () => Promise<T>): Promise<T> {
     setPendingMutations((count) => count + 1);
     try {
-      const result = await sync.mutate(write, () =>
-        walletApi.getWallet(requireToken()),
-      );
+      const result = await sync.mutate(write, () => walletApi.getWallet(requireToken()));
       setHasLoaded(true);
       return result;
     } catch (error) {
-      setLoadError(
-        error instanceof Error ? error.message : "Could not save wallet",
-      );
+      setLoadError(error instanceof Error ? error.message : "Could not save wallet");
       throw error;
     } finally {
       setPendingMutations((count) => Math.max(0, count - 1));
@@ -560,11 +490,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
-    if (
-      selectedPeriodMode === "month" &&
-      months.length > 0 &&
-      !months.includes(selectedMonth)
-    ) {
+    if (selectedPeriodMode === "month" && months.length > 0 && !months.includes(selectedMonth)) {
       queueMicrotask(() => setSelectedMonthState(months[0]));
     }
   }, [dataset.records, selectedMonth, selectedPeriodMode]);
@@ -599,8 +525,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   async function addAccount(value: Omit<Account, "id">) {
-    return (await mutate(() => walletApi.createAccount(requireToken(), value)))
-      .id;
+    return (await mutate(() => walletApi.createAccount(requireToken(), value))).id;
   }
   async function updateAccount(id: string, value: Omit<Account, "id">) {
     await mutate(() => walletApi.updateAccount(requireToken(), id, value));
@@ -613,8 +538,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
   async function addCategory(value: Omit<Category, "id">) {
-    return (await mutate(() => walletApi.createCategory(requireToken(), value)))
-      .id;
+    return (await mutate(() => walletApi.createCategory(requireToken(), value))).id;
   }
   async function updateCategory(id: string, value: Omit<Category, "id">) {
     await mutate(() => walletApi.updateCategory(requireToken(), id, value));
@@ -628,9 +552,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }));
   }
   async function addCreditCard(value: Omit<CreditCard, "id">) {
-    return (
-      await mutate(() => walletApi.createCreditCard(requireToken(), value))
-    ).id;
+    return (await mutate(() => walletApi.createCreditCard(requireToken(), value))).id;
   }
   async function updateCreditCard(id: string, value: Omit<CreditCard, "id">) {
     await mutate(() => walletApi.updateCreditCard(requireToken(), id, value));
@@ -661,18 +583,13 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await mutate(() => walletApi.deleteGoal(requireToken(), id));
   }
   async function addBudget(value: Omit<Budget, "id">) {
-    return (await mutate(() => walletApi.createBudget(requireToken(), value)))
-      .id;
+    return (await mutate(() => walletApi.createBudget(requireToken(), value))).id;
   }
   async function addRecordTemplate(value: Omit<RecordTemplate, "id">) {
-    return (
-      await mutate(() => walletApi.createRecordTemplate(requireToken(), value))
-    ).id;
+    return (await mutate(() => walletApi.createRecordTemplate(requireToken(), value))).id;
   }
   async function updateRecordTemplate(id: string, value: RecordTemplatePatch) {
-    await mutate(() =>
-      walletApi.updateRecordTemplate(requireToken(), id, value),
-    );
+    await mutate(() => walletApi.updateRecordTemplate(requireToken(), id, value));
   }
   async function deleteRecordTemplate(id: string) {
     await mutate(() => walletApi.deleteRecordTemplate(requireToken(), id));
@@ -684,9 +601,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await mutate(() => walletApi.deleteBudget(requireToken(), id));
   }
   async function addInvestment(value: Omit<Investment, "id">) {
-    return (
-      await mutate(() => walletApi.createInvestment(requireToken(), value))
-    ).id;
+    return (await mutate(() => walletApi.createInvestment(requireToken(), value))).id;
   }
   async function updateInvestment(id: string, value: InvestmentPatch) {
     await mutate(() => walletApi.updateInvestment(requireToken(), id, value));
@@ -695,17 +610,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await mutate(() => walletApi.deleteInvestment(requireToken(), id));
   }
   async function addInstallmentPlan(value: Omit<InstallmentPlan, "id">) {
-    return (
-      await mutate(() => walletApi.createInstallmentPlan(requireToken(), value))
-    ).id;
+    return (await mutate(() => walletApi.createInstallmentPlan(requireToken(), value))).id;
   }
-  async function updateInstallmentPlan(
-    id: string,
-    value: Omit<InstallmentPlan, "id">,
-  ) {
-    await mutate(() =>
-      walletApi.updateInstallmentPlan(requireToken(), id, value),
-    );
+  async function updateInstallmentPlan(id: string, value: Omit<InstallmentPlan, "id">) {
+    await mutate(() => walletApi.updateInstallmentPlan(requireToken(), id, value));
   }
   async function deleteInstallmentPlan(id: string) {
     await mutate(() => walletApi.deleteInstallmentPlan(requireToken(), id));
@@ -720,17 +628,10 @@ export function WalletProvider({ children }: PropsWithChildren) {
     await mutate(() => walletApi.deleteDebt(requireToken(), id));
   }
   async function addRecurringDebt(value: Omit<RecurringDebt, "id">) {
-    return (
-      await mutate(() => walletApi.createRecurringDebt(requireToken(), value))
-    ).id;
+    return (await mutate(() => walletApi.createRecurringDebt(requireToken(), value))).id;
   }
-  async function updateRecurringDebt(
-    id: string,
-    value: Omit<RecurringDebt, "id">,
-  ) {
-    await mutate(() =>
-      walletApi.updateRecurringDebt(requireToken(), id, value),
-    );
+  async function updateRecurringDebt(id: string, value: Omit<RecurringDebt, "id">) {
+    await mutate(() => walletApi.updateRecurringDebt(requireToken(), id, value));
   }
   async function deleteRecurringDebt(id: string) {
     await mutate(() => walletApi.deleteRecurringDebt(requireToken(), id));
@@ -763,68 +664,40 @@ export function WalletProvider({ children }: PropsWithChildren) {
     id: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId">,
   ) {
-    await mutate(() =>
-      walletApi.createCreditCardPayment(requireToken(), id, payment),
-    );
+    await mutate(() => walletApi.createCreditCardPayment(requireToken(), id, payment));
   }
 
   async function addCreditCardRecord(
     id: string,
-    value: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() =>
-      walletApi.createCreditCardRecord(requireToken(), id, value),
-    );
+    await mutate(() => walletApi.createCreditCardRecord(requireToken(), id, value));
   }
   async function addCreditCardRefund(
     id: string,
-    value: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() =>
-      walletApi.createCreditCardRefund(requireToken(), id, value),
-    );
+    await mutate(() => walletApi.createCreditCardRefund(requireToken(), id, value));
   }
   async function updateCreditCardRecord(
     id: string,
     movementId: string,
-    value: Omit<
-      CreditCardRecord,
-      "id" | "creditCardId" | "walletRecordId" | "statementId"
-    >,
+    value: Omit<CreditCardRecord, "id" | "creditCardId" | "walletRecordId" | "statementId">,
   ) {
-    await mutate(() =>
-      walletApi.updateCreditCardRecord(requireToken(), id, movementId, value),
-    );
+    await mutate(() => walletApi.updateCreditCardRecord(requireToken(), id, movementId, value));
   }
   async function deleteCreditCardRecord(id: string, movementId: string) {
-    await mutate(() =>
-      walletApi.deleteCreditCardRecord(requireToken(), id, movementId),
-    );
+    await mutate(() => walletApi.deleteCreditCardRecord(requireToken(), id, movementId));
   }
   async function deleteCreditCardPayment(id: string, paymentId: string) {
-    await mutate(() =>
-      walletApi.deleteCreditCardPayment(requireToken(), id, paymentId),
-    );
+    await mutate(() => walletApi.deleteCreditCardPayment(requireToken(), id, paymentId));
   }
   async function payCreditCardStatement(
     id: string,
     statementId: string,
     payment: Omit<CreditCardPayment, "id" | "creditCardId" | "statementId">,
   ) {
-    await mutate(() =>
-      walletApi.payCreditCardStatement(
-        requireToken(),
-        id,
-        statementId,
-        payment,
-      ),
-    );
+    await mutate(() => walletApi.payCreditCardStatement(requireToken(), id, statementId, payment));
   }
   async function addGoalReservation(value: Omit<GoalReservation, "id">) {
     await mutate(() => walletApi.createGoalReservation(requireToken(), value));
@@ -844,14 +717,11 @@ export function WalletProvider({ children }: PropsWithChildren) {
     id: string,
     payment: Parameters<typeof walletApi.recordDebtPayment>[2],
   ) {
-    await mutate(() =>
-      walletApi.recordDebtPayment(requireToken(), id, payment),
-    );
+    await mutate(() => walletApi.recordDebtPayment(requireToken(), id, payment));
   }
   async function toggleAccountVisibility(id: string) {
     const account = dataset.accounts.find((item) => item.id === id);
-    if (account)
-      await updateAccount(id, { ...account, isVisible: !account.isVisible });
+    if (account) await updateAccount(id, { ...account, isVisible: !account.isVisible });
   }
   async function setPrimaryAccount(id: string) {
     await updateWalletSettings({ primaryAccountId: id });
@@ -874,9 +744,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
             <p className="mt-1 text-sm text-muted-foreground">{loadError}</p>
           </div>
           <div className="flex gap-2">
-            <Button onClick={() => void reloadWallet().catch(() => undefined)}>
-              Retry
-            </Button>
+            <Button onClick={() => void reloadWallet().catch(() => undefined)}>Retry</Button>
             <Button variant="outline" onClick={lock}>
               Lock
             </Button>
@@ -969,15 +837,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
       }}
     >
       {loadError ? (
-        <div
-          role="alert"
-          className="border border-amber-500 bg-card p-3 text-sm"
-        >
+        <div role="alert" className="border border-amber-500 bg-card p-3 text-sm">
           Showing the last loaded data. {loadError}
-          <Button
-            variant="outline"
-            onClick={() => void reloadWallet().catch(() => undefined)}
-          >
+          <Button variant="outline" onClick={() => void reloadWallet().catch(() => undefined)}>
             Retry refresh
           </Button>
         </div>

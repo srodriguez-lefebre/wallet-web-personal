@@ -1,13 +1,5 @@
 import * as fs from "node:fs/promises";
-import {
-  chmod,
-  mkdir,
-  mkdtemp,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
@@ -38,9 +30,7 @@ test("new workspaces request owner-only permissions", async () => {
 test.skipIf(process.platform === "win32")(
   "existing POSIX workspaces become owner-only",
   async () => {
-    const directory = await mkdtemp(
-      path.join(os.tmpdir(), "wallet-lock-test-"),
-    );
+    const directory = await mkdtemp(path.join(os.tmpdir(), "wallet-lock-test-"));
     try {
       await mkdir(directory, { recursive: true });
       await chmod(directory, 0o755);
@@ -62,12 +52,8 @@ test("concurrent starts cannot recover and delete each other's stale lock", asyn
       acquireWorkspaceLock(directory),
       acquireWorkspaceLock(directory),
     ]);
-    for (const result of results)
-      if (result.status === "fulfilled") await result.value();
-    expect(results.map((result) => result.status)).toEqual([
-      "rejected",
-      "rejected",
-    ]);
+    for (const result of results) if (result.status === "fulfilled") await result.value();
+    expect(results.map((result) => result.status)).toEqual(["rejected", "rejected"]);
     expect(await readFile(file, "utf8")).toBe("99999999");
   } finally {
     await rm(directory, { recursive: true, force: true });

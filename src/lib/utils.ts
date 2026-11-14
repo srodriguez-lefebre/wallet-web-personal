@@ -25,10 +25,7 @@ export function limitDecimalPlaces(value: string, maxDecimals = 2) {
 
   if (!normalized.includes(".")) return integer;
 
-  const fraction = fractionParts
-    .join("")
-    .replace(/\D/g, "")
-    .slice(0, safeMaxDecimals);
+  const fraction = fractionParts.join("").replace(/\D/g, "").slice(0, safeMaxDecimals);
 
   return `${integer}.${fraction}`;
 }

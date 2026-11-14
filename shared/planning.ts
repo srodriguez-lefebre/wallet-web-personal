@@ -9,11 +9,7 @@ function calendarDay(value: string | Date): number | null {
       : value.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(key)) return null;
   const parsed = new Date(`${key}T00:00:00.000Z`);
-  if (
-    !Number.isFinite(parsed.getTime()) ||
-    parsed.toISOString().slice(0, 10) !== key
-  )
-    return null;
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== key) return null;
   return parsed.getTime() / 86_400_000;
 }
 
@@ -24,13 +20,7 @@ function daysUntil(value: string | undefined, asOf: Date) {
 }
 
 export interface GoalFundingPlan {
-  status:
-    | "ready"
-    | "funded"
-    | "missing_rate"
-    | "inactive"
-    | "no_deadline"
-    | "overdue";
+  status: "ready" | "funded" | "missing_rate" | "inactive" | "no_deadline" | "overdue";
   remaining: number | null;
   daysRemaining: number | null;
   dailyContribution: number | null;
@@ -71,9 +61,7 @@ export function calculateGoalFundingPlan(
     dailyContribution: centsCeiling(remaining / contributionDays),
     weeklyContribution: Math.min(
       remaining,
-      centsCeiling(
-        (remaining * Math.min(7, contributionDays)) / contributionDays,
-      ),
+      centsCeiling((remaining * Math.min(7, contributionDays)) / contributionDays),
     ),
   };
 }
@@ -95,10 +83,7 @@ export function debtDueState(debt: Debt, asOf = new Date()): DebtDueState {
 
 export function selectDebtsByDueDate(
   debts: Debt[],
-  {
-    window = "all",
-    asOf = new Date(),
-  }: { window?: DebtDueWindow; asOf?: Date } = {},
+  { window = "all", asOf = new Date() }: { window?: DebtDueWindow; asOf?: Date } = {},
 ): Debt[] {
   return debts
     .filter(isOpenDebt)
@@ -106,11 +91,7 @@ export function selectDebtsByDueDate(
       const state = debtDueState(debt, asOf);
       if (window === "all") return true;
       if (window === "overdue") return state.kind === "overdue";
-      return (
-        state.days !== null &&
-        state.days >= 0 &&
-        state.days <= (window === "next7" ? 7 : 30)
-      );
+      return state.days !== null && state.days >= 0 && state.days <= (window === "next7" ? 7 : 30);
     })
     .sort((a, b) => {
       const first = daysUntil(a.dueAt, asOf),
@@ -132,10 +113,7 @@ export interface InvestmentCurrencySummary {
 export function summarizeInvestmentsByCurrency(
   investments: Investment[],
 ): InvestmentCurrencySummary[] {
-  const totals = new Map<
-    CurrencyCode,
-    { invested: number; currentValue: number; count: number }
-  >();
+  const totals = new Map<CurrencyCode, { invested: number; currentValue: number; count: number }>();
   for (const investment of investments) {
     const total = totals.get(investment.currency) ?? {
       invested: 0,
@@ -155,8 +133,7 @@ export function summarizeInvestmentsByCurrency(
         currency,
         ...total,
         gain,
-        returnPercentage:
-          total.invested > 0 ? (gain / total.invested) * 100 : null,
+        returnPercentage: total.invested > 0 ? (gain / total.invested) * 100 : null,
       };
     });
 }

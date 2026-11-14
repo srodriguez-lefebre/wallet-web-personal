@@ -65,17 +65,13 @@ afterEach(async () => {
 async function pay(path: "partial" | "settle") {
   const button = tree!.root
     .findAllByType("button")
-    .find((button) =>
-      button.children.includes(path === "partial" ? "Partial" : "Pay"),
-    )!;
+    .find((button) => button.children.includes(path === "partial" ? "Partial" : "Pay"))!;
   await act(async () => {
     await button.props.onClick();
   });
   if (path === "partial")
     await act(async () => {
-      await tree!.root
-        .findByType("form")
-        .props.onSubmit({ preventDefault() {} });
+      await tree!.root.findByType("form").props.onSubmit({ preventDefault() {} });
     });
 }
 test.each(["partial", "settle"] as const)(
@@ -95,9 +91,7 @@ test("an uncertain partial payment keeps its key for the retry", async () => {
   await act(async () => {
     tree = create(<DebtsView />);
   });
-  payment.mockRejectedValueOnce(
-    new Error("connection lost after server commit"),
-  );
+  payment.mockRejectedValueOnce(new Error("connection lost after server commit"));
   await expect(pay("partial")).rejects.toThrow(/connection lost/);
   const firstKey = payment.mock.calls[0][1].idempotencyKey;
   await pay("partial");

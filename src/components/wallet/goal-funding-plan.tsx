@@ -47,11 +47,7 @@ export function GoalFundingPlan({ progress }: { progress: GoalProgress }) {
       ) : (
         <Badge
           variant={
-            plan.status === "funded"
-              ? "success"
-              : plan.status === "overdue"
-                ? "danger"
-                : "muted"
+            plan.status === "funded" ? "success" : plan.status === "overdue" ? "danger" : "muted"
           }
         >
           {messages[plan.status]}

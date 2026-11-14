@@ -1,6 +1,5 @@
 import { z } from "zod";
 
-
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
 export const uuidSchema = z.string().uuid("Invalid UUID");
 const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
@@ -15,20 +14,9 @@ export const recordGoalAssociationSchema = z.object({
 
 export const recordTypeSchema = z.enum(["expense", "income", "transfer"]);
 
-export const paymentTypeSchema = z.enum([
-  "cash",
-  "debit",
-  "credit",
-  "transfer",
-  "other",
-]);
+export const paymentTypeSchema = z.enum(["cash", "debit", "credit", "transfer", "other"]);
 
-export const paymentStatusSchema = z.enum([
-  "cleared",
-  "pending",
-  "needs_review",
-  "cancelled",
-]);
+export const paymentStatusSchema = z.enum(["cleared", "pending", "needs_review", "cancelled"]);
 
 export const debtDirectionSchema = z.enum(["payable", "receivable"]);
 
@@ -36,15 +24,7 @@ export const debtStatusSchema = z.enum(["active", "paid", "paused"]);
 
 export const accountSchema = z.object({
   name: z.string().min(1),
-  type: z.enum([
-    "cash",
-    "bank",
-    "credit_card",
-    "savings",
-    "recurring",
-    "investment",
-    "custom",
-  ]),
+  type: z.enum(["cash", "bank", "credit_card", "savings", "recurring", "investment", "custom"]),
   currency: currencySchema,
   initialBalance: z.number(),
   color: z.string().min(1),
@@ -67,20 +47,22 @@ export const tagSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-export const recordTemplateSchema = z.object({
-  name: z.string().trim().min(1).max(80),
-  type: recordTypeSchema,
-  amount: z.number().finite().positive(),
-  currency: currencySchema,
-  accountId: uuidSchema.optional(),
-  creditCardId: uuidSchema.optional(),
-  destinationAccountId: uuidSchema.optional(),
-  categoryId: uuidSchema.optional(),
-  tagId: uuidSchema.optional(),
-  counterpartyName: z.string().optional(),
-  note: z.string().optional(),
-  paymentType: paymentTypeSchema,
-}).strict();
+export const recordTemplateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    type: recordTypeSchema,
+    amount: z.number().finite().positive(),
+    currency: currencySchema,
+    accountId: uuidSchema.optional(),
+    creditCardId: uuidSchema.optional(),
+    destinationAccountId: uuidSchema.optional(),
+    categoryId: uuidSchema.optional(),
+    tagId: uuidSchema.optional(),
+    counterpartyName: z.string().optional(),
+    note: z.string().optional(),
+    paymentType: paymentTypeSchema,
+  })
+  .strict();
 
 export const recordSchema = z
   .object({
@@ -108,23 +90,31 @@ export const recordSchema = z
     debtId: uuidSchema.optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.exchangeRateToPrimary === 0 && value.paymentStatus !== "needs_review" && value.paymentStatus !== "cancelled") {
-      ctx.addIssue({code:"custom",path:["exchangeRateToPrimary"],message:"An unresolved primary conversion requires review"});
+    if (
+      value.exchangeRateToPrimary === 0 &&
+      value.paymentStatus !== "needs_review" &&
+      value.paymentStatus !== "cancelled"
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["exchangeRateToPrimary"],
+        message: "An unresolved primary conversion requires review",
+      });
     }
     for (const [index, association] of value.goalAssociations.entries()) {
       if (association.allocatedAmount !== undefined && association.allocatedAmount > value.amount) {
-        ctx.addIssue({ code: "custom", path: ["goalAssociations", index, "allocatedAmount"], message: "Goal allocation cannot exceed the record amount" });
+        ctx.addIssue({
+          code: "custom",
+          path: ["goalAssociations", index, "allocatedAmount"],
+          message: "Goal allocation cannot exceed the record amount",
+        });
       }
     }
     // Cancellation preserves incomplete review history without requiring a
     // financial assignment or an invented conversion to remove its impact.
     if (value.paymentStatus === "cancelled") return;
     if (value.type !== "transfer") {
-      if (
-        !value.accountId &&
-        !value.creditCardId &&
-        value.paymentStatus !== "needs_review"
-      ) {
+      if (!value.accountId && !value.creditCardId && value.paymentStatus !== "needs_review") {
         ctx.addIssue({
           code: "custom",
           path: ["accountId"],
@@ -193,18 +183,18 @@ export const recordSchema = z
 // Creation is narrower than durable history: refunds require their original
 // purchase and are created by the dedicated Cards action.
 export const recordCreateSchema = recordSchema.superRefine((value, context) => {
-  if (value.creditCardId && value.type !== "expense") context.addIssue({
-    code: "custom", path: ["creditCardId"],
-    message: "Use the Cards refund action for a credit-card refund; transfers cannot use a card.",
-  });
+  if (value.creditCardId && value.type !== "expense")
+    context.addIssue({
+      code: "custom",
+      path: ["creditCardId"],
+      message: "Use the Cards refund action for a credit-card refund; transfers cannot use a card.",
+    });
 });
 
 export const creditCardSchema = z.object({
   name: z.string().min(1),
   issuer: z.string().min(1),
-  lastFour: z
-    .string()
-    .regex(/^\d{4}$/, "Last four must contain exactly four digits"),
+  lastFour: z.string().regex(/^\d{4}$/, "Last four must contain exactly four digits"),
   creditLimit: z.number().positive(),
   limitCurrency: currencySchema,
   closingDay: z.number().int().min(1).max(31),
@@ -277,31 +267,43 @@ export const creditCardRecordSchema = z
     }
   });
 
-export const goalSchema = z.object({
-  name: z.string().min(1),
-  targetAmount: z.number().positive(),
-  currency: currencySchema,
-  color: z.string().min(1),
-  icon: z.string().min(1),
-  isVisible: z.boolean().default(true),
-  deadline: z.string().optional(),
-  status: z
-    .enum(["active", "completed", "paused", "cancelled"])
-    .default("active"),
-  accountId: uuidSchema.optional(),
-  autoCaptureEnabled: z.boolean().default(false),
-  autoCaptureStart: calendarDateSchema.optional(),
-  autoCaptureEnd: calendarDateSchema.optional(),
-  autoReservationAccountId: uuidSchema.optional(),
-  note: z.string().optional(),
-}).superRefine((value, context) => {
-  if (value.autoCaptureEnabled && (!value.autoCaptureStart || !value.autoCaptureEnd)) {
-    context.addIssue({ code: "custom", path: ["autoCaptureStart"], message: "Automatic capture requires a date range" });
-  }
-  if (value.autoCaptureStart && value.autoCaptureEnd && value.autoCaptureStart > value.autoCaptureEnd) {
-    context.addIssue({ code: "custom", path: ["autoCaptureEnd"], message: "End date must be on or after start date" });
-  }
-});
+export const goalSchema = z
+  .object({
+    name: z.string().min(1),
+    targetAmount: z.number().positive(),
+    currency: currencySchema,
+    color: z.string().min(1),
+    icon: z.string().min(1),
+    isVisible: z.boolean().default(true),
+    deadline: z.string().optional(),
+    status: z.enum(["active", "completed", "paused", "cancelled"]).default("active"),
+    accountId: uuidSchema.optional(),
+    autoCaptureEnabled: z.boolean().default(false),
+    autoCaptureStart: calendarDateSchema.optional(),
+    autoCaptureEnd: calendarDateSchema.optional(),
+    autoReservationAccountId: uuidSchema.optional(),
+    note: z.string().optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.autoCaptureEnabled && (!value.autoCaptureStart || !value.autoCaptureEnd)) {
+      context.addIssue({
+        code: "custom",
+        path: ["autoCaptureStart"],
+        message: "Automatic capture requires a date range",
+      });
+    }
+    if (
+      value.autoCaptureStart &&
+      value.autoCaptureEnd &&
+      value.autoCaptureStart > value.autoCaptureEnd
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["autoCaptureEnd"],
+        message: "End date must be on or after start date",
+      });
+    }
+  });
 
 export const goalReservationSchema = z.object({
   goalId: uuidSchema,
@@ -399,19 +401,22 @@ export const budgetSchema = z.object({
   isActive: z.boolean().default(true),
 });
 
-export const installmentPlanSchema = z.object({
-  name: z.string().min(1),
-  totalAmount: z.number().positive(),
-  currency: currencySchema,
-  installmentsTotal: z.number().int().positive(),
-  installmentsPaid: z.number().int().nonnegative(),
-  accountId: uuidSchema,
-  categoryId: uuidSchema,
-  nextPaymentAt: z.string().datetime().or(z.string().date()).optional(),
-  note: z.string().optional(),
-}).refine((value) => value.installmentsPaid <= value.installmentsTotal, {
-  path: ["installmentsPaid"], message: "Paid installments cannot exceed the total",
-});
+export const installmentPlanSchema = z
+  .object({
+    name: z.string().min(1),
+    totalAmount: z.number().positive(),
+    currency: currencySchema,
+    installmentsTotal: z.number().int().positive(),
+    installmentsPaid: z.number().int().nonnegative(),
+    accountId: uuidSchema,
+    categoryId: uuidSchema,
+    nextPaymentAt: z.string().datetime().or(z.string().date()).optional(),
+    note: z.string().optional(),
+  })
+  .refine((value) => value.installmentsPaid <= value.installmentsTotal, {
+    path: ["installmentsPaid"],
+    message: "Paid installments cannot exceed the total",
+  });
 
 export const settingsSchema = z.object({
   primaryCurrency: currencySchema,
@@ -439,9 +444,12 @@ export const unlockSchema = z.object({
 });
 
 function nonEmptyPatch<T extends z.ZodRawShape>(shape: T) {
-  return z.object(shape).strict().refine((value) => Object.keys(value).length > 0, {
-    message: "Patch must contain at least one field",
-  });
+  return z
+    .object(shape)
+    .strict()
+    .refine((value) => Object.keys(value).length > 0, {
+      message: "Patch must contain at least one field",
+    });
 }
 
 export const recordTemplatePatchSchema = nonEmptyPatch({
@@ -485,17 +493,28 @@ const merchantCorrectionSchema = z.object({
 });
 
 export const recordPatchSchema = nonEmptyPatch({
-  type: recordTypeSchema.optional(), amount: z.number().positive().optional(),
-  currency: currencySchema.optional(), accountId: uuidSchema.optional(),
-  accountAmount: z.number().positive().optional(), creditCardId: uuidSchema.nullable().optional(),
-  destinationAccountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.nullable().optional(),
+  type: recordTypeSchema.optional(),
+  amount: z.number().positive().optional(),
+  currency: currencySchema.optional(),
+  accountId: uuidSchema.optional(),
+  accountAmount: z.number().positive().optional(),
+  creditCardId: uuidSchema.nullable().optional(),
+  destinationAccountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.nullable().optional(),
   destinationAmount: z.number().positive().optional(),
-  counterpartyName: z.string().nullable().optional(), tagIds: z.array(uuidSchema).max(1).optional(),
-  goalIds: z.array(uuidSchema).optional(), goalAssociations: z.array(recordGoalAssociationSchema).optional(),
-  paymentType: paymentTypeSchema.optional(), paymentStatus: paymentStatusSchema.optional(),
-  exchangeRateToPrimary: z.number().nonnegative().optional(), amountInLimitCurrency: z.number().positive().optional(),
-  exchangeRateToLimitCurrency: z.number().positive().optional(), occurredAt: z.string().datetime().optional(),
-  note: z.string().nullable().optional(), isFixed: z.boolean().optional(), debtId: uuidSchema.nullable().optional(),
+  counterpartyName: z.string().nullable().optional(),
+  tagIds: z.array(uuidSchema).max(1).optional(),
+  goalIds: z.array(uuidSchema).optional(),
+  goalAssociations: z.array(recordGoalAssociationSchema).optional(),
+  paymentType: paymentTypeSchema.optional(),
+  paymentStatus: paymentStatusSchema.optional(),
+  exchangeRateToPrimary: z.number().nonnegative().optional(),
+  amountInLimitCurrency: z.number().positive().optional(),
+  exchangeRateToLimitCurrency: z.number().positive().optional(),
+  occurredAt: z.string().datetime().optional(),
+  note: z.string().nullable().optional(),
+  isFixed: z.boolean().optional(),
+  debtId: uuidSchema.nullable().optional(),
   expectedUpdatedAt: z.string().datetime().optional(),
   merchantAutoApply: z.boolean().optional(),
   restoreMerchantCorrection: merchantCorrectionSchema.nullable().optional(),
@@ -505,74 +524,136 @@ export const recordPatchSchema = nonEmptyPatch({
 );
 
 export const creditCardPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), issuer: z.string().min(1).optional(),
-  lastFour: z.string().regex(/^\d{4}$/).optional(), creditLimit: z.number().positive().optional(),
-  limitCurrency: currencySchema.optional(), closingDay: z.number().int().min(1).max(31).optional(),
-  dueDay: z.number().int().min(1).max(31).optional(), color: z.string().min(1).optional(),
-  icon: z.string().min(1).optional(), isActive: z.boolean().optional(), note: z.string().nullable().optional(),
+  name: z.string().min(1).optional(),
+  issuer: z.string().min(1).optional(),
+  lastFour: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional(),
+  creditLimit: z.number().positive().optional(),
+  limitCurrency: currencySchema.optional(),
+  closingDay: z.number().int().min(1).max(31).optional(),
+  dueDay: z.number().int().min(1).max(31).optional(),
+  color: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(),
+  isActive: z.boolean().optional(),
+  note: z.string().nullable().optional(),
 });
 
 export const creditCardRecordPatchSchema = nonEmptyPatch({
-  kind: z.enum(["purchase", "refund"]).optional(), originalRecordId: uuidSchema.nullable().optional(),
-  amount: z.number().positive().optional(), currency: currencySchema.optional(),
-  amountInLimitCurrency: z.number().positive().optional(), exchangeRateToLimitCurrency: z.number().positive().optional(),
-  categoryId: uuidSchema.optional(), counterpartyName: z.string().nullable().optional(), note: z.string().nullable().optional(),
-  accountId: uuidSchema.nullable().optional(), accountAmount: z.number().positive().nullable().optional(),
-  accountImpactAtCreation: z.boolean().optional(), occurredAt: z.string().datetime().optional(),
+  kind: z.enum(["purchase", "refund"]).optional(),
+  originalRecordId: uuidSchema.nullable().optional(),
+  amount: z.number().positive().optional(),
+  currency: currencySchema.optional(),
+  amountInLimitCurrency: z.number().positive().optional(),
+  exchangeRateToLimitCurrency: z.number().positive().optional(),
+  categoryId: uuidSchema.optional(),
+  counterpartyName: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
+  accountId: uuidSchema.nullable().optional(),
+  accountAmount: z.number().positive().nullable().optional(),
+  accountImpactAtCreation: z.boolean().optional(),
+  occurredAt: z.string().datetime().optional(),
 });
 
 export const debtPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), direction: debtDirectionSchema.optional(),
-  originalAmount: z.number().positive().nullable().optional(), pendingAmount: z.number().nonnegative().nullable().optional(),
-  currency: currencySchema.optional(), counterpartyName: z.string().min(1).optional(),
-  accountId: uuidSchema.nullable().optional(), categoryId: uuidSchema.optional(), status: debtStatusSchema.optional(),
-  isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(),
-  dueAt: z.string().datetime().or(z.string().date()).nullable().optional(), note: z.string().nullable().optional(),
-  recurringDebtId: uuidSchema.nullable().optional(), recurringMonth: z.string().nullable().optional(),
+  name: z.string().min(1).optional(),
+  direction: debtDirectionSchema.optional(),
+  originalAmount: z.number().positive().nullable().optional(),
+  pendingAmount: z.number().nonnegative().nullable().optional(),
+  currency: currencySchema.optional(),
+  counterpartyName: z.string().min(1).optional(),
+  accountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.optional(),
+  status: debtStatusSchema.optional(),
+  isVisible: z.boolean().optional(),
+  startedAt: z.string().datetime().or(z.string().date()).optional(),
+  dueAt: z.string().datetime().or(z.string().date()).nullable().optional(),
+  note: z.string().nullable().optional(),
+  recurringDebtId: uuidSchema.nullable().optional(),
+  recurringMonth: z.string().nullable().optional(),
 });
 
 export const recurringDebtPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), direction: debtDirectionSchema.optional(), amount: z.number().positive().nullable().optional(),
-  currency: currencySchema.optional(), counterpartyName: z.string().min(1).optional(), accountId: uuidSchema.nullable().optional(),
-  categoryId: uuidSchema.optional(), dayOfMonth: z.number().int().min(1).max(31).optional(), isActive: z.boolean().optional(),
-  startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
+  name: z.string().min(1).optional(),
+  direction: debtDirectionSchema.optional(),
+  amount: z.number().positive().nullable().optional(),
+  currency: currencySchema.optional(),
+  counterpartyName: z.string().min(1).optional(),
+  accountId: uuidSchema.nullable().optional(),
+  categoryId: uuidSchema.optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  isActive: z.boolean().optional(),
+  startedAt: z.string().datetime().or(z.string().date()).optional(),
+  note: z.string().nullable().optional(),
 });
 
 export const tagPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), color: z.string().min(1).optional(), isActive: z.boolean().optional(),
+  name: z.string().min(1).optional(),
+  color: z.string().min(1).optional(),
+  isActive: z.boolean().optional(),
 });
 export const goalPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), targetAmount: z.number().positive().optional(), currency: currencySchema.optional(),
-  color: z.string().min(1).optional(), icon: z.string().min(1).optional(), isVisible: z.boolean().optional(),
-  deadline: z.string().nullable().optional(), status: z.enum(["active", "completed", "paused", "cancelled"]).optional(),
+  name: z.string().min(1).optional(),
+  targetAmount: z.number().positive().optional(),
+  currency: currencySchema.optional(),
+  color: z.string().min(1).optional(),
+  icon: z.string().min(1).optional(),
+  isVisible: z.boolean().optional(),
+  deadline: z.string().nullable().optional(),
+  status: z.enum(["active", "completed", "paused", "cancelled"]).optional(),
   accountId: uuidSchema.nullable().optional(),
-  autoCaptureEnabled: z.boolean().optional(), autoCaptureStart: calendarDateSchema.nullable().optional(),
-  autoCaptureEnd: calendarDateSchema.nullable().optional(), autoReservationAccountId: uuidSchema.nullable().optional(),
+  autoCaptureEnabled: z.boolean().optional(),
+  autoCaptureStart: calendarDateSchema.nullable().optional(),
+  autoCaptureEnd: calendarDateSchema.nullable().optional(),
+  autoReservationAccountId: uuidSchema.nullable().optional(),
   note: z.string().nullable().optional(),
 });
 export const investmentPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
-  amountInvested: z.number().positive().optional(), currentValue: z.number().nonnegative().optional(), currency: currencySchema.optional(),
-  isVisible: z.boolean().optional(), startedAt: z.string().datetime().or(z.string().date()).optional(), note: z.string().nullable().optional(),
+  name: z.string().min(1).optional(),
+  type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
+  amountInvested: z.number().positive().optional(),
+  currentValue: z.number().nonnegative().optional(),
+  currency: currencySchema.optional(),
+  isVisible: z.boolean().optional(),
+  startedAt: z.string().datetime().or(z.string().date()).optional(),
+  note: z.string().nullable().optional(),
 });
 export const budgetPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), limitAmount: z.number().positive().optional(), currency: currencySchema.optional(),
-  period: z.literal("monthly").optional(), categoryId: uuidSchema.nullable().optional(), tagId: uuidSchema.nullable().optional(),
-  accountId: uuidSchema.nullable().optional(), goalId: uuidSchema.nullable().optional(), color: z.string().min(1).optional(), isActive: z.boolean().optional(),
+  name: z.string().min(1).optional(),
+  limitAmount: z.number().positive().optional(),
+  currency: currencySchema.optional(),
+  period: z.literal("monthly").optional(),
+  categoryId: uuidSchema.nullable().optional(),
+  tagId: uuidSchema.nullable().optional(),
+  accountId: uuidSchema.nullable().optional(),
+  goalId: uuidSchema.nullable().optional(),
+  color: z.string().min(1).optional(),
+  isActive: z.boolean().optional(),
 });
 export const installmentPlanPatchSchema = nonEmptyPatch({
-  name: z.string().min(1).optional(), totalAmount: z.number().positive().optional(), currency: currencySchema.optional(),
-  installmentsTotal: z.number().int().positive().optional(), installmentsPaid: z.number().int().nonnegative().optional(),
-  accountId: uuidSchema.optional(), categoryId: uuidSchema.optional(), nextPaymentAt: z.string().nullable().optional(), note: z.string().nullable().optional(),
+  name: z.string().min(1).optional(),
+  totalAmount: z.number().positive().optional(),
+  currency: currencySchema.optional(),
+  installmentsTotal: z.number().int().positive().optional(),
+  installmentsPaid: z.number().int().nonnegative().optional(),
+  accountId: uuidSchema.optional(),
+  categoryId: uuidSchema.optional(),
+  nextPaymentAt: z.string().nullable().optional(),
+  note: z.string().nullable().optional(),
 });
 
 export const settingsPatchSchema = nonEmptyPatch({
   reviewSeenThrough: z.string().datetime().optional(),
-  primaryCurrency: currencySchema.optional(), primaryAccountId: uuidSchema.nullable().optional(),
+  primaryCurrency: currencySchema.optional(),
+  primaryAccountId: uuidSchema.nullable().optional(),
   theme: z.enum(["light", "dark", "system"]).optional(),
-  defaultDashboardPreset: settingsSchema.shape.defaultDashboardPreset.optional(), locale: z.literal("es-UY").optional(),
-  includeHiddenAccountsInReports: z.boolean().optional(), defaultAccountId: uuidSchema.nullable().optional(),
-  defaultPaymentType: paymentTypeSchema.optional(), defaultCreditCardId: uuidSchema.nullable().optional(),
+  defaultDashboardPreset: settingsSchema.shape.defaultDashboardPreset.optional(),
+  locale: z.literal("es-UY").optional(),
+  includeHiddenAccountsInReports: z.boolean().optional(),
+  defaultAccountId: uuidSchema.nullable().optional(),
+  defaultPaymentType: paymentTypeSchema.optional(),
+  defaultCreditCardId: uuidSchema.nullable().optional(),
   defaultPaymentStatus: paymentStatusSchema.optional(),
 });
 
@@ -590,173 +671,357 @@ export type InvestmentPatch = z.infer<typeof investmentPatchSchema>;
 export type BudgetPatch = z.infer<typeof budgetPatchSchema>;
 export type InstallmentPlanPatch = z.infer<typeof installmentPlanPatchSchema>;
 
-const dateOnlySchema = z.string()
+const dateOnlySchema = z
+  .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
   .refine((value) => {
     const parsed = new Date(`${value}T00:00:00.000Z`);
     return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
   }, "Invalid calendar date");
 
-export const recordFiltersSchema = z.object({
-  type: z.enum(["all", "expense", "income", "transfer"]).optional(),
-  accountId: uuidSchema.optional(),
-  creditCardId: uuidSchema.optional(),
-  categoryId: uuidSchema.optional(),
-  tagId: uuidSchema.optional(),
-  goalId: uuidSchema.optional(),
-  search: z.string().trim().min(1).max(100).optional(),
-  paymentStatus: z.enum(["all", "cleared", "pending", "needs_review", "cancelled"]).optional(),
-  from: dateOnlySchema.optional(),
-  to: dateOnlySchema.optional(),
-  limit: z.coerce.number().int().min(1).max(500).default(100),
-  cursor: z.string().min(1).max(500).optional(),
-}).superRefine((value, context) => {
-  if (value.from && value.to && value.from > value.to) {
-    context.addIssue({ code: "custom", path: ["to"], message: "End date must be on or after start date" });
-  }
-});
+export const recordFiltersSchema = z
+  .object({
+    type: z.enum(["all", "expense", "income", "transfer"]).optional(),
+    accountId: uuidSchema.optional(),
+    creditCardId: uuidSchema.optional(),
+    categoryId: uuidSchema.optional(),
+    tagId: uuidSchema.optional(),
+    goalId: uuidSchema.optional(),
+    search: z.string().trim().min(1).max(100).optional(),
+    paymentStatus: z.enum(["all", "cleared", "pending", "needs_review", "cancelled"]).optional(),
+    from: dateOnlySchema.optional(),
+    to: dateOnlySchema.optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+    cursor: z.string().min(1).max(500).optional(),
+  })
+  .superRefine((value, context) => {
+    if (value.from && value.to && value.from > value.to) {
+      context.addIssue({
+        code: "custom",
+        path: ["to"],
+        message: "End date must be on or after start date",
+      });
+    }
+  });
 
-export const walletBootstrapSchema = z.object({
-  recordsLimit: z.number().int().min(1).max(500).default(200),
-  recordsCursor: z.string().min(1).max(500).nullable().default(null),
-}).strict();
+export const walletBootstrapSchema = z
+  .object({
+    recordsLimit: z.number().int().min(1).max(500).default(200),
+    recordsCursor: z.string().min(1).max(500).nullable().default(null),
+  })
+  .strict();
 
-export const recordImportSchema = z.object({
-  records: z.array(recordCreateSchema).min(1).max(200),
-}).strict();
+export const recordImportSchema = z
+  .object({
+    records: z.array(recordCreateSchema).min(1).max(200),
+  })
+  .strict();
 
 const optionalUuidSchema = uuidSchema.optional();
 
-export const mailIngestionSchema = z.object({
-  idempotencyKey: z.string().min(8).max(300),
-  integration: z.object({
-    name: z.string().min(1).max(100),
-    version: z.string().min(1).max(100),
-  }),
-  email: z.object({
-    provider: z.literal("gmail"),
-    messageId: z.string().min(1).max(300),
-    threadId: z.string().min(1).max(300),
-    subject: z.string().max(500).default(""),
-    from: z.string().max(500).default(""),
-    date: z.string().datetime(),
-  }),
-  transaction: z.object({
-    source: z.string().min(1).max(100),
-    sourceLabel: z.string().max(100).default(""),
-    occurredAt: z.string().datetime(),
-    amount: z.number().nonnegative(),
-    currency: currencySchema,
-    merchantRaw: z.string().min(1).max(500),
-    cardAlias: z.string().max(200).default(""),
-    cardBrand: z.string().max(100).default(""),
-    cardNumber: z.string().max(100).default(""),
-    paymentType: z.enum(["credit_card", "debit", "transfer"]),
-    accountNumber: z.string().max(100).optional(),
-    destinationAccountNumber: z.string().max(100).optional(),
-    destinationBank: z.string().max(200).optional(),
-  }),
-  destination: z
-    .object({
-      accountId: optionalUuidSchema,
-      creditCardId: optionalUuidSchema,
-      destinationAccountId: optionalUuidSchema,
-    })
-    .default({}),
-}).superRefine((value, context) => {
-  if (value.transaction.paymentType !== "credit_card" && value.destination.creditCardId) {
-    context.addIssue({ code: "custom", path: ["destination", "creditCardId"], message: "Bank notices cannot be assigned to a credit card" });
-  }
-  if (value.destination.destinationAccountId) {
-    if (value.transaction.paymentType !== "transfer" || !value.destination.accountId) {
-      context.addIssue({ code: "custom", path: ["destination", "destinationAccountId"], message: "An owned transfer requires a source bank account" });
+export const mailIngestionSchema = z
+  .object({
+    idempotencyKey: z.string().min(8).max(300),
+    integration: z.object({
+      name: z.string().min(1).max(100),
+      version: z.string().min(1).max(100),
+    }),
+    email: z.object({
+      provider: z.literal("gmail"),
+      messageId: z.string().min(1).max(300),
+      threadId: z.string().min(1).max(300),
+      subject: z.string().max(500).default(""),
+      from: z.string().max(500).default(""),
+      date: z.string().datetime(),
+    }),
+    transaction: z.object({
+      source: z.string().min(1).max(100),
+      sourceLabel: z.string().max(100).default(""),
+      occurredAt: z.string().datetime(),
+      amount: z.number().nonnegative(),
+      currency: currencySchema,
+      merchantRaw: z.string().min(1).max(500),
+      cardAlias: z.string().max(200).default(""),
+      cardBrand: z.string().max(100).default(""),
+      cardNumber: z.string().max(100).default(""),
+      paymentType: z.enum(["credit_card", "debit", "transfer"]),
+      accountNumber: z.string().max(100).optional(),
+      destinationAccountNumber: z.string().max(100).optional(),
+      destinationBank: z.string().max(200).optional(),
+    }),
+    destination: z
+      .object({
+        accountId: optionalUuidSchema,
+        creditCardId: optionalUuidSchema,
+        destinationAccountId: optionalUuidSchema,
+      })
+      .default({}),
+  })
+  .superRefine((value, context) => {
+    if (value.transaction.paymentType !== "credit_card" && value.destination.creditCardId) {
+      context.addIssue({
+        code: "custom",
+        path: ["destination", "creditCardId"],
+        message: "Bank notices cannot be assigned to a credit card",
+      });
     }
-    if (value.destination.destinationAccountId === value.destination.accountId) {
-      context.addIssue({ code: "custom", path: ["destination", "destinationAccountId"], message: "Transfer accounts must be different" });
+    if (value.destination.destinationAccountId) {
+      if (value.transaction.paymentType !== "transfer" || !value.destination.accountId) {
+        context.addIssue({
+          code: "custom",
+          path: ["destination", "destinationAccountId"],
+          message: "An owned transfer requires a source bank account",
+        });
+      }
+      if (value.destination.destinationAccountId === value.destination.accountId) {
+        context.addIssue({
+          code: "custom",
+          path: ["destination", "destinationAccountId"],
+          message: "Transfer accounts must be different",
+        });
+      }
     }
-  }
-});
+  });
 
 export type MailIngestionInput = z.infer<typeof mailIngestionSchema>;
-
 
 const id = { id: uuidSchema };
 // Read contracts preserve legacy history, including uncategorized records. Creation rules remain stricter.
 export const walletRecordResponseSchema = z.object({
-  ...recordSchema.shape, ...id,
+  ...recordSchema.shape,
+  ...id,
   createdAt: z.string().datetime().optional(),
   updatedAt: z.string().datetime().optional(),
   importMerchant: z.string().optional(),
   importHistory: z.array(z.string()).optional(),
   merchantCorrection: merchantCorrectionSchema.optional(),
 });
-export const cardStatementResponseSchema = z.object({ ...id, creditCardId: uuidSchema, cycleStart: z.string().datetime(), cycleEnd: z.string().datetime(), dueAt: z.string().datetime(), status: z.enum(["pending","partial","paid","overdue"]), closedAt:z.string().datetime(),paidAt:z.string().datetime().optional() });
-export const cardPaymentResponseSchema = creditCardPaymentSchema.safeExtend({ ...id, creditCardId: uuidSchema, statementId: uuidSchema.optional() });
-export const cardRecordResponseSchema = creditCardRecordSchema.safeExtend({ ...id, creditCardId:uuidSchema, walletRecordId:uuidSchema.optional(),statementId:uuidSchema.optional() });
-export const reservationMovementResponseSchema = goalReservationSchema.extend({ ...id,type:z.enum(["reserve","consume","restore","release"]),recordId:uuidSchema.optional(),reversesMovementId:uuidSchema.optional() });
-export const exchangeRateResponseSchema = z.object({ ...id,fromCurrency:currencySchema,toCurrency:currencySchema,rate:z.number().positive(),date:z.string(),source:z.string().optional() });
-export const paymentAllocationResponseSchema = z.object({ ...id,paymentId:uuidSchema,creditCardRecordId:uuidSchema,amount:z.number().nonnegative(),amountInLimitCurrency:z.number().nonnegative() });
-export const goalResponseSchema = goalSchema.safeExtend({...id,tagIds:z.array(uuidSchema).default([])});
+export const cardStatementResponseSchema = z.object({
+  ...id,
+  creditCardId: uuidSchema,
+  cycleStart: z.string().datetime(),
+  cycleEnd: z.string().datetime(),
+  dueAt: z.string().datetime(),
+  status: z.enum(["pending", "partial", "paid", "overdue"]),
+  closedAt: z.string().datetime(),
+  paidAt: z.string().datetime().optional(),
+});
+export const cardPaymentResponseSchema = creditCardPaymentSchema.safeExtend({
+  ...id,
+  creditCardId: uuidSchema,
+  statementId: uuidSchema.optional(),
+});
+export const cardRecordResponseSchema = creditCardRecordSchema.safeExtend({
+  ...id,
+  creditCardId: uuidSchema,
+  walletRecordId: uuidSchema.optional(),
+  statementId: uuidSchema.optional(),
+});
+export const reservationMovementResponseSchema = goalReservationSchema.extend({
+  ...id,
+  type: z.enum(["reserve", "consume", "restore", "release"]),
+  recordId: uuidSchema.optional(),
+  reversesMovementId: uuidSchema.optional(),
+});
+export const exchangeRateResponseSchema = z.object({
+  ...id,
+  fromCurrency: currencySchema,
+  toCurrency: currencySchema,
+  rate: z.number().positive(),
+  date: z.string(),
+  source: z.string().optional(),
+});
+export const paymentAllocationResponseSchema = z.object({
+  ...id,
+  paymentId: uuidSchema,
+  creditCardRecordId: uuidSchema,
+  amount: z.number().nonnegative(),
+  amountInLimitCurrency: z.number().nonnegative(),
+});
+export const goalResponseSchema = goalSchema.safeExtend({
+  ...id,
+  tagIds: z.array(uuidSchema).default([]),
+});
 export const walletDatasetSchema = z.object({
   recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
-  settings:settingsSchema,
-  accounts:z.array(accountSchema.extend(id)),categories:z.array(categorySchema.extend({...id,systemKey:z.string().optional()})),tags:z.array(tagSchema.extend(id)),records:z.array(walletRecordResponseSchema),
-  creditCards:z.array(creditCardSchema.extend(id)),creditCardRecords:z.array(cardRecordResponseSchema),creditCardStatements:z.array(cardStatementResponseSchema),creditCardPayments:z.array(cardPaymentResponseSchema),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema),
-  goals:z.array(goalResponseSchema),goalReservations:z.array(goalReservationSchema.extend(id)),goalReservationMovements:z.array(reservationMovementResponseSchema).optional(),
-  budgets:z.array(budgetSchema.extend(id)),exchangeRates:z.array(exchangeRateResponseSchema),investments:z.array(investmentSchema.extend(id)),debts:z.array(debtSchema.safeExtend(id)),recurringDebts:z.array(recurringDebtSchema.extend(id)),installmentPlans:z.array(installmentPlanSchema.extend(id)),
+  settings: settingsSchema,
+  accounts: z.array(accountSchema.extend(id)),
+  categories: z.array(categorySchema.extend({ ...id, systemKey: z.string().optional() })),
+  tags: z.array(tagSchema.extend(id)),
+  records: z.array(walletRecordResponseSchema),
+  creditCards: z.array(creditCardSchema.extend(id)),
+  creditCardRecords: z.array(cardRecordResponseSchema),
+  creditCardStatements: z.array(cardStatementResponseSchema),
+  creditCardPayments: z.array(cardPaymentResponseSchema),
+  creditCardPaymentAllocations: z.array(paymentAllocationResponseSchema),
+  goals: z.array(goalResponseSchema),
+  goalReservations: z.array(goalReservationSchema.extend(id)),
+  goalReservationMovements: z.array(reservationMovementResponseSchema).optional(),
+  budgets: z.array(budgetSchema.extend(id)),
+  exchangeRates: z.array(exchangeRateResponseSchema),
+  investments: z.array(investmentSchema.extend(id)),
+  debts: z.array(debtSchema.safeExtend(id)),
+  recurringDebts: z.array(recurringDebtSchema.extend(id)),
+  installmentPlans: z.array(installmentPlanSchema.extend(id)),
 });
-const backupMetadata = {createdAt:z.string().datetime().optional(),updatedAt:z.string().datetime().optional(),deletedAt:z.string().datetime().nullable().optional()};
-const backupRetryMetadata = {idempotencyKey:z.string().nullable().optional(),requestHash:z.string().nullable().optional()};
-export const walletBackupSchema = walletDatasetSchema.extend({
-  recordTemplates: z.array(recordTemplateSchema.extend({...id,...backupMetadata})).max(100).optional().default([]),
-  ingestionEvents:z.array(z.object({...id,idempotencyKey:z.string().min(1),source:z.string(),status:z.string(),action:z.string().optional(),fingerprint:z.string().optional(),targetKey:z.string().optional(),merchantNormalized:z.string().optional(),amount:z.number().nonnegative().optional(),currency:currencySchema.optional(),occurredAt:z.string().datetime().optional(),recordId:uuidSchema.optional(),creditCardRecordId:uuidSchema.optional(),duplicateOfId:uuidSchema.optional(),completedAt:z.string().datetime().optional(),createdAt:z.string().datetime(),updatedAt:z.string().datetime()})).optional(),
-  merchants:z.array(z.object({...id,...backupMetadata,name:z.string().min(1),categoryId:uuidSchema,priority:z.number().int(),matchMode:z.enum(["alias","exact"]).default("alias"),isActive:z.boolean()})).optional(),
-  merchantAliases:z.array(z.object({...id,createdAt:backupMetadata.createdAt,merchantId:uuidSchema,alias:z.string().min(1),normalizedAlias:z.string().min(1)})).optional(),
-  settings:settingsSchema.extend({...backupMetadata,id:uuidSchema.optional()}),
-  accounts:z.array(accountSchema.extend({...id,...backupMetadata})),categories:z.array(categorySchema.extend({...id,...backupMetadata,systemKey:z.string().optional()})),
-  tags:z.array(tagSchema.extend({...id,...backupMetadata})),
-  records:z.array(walletRecordResponseSchema.safeExtend({...backupMetadata,...backupRetryMetadata})),
-  goals:z.array(goalResponseSchema.safeExtend(backupMetadata)),creditCards:z.array(creditCardSchema.extend({...id,...backupMetadata})),
-  creditCardRecords:z.array(cardRecordResponseSchema.safeExtend(backupMetadata)),creditCardPayments:z.array(z.object({...cardPaymentResponseSchema.shape,...backupMetadata,...backupRetryMetadata})),
-  creditCardStatements:z.array(cardStatementResponseSchema.extend(backupMetadata)),creditCardPaymentAllocations:z.array(paymentAllocationResponseSchema.extend(backupMetadata)),
-  goalReservations:z.array(goalReservationSchema.extend({...id,...backupMetadata,createdAt:z.string().datetime()})),
-  goalReservationMovements:z.array(reservationMovementResponseSchema.extend({...backupMetadata,createdAt:z.string().datetime(),idempotencyKey:z.string().nullable().optional()})).optional(),
-  budgets:z.array(budgetSchema.extend({...id,...backupMetadata})),exchangeRates:z.array(exchangeRateResponseSchema.extend(backupMetadata)),
-  investments:z.array(investmentSchema.extend({...id,...backupMetadata})),debts:z.array(debtSchema.safeExtend({...id,...backupMetadata})),
-  recurringDebts:z.array(recurringDebtSchema.extend({...id,...backupMetadata})),installmentPlans:z.array(installmentPlanSchema.extend({...id,...backupMetadata})),
-}).superRefine((dataset,ctx)=>{
-  const ids = new Map<string,Set<string>>();
-  for (const [name,rows] of Object.entries(dataset)) {
-    if (!Array.isArray(rows)) continue;
-    const keys=rows.map(row=>row.id);
-    if(new Set(keys).size!==keys.length) ctx.addIssue({code:"custom",path:[name],message:"Duplicate IDs in backup"});
-    ids.set(name,new Set(keys));
-  }
-  const reference=(collection:string,value:string|undefined,path:(string|number)[])=>{
-    if(value&&!ids.get(collection)?.has(value))ctx.addIssue({code:"custom",path,message:`Missing ${collection} reference`});
-  };
-  dataset.recordTemplates.forEach((template,index)=>{
-    for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",template[key],["recordTemplates",index,key]);
-    reference("creditCards",template.creditCardId,["recordTemplates",index,"creditCardId"]);
-    reference("categories",template.categoryId,["recordTemplates",index,"categoryId"]);
-    reference("tags",template.tagId,["recordTemplates",index,"tagId"]);
+const backupMetadata = {
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+  deletedAt: z.string().datetime().nullable().optional(),
+};
+const backupRetryMetadata = {
+  idempotencyKey: z.string().nullable().optional(),
+  requestHash: z.string().nullable().optional(),
+};
+export const walletBackupSchema = walletDatasetSchema
+  .extend({
+    recordTemplates: z
+      .array(recordTemplateSchema.extend({ ...id, ...backupMetadata }))
+      .max(100)
+      .optional()
+      .default([]),
+    ingestionEvents: z
+      .array(
+        z.object({
+          ...id,
+          idempotencyKey: z.string().min(1),
+          source: z.string(),
+          status: z.string(),
+          action: z.string().optional(),
+          fingerprint: z.string().optional(),
+          targetKey: z.string().optional(),
+          merchantNormalized: z.string().optional(),
+          amount: z.number().nonnegative().optional(),
+          currency: currencySchema.optional(),
+          occurredAt: z.string().datetime().optional(),
+          recordId: uuidSchema.optional(),
+          creditCardRecordId: uuidSchema.optional(),
+          duplicateOfId: uuidSchema.optional(),
+          completedAt: z.string().datetime().optional(),
+          createdAt: z.string().datetime(),
+          updatedAt: z.string().datetime(),
+        }),
+      )
+      .optional(),
+    merchants: z
+      .array(
+        z.object({
+          ...id,
+          ...backupMetadata,
+          name: z.string().min(1),
+          categoryId: uuidSchema,
+          priority: z.number().int(),
+          matchMode: z.enum(["alias", "exact"]).default("alias"),
+          isActive: z.boolean(),
+        }),
+      )
+      .optional(),
+    merchantAliases: z
+      .array(
+        z.object({
+          ...id,
+          createdAt: backupMetadata.createdAt,
+          merchantId: uuidSchema,
+          alias: z.string().min(1),
+          normalizedAlias: z.string().min(1),
+        }),
+      )
+      .optional(),
+    settings: settingsSchema.extend({ ...backupMetadata, id: uuidSchema.optional() }),
+    accounts: z.array(accountSchema.extend({ ...id, ...backupMetadata })),
+    categories: z.array(
+      categorySchema.extend({ ...id, ...backupMetadata, systemKey: z.string().optional() }),
+    ),
+    tags: z.array(tagSchema.extend({ ...id, ...backupMetadata })),
+    records: z.array(
+      walletRecordResponseSchema.safeExtend({ ...backupMetadata, ...backupRetryMetadata }),
+    ),
+    goals: z.array(goalResponseSchema.safeExtend(backupMetadata)),
+    creditCards: z.array(creditCardSchema.extend({ ...id, ...backupMetadata })),
+    creditCardRecords: z.array(cardRecordResponseSchema.safeExtend(backupMetadata)),
+    creditCardPayments: z.array(
+      z.object({ ...cardPaymentResponseSchema.shape, ...backupMetadata, ...backupRetryMetadata }),
+    ),
+    creditCardStatements: z.array(cardStatementResponseSchema.extend(backupMetadata)),
+    creditCardPaymentAllocations: z.array(paymentAllocationResponseSchema.extend(backupMetadata)),
+    goalReservations: z.array(
+      goalReservationSchema.extend({ ...id, ...backupMetadata, createdAt: z.string().datetime() }),
+    ),
+    goalReservationMovements: z
+      .array(
+        reservationMovementResponseSchema.extend({
+          ...backupMetadata,
+          createdAt: z.string().datetime(),
+          idempotencyKey: z.string().nullable().optional(),
+        }),
+      )
+      .optional(),
+    budgets: z.array(budgetSchema.extend({ ...id, ...backupMetadata })),
+    exchangeRates: z.array(exchangeRateResponseSchema.extend(backupMetadata)),
+    investments: z.array(investmentSchema.extend({ ...id, ...backupMetadata })),
+    debts: z.array(debtSchema.safeExtend({ ...id, ...backupMetadata })),
+    recurringDebts: z.array(recurringDebtSchema.extend({ ...id, ...backupMetadata })),
+    installmentPlans: z.array(installmentPlanSchema.extend({ ...id, ...backupMetadata })),
+  })
+  .superRefine((dataset, ctx) => {
+    const ids = new Map<string, Set<string>>();
+    for (const [name, rows] of Object.entries(dataset)) {
+      if (!Array.isArray(rows)) continue;
+      const keys = rows.map((row) => row.id);
+      if (new Set(keys).size !== keys.length)
+        ctx.addIssue({ code: "custom", path: [name], message: "Duplicate IDs in backup" });
+      ids.set(name, new Set(keys));
+    }
+    const reference = (
+      collection: string,
+      value: string | undefined,
+      path: (string | number)[],
+    ) => {
+      if (value && !ids.get(collection)?.has(value))
+        ctx.addIssue({ code: "custom", path, message: `Missing ${collection} reference` });
+    };
+    dataset.recordTemplates.forEach((template, index) => {
+      for (const key of ["accountId", "destinationAccountId"] as const)
+        reference("accounts", template[key], ["recordTemplates", index, key]);
+      reference("creditCards", template.creditCardId, ["recordTemplates", index, "creditCardId"]);
+      reference("categories", template.categoryId, ["recordTemplates", index, "categoryId"]);
+      reference("tags", template.tagId, ["recordTemplates", index, "tagId"]);
+    });
+    dataset.records.forEach((record, index) => {
+      for (const key of ["accountId", "destinationAccountId"] as const)
+        reference("accounts", record[key], ["records", index, key]);
+      reference("categories", record.categoryId, ["records", index, "categoryId"]);
+      reference("creditCards", record.creditCardId, ["records", index, "creditCardId"]);
+      // Historical debt IDs can outlive deleted debt metadata; records.debt_id has no FK.
+      record.tagIds.forEach((value) => reference("tags", value, ["records", index, "tagIds"]));
+      record.goalAssociations.forEach((value) =>
+        reference("goals", value.goalId, ["records", index, "goalAssociations"]),
+      );
+      record.goalIds.forEach((value) => reference("goals", value, ["records", index, "goalIds"]));
+    });
+    if ((dataset.merchants === undefined) !== (dataset.merchantAliases === undefined))
+      ctx.addIssue({
+        code: "custom",
+        path: ["merchants"],
+        message: "Backup must include both merchant collections",
+      });
+    dataset.merchants?.forEach((merchant, index) =>
+      reference("categories", merchant.categoryId, ["merchants", index, "categoryId"]),
+    );
+    dataset.merchantAliases?.forEach((alias, index) =>
+      reference("merchants", alias.merchantId, ["merchantAliases", index, "merchantId"]),
+    );
+    dataset.ingestionEvents?.forEach((event, index) => {
+      reference("records", event.recordId, ["ingestionEvents", index, "recordId"]);
+      reference("creditCardRecords", event.creditCardRecordId, [
+        "ingestionEvents",
+        index,
+        "creditCardRecordId",
+      ]);
+      reference("ingestionEvents", event.duplicateOfId, [
+        "ingestionEvents",
+        index,
+        "duplicateOfId",
+      ]);
+    });
   });
-  dataset.records.forEach((record,index)=>{
-    for(const key of ["accountId","destinationAccountId"] as const) reference("accounts",record[key],["records",index,key]);
-    reference("categories",record.categoryId,["records",index,"categoryId"]);
-    reference("creditCards",record.creditCardId,["records",index,"creditCardId"]);
-    // Historical debt IDs can outlive deleted debt metadata; records.debt_id has no FK.
-    record.tagIds.forEach(value=>reference("tags",value,["records",index,"tagIds"]));
-    record.goalAssociations.forEach(value=>reference("goals",value.goalId,["records",index,"goalAssociations"]));
-    record.goalIds.forEach(value=>reference("goals",value,["records",index,"goalIds"]));
-  });
-  if ((dataset.merchants === undefined) !== (dataset.merchantAliases === undefined)) ctx.addIssue({code:"custom",path:["merchants"],message:"Backup must include both merchant collections"});
-  dataset.merchants?.forEach((merchant,index)=>reference("categories",merchant.categoryId,["merchants",index,"categoryId"]));
-  dataset.merchantAliases?.forEach((alias,index)=>reference("merchants",alias.merchantId,["merchantAliases",index,"merchantId"]));
-  dataset.ingestionEvents?.forEach((event,index)=>{
-    reference("records",event.recordId,["ingestionEvents",index,"recordId"]);
-    reference("creditCardRecords",event.creditCardRecordId,["ingestionEvents",index,"creditCardRecordId"]);
-    reference("ingestionEvents",event.duplicateOfId,["ingestionEvents",index,"duplicateOfId"]);
-  });
-});
-

@@ -1,10 +1,6 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
 import { calculateCreditCardStatementBalance } from "@shared/calculations";
-import type {
-  CreditCard,
-  CreditCardStatement,
-  WalletDataset,
-} from "@shared/types";
+import type { CreditCard, CreditCardStatement, WalletDataset } from "@shared/types";
 
 export interface PendingCardStatement extends ReturnType<
   typeof calculateCreditCardStatementBalance
@@ -27,8 +23,8 @@ function cardHistoryAsOf(dataset: WalletDataset, asOf: Date) {
       (record) => parseISO(record.occurredAt) <= asOf,
     ),
     creditCardPayments: payments,
-    creditCardPaymentAllocations: dataset.creditCardPaymentAllocations.filter(
-      (allocation) => paymentIds.has(allocation.paymentId),
+    creditCardPaymentAllocations: dataset.creditCardPaymentAllocations.filter((allocation) =>
+      paymentIds.has(allocation.paymentId),
     ),
   };
 }
@@ -38,10 +34,7 @@ export function cardStatementBalanceAsOf(
   statement: CreditCardStatement,
   asOf = new Date(),
 ) {
-  return calculateCreditCardStatementBalance(
-    cardHistoryAsOf(dataset, asOf),
-    statement,
-  );
+  return calculateCreditCardStatementBalance(cardHistoryAsOf(dataset, asOf), statement);
 }
 
 /** Read-only agenda for Cards and Dashboard. Includes archived cards and ignores
@@ -55,16 +48,11 @@ export function selectPendingCardStatements(
   const current = cardHistoryAsOf(dataset, asOf);
   return dataset.creditCardStatements
     .flatMap((statement) => {
-      const card = dataset.creditCards.find(
-        (card) => card.id === statement.creditCardId,
-      );
+      const card = dataset.creditCards.find((card) => card.id === statement.creditCardId);
       if (!card || parseISO(statement.closedAt) > asOf) return [];
       const balance = calculateCreditCardStatementBalance(current, statement);
       if (balance.dueAmountInLimitCurrency < 0.005) return [];
-      const daysUntilDue = differenceInCalendarDays(
-        parseISO(statement.dueAt),
-        asOf,
-      );
+      const daysUntilDue = differenceInCalendarDays(parseISO(statement.dueAt), asOf);
       return [
         {
           card,
@@ -85,8 +73,7 @@ export function selectPendingCardStatements(
     })
     .sort(
       (a, b) =>
-        parseISO(a.statement.dueAt).getTime() -
-          parseISO(b.statement.dueAt).getTime() ||
+        parseISO(a.statement.dueAt).getTime() - parseISO(b.statement.dueAt).getTime() ||
         a.statement.id.localeCompare(b.statement.id),
     );
 }
@@ -99,25 +86,17 @@ export function selectCardStatement(
 ): CreditCardStatement | undefined {
   return (
     dataset.creditCardStatements.find(
-      (statement) =>
-        statement.creditCardId === cardId && statement.id === requestedId,
+      (statement) => statement.creditCardId === cardId && statement.id === requestedId,
     ) ??
-    selectPendingCardStatements(dataset, asOf).find(
-      (entry) => entry.card.id === cardId,
-    )?.statement
+    selectPendingCardStatements(dataset, asOf).find((entry) => entry.card.id === cardId)?.statement
   );
 }
 
 export function cardLimitWarning(utilizationPercent: number) {
-  if (!Number.isFinite(utilizationPercent) || utilizationPercent < 80)
-    return null;
+  if (!Number.isFinite(utilizationPercent) || utilizationPercent < 80) return null;
   return {
-    severity:
-      utilizationPercent >= 100 ? ("danger" as const) : ("warning" as const),
-    message:
-      utilizationPercent >= 100
-        ? "Credit limit reached"
-        : "Approaching credit limit",
+    severity: utilizationPercent >= 100 ? ("danger" as const) : ("warning" as const),
+    message: utilizationPercent >= 100 ? "Credit limit reached" : "Approaching credit limit",
     percent: Math.round(utilizationPercent),
   };
 }

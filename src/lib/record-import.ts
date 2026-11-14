@@ -51,31 +51,23 @@ export function parseCsv(text: string): Array<Record<string, string>> {
       endRow();
       if (c === "\r" && csv[i + 1] === "\n") i++;
     } else if (c === '"' && !cell && !closed) quoted = true;
-    else if (closed || c === '"')
-      throw new Error("Invalid CSV quote placement.");
+    else if (closed || c === '"') throw new Error("Invalid CSV quote placement.");
     else cell += c;
   }
   if (quoted) throw new Error("CSV has an unterminated quoted field.");
   if (cell || row.length || closed) endRow();
   const headers = (rows.shift() ?? []).map((h) => h.trim().toLowerCase());
-  if (new Set(headers).size !== headers.length)
-    throw new Error("CSV headers must be unique.");
+  if (new Set(headers).size !== headers.length) throw new Error("CSV headers must be unique.");
   return rows.map((values, i) => {
     if (values.length !== headers.length)
-      throw new Error(
-        `CSV row ${i + 2} has ${values.length} fields; expected ${headers.length}.`,
-      );
+      throw new Error(`CSV row ${i + 2} has ${values.length} fields; expected ${headers.length}.`);
     return Object.fromEntries(headers.map((h, j) => [h, values[j]]));
   });
 }
 
 const csvCell = (value: unknown) => {
   const text =
-    value === undefined
-      ? ""
-      : typeof value === "object"
-        ? JSON.stringify(value)
-        : String(value);
+    value === undefined ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 };
 const csvFields = [
@@ -107,18 +99,13 @@ export function recordsCsv(records: WalletRecord[]) {
     csvFields.join(","),
     ...records.map((record) =>
       csvFields
-        .map((key) =>
-          csvCell((record as unknown as Record<string, unknown>)[key]),
-        )
+        .map((key) => csvCell((record as unknown as Record<string, unknown>)[key]))
         .join(","),
     ),
   ].join("\r\n");
 }
 
-function positive(
-  value: string | undefined,
-  label: string,
-): number | undefined {
+function positive(value: string | undefined, label: string): number | undefined {
   if (!value?.trim()) return undefined;
   const number = Number(value);
   if (!Number.isFinite(number) || number <= 0)
@@ -139,37 +126,26 @@ export function prepareCsvRecords(
       const amount = positive(row.amount, "Amount");
       if (!amount) throw new Error("Amount is required.");
       const rawDate = (row.date || row.occurredat || "").trim();
-      const date = new Date(
-        /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? `${rawDate}T12:00:00Z` : rawDate,
-      );
+      const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? `${rawDate}T12:00:00Z` : rawDate);
       if (
         !rawDate ||
         Number.isNaN(date.getTime()) ||
-        (/^\d{4}-\d{2}-\d{2}$/.test(rawDate) &&
-          date.toISOString().slice(0, 10) !== rawDate)
+        (/^\d{4}-\d{2}-\d{2}$/.test(rawDate) && date.toISOString().slice(0, 10) !== rawDate)
       )
         throw new Error("Date is invalid.");
-      const paymentStatus = paymentStatusSchema.parse(
-        row.paymentstatus || row.status || "cleared",
-      );
+      const paymentStatus = paymentStatusSchema.parse(row.paymentstatus || row.status || "cleared");
       // Explicit empty IDs from an export are meaningful (for example review
       // items without a destination); defaults only fill absent CSV columns.
-      const accountId =
-        "accountid" in row ? row.accountid || undefined : defaultAccountId;
+      const accountId = "accountid" in row ? row.accountid || undefined : defaultAccountId;
       const account = dataset.accounts.find((a) => a.id === accountId);
       const card = row.creditcardid
         ? dataset.creditCards.find((c) => c.id === row.creditcardid)
         : undefined;
       if (row.creditcardid && !card) throw new Error("Card does not exist.");
-      if (
-        (!account && !card && paymentStatus !== "needs_review") ||
-        (accountId && !account)
-      )
+      if ((!account && !card && paymentStatus !== "needs_review") || (accountId && !account))
         throw new Error("Select a valid account.");
       const currency = currencySchema.parse(
-        row.currency?.trim().toUpperCase() ||
-          account?.currency ||
-          card?.limitCurrency,
+        row.currency?.trim().toUpperCase() || account?.currency || card?.limitCurrency,
       );
       const occurredAt = date.toISOString();
       const primaryRate =
@@ -185,20 +161,11 @@ export function prepareCsvRecords(
           `Missing ${currency}/${dataset.settings.primaryCurrency} exchange rate. Supply exchangeRateToPrimary.`,
         );
       let accountAmount = positive(row.accountamount, "Account amount");
-      if (
-        account &&
-        accountAmount === undefined &&
-        currency !== account.currency
-      ) {
+      if (account && accountAmount === undefined && currency !== account.currency) {
         const rate =
           account.currency === dataset.settings.primaryCurrency
             ? primaryRate
-            : findExchangeRate(
-                dataset.exchangeRates,
-                currency,
-                account.currency,
-                occurredAt,
-              );
+            : findExchangeRate(dataset.exchangeRates, currency, account.currency, occurredAt);
         if (!rate)
           throw new Error(
             `Missing ${currency}/${account.currency} exchange rate. Supply accountAmount.`,
@@ -209,8 +176,7 @@ export function prepareCsvRecords(
         "categoryid" in row
           ? row.categoryid || undefined
           : dataset.categories.find(
-              (c) =>
-                c.name.toLowerCase() === row.category?.trim().toLowerCase(),
+              (c) => c.name.toLowerCase() === row.category?.trim().toLowerCase(),
             )?.id || (type === "income" ? incomeCategoryId : expenseCategoryId);
       if (categoryId && !dataset.categories.some((c) => c.id === categoryId))
         throw new Error("Category does not exist.");
@@ -228,46 +194,26 @@ export function prepareCsvRecords(
         categoryId: categoryId || undefined,
         creditCardId: row.creditcardid || undefined,
         destinationAccountId: destination?.id,
-        counterpartyName:
-          row.description ||
-          row.counterparty ||
-          row.counterpartyname ||
-          undefined,
-        tagIds: row.tagids
-          ? z.array(z.string()).parse(JSON.parse(row.tagids))
-          : [],
-        goalIds: row.goalids
-          ? z.array(z.string()).parse(JSON.parse(row.goalids))
-          : [],
+        counterpartyName: row.description || row.counterparty || row.counterpartyname || undefined,
+        tagIds: row.tagids ? z.array(z.string()).parse(JSON.parse(row.tagids)) : [],
+        goalIds: row.goalids ? z.array(z.string()).parse(JSON.parse(row.goalids)) : [],
         goalAssociations: row.goalassociations
-          ? z
-              .array(recordGoalAssociationSchema)
-              .parse(JSON.parse(row.goalassociations))
+          ? z.array(recordGoalAssociationSchema).parse(JSON.parse(row.goalassociations))
           : [],
         paymentType: paymentTypeSchema.parse(row.paymenttype || "other"),
         paymentStatus,
         exchangeRateToPrimary: primaryRate,
-        amountInLimitCurrency: positive(
-          row.amountinlimitcurrency,
-          "Limit amount",
-        ),
-        exchangeRateToLimitCurrency: positive(
-          row.exchangeratetolimitcurrency,
-          "Limit rate",
-        ),
+        amountInLimitCurrency: positive(row.amountinlimitcurrency, "Limit amount"),
+        exchangeRateToLimitCurrency: positive(row.exchangeratetolimitcurrency, "Limit rate"),
         occurredAt,
         note: row.note || undefined,
         isFixed: row.isfixed === "true",
         debtId: row.debtid ? uuidSchema.parse(row.debtid) : undefined,
       };
-      if (
-        record.debtId &&
-        !dataset.debts.some((debt) => debt.id === record.debtId)
-      )
+      if (record.debtId && !dataset.debts.some((debt) => debt.id === record.debtId))
         throw new Error("Linked debt does not exist.");
       for (const tagId of record.tagIds) {
-        if (!dataset.tags.some((tag) => tag.id === tagId))
-          throw new Error("Tag does not exist.");
+        if (!dataset.tags.some((tag) => tag.id === tagId)) throw new Error("Tag does not exist.");
       }
       const goalIds = new Set([
         ...(record.goalIds ?? []),
@@ -282,33 +228,21 @@ export function prepareCsvRecords(
           throw new Error("New records can only be associated with active goals.");
       }
       if (destination) {
-        const amountInDestination = positive(
-          row.destinationamount,
-          "Destination amount",
-        );
+        const amountInDestination = positive(row.destinationamount, "Destination amount");
         const rate =
           destination.currency === dataset.settings.primaryCurrency
             ? primaryRate
-            : findExchangeRate(
-                dataset.exchangeRates,
-                currency,
-                destination.currency,
-                occurredAt,
-              );
+            : findExchangeRate(dataset.exchangeRates, currency, destination.currency, occurredAt);
         if (!amountInDestination && !rate)
-          throw new Error(
-            "Missing destination exchange rate. Supply destinationAmount.",
-          );
+          throw new Error("Missing destination exchange rate. Supply destinationAmount.");
         Object.assign(record, {
-          destinationAmount:
-            amountInDestination ?? Math.round(amount * rate! * 100) / 100,
+          destinationAmount: amountInDestination ?? Math.round(amount * rate! * 100) / 100,
         });
       }
       // Invalid rows must not reserve a duplicate identity for later valid rows.
       const validated = recordCreateSchema.parse(record);
       const fingerprint = recordFingerprint(validated);
-      if (seen.has(fingerprint))
-        throw new Error("Possible duplicate in wallet or CSV.");
+      if (seen.has(fingerprint)) throw new Error("Possible duplicate in wallet or CSV.");
       seen.add(fingerprint);
       // Preview and the API share the final contract, including cross-field
       // card constraints and references represented by UUIDs.

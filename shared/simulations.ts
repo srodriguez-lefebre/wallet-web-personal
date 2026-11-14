@@ -8,14 +8,20 @@ import {
 } from "./calculations.js";
 
 export function calculateEndOfMonthProjection(dataset: WalletDataset, dailySpend: number) {
-  const remainingDays = Math.max(1, differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1);
+  const remainingDays = Math.max(
+    1,
+    differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1,
+  );
   const balance = calculateVisibleBalance(dataset);
 
   return balance - dailySpend * remainingDays;
 }
 
 export function calculateAllowedDailySpend(dataset: WalletDataset) {
-  const remainingDays = Math.max(1, differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1);
+  const remainingDays = Math.max(
+    1,
+    differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1,
+  );
   const balance = calculateVisibleBalance(dataset);
 
   return balance / remainingDays;
@@ -29,10 +35,7 @@ export function buildSavingsRecommendations(dataset: WalletDataset) {
       summary.dailyAverageExpense,
       dataset.settings.primaryCurrency,
     )}.`,
-    `Estimated daily allowance: ${formatMoney(
-      allowedDaily,
-      dataset.settings.primaryCurrency,
-    )}.`,
+    `Estimated daily allowance: ${formatMoney(allowedDaily, dataset.settings.primaryCurrency)}.`,
   ];
 
   if (summary.dailyAverageExpense > allowedDaily) {

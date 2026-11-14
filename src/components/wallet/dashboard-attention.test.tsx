@@ -16,12 +16,7 @@ test("debt net distinguishes unknown amounts and partial known totals", async ()
     },
   ];
   await act(async () => {
-    tree = create(
-      <DebtNetBadge
-        summary={calculateVisibleDebtSummary(data)}
-        currency="UYU"
-      />,
-    );
+    tree = create(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Net unavailable");
   expect(JSON.stringify(tree!.toJSON())).not.toContain("$ 0");
@@ -32,12 +27,7 @@ test("debt net distinguishes unknown amounts and partial known totals", async ()
     currency: "UYU",
   });
   await act(async () => {
-    tree!.update(
-      <DebtNetBadge
-        summary={calculateVisibleDebtSummary(data)}
-        currency="UYU"
-      />,
-    );
+    tree!.update(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Known net");
 });

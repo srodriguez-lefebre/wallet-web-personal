@@ -35,9 +35,7 @@ afterAll(async () => {
   await pg.close();
 });
 beforeEach(async () => {
-  await pg.exec(
-    "TRUNCATE accounts,categories,settings,goals,tags,exchange_rates CASCADE",
-  );
+  await pg.exec("TRUNCATE accounts,categories,settings,goals,tags,exchange_rates CASCADE");
   await importSnapshot(pg, {
     settings: { primaryCurrency: "UYU" },
     accounts: [
@@ -51,9 +49,7 @@ beforeEach(async () => {
         icon: "bank",
       },
     ],
-    categories: [
-      { id: categoryId, name: "Category", color: "blue", icon: "bank" },
-    ],
+    categories: [{ id: categoryId, name: "Category", color: "blue", icon: "bank" }],
     goals: [
       {
         id: goalId,
@@ -92,20 +88,66 @@ async function archiveHistory() {
   return record;
 }
 
-test("complete backups preserve mail retry identities and duplicate lineage after restoration",async()=>{
-  const record=await createRecord(recordSchema.parse({type:"expense",amount:40,currency:"UYU",accountId,categoryId,paymentType:"debit",paymentStatus:"cleared",occurredAt:date}));
-  const eventId="00000000-0000-4000-8000-000000000011",duplicateId="00000000-0000-4000-8000-000000000012";
-  await pg.query("INSERT INTO ingestion_events(id,idempotency_key,source,status,action,record_id) VALUES($1,'backup-mail','test','completed','created',$2)",[eventId,record.id]);
-  await pg.query("INSERT INTO ingestion_events(id,idempotency_key,source,status,action,duplicate_of_id) VALUES($1,'backup-duplicate','test','completed','duplicate',$2)",[duplicateId,eventId]);
-  const backup=walletBackupSchema.parse(await getWalletBackup());
+test("complete backups preserve mail retry identities and duplicate lineage after restoration", async () => {
+  const record = await createRecord(
+    recordSchema.parse({
+      type: "expense",
+      amount: 40,
+      currency: "UYU",
+      accountId,
+      categoryId,
+      paymentType: "debit",
+      paymentStatus: "cleared",
+      occurredAt: date,
+    }),
+  );
+  const eventId = "00000000-0000-4000-8000-000000000011",
+    duplicateId = "00000000-0000-4000-8000-000000000012";
+  await pg.query(
+    "INSERT INTO ingestion_events(id,idempotency_key,source,status,action,record_id) VALUES($1,'backup-mail','test','completed','created',$2)",
+    [eventId, record.id],
+  );
+  await pg.query(
+    "INSERT INTO ingestion_events(id,idempotency_key,source,status,action,duplicate_of_id) VALUES($1,'backup-duplicate','test','completed','duplicate',$2)",
+    [duplicateId, eventId],
+  );
+  const backup = walletBackupSchema.parse(await getWalletBackup());
   expect(backup.ingestionEvents).toHaveLength(2);
   await pg.exec("DELETE FROM ingestion_events");
   await restoreWalletBackup(backup);
-  const input={idempotencyKey:"backup-mail",integration:{name:"gmail_apps_script" as const,version:"test"},email:{provider:"gmail" as const,messageId:"test",threadId:"test",subject:"Test",from:"test@example.com",date},transaction:{source:"test",sourceLabel:"test",occurredAt:date,amount:40,currency:"UYU" as const,merchantRaw:"Test",cardAlias:"",cardBrand:"",cardNumber:"",paymentType:"credit_card" as const},destination:{}};
+  const input = {
+    idempotencyKey: "backup-mail",
+    integration: { name: "gmail_apps_script" as const, version: "test" },
+    email: {
+      provider: "gmail" as const,
+      messageId: "test",
+      threadId: "test",
+      subject: "Test",
+      from: "test@example.com",
+      date,
+    },
+    transaction: {
+      source: "test",
+      sourceLabel: "test",
+      occurredAt: date,
+      amount: 40,
+      currency: "UYU" as const,
+      merchantRaw: "Test",
+      cardAlias: "",
+      cardBrand: "",
+      cardNumber: "",
+      paymentType: "credit_card" as const,
+    },
+    destination: {},
+  };
   expect((await processMailIngestion(input)).status).toBe("already_processed");
   expect((await getWalletDataset()).records).toHaveLength(1);
-  expect((await getWalletBackup()).ingestionEvents?.find(event=>event.id===duplicateId)?.duplicateOfId).toBe(eventId);
-  const legacy={...backup};delete legacy.ingestionEvents;
+  expect(
+    (await getWalletBackup()).ingestionEvents?.find((event) => event.id === duplicateId)
+      ?.duplicateOfId,
+  ).toBe(eventId);
+  const legacy = { ...backup };
+  delete legacy.ingestionEvents;
   await restoreWalletBackup(legacy);
   expect((await processMailIngestion(input)).status).toBe("already_processed");
 });
@@ -124,18 +166,14 @@ test("backup retains archived goals and every ledger reference without exposing 
   expect(backup.records[0].id).toBe(record.id);
   expect(backup.goalReservationMovements).toHaveLength(3);
   expect(
-    backup.goalReservationMovements?.find(
-      (movement) => movement.type === "consume",
-    ),
+    backup.goalReservationMovements?.find((movement) => movement.type === "consume"),
   ).toMatchObject({ recordId: record.id, idempotencyKey: expect.any(String) });
 });
 
 test("backup retains soft-deleted records and accounts referenced by durable financial history", async () => {
   const record = await archiveHistory();
   await deleteRecord(record.id);
-  await pg.query("update accounts set deleted_at=now() where id=$1", [
-    accountId,
-  ]);
+  await pg.query("update accounts set deleted_at=now() where id=$1", [accountId]);
   const normal = await getWalletDataset();
   expect(normal.accounts).toEqual([]);
   expect(normal.records).toEqual([]);
@@ -153,9 +191,7 @@ test("backup retains soft-deleted records and accounts referenced by durable fin
 test("JSON export and atomic restore preserve archived goals and reservation ledger without reviving UI entities", async () => {
   await archiveHistory();
   const before = await getWalletDataset();
-  const backup = walletBackupSchema.parse(
-    JSON.parse(JSON.stringify(await getWalletBackup())),
-  );
+  const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
   expect(backup.goals[0].deletedAt).toEqual(expect.any(String));
   await restoreWalletBackup(backup);
   expect(await getWalletDataset()).toEqual(before);
@@ -167,12 +203,8 @@ test("JSON export and atomic restore preserve archived goals and reservation led
 test("export and restore retain deleted records and archived accounts needed by reservation references", async () => {
   const record = await archiveHistory();
   await deleteRecord(record.id);
-  await pg.query("update accounts set deleted_at=now() where id=$1", [
-    accountId,
-  ]);
-  const backup = walletBackupSchema.parse(
-    JSON.parse(JSON.stringify(await getWalletBackup())),
-  );
+  await pg.query("update accounts set deleted_at=now() where id=$1", [accountId]);
+  const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
   expect(backup.accounts[0].deletedAt).toEqual(expect.any(String));
   expect(backup.records[0].deletedAt).toEqual(expect.any(String));
   await restoreWalletBackup(backup);

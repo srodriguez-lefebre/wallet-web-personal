@@ -22,17 +22,12 @@ export function json(res: ServerResponse, value: unknown, status = 200) {
   res.end(JSON.stringify(value));
 }
 
-export async function serveWalletApi(
-  req: IncomingMessage,
-  res: ServerResponse,
-) {
+export async function serveWalletApi(req: IncomingMessage, res: ServerResponse) {
   const url = new URL(req.url!, "http://127.0.0.1");
   const request = req as VercelRequest;
   request.query = Object.fromEntries(url.searchParams);
   request.query.path =
-    url.pathname === "/api"
-      ? (request.query.path ?? "")
-      : url.pathname.replace(/^\/api\//, "");
+    url.pathname === "/api" ? (request.query.path ?? "") : url.pathname.replace(/^\/api\//, "");
   request.cookies = {};
   try {
     request.body = await readJson(req);

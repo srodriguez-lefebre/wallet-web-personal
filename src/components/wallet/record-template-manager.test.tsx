@@ -92,15 +92,11 @@ async function mount() {
   });
 }
 function button(text: string) {
-  return tree!.root
-    .findAllByType("button")
-    .find((button) => button.children.includes(text))!;
+  return tree!.root.findAllByType("button").find((button) => button.children.includes(text))!;
 }
 async function fill(label: string, value: string) {
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": label })
-      .props.onChange({ target: { value } }),
+    tree!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } }),
   );
 }
 async function createDraft() {
@@ -110,9 +106,7 @@ async function createDraft() {
   await fill("Importe de plantilla", "100");
 }
 async function submit() {
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
 }
 test("settings manager creates reusable configuration without inserting financial history", async () => {
   const before = structuredClone(dataset.records);
@@ -127,13 +121,7 @@ test("settings manager creates reusable configuration without inserting financia
     }),
   );
   const payload = actions.add.mock.calls[0][0];
-  for (const key of [
-    "occurredAt",
-    "accountAmount",
-    "exchangeRateToPrimary",
-    "goalIds",
-    "debtId",
-  ])
+  for (const key of ["occurredAt", "accountAmount", "exchangeRateToPrimary", "goalIds", "debtId"])
     expect(payload).not.toHaveProperty(key);
   expect(dataset.records).toEqual(before);
   expect(actions.addRecord).not.toHaveBeenCalled();
@@ -143,9 +131,7 @@ test("use requests a fresh record draft and routes to records without writing", 
   dataset.recordTemplates = [saved()];
   await mount();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Usar plantilla Alquiler" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Usar plantilla Alquiler" }).props.onClick(),
   );
   expect(actions.request).toHaveBeenCalledExactlyOnceWith(templateId);
   expect(actions.navigate).toHaveBeenCalledExactlyOnceWith("/records");
@@ -156,9 +142,7 @@ test("editing a template clears optional fields through the shared patch contrac
   dataset.recordTemplates = [{ ...saved(), note: "Anterior" }];
   await mount();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Editar plantilla Alquiler" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Editar plantilla Alquiler" }).props.onClick(),
   );
   await fill("Nombre de plantilla", "Alquiler actualizado");
   await fill("Nota de plantilla", "");
@@ -173,9 +157,7 @@ test("editing a template clears optional fields through the shared patch contrac
   );
   expect(actions.addRecord).not.toHaveBeenCalled();
   expect(
-    tree!.root
-      .findAllByType("input")
-      .some((input) => input.props.type === "datetime-local"),
+    tree!.root.findAllByType("input").some((input) => input.props.type === "datetime-local"),
   ).toBe(false);
 });
 test("pending saves are single flight", async () => {
@@ -220,15 +202,11 @@ test("delete retry reconciles an already-removed template without touching recor
   actions.remove.mockRejectedValueOnce(new Error("Response lost"));
   await mount();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Quitar plantilla Alquiler" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Quitar plantilla Alquiler" }).props.onClick(),
   );
   actions.read.mockResolvedValue({ ...dataset, recordTemplates: [] });
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Quitar plantilla Alquiler" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Quitar plantilla Alquiler" }).props.onClick(),
   );
   expect(actions.remove).toHaveBeenCalledTimes(1);
   expect(actions.read).toHaveBeenCalledTimes(1);
@@ -250,8 +228,8 @@ test("late save completion does not close another configuration draft", async ()
   await act(async () => button("Crear plantilla").props.onClick());
   await fill("Nombre de plantilla", "Otra plantilla");
   await act(async () => release(templateId));
-  expect(
-    tree!.root.findByProps({ "aria-label": "Nombre de plantilla" }).props.value,
-  ).toBe("Otra plantilla");
+  expect(tree!.root.findByProps({ "aria-label": "Nombre de plantilla" }).props.value).toBe(
+    "Otra plantilla",
+  );
   expect(tree!.root.findByType("form")).toBeDefined();
 });

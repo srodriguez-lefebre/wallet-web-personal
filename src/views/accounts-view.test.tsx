@@ -62,14 +62,10 @@ async function mount() {
 }
 async function edit() {
   await mount();
-  await act(async () =>
-    tree!.root.findByProps({ "aria-label": "Edit accounts" }).props.onClick(),
-  );
+  await act(async () => tree!.root.findByProps({ "aria-label": "Edit accounts" }).props.onClick());
 }
 function save() {
-  return tree!.root
-    .findAllByType("button")
-    .find((button) => button.children.includes("Save"))!;
+  return tree!.root.findAllByType("button").find((button) => button.children.includes("Save"))!;
 }
 function submit() {
   return tree!.root.findByType("form").props.onSubmit({ preventDefault() {} });
@@ -85,8 +81,7 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
   actions.updateAccount.mockImplementation(async (id: string) => {
     if (
       id === dataset.accounts[1].id &&
-      actions.updateAccount.mock.calls.filter((call) => call[0] === id)
-        .length === 1
+      actions.updateAccount.mock.calls.filter((call) => call[0] === id).length === 1
     )
       throw new Error("Offline");
   });
@@ -102,9 +97,7 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
       .catch(() => {});
   });
   expect(
-    tree!.root
-      .findAllByProps({ placeholder: "Account name" })
-      .map((input) => input.props.value),
+    tree!.root.findAllByProps({ placeholder: "Account name" }).map((input) => input.props.value),
   ).toEqual(["First edited", "Second edited"]);
   await act(async () => {
     await save()
@@ -112,21 +105,15 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
       .catch(() => {});
   });
   expect(
-    actions.updateAccount.mock.calls.filter(
-      (call) => call[0] === dataset.accounts[0].id,
-    ),
+    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[0].id),
   ).toHaveLength(1);
   expect(
-    actions.updateAccount.mock.calls.filter(
-      (call) => call[0] === dataset.accounts[1].id,
-    ),
+    actions.updateAccount.mock.calls.filter((call) => call[0] === dataset.accounts[1].id),
   ).toHaveLength(2);
 });
 test("creating succeeds once even when the primary-account step needs a retry", async () => {
   dataset.settings.primaryAccountId = undefined;
-  actions.setPrimaryAccount.mockRejectedValueOnce(
-    new Error("Settings unavailable"),
-  );
+  actions.setPrimaryAccount.mockRejectedValueOnce(new Error("Settings unavailable"));
   await mount();
   await act(async () =>
     tree!.root
@@ -167,18 +154,15 @@ test("double creation submits a single request and preserves the form after fail
     fail(new Error("Offline"));
     await Promise.allSettled([first, second]);
   });
-  expect(
-    tree!.root.findByProps({ placeholder: "Banco, efectivo, tarjeta..." }).props
-      .value,
-  ).toBe("Retained bank");
+  expect(tree!.root.findByProps({ placeholder: "Banco, efectivo, tarjeta..." }).props.value).toBe(
+    "Retained bank",
+  );
 });
 test("incomplete history withholds account balances and displays its loading state", async () => {
   complete = false;
   await mount();
   expect(
-    tree!.root
-      .findAllByType("div")
-      .filter((node) => node.props.role === "button"),
+    tree!.root.findAllByType("div").filter((node) => node.props.role === "button"),
   ).toHaveLength(0);
   expect(JSON.stringify(tree!.toJSON())).toContain(
     "Loading complete history to calculate current balances",
@@ -189,9 +173,7 @@ test("a successful archive is not repeated when another account save fails", asy
   actions.updateAccount.mockRejectedValueOnce(new Error("Offline"));
   await edit();
   await act(async () =>
-    tree!.root
-      .findAllByProps({ "aria-label": "Archive account" })[0]
-      .props.onClick(),
+    tree!.root.findAllByProps({ "aria-label": "Archive account" })[0].props.onClick(),
   );
   await act(async () =>
     tree!.root
@@ -230,22 +212,16 @@ test("revealing a hidden account preserves the existing account cards and their 
   dataset.accounts[1].isVisible = false;
   await mount();
   const accountCards = () =>
-    tree!.root
-      .findAllByType("div")
-      .filter((node) => node.props.role === "button");
+    tree!.root.findAllByType("div").filter((node) => node.props.role === "button");
   expect(accountCards()).toHaveLength(1);
   const originalBalance = accountCards()[0]
     .findByProps({ className: "text-3xl font-semibold" })
     .children.join("");
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Show hidden accounts" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Show hidden accounts" }).props.onClick(),
   );
   expect(accountCards()).toHaveLength(2);
   expect(
-    accountCards()[0]
-      .findByProps({ className: "text-3xl font-semibold" })
-      .children.join(""),
+    accountCards()[0].findByProps({ className: "text-3xl font-semibold" }).children.join(""),
   ).toBe(originalBalance);
 });

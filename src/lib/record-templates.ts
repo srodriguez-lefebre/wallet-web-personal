@@ -1,15 +1,8 @@
-import type {
-  RecordTemplate,
-  WalletDataset,
-  WalletRecord,
-} from "@shared/types";
+import type { RecordTemplate, WalletDataset, WalletRecord } from "@shared/types";
 import type { RecordTemplatePatch } from "@shared/schemas";
 import { findExchangeRate } from "@shared/money";
 
-export function templateFromRecord(
-  record: WalletRecord,
-  name: string,
-): Omit<RecordTemplate, "id"> {
+export function templateFromRecord(record: WalletRecord, name: string): Omit<RecordTemplate, "id"> {
   return {
     name: name.trim(),
     type: record.type,
@@ -17,8 +10,7 @@ export function templateFromRecord(
     currency: record.currency,
     accountId: record.accountId,
     creditCardId: record.type === "expense" ? record.creditCardId : undefined,
-    destinationAccountId:
-      record.type === "transfer" ? record.destinationAccountId : undefined,
+    destinationAccountId: record.type === "transfer" ? record.destinationAccountId : undefined,
     categoryId: record.type === "transfer" ? undefined : record.categoryId,
     tagId: record.tagIds[0],
     counterpartyName: record.counterpartyName,
@@ -35,17 +27,13 @@ export function prepareTemplateDraft(
   const problems: string[] = [];
   let accountId =
     template.accountId &&
-    dataset.accounts.some(
-      (a) => a.id === template.accountId && a.isActive && a.isVisible,
-    )
+    dataset.accounts.some((a) => a.id === template.accountId && a.isActive && a.isVisible)
       ? template.accountId
       : undefined;
   let creditCardId =
     template.type === "expense" &&
     template.creditCardId &&
-    dataset.creditCards.some(
-      (c) => c.id === template.creditCardId && c.isActive,
-    )
+    dataset.creditCards.some((c) => c.id === template.creditCardId && c.isActive)
       ? template.creditCardId
       : undefined;
   const missingAccount = Boolean(template.accountId && !accountId);
@@ -61,40 +49,27 @@ export function prepareTemplateDraft(
     template.destinationAccountId &&
     dataset.accounts.some(
       (a) =>
-        a.id === template.destinationAccountId &&
-        a.isActive &&
-        a.isVisible &&
-        a.id !== accountId,
+        a.id === template.destinationAccountId && a.isActive && a.isVisible && a.id !== accountId,
     )
       ? template.destinationAccountId
       : undefined;
   const categoryId =
-    template.categoryId &&
-    dataset.categories.some((c) => c.id === template.categoryId)
+    template.categoryId && dataset.categories.some((c) => c.id === template.categoryId)
       ? template.categoryId
       : undefined;
   const tagId =
-    template.tagId &&
-    dataset.tags.some((t) => t.id === template.tagId && t.isActive)
+    template.tagId && dataset.tags.some((t) => t.id === template.tagId && t.isActive)
       ? template.tagId
       : undefined;
   if (missingAccount) problems.push("Choose an active account.");
-  if (missingCard)
-    problems.push(
-      "The saved card is unavailable; choose a payment destination.",
-    );
+  if (missingCard) problems.push("The saved card is unavailable; choose a payment destination.");
   if (missingAccount && template.creditCardId && !missingCard)
-    problems.push(
-      "Choose a payment destination explicitly, including card-only if appropriate.",
-    );
+    problems.push("Choose a payment destination explicitly, including card-only if appropriate.");
   if (template.type === "transfer" && !destinationAccountId)
     problems.push("Choose a destination account.");
-  if (template.type !== "transfer" && !categoryId)
-    problems.push("Choose a category.");
+  if (template.type !== "transfer" && !categoryId) problems.push("Choose a category.");
   if (template.tagId && !tagId)
-    problems.push(
-      "The saved tag is unavailable and was removed from this draft.",
-    );
+    problems.push("The saved tag is unavailable and was removed from this draft.");
   const card = dataset.creditCards.find((c) => c.id === creditCardId);
   const limitRate = card
     ? String(
@@ -130,9 +105,7 @@ export function prepareTemplateDraft(
   return { value, limitRate, problems };
 }
 
-export function templateReplacementPatch(
-  value: Omit<RecordTemplate, "id">,
-): RecordTemplatePatch {
+export function templateReplacementPatch(value: Omit<RecordTemplate, "id">): RecordTemplatePatch {
   return {
     name: value.name,
     type: value.type,
@@ -149,10 +122,7 @@ export function templateReplacementPatch(
   };
 }
 
-export function sameTemplateDetails(
-  a: Omit<RecordTemplate, "id">,
-  b: Omit<RecordTemplate, "id">,
-) {
+export function sameTemplateDetails(a: Omit<RecordTemplate, "id">, b: Omit<RecordTemplate, "id">) {
   const signature = (value: Omit<RecordTemplate, "id">) =>
     JSON.stringify({
       ...templateReplacementPatch(value),

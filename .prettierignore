@@ -1,0 +1,8 @@
+dist
+coverage
+node_modules
+drizzle/
+docs/
+.local-wallet/
+*.gs
+package-lock.json

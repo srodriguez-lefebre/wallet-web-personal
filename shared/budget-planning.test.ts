@@ -50,15 +50,17 @@ describe("history budget planning", () => {
     const dataset = fixture();
     dataset.records = [expense({ occurredAt: "2026-07-03T12:00:00Z" })];
     const today = new Date(2026, 9, 3, 12);
-    expect(() => buildBudgetPlan(dataset, "2026-11", 10, [], today)).toThrow(
-      /complete|earlier/i,
-    );
-    expect(
-      buildBudgetPlan(dataset, "2026-10", 10, [], today).sourceMonths,
-    ).toEqual(["2026-07", "2026-08", "2026-09"]);
-    expect(
-      buildBudgetPlan(dataset, "2026-09", 10, [], today).sourceMonths,
-    ).toEqual(["2026-06", "2026-07", "2026-08"]);
+    expect(() => buildBudgetPlan(dataset, "2026-11", 10, [], today)).toThrow(/complete|earlier/i);
+    expect(buildBudgetPlan(dataset, "2026-10", 10, [], today).sourceMonths).toEqual([
+      "2026-07",
+      "2026-08",
+      "2026-09",
+    ]);
+    expect(buildBudgetPlan(dataset, "2026-09", 10, [], today).sourceMonths).toEqual([
+      "2026-06",
+      "2026-07",
+      "2026-08",
+    ]);
   });
 
   it("keeps direct unlinked card purchases outside the wallet-record budget domain", () => {
@@ -113,15 +115,9 @@ describe("history budget planning", () => {
 
   it("handles leap calendar boundaries and allows margins zero through one hundred", () => {
     const dataset = fixture();
-    dataset.records = [
-      expense({ amount: 30, occurredAt: "2024-02-29T12:00:00Z" }),
-    ];
-    expect(
-      buildBudgetPlan(dataset, "2024-03", 0).proposals[0].limitAmount,
-    ).toBe(10);
-    expect(
-      buildBudgetPlan(dataset, "2024-03", 100).proposals[0].limitAmount,
-    ).toBe(20);
+    dataset.records = [expense({ amount: 30, occurredAt: "2024-02-29T12:00:00Z" })];
+    expect(buildBudgetPlan(dataset, "2024-03", 0).proposals[0].limitAmount).toBe(10);
+    expect(buildBudgetPlan(dataset, "2024-03", 100).proposals[0].limitAmount).toBe(20);
     for (const margin of [-1, 101, Number.NaN])
       expect(() => buildBudgetPlan(dataset, "2024-03", margin)).toThrow();
     for (const month of ["2024-00", "2024-13", "2024-2", "not-a-month"])
@@ -176,29 +172,20 @@ describe("history budget planning", () => {
       expense({ accountId: "visible", amount: 30 }),
       expense({ accountId: "hidden", amount: 300 }),
     ];
-    expect(
-      buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total,
-    ).toBe(30);
+    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total).toBe(30);
     dataset.settings.includeHiddenAccountsInReports = true;
-    expect(
-      buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total,
-    ).toBe(330);
+    expect(buildBudgetPlan(reportDataset(dataset), "2026-02", 0).proposals[0].total).toBe(330);
   });
 
   it("withholds incomplete category totals when historical FX is invalid", () => {
     const dataset = fixture();
-    dataset.records = [
-      expense(),
-      expense({ currency: "USD", exchangeRateToPrimary: 0 }),
-    ];
+    dataset.records = [expense(), expense({ currency: "USD", exchangeRateToPrimary: 0 })];
     expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0]).toMatchObject({
       status: "missing_exchange_rate",
       total: null,
       limitAmount: null,
     });
-    dataset.records = [
-      expense({ currency: "USD", exchangeRateToPrimary: Number.NaN }),
-    ];
+    dataset.records = [expense({ currency: "USD", exchangeRateToPrimary: Number.NaN })];
     expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0].status).toBe(
       "missing_exchange_rate",
     );
@@ -226,13 +213,9 @@ describe("history budget planning", () => {
   it("rounds any positive small estimate up to a cent without representation noise adding another cent", () => {
     const dataset = fixture();
     dataset.records = [expense({ amount: 1e-20 })];
-    expect(
-      buildBudgetPlan(dataset, "2026-02", 0).proposals[0].limitAmount,
-    ).toBe(0.01);
+    expect(buildBudgetPlan(dataset, "2026-02", 0).proposals[0].limitAmount).toBe(0.01);
     dataset.records = [expense({ amount: 30 })];
-    expect(
-      buildBudgetPlan(dataset, "2026-02", 10).proposals[0].limitAmount,
-    ).toBe(11);
+    expect(buildBudgetPlan(dataset, "2026-02", 10).proposals[0].limitAmount).toBe(11);
   });
 
   it("blocks overlapping active categories in any currency or scope but permits archived budgets", () => {
@@ -246,12 +229,12 @@ describe("history budget planning", () => {
       accountId: "hidden",
       isActive: true,
     };
+    expect(buildBudgetPlan(dataset, "2026-02", 10, [budget]).proposals[0]).toMatchObject({
+      status: "conflict",
+      conflictingBudgetIds: ["existing"],
+    });
     expect(
-      buildBudgetPlan(dataset, "2026-02", 10, [budget]).proposals[0],
-    ).toMatchObject({ status: "conflict", conflictingBudgetIds: ["existing"] });
-    expect(
-      buildBudgetPlan(dataset, "2026-02", 10, [{ ...budget, isActive: false }])
-        .proposals[0].status,
+      buildBudgetPlan(dataset, "2026-02", 10, [{ ...budget, isActive: false }]).proposals[0].status,
     ).toBe("ready");
   });
 });

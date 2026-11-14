@@ -28,9 +28,7 @@ vi.mock("@/lib/use-action-toast", async () => {
   return {
     useActionToast: () => ({
       toast: null,
-      runAction: createActionToastRunner((status) =>
-        state.messages.push(status),
-      ),
+      runAction: createActionToastRunner((status) => state.messages.push(status)),
     }),
   };
 });
@@ -74,9 +72,7 @@ async function open(label: string) {
 }
 async function change(label: string, value: string) {
   await act(async () => {
-    tree!.root
-      .findByProps({ "aria-label": label })
-      .props.onChange({ target: { value } });
+    tree!.root.findByProps({ "aria-label": label }).props.onChange({ target: { value } });
   });
 }
 const save = () =>
@@ -88,14 +84,18 @@ test("completed goal keeps its target and totals but hides remaining funding and
   const dataset = state.dataset as WalletDataset;
   dataset.goals[0].status = "completed";
   dataset.goals[0].targetAmount = 999999;
-  await act(async () => { tree = create(<GoalDetailView />); });
+  await act(async () => {
+    tree = create(<GoalDetailView />);
+  });
   const content = JSON.stringify(tree!.toJSON());
   expect(content).toContain("Reserved");
   expect(content).toContain("Spent");
   expect(content).not.toContain("Still needed");
   expect(content).not.toContain("Remaining");
   expect(content).not.toContain("Committed");
-  expect(tree!.root.findByProps({ "aria-label": "Completed goal" }).props["aria-valuenow"]).toBe(100);
+  expect(tree!.root.findByProps({ "aria-label": "Completed goal" }).props["aria-valuenow"]).toBe(
+    100,
+  );
   expect(dataset.goals[0].targetAmount).toBe(999999);
 });
 
@@ -116,9 +116,7 @@ test("detail editing validates and saves through the persisted goal action", asy
     expect.objectContaining({ name: "Updated trip", targetAmount: 8000 }),
   );
   expect(state.messages.at(-1)).toBe("success");
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Edit goal details" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Edit goal details" })).toHaveLength(0);
 });
 
 test("closing below target submits completion and keeps failure retryable", async () => {
@@ -182,7 +180,5 @@ test("a completed goal cannot be closed again from the detail action", async () 
   await act(async () => {
     tree = create(<GoalDetailView />);
   });
-  expect(
-    tree!.root.findByProps({ "aria-label": "Close goal" }).props.disabled,
-  ).toBe(true);
+  expect(tree!.root.findByProps({ "aria-label": "Close goal" }).props.disabled).toBe(true);
 });

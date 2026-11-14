@@ -26,9 +26,9 @@ test("imports a wallet with no accounts and no dangling references", async () =>
       categories: 1,
       records: 0,
     });
-    expect(
-      (await pg.query("SELECT primary_account_id FROM settings")).rows,
-    ).toEqual([{ primary_account_id: null }]);
+    expect((await pg.query("SELECT primary_account_id FROM settings")).rows).toEqual([
+      { primary_account_id: null },
+    ]);
   } finally {
     await pg.close();
   }
@@ -38,8 +38,7 @@ test("an empty account collection still rejects a dangling settings reference at
   const pg = new PGlite();
   try {
     await applyMigrations(pg);
-    const before = (await pg.query("SELECT id FROM categories ORDER BY id"))
-      .rows;
+    const before = (await pg.query("SELECT id FROM categories ORDER BY id")).rows;
     await expect(
       importSnapshot(pg, {
         ...emptyWallet,
@@ -49,9 +48,7 @@ test("an empty account collection still rejects a dangling settings reference at
         },
       }),
     ).rejects.toThrow();
-    expect(
-      (await pg.query("SELECT id FROM categories ORDER BY id")).rows,
-    ).toEqual(before);
+    expect((await pg.query("SELECT id FROM categories ORDER BY id")).rows).toEqual(before);
     expect((await pg.query("SELECT id FROM settings")).rows).toEqual([]);
   } finally {
     await pg.close();

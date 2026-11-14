@@ -11,9 +11,7 @@ export interface CurrencyLiquidity {
 /** Original-currency liquidity of active, visible cash/bank/savings accounts.
  * Pass balances only after complete history has loaded; no FX totals are mixed.
  */
-export function groupAccountLiquidity(
-  balances: AccountBalance[],
-): CurrencyLiquidity[] {
+export function groupAccountLiquidity(balances: AccountBalance[]): CurrencyLiquidity[] {
   const groups = new Map<CurrencyCode, CurrencyLiquidity>();
   for (const { account, totalBalance, reserved, freeBalance } of balances) {
     if (
@@ -36,7 +34,5 @@ export function groupAccountLiquidity(
     group.accountCount += 1;
     groups.set(account.currency, group);
   }
-  return [...groups.values()].sort((a, b) =>
-    a.currency.localeCompare(b.currency),
-  );
+  return [...groups.values()].sort((a, b) => a.currency.localeCompare(b.currency));
 }

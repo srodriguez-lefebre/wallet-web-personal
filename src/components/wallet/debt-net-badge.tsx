@@ -8,8 +8,7 @@ export function DebtNetBadge({
   summary: ReturnType<typeof calculateVisibleDebtSummary>;
   currency: CurrencyCode;
 }) {
-  const unknown =
-    summary.openCount > 0 && summary.amountPendingCount === summary.openCount;
+  const unknown = summary.openCount > 0 && summary.amountPendingCount === summary.openCount;
   return (
     <Badge
       variant={

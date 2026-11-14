@@ -163,52 +163,84 @@ async function openRecord() {
   await act(async () => {
     tree = create(<RecordsView />);
   });
-  await act(async () =>
-    tree!.root.findAllByProps({ role: "button" })[0].props.onClick(),
-  );
+  await act(async () => tree!.root.findAllByProps({ role: "button" })[0].props.onClick());
 }
 
 test("the queue toggle opens global review from a manually filtered Needs review view", async () => {
   filters = { accountId: "bank", paymentStatus: "needs_review" };
-  await act(async () => { tree = create(<RecordsView />); });
-  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(false);
-  await act(async () => tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick());
+  await act(async () => {
+    tree = create(<RecordsView />);
+  });
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(
+    false,
+  );
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
+  );
   expect(openReviewQueue).toHaveBeenCalledOnce();
   expect(closeReviewQueue).not.toHaveBeenCalled();
   await act(async () => tree!.update(<RecordsView />));
-  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(true);
-  await act(async () => tree!.root.findByProps({ "aria-label": "Remove Status filter" }).props.onClick());
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(
+    true,
+  );
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Remove Status filter" }).props.onClick(),
+  );
   await act(async () => tree!.update(<RecordsView />));
   expect(filters).toEqual({ accountId: "bank", paymentStatus: "needs_review" });
-  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(false);
+  expect(tree!.root.findByProps({ "aria-label": "Open review queue" }).props["aria-pressed"]).toBe(
+    false,
+  );
 });
 
-test.each(["cleared", "needs_review"] as const)("Status All exits the global queue and restores the previous %s filter", async (status) => {
-  filters = { accountId: "bank", paymentStatus: status, note: "manual note" };
-  const previous = { ...filters };
-  await act(async () => { tree = create(<RecordsView />); });
-  await act(async () => tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick());
-  await act(async () => tree!.update(<RecordsView />));
-  const statusSelect = tree!.root.findAllByType("select").find((select) => select.props.value === "needs_review")!;
-  await act(async () => statusSelect.props.onChange({ target: { value: "all" } }));
-  expect(closeReviewQueue).toHaveBeenCalledOnce();
-  expect(filters).toEqual(previous);
-  expect(periodMode).toBe("month");
-});
+test.each(["cleared", "needs_review"] as const)(
+  "Status All exits the global queue and restores the previous %s filter",
+  async (status) => {
+    filters = { accountId: "bank", paymentStatus: status, note: "manual note" };
+    const previous = { ...filters };
+    await act(async () => {
+      tree = create(<RecordsView />);
+    });
+    await act(async () =>
+      tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
+    );
+    await act(async () => tree!.update(<RecordsView />));
+    const statusSelect = tree!.root
+      .findAllByType("select")
+      .find((select) => select.props.value === "needs_review")!;
+    await act(async () => statusSelect.props.onChange({ target: { value: "all" } }));
+    expect(closeReviewQueue).toHaveBeenCalledOnce();
+    expect(filters).toEqual(previous);
+    expect(periodMode).toBe("month");
+  },
+);
 
 test("Note receives focus only when explicitly opened, including after removal", async () => {
   const focus = vi.fn();
   await act(async () => {
-    tree = create(<RecordsView />, { createNodeMock: (element) => element.type === "textarea" ? { focus } : null });
+    tree = create(<RecordsView />, {
+      createNodeMock: (element) => (element.type === "textarea" ? { focus } : null),
+    });
   });
   expect(focus).not.toHaveBeenCalled();
-  const addNote = () => tree!.root.findAllByType("button").find((button) => button.children.some((child) => typeof child === "string" && child.includes("Add filter")))!;
+  const addNote = () =>
+    tree!.root
+      .findAllByType("button")
+      .find((button) =>
+        button.children.some((child) => typeof child === "string" && child.includes("Add filter")),
+      )!;
   await act(async () => addNote().props.onClick());
   expect(focus).toHaveBeenCalledTimes(1);
-  await act(async () => tree!.root.findByProps({ placeholder: "Paste part of a note" }).props.onChange({ target: { value: "lunch" } }));
+  await act(async () =>
+    tree!.root
+      .findByProps({ placeholder: "Paste part of a note" })
+      .props.onChange({ target: { value: "lunch" } }),
+  );
   await act(async () => tree!.update(<RecordsView />));
   expect(focus).toHaveBeenCalledTimes(1);
-  await act(async () => tree!.root.findByProps({ "aria-label": "Remove Note filter" }).props.onClick());
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Remove Note filter" }).props.onClick(),
+  );
   await act(async () => tree!.update(<RecordsView />));
   await act(async () => addNote().props.onClick());
   expect(focus).toHaveBeenCalledTimes(2);
@@ -217,15 +249,23 @@ test("Note receives focus only when explicitly opened, including after removal",
 test("an existing Note filter on mount does not steal focus", async () => {
   filters = { note: "existing" };
   const focus = vi.fn();
-  await act(async () => { tree = create(<RecordsView />, { createNodeMock: () => ({ focus }) }); });
+  await act(async () => {
+    tree = create(<RecordsView />, { createNodeMock: () => ({ focus }) });
+  });
   expect(focus).not.toHaveBeenCalled();
 });
 
 test("dismissing the review status chip uses the same return action as the toggle", async () => {
-  await act(async () => { tree = create(<RecordsView />); });
-  await act(async () => tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick());
+  await act(async () => {
+    tree = create(<RecordsView />);
+  });
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
+  );
   await act(async () => tree!.update(<RecordsView />));
-  await act(async () => tree!.root.findByProps({ "aria-label": "Remove Status filter" }).props.onClick());
+  await act(async () =>
+    tree!.root.findByProps({ "aria-label": "Remove Status filter" }).props.onClick(),
+  );
   expect(closeReviewQueue).toHaveBeenCalledOnce();
 });
 
@@ -234,12 +274,8 @@ test("removing a card sends JSON null and preserves an unchanged precise timesta
   const paymentType = tree!.root
     .findAllByType("select")
     .find((select) => select.props.value === "card:test-card")!;
-  await act(async () =>
-    paymentType.props.onChange({ target: { value: "debit" } }),
-  );
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => paymentType.props.onChange({ target: { value: "debit" } }));
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(update).toHaveBeenCalledTimes(1);
   expect(update.mock.calls[0][1]).toMatchObject({
     creditCardId: null,
@@ -275,18 +311,15 @@ test("bank-refund editing locks financial inputs and submits only metadata", asy
   ];
   await openRecord();
   expect(
-    tree!.root
-      .findAllByType("input")
-      .find((input) => input.props.type === "number")!.props.disabled,
+    tree!.root.findAllByType("input").find((input) => input.props.type === "number")!.props
+      .disabled,
   ).toBe(true);
   await act(async () =>
     tree!.root
       .findByProps({ placeholder: "Optional description" })
       .props.onChange({ target: { value: "Confirmed" } }),
   );
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   const payload = update.mock.calls[0][1];
   expect(payload.note).toBe("Confirmed");
   for (const key of [
@@ -334,16 +367,12 @@ test("clicking the active review queue again restores the previous period and fi
     tree = create(<RecordsView />);
   });
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Open review queue" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
   );
   await act(async () => tree!.update(<RecordsView />));
   expect(tree!.root.findAllByProps({ role: "button" })).toHaveLength(1);
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Open review queue" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
   );
   await act(async () => tree!.update(<RecordsView />));
   expect(filters).toEqual({});
@@ -369,9 +398,7 @@ test("a default foreign credit card starts in its limit currency rather than the
   const currency = tree!.root
     .findAllByType("select")
     .find((select) =>
-      select
-        .findAllByType("option")
-        .some((option) => option.children.includes("BRL")),
+      select.findAllByType("option").some((option) => option.children.includes("BRL")),
     )!;
   expect(currency.props.value).toBe("USD");
 });
@@ -390,24 +417,17 @@ test("an unknown-bank purchase can be resolved as card-only without a bank accou
   const paymentType = tree!.root
     .findAllByType("select")
     .find((select) =>
-      select
-        .findAllByType("option")
-        .some((option) => option.props.value === "card:test-card"),
+      select.findAllByType("option").some((option) => option.props.value === "card:test-card"),
     )!;
-  await act(async () =>
-    paymentType.props.onChange({ target: { value: "card:test-card" } }),
-  );
+  await act(async () => paymentType.props.onChange({ target: { value: "card:test-card" } }));
   await act(async () =>
     tree!.root.findByProps({ "aria-label": "Set status to Cleared" }).props.onClick(),
   );
   expect(
-    tree!.root
-      .findAllByType("button")
-      .find((button) => button.props.type === "submit")!.props.disabled,
+    tree!.root.findAllByType("button").find((button) => button.props.type === "submit")!.props
+      .disabled,
   ).toBe(false);
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(update.mock.calls[0][1]).toMatchObject({
     creditCardId: "test-card",
     paymentStatus: "cleared",
@@ -435,13 +455,10 @@ test("an unresolved review record can be cancelled without inventing destination
     tree!.root.findByProps({ "aria-label": "Set status to Cancelled" }).props.onClick(),
   );
   expect(
-    tree!.root
-      .findAllByType("button")
-      .find((button) => button.props.type === "submit")!.props.disabled,
+    tree!.root.findAllByType("button").find((button) => button.props.type === "submit")!.props
+      .disabled,
   ).toBe(false);
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(update).toHaveBeenCalledExactlyOnceWith("wallet-record", {
     paymentStatus: "cancelled",
   });
@@ -465,9 +482,7 @@ test("review queue clears incompatible filters and includes drafts outside the s
     tree = create(<RecordsView />);
   });
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Open review queue" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Open review queue" }).props.onClick(),
   );
   await act(async () => tree!.update(<RecordsView />));
   expect(openReviewQueue).toHaveBeenCalledOnce();
@@ -482,10 +497,7 @@ test("review count does not present partial loaded history as a complete total",
     tree = create(<RecordsView />);
   });
   expect(
-    JSON.stringify(
-      tree!.root.findByProps({ "aria-label": "Open review queue" }).props
-        .children,
-    ),
+    JSON.stringify(tree!.root.findByProps({ "aria-label": "Open review queue" }).props.children),
   ).toContain("Loading");
 });
 
@@ -533,9 +545,7 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
   const original = structuredClone(dataset.records[0]);
   await openRecord();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Duplicate record" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
   );
   expect(add).not.toHaveBeenCalled();
   expect(update).not.toHaveBeenCalled();
@@ -567,9 +577,7 @@ test("duplicating opens a fresh draft and writes only once on submit with curren
     goalIds: [],
   });
   expect(recordCreateSchema.safeParse(payload).success).toBe(true);
-  expect(payload.occurredAt.slice(0, 10)).toBe(
-    new Date().toISOString().slice(0, 10),
-  );
+  expect(payload.occurredAt.slice(0, 10)).toBe(new Date().toISOString().slice(0, 10));
   for (const key of ["id", "debtId", "idempotencyKey", "requestHash"])
     expect(payload).not.toHaveProperty(key);
   expect(dataset.records[0]).toEqual(original);
@@ -589,13 +597,9 @@ test("duplicate with no current quote stays editable and sends no write", async 
   dataset.accounts[0].currency = "UYU";
   await openRecord();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Duplicate record" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
   );
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(add).not.toHaveBeenCalled();
   expect(tree!.root.findByProps({ role: "alert" })).toBeDefined();
 });
@@ -605,9 +609,7 @@ test("duplicate does not reuse inactive cards or accounts and retains its form a
   dataset.accounts[0].isActive = false;
   await openRecord();
   await act(async () =>
-    tree!.root
-      .findByProps({ "aria-label": "Duplicate record" })
-      .props.onClick(),
+    tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
   );
   const accountSelect = tree!.root
     .findAllByType("select")
@@ -618,26 +620,20 @@ test("duplicate does not reuse inactive cards or accounts and retains its form a
     )!;
   expect(accountSelect.props.value).not.toBe(dataset.accounts[0].id);
   expect(
-    tree!.root
-      .findAllByType("select")
-      .some((select) => select.props.value === "card:test-card"),
+    tree!.root.findAllByType("select").some((select) => select.props.value === "card:test-card"),
   ).toBe(false);
   await act(async () =>
     accountSelect.props.onChange({ target: { value: dataset.accounts[1].id } }),
   );
   add.mockRejectedValue(new Error("Offline"));
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(add).toHaveBeenCalledOnce();
   expect(tree!.root.findByType("form")).toBeDefined();
 });
 
 test("a submitted duplicate persists as a separate record after a canonical reload", async () => {
-  const { createPostgresTestDatabase } =
-    await import("../../scripts/sandbox/postgres-test");
-  const { createRecord, getWalletDataset } =
-    await import("../../server/db/wallet-repository");
+  const { createPostgresTestDatabase } = await import("../../scripts/sandbox/postgres-test");
+  const { createRecord, getWalletDataset } = await import("../../server/db/wallet-repository");
   const { randomUUID } = await import("node:crypto");
   const fixture = await createPostgresTestDatabase();
   try {
@@ -652,9 +648,7 @@ test("a submitted duplicate persists as a separate record after a canonical relo
       "INSERT INTO categories(id,name,color,icon) VALUES($1,'Duplicate test','blue','bank')",
       [categoryId],
     );
-    await fixture.pool.query(
-      "INSERT INTO settings(primary_currency) VALUES('UYU')",
-    );
+    await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
     await fixture.pool.query(
       "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',42,'2026-01-01')",
     );
@@ -667,22 +661,14 @@ test("a submitted duplicate persists as a separate record after a canonical relo
     add.mockImplementation(createRecord);
     await openRecord();
     await act(async () =>
-      tree!.root
-        .findByProps({ "aria-label": "Duplicate record" })
-        .props.onClick(),
+      tree!.root.findByProps({ "aria-label": "Duplicate record" }).props.onClick(),
     );
     expect((await getWalletDataset()).records).toHaveLength(1);
-    await act(async () =>
-      tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-    );
+    await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
     const reloaded = await getWalletDataset();
     expect(reloaded.records).toHaveLength(2);
-    expect(reloaded.records.find((record) => record.id === sourceId)).toEqual(
-      original,
-    );
-    expect(
-      reloaded.records.find((record) => record.id !== sourceId),
-    ).toMatchObject({
+    expect(reloaded.records.find((record) => record.id === sourceId)).toEqual(original);
+    expect(reloaded.records.find((record) => record.id !== sourceId)).toMatchObject({
       amount: 100,
       currency: "USD",
       accountAmount: 4200,
@@ -696,12 +682,16 @@ test("a submitted duplicate persists as a separate record after a canonical relo
 
 test("editing a bank-backed purchase cannot select Card only", async () => {
   await openRecord();
-  expect(tree!.root.findAllByType("option").filter(option => option.children.includes("Card only"))).toHaveLength(0);
+  expect(
+    tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),
+  ).toHaveLength(0);
 });
 
 test("editing an existing card-only purchase retains Card only", async () => {
   dataset.records[0].accountId = undefined;
   dataset.records[0].accountAmount = undefined;
   await openRecord();
-  expect(tree!.root.findAllByType("option").filter(option => option.children.includes("Card only"))).toHaveLength(1);
+  expect(
+    tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),
+  ).toHaveLength(1);
 });

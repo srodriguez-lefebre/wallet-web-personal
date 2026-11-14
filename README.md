@@ -1,4 +1,4 @@
-﻿# Wallet Web Personal
+# Wallet Web Personal
 
 Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credito, goals, presupuestos y analiticas.
 

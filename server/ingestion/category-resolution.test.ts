@@ -27,9 +27,7 @@ afterAll(async () => {
 });
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await fixture.pool.query(
-    "TRUNCATE accounts,categories,credit_cards,settings CASCADE",
-  );
+  await fixture.pool.query("TRUNCATE accounts,categories,credit_cards,settings CASCADE");
   for (const [id, name, systemKey] of [
     [taxiId, "Taxi", null],
     [publicId, "Public transport", null],
@@ -50,17 +48,16 @@ beforeEach(async () => {
     "INSERT INTO credit_cards(id,name,issuer,last_four,credit_limit,limit_currency,closing_day,due_day,color,icon) VALUES($1,'Card','Bank','1234',1000,'UYU',20,5,'blue','bank')",
     [cardId],
   );
-  await fixture.pool.query(
-    "INSERT INTO settings(primary_currency) VALUES('UYU')",
-  );
+  await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
   vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(null);
 });
 async function rule(name: string, categoryId: string, normalizedAlias = name.toUpperCase()) {
   const id = randomUUID();
-  await fixture.pool.query(
-    "INSERT INTO merchants(id,name,category_id) VALUES($1,$2,$3)",
-    [id, name, categoryId],
-  );
+  await fixture.pool.query("INSERT INTO merchants(id,name,category_id) VALUES($1,$2,$3)", [
+    id,
+    name,
+    categoryId,
+  ]);
   await fixture.pool.query(
     "INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) VALUES($1,$2,$3)",
     [id, name, normalizedAlias],
@@ -96,25 +93,28 @@ function input(merchantRaw: string): MailIngestionInput {
 async function stored() {
   return {
     record: (await fixture.pool.query("SELECT * FROM records")).rows[0],
-    card: (await fixture.pool.query("SELECT * FROM credit_card_records"))
-      .rows[0],
-    metadata: (
-      await fixture.pool.query("SELECT sanitized_payload FROM ingestion_events")
-    ).rows[0].sanitized_payload,
+    card: (await fixture.pool.query("SELECT * FROM credit_card_records")).rows[0],
+    metadata: (await fixture.pool.query("SELECT sanitized_payload FROM ingestion_events")).rows[0]
+      .sanitized_payload,
   };
 }
 
 test("review saves and undo persist, and corrected merchants only auto-apply after opt-in", async () => {
   const first = await processMailIngestion(input("ERBOT SA MONTE"));
   expect(first.status).toBe("needs_review");
-  const initial = (await getWalletDataset()).records.find((record) => record.id === first.recordId)!;
+  const initial = (await getWalletDataset()).records.find(
+    (record) => record.id === first.recordId,
+  )!;
   expect(initial.importHistory).toContain(categoryImportWarning);
   expect(initial.note).not.toContain(categoryImportWarning);
   expect(countNewReviews(await getWalletDataset())).toBe(1);
   await patchSettings({ reviewSeenThrough: initial.createdAt! });
   expect(countNewReviews(await getWalletDataset())).toBe(0);
 
-  const saved = (await updateRecord(initial.id, { categoryId: foodId, expectedUpdatedAt: initial.updatedAt }))!;
+  const saved = (await updateRecord(initial.id, {
+    categoryId: foodId,
+    expectedUpdatedAt: initial.updatedAt,
+  }))!;
   expect(saved).toMatchObject({
     categoryId: foodId,
     paymentStatus: "needs_review",
@@ -122,22 +122,34 @@ test("review saves and undo persist, and corrected merchants only auto-apply aft
     merchantCorrection: { autoApply: false },
   });
   expect(saved.importHistory).toContain(categoryImportWarning);
-  expect((await resolveCategory(createDb(), "  erbot sa   monte  ")).source).toBe("user_suggestion");
+  expect((await resolveCategory(createDb(), "  erbot sa   monte  ")).source).toBe(
+    "user_suggestion",
+  );
   const next = await processMailIngestion(input("ERBOT SA MONTE"));
   expect(next.status).toBe("needs_review");
-  expect((await getWalletDataset()).records.find((record) => record.id === next.recordId)?.categoryId).toBe(unknownId);
+  expect(
+    (await getWalletDataset()).records.find((record) => record.id === next.recordId)?.categoryId,
+  ).toBe(unknownId);
   expect(countNewReviews(await getWalletDataset())).toBe(1);
 
   const reviewed = (await updateRecord(saved.id, {
-    categoryId: foodId, paymentStatus: "cleared", merchantAutoApply: true, expectedUpdatedAt: saved.updatedAt,
+    categoryId: foodId,
+    paymentStatus: "cleared",
+    merchantAutoApply: true,
+    expectedUpdatedAt: saved.updatedAt,
   }))!;
   const automatic = await processMailIngestion(input("ERBOT SA MONTE"));
   expect(automatic.status).toBe("created");
-  expect((await getWalletDataset()).records.find((record) => record.id === automatic.recordId)).toMatchObject({
-    categoryId: foodId, importMerchant: "ERBOT SA MONTE",
+  expect(
+    (await getWalletDataset()).records.find((record) => record.id === automatic.recordId),
+  ).toMatchObject({
+    categoryId: foodId,
+    importMerchant: "ERBOT SA MONTE",
   });
   expect((await resolveCategory(createDb(), "ERBOT SA MONTE BRANCH")).source).not.toBe("user_rule");
-  await expect(updateRecord(initial.id, { categoryId: taxiId, expectedUpdatedAt: initial.updatedAt })).rejects.toThrow("record changed");
+  await expect(
+    updateRecord(initial.id, { categoryId: taxiId, expectedUpdatedAt: initial.updatedAt }),
+  ).rejects.toThrow("record changed");
 
   const undone = await updateRecord(saved.id, {
     categoryId: initial.categoryId,
@@ -148,13 +160,13 @@ test("review saves and undo persist, and corrected merchants only auto-apply aft
   expect(undone).toMatchObject({ categoryId: unknownId, paymentStatus: "needs_review" });
   expect(undone?.merchantCorrection).toBeUndefined();
   expect((await resolveCategory(createDb(), "ERBOT SA MONTE")).source).toBe("fallback");
-  expect((await getWalletDataset()).records.find((record) => record.id === saved.id)?.importHistory).toContain(categoryImportWarning);
+  expect(
+    (await getWalletDataset()).records.find((record) => record.id === saved.id)?.importHistory,
+  ).toContain(categoryImportWarning);
 });
 test("an existing erroneous Uber transport rule produces Taxi in both durable records", async () => {
   await rule("Uber", publicId);
-  expect((await processMailIngestion(input("UBER TRIP MONTE"))).status).toBe(
-    "created",
-  );
+  expect((await processMailIngestion(input("UBER TRIP MONTE"))).status).toBe("created");
   const saved = await stored();
   expect(saved.record.category_id).toBe(taxiId);
   expect(saved.card.category_id).toBe(taxiId);
@@ -196,7 +208,9 @@ test("unknown-rule GPT fallback preserves canonical identity for cross-source du
   const second = input("HANDY*SHOP");
   second.transaction.source = "google_wallet";
   expect((await processMailIngestion(second)).status).toBe("duplicate");
-  expect((await fixture.pool.query("SELECT counterparty_name FROM records")).rows).toEqual([{ counterparty_name: "Shop" }]);
+  expect((await fixture.pool.query("SELECT counterparty_name FROM records")).rows).toEqual([
+    { counterparty_name: "Shop" },
+  ]);
 });
 test("a failed model call keeps the expense reviewable and persists safe diagnostics", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementation(
@@ -227,12 +241,8 @@ test("a failed model call keeps the expense reviewable and persists safe diagnos
   expect(result.warnings?.join(" ")).toMatch(/category/i);
 });
 test("a model explicitly choosing Unknown expense also needs review", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(
-    unknownId,
-  );
-  expect((await processMailIngestion(input("Opaque company"))).status).toBe(
-    "needs_review",
-  );
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(unknownId);
+  expect((await processMailIngestion(input("Opaque company"))).status).toBe("needs_review");
   expect((await stored()).metadata.classification).toMatchObject({
     source: "openai",
     needsReview: true,
@@ -240,16 +250,17 @@ test("a model explicitly choosing Unknown expense also needs review", async () =
 });
 test("HBO bank-domain descriptors get the specific TV category without GPT", async () => {
   await rule("HBO", foodId);
-  expect(
-    (await processMailIngestion(input("DLO*help.hbomax.com MONTE"))).status,
-  ).toBe("created");
+  expect((await processMailIngestion(input("DLO*help.hbomax.com MONTE"))).status).toBe("created");
   expect((await stored()).record.category_id).toBe(tvId);
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
 });
 
 test("a pañalera is shopping rather than a guessed bakery", async () => {
   const shoppingId = randomUUID();
-  await fixture.pool.query("INSERT INTO categories(id,name,color,icon) VALUES($1,'Shopping','blue','bank')", [shoppingId]);
+  await fixture.pool.query(
+    "INSERT INTO categories(id,name,color,icon) VALUES($1,'Shopping','blue','bank')",
+    [shoppingId],
+  );
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
   await processMailIngestion(input("PAÑALERA NATAL 27 MONTE"));
   expect((await stored()).record.category_id).toBe(shoppingId);
@@ -265,33 +276,50 @@ test("insurance without an appropriate category stays reviewable instead of beco
 
 test("insurance category matching ignores letter case", async () => {
   const insuranceId = randomUUID();
-  await fixture.pool.query("INSERT INTO categories(id,name,color,icon) VALUES($1,'insurance','blue','bank')", [insuranceId]);
+  await fixture.pool.query(
+    "INSERT INTO categories(id,name,color,icon) VALUES($1,'insurance','blue','bank')",
+    [insuranceId],
+  );
   await processMailIngestion(input("BANCO DE SEGUROS 98290"));
   expect((await stored()).record.category_id).toBe(insuranceId);
 });
 
 test("an explicit insurance merchant rule retains its custom category", async () => {
   const insuranceId = randomUUID();
-  await fixture.pool.query("INSERT INTO categories(id,name,color,icon) VALUES($1,'Auto insurance','blue','bank')", [insuranceId]);
+  await fixture.pool.query(
+    "INSERT INTO categories(id,name,color,icon) VALUES($1,'Auto insurance','blue','bank')",
+    [insuranceId],
+  );
   await rule("Banco de Seguros", insuranceId);
   await processMailIngestion(input("BANCO DE SEGUROS 98290"));
   expect((await stored()).record.category_id).toBe(insuranceId);
 });
 
-test.each(["generic", "failed model"])("unknown-rule %s fallback preserves canonical merchant identity", async (mode) => {
-  await rule(mode === "generic" ? "Restaurante" : "Shop", unknownId);
-  await processMailIngestion(input(mode === "generic" ? "RESTAURANTE MONTE" : "SHOP MONTE"));
-  expect((await stored()).record.counterparty_name).toBe(mode === "generic" ? "Restaurante" : "Shop");
-});
+test.each(["generic", "failed model"])(
+  "unknown-rule %s fallback preserves canonical merchant identity",
+  async (mode) => {
+    await rule(mode === "generic" ? "Restaurante" : "Shop", unknownId);
+    await processMailIngestion(input(mode === "generic" ? "RESTAURANTE MONTE" : "SHOP MONTE"));
+    expect((await stored()).record.counterparty_name).toBe(
+      mode === "generic" ? "Restaurante" : "Shop",
+    );
+  },
+);
 
-test.each(["UBER TRIP", "UBER EATS"])("a longer %s alias does not retain an erroneous public-transport category", async alias => {
-  await rule("Uber", publicId);
-  await fixture.pool.query("INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) SELECT id,$1,$1 FROM merchants WHERE name='Uber'", [alias]);
-  await processMailIngestion(input(alias + " MONTE"));
-  const saved = await stored();
-  expect(saved.record.category_id).toBe(alias === "UBER EATS" ? foodId : taxiId);
-  expect(saved.record.counterparty_name).toBe(alias === "UBER EATS" ? "UBER EATS MONTE" : "Uber");
-});
+test.each(["UBER TRIP", "UBER EATS"])(
+  "a longer %s alias does not retain an erroneous public-transport category",
+  async (alias) => {
+    await rule("Uber", publicId);
+    await fixture.pool.query(
+      "INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) SELECT id,$1,$1 FROM merchants WHERE name='Uber'",
+      [alias],
+    );
+    await processMailIngestion(input(alias + " MONTE"));
+    const saved = await stored();
+    expect(saved.record.category_id).toBe(alias === "UBER EATS" ? foodId : taxiId);
+    expect(saved.record.counterparty_name).toBe(alias === "UBER EATS" ? "UBER EATS MONTE" : "Uber");
+  },
+);
 
 test("a credit notice cannot debit an account deactivated during classification", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
@@ -312,9 +340,20 @@ test("a successful GPT category becomes a persistent rule available in JSON back
   await processMailIngestion(next, createDb());
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
   const backup = await getWalletDataset(createDb(), { includeArchived: true });
-  expect(backup.merchants).toEqual([expect.objectContaining({name: "HDP HURBAN FOOD MONTE", categoryId: foodId, matchMode: "exact"})]);
-  expect(backup.merchantAliases).toEqual([expect.objectContaining({normalizedAlias: "HDP HURBAN FOOD MONTE"})]);
-  expect((await fixture.pool.query("SELECT category_id FROM records")).rows).toEqual([{category_id: foodId}, {category_id: foodId}]);
+  expect(backup.merchants).toEqual([
+    expect.objectContaining({
+      name: "HDP HURBAN FOOD MONTE",
+      categoryId: foodId,
+      matchMode: "exact",
+    }),
+  ]);
+  expect(backup.merchantAliases).toEqual([
+    expect.objectContaining({ normalizedAlias: "HDP HURBAN FOOD MONTE" }),
+  ]);
+  expect((await fixture.pool.query("SELECT category_id FROM records")).rows).toEqual([
+    { category_id: foodId },
+    { category_id: foodId },
+  ]);
 });
 
 test("a learned category promotes an unknown rule without changing its merchant identity", async () => {
@@ -322,13 +361,21 @@ test("a learned category promotes an unknown rule without changing its merchant 
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
   await processMailIngestion(input("SHOP MONTE"));
   vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
-  expect(await resolveCategory(createDb(), "HANDY*SHOP")).toMatchObject({merchantName: "Shop", categoryId: foodId, source: "merchant_rule"});
+  expect(await resolveCategory(createDb(), "HANDY*SHOP")).toMatchObject({
+    merchantName: "Shop",
+    categoryId: foodId,
+    source: "merchant_rule",
+  });
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
-  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([{name: "Shop", category_id: foodId}]);
+  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([
+    { name: "Shop", category_id: foodId },
+  ]);
 });
 
-test.each([null, "unknown"])("a model result %s does not become a learned rule", async result => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(result === "unknown" ? unknownId : null);
+test.each([null, "unknown"])("a model result %s does not become a learned rule", async (result) => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(
+    result === "unknown" ? unknownId : null,
+  );
   await processMailIngestion(input("OPAQUE SHOP"));
   expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
 });
@@ -340,19 +387,24 @@ test("learning does not overwrite a merchant category manually changed during GP
     return foodId;
   });
   await processMailIngestion(input("SHOP MONTE"));
-  expect((await fixture.pool.query("SELECT category_id FROM merchants")).rows).toEqual([{category_id: tvId}]);
+  expect((await fixture.pool.query("SELECT category_id FROM merchants")).rows).toEqual([
+    { category_id: tvId },
+  ]);
 });
 
 test("two concurrent classifications create only one merchant and one alias", async () => {
   let arrived = 0;
   let release = () => {};
-  const both = new Promise<void>(resolve => {release = resolve;});
+  const both = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementation(async () => {
     if (++arrived === 2) release();
     await both;
     return foodId;
   });
-  const first = input("NEW SHOP"), second = input("NEW SHOP");
+  const first = input("NEW SHOP"),
+    second = input("NEW SHOP");
   second.transaction.amount = 60;
   await Promise.all([processMailIngestion(first), processMailIngestion(second)]);
   expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(1);
@@ -362,8 +414,12 @@ test("two concurrent classifications create only one merchant and one alias", as
 
 test("failed financial writes roll back learned rules together with the records", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  await fixture.pool.query("CREATE FUNCTION reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='completed' THEN RAISE EXCEPTION 'test completion failure'; END IF; RETURN NEW; END $$");
-  await fixture.pool.query("CREATE TRIGGER reject_completion BEFORE UPDATE ON ingestion_events FOR EACH ROW EXECUTE FUNCTION reject_completion()");
+  await fixture.pool.query(
+    "CREATE FUNCTION reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='completed' THEN RAISE EXCEPTION 'test completion failure'; END IF; RETURN NEW; END $$",
+  );
+  await fixture.pool.query(
+    "CREATE TRIGGER reject_completion BEFORE UPDATE ON ingestion_events FOR EACH ROW EXECUTE FUNCTION reject_completion()",
+  );
   try {
     await expect(processMailIngestion(input("NEW SHOP"))).rejects.toThrow();
     expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
@@ -377,9 +433,11 @@ test("failed financial writes roll back learned rules together with the records"
 test("a shorter learned descriptor cannot change old fingerprints and duplicate an expense", async () => {
   await processMailIngestion(input("SHOP MONTE"));
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  const learning = input("SHOP"); learning.transaction.amount = 60;
+  const learning = input("SHOP");
+  learning.transaction.amount = 60;
   await processMailIngestion(learning);
-  const repeat = input("SHOP MONTE"); repeat.transaction.source = "google_wallet";
+  const repeat = input("SHOP MONTE");
+  repeat.transaction.source = "google_wallet";
   expect((await processMailIngestion(repeat)).status).toBe("duplicate");
   expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(2);
 });
@@ -390,21 +448,33 @@ test("a broader manual rule created during GPT is not shadowed by learning", asy
     return foodId;
   });
   await processMailIngestion(input("SHOP MONTE"));
-  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([{name: "Shop", category_id: tvId}]);
-  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId: tvId, merchantName: "Shop"});
+  expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([
+    { name: "Shop", category_id: tvId },
+  ]);
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({
+    categoryId: tvId,
+    merchantName: "Shop",
+  });
 });
 
 test("a manual rule takes precedence over an older exact learned descriptor", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
   await processMailIngestion(input("SHOP MONTE"));
   await rule("Shop", tvId);
-  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId: tvId, merchantName: "Shop"});
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({
+    categoryId: tvId,
+    merchantName: "Shop",
+  });
 });
 
 test("an existing explicit rule with negative priority keeps broad alias matching", async () => {
   await rule("Shop", foodId);
   await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
-  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({merchantName:"Shop", categoryId:foodId, source:"merchant_rule"});
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({
+    merchantName: "Shop",
+    categoryId: foodId,
+    source: "merchant_rule",
+  });
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
 });
 
@@ -413,13 +483,26 @@ test("JSON restore retains exact learned rules and defaults legacy negative-prio
   await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
   await processMailIngestion(input("HDP HURBAN FOOD MONTE"));
-  const backup = await getWalletDataset(createDb(), {includeArchived:true});
-  for (const merchant of backup.merchants ?? []) if(merchant.name === "Shop") delete merchant.matchMode;
+  const backup = await getWalletDataset(createDb(), { includeArchived: true });
+  for (const merchant of backup.merchants ?? [])
+    if (merchant.name === "Shop") delete merchant.matchMode;
   const parsed = walletBackupSchema.parse(JSON.parse(JSON.stringify(backup)));
   await restoreWalletBackup(parsed);
   vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
-  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({categoryId:tvId, merchantName:"Shop"});
-  expect(await resolveCategory(createDb(), "HDP HURBAN FOOD MONTE")).toMatchObject({categoryId:foodId, source:"merchant_rule"});
+  expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({
+    categoryId: tvId,
+    merchantName: "Shop",
+  });
+  expect(await resolveCategory(createDb(), "HDP HURBAN FOOD MONTE")).toMatchObject({
+    categoryId: foodId,
+    source: "merchant_rule",
+  });
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
-  expect((await fixture.pool.query("SELECT match_mode FROM merchants WHERE name='HDP HURBAN FOOD MONTE'")).rows).toEqual([{match_mode:"exact"}]);
+  expect(
+    (
+      await fixture.pool.query(
+        "SELECT match_mode FROM merchants WHERE name='HDP HURBAN FOOD MONTE'",
+      )
+    ).rows,
+  ).toEqual([{ match_mode: "exact" }]);
 });

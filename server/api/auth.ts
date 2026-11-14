@@ -45,10 +45,16 @@ export function createSessionToken(now = new Date()) {
       iat: Math.floor(now.getTime() / 1000),
       exp: Math.floor(now.getTime() / 1000) + ttl,
       jti: randomUUID(),
-      sub: createHash("sha256").update(process.env.API_TOKEN ?? authSecret()).digest("base64url").slice(0, 24),
+      sub: createHash("sha256")
+        .update(process.env.API_TOKEN ?? authSecret())
+        .digest("base64url")
+        .slice(0, 24),
     }),
   ).toString("base64url");
-  return { token: `${payload}.${sign(payload)}`, expiresAt: new Date(now.getTime() + ttl * 1000).toISOString() };
+  return {
+    token: `${payload}.${sign(payload)}`,
+    expiresAt: new Date(now.getTime() + ttl * 1000).toISOString(),
+  };
 }
 
 export function isValidSessionToken(token: string | null, now = new Date()) {
@@ -56,7 +62,9 @@ export function isValidSessionToken(token: string | null, now = new Date()) {
   const [payload, signature, extra] = token.split(".");
   if (!payload || !signature || extra || !safeEqual(signature, sign(payload))) return false;
   try {
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { exp?: number };
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
+      exp?: number;
+    };
     return typeof parsed.exp === "number" && parsed.exp > Math.floor(now.getTime() / 1000);
   } catch {
     return false;

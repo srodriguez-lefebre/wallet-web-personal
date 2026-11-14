@@ -23,9 +23,7 @@ afterAll(async () => {
   if (fixture) await fixture.close();
 }, 30_000);
 beforeEach(async () => {
-  await fixture.pool.query(
-    "TRUNCATE accounts,categories,settings,debts,goals CASCADE",
-  );
+  await fixture.pool.query("TRUNCATE accounts,categories,settings,debts,goals CASCADE");
   await fixture.pool.query(
     "insert into accounts(id,name,type,currency,initial_balance,color,icon) values ($1,'Account','bank','UYU',1000,'blue','bank')",
     [accountId],
@@ -34,9 +32,7 @@ beforeEach(async () => {
     "insert into categories(id,name,color,icon) values ($1,'Category','blue','bank')",
     [categoryId],
   );
-  await fixture.pool.query(
-    "insert into settings(primary_currency) values ('UYU')",
-  );
+  await fixture.pool.query("insert into settings(primary_currency) values ('UYU')");
   await fixture.pool.query(
     "insert into debts(id,name,direction,currency,original_amount,pending_amount,counterparty_name,category_id,started_at) values ($1,'Debt','payable','UYU',100,100,'Party',$2,$3)",
     [debtId, categoryId, date],
@@ -81,15 +77,10 @@ test("reimport skips soft-deleted deterministic identities and still inserts new
   const [saved] = await importWalletRecords([original]);
   await deleteRecord(saved.id);
   expect(
-    await importWalletRecords([
-      original,
-      input({ occurredAt: "2026-06-22T12:00:00.000Z" }),
-    ]),
+    await importWalletRecords([original, input({ occurredAt: "2026-06-22T12:00:00.000Z" })]),
   ).toHaveLength(1);
   expect((await getWalletDataset()).records).toHaveLength(1);
-  expect(
-    (await fixture.pool.query("select id from records")).rows,
-  ).toHaveLength(2);
+  expect((await fixture.pool.query("select id from records")).rows).toHaveLength(2);
 });
 
 test("an ordinary record cannot be attached to a debt through PATCH", async () => {
@@ -125,9 +116,7 @@ test("same-debt PATCH keeps legitimate payment reconciliation and forbids detach
   expect(await pending()).toBe(70);
   await updateRecord(payment!.record.id, { debtId, amount: 10 });
   expect(await pending()).toBe(90);
-  await expect(
-    updateRecord(payment!.record.id, { debtId: null }),
-  ).rejects.toThrow();
+  await expect(updateRecord(payment!.record.id, { debtId: null })).rejects.toThrow();
   expect(await pending()).toBe(90);
 });
 

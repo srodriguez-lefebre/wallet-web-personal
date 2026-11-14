@@ -141,9 +141,7 @@ export function AppShell({ children }: PropsWithChildren) {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Personal Wallet</p>
-                  <p className="text-xs text-muted-foreground">
-                    Finance control
-                  </p>
+                  <p className="text-xs text-muted-foreground">Finance control</p>
                 </div>
               </div>
               <Button

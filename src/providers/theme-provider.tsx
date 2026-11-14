@@ -42,16 +42,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       theme,
-      toggleTheme: () =>
-        setThemeState((current) => (current === "dark" ? "light" : "dark")),
+      toggleTheme: () => setThemeState((current) => (current === "dark" ? "light" : "dark")),
       setTheme: setThemeState,
     }),
     [theme],
   );
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

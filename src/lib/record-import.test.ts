@@ -1,10 +1,5 @@
 import { expect, test } from "vitest";
-import {
-  parseCsv,
-  recordsCsv,
-  prepareCsvRecords,
-  importRecordBatches,
-} from "./record-import";
+import { parseCsv, recordsCsv, prepareCsvRecords, importRecordBatches } from "./record-import";
 import { mockWalletData as originalMockData } from "../../shared/mock-data";
 // Match the public API's UUID contract, including every fixture reference.
 const replacements = new Map<string, string>();
@@ -18,18 +13,15 @@ const mockWalletData: typeof originalMockData = JSON.parse(
     )
       return value;
     if (!replacements.has(value))
-      replacements.set(
-        value,
-        `00000000-0000-4000-8000-${String(idNumber++).padStart(12, "0")}`,
-      );
+      replacements.set(value, `00000000-0000-4000-8000-${String(idNumber++).padStart(12, "0")}`);
     return replacements.get(value);
   },
 );
 
 test("quoted CSV preserves newlines, quotes, commas, CRLF and BOM", () => {
-  expect(
-    parseCsv('\uFEFFdate,note\r\n2026-01-01,"line 1, ""quote""\r\nline 2"\r\n'),
-  ).toEqual([{ date: "2026-01-01", note: 'line 1, "quote"\r\nline 2' }]);
+  expect(parseCsv('\uFEFFdate,note\r\n2026-01-01,"line 1, ""quote""\r\nline 2"\r\n')).toEqual([
+    { date: "2026-01-01", note: 'line 1, "quote"\r\nline 2' },
+  ]);
   expect(() => parseCsv('a,b\n1,"unterminated')).toThrow(/quote/i);
 });
 
@@ -140,14 +132,10 @@ test("imports 201+ records in batches and deduplicates both complete history and
     counterpartyName: `row ${i}`,
   }));
   const sizes: number[] = [];
-  const count = await importRecordBatches(
-    [...records, records[1]],
-    [records[0]],
-    async (rows) => {
-      sizes.push(rows.length);
-      return rows.map((r, i) => ({ ...r, id: String(i) }));
-    },
-  );
+  const count = await importRecordBatches([...records, records[1]], [records[0]], async (rows) => {
+    sizes.push(rows.length);
+    return rows.map((r, i) => ({ ...r, id: String(i) }));
+  });
   expect(sizes).toEqual([200, 1]);
   expect(count).toBe(201);
 });
@@ -218,10 +206,7 @@ test("a rejected row does not mark a later valid row as already imported", () =>
   const valid = { ...mockWalletData.records[0], tagIds: [] };
   const invalid = {
     ...valid,
-    tagIds: [
-      "00000000-0000-4000-8000-000000008881",
-      "00000000-0000-4000-8000-000000008882",
-    ],
+    tagIds: ["00000000-0000-4000-8000-000000008881", "00000000-0000-4000-8000-000000008882"],
   };
   const result = prepareCsvRecords(
     recordsCsv([invalid, valid]),
@@ -234,23 +219,73 @@ test("a rejected row does not mark a later valid row as already imported", () =>
   expect(result[1].error).toBeUndefined();
 });
 
-test.each(["tagIds", "goalIds", "goalAssociations"] as const)("CSV preview rejects an unknown %s reference per row", (field) => {
-  const unknownId = "00000000-0000-4000-8000-000000007777";
-  const dataset = { ...mockWalletData, records: [] };
-  const valid = { ...mockWalletData.records[0], tagIds: [], goalIds: [], goalAssociations: [] };
-  const invalid = { ...valid, [field]: field === "goalAssociations" ? [{ goalId: unknownId, assignmentSource: "manual", useReserved: true, reserveIncome: true }] : [unknownId] };
-  const result = prepareCsvRecords(recordsCsv([invalid, valid]), dataset, dataset.accounts[0].id, dataset.categories[0].id, dataset.categories[0].id);
-  expect(result[0].error).toMatch(/does not exist/i);
-  expect(result[0].record).toBeUndefined();
-  expect(result[1].error).toBeUndefined();
-});
+test.each(["tagIds", "goalIds", "goalAssociations"] as const)(
+  "CSV preview rejects an unknown %s reference per row",
+  (field) => {
+    const unknownId = "00000000-0000-4000-8000-000000007777";
+    const dataset = { ...mockWalletData, records: [] };
+    const valid = { ...mockWalletData.records[0], tagIds: [], goalIds: [], goalAssociations: [] };
+    const invalid = {
+      ...valid,
+      [field]:
+        field === "goalAssociations"
+          ? [
+              {
+                goalId: unknownId,
+                assignmentSource: "manual",
+                useReserved: true,
+                reserveIncome: true,
+              },
+            ]
+          : [unknownId],
+    };
+    const result = prepareCsvRecords(
+      recordsCsv([invalid, valid]),
+      dataset,
+      dataset.accounts[0].id,
+      dataset.categories[0].id,
+      dataset.categories[0].id,
+    );
+    expect(result[0].error).toMatch(/does not exist/i);
+    expect(result[0].record).toBeUndefined();
+    expect(result[1].error).toBeUndefined();
+  },
+);
 
-test.each(["goalIds", "goalAssociations"] as const)("new %s links require active goals without invalidating unrelated historical links", (field) => {
-  const dataset = structuredClone(mockWalletData);
-  dataset.goals[0].status = "completed";
-  const valid = { ...dataset.records[0], counterpartyName: "New CSV row", tagIds: [dataset.tags[0].id], goalIds: [], goalAssociations: [] };
-  const invalid = { ...valid, [field]: field === "goalAssociations" ? [{ goalId: dataset.goals[0].id, assignmentSource: "manual", useReserved: true, reserveIncome: true }] : [dataset.goals[0].id] };
-  const result = prepareCsvRecords(recordsCsv([invalid, valid]), dataset, dataset.accounts[0].id, dataset.categories[0].id, dataset.categories[0].id);
-  expect(result[0].error).toMatch(/active goal/i);
-  expect(result[1].error).toBeUndefined();
-});
+test.each(["goalIds", "goalAssociations"] as const)(
+  "new %s links require active goals without invalidating unrelated historical links",
+  (field) => {
+    const dataset = structuredClone(mockWalletData);
+    dataset.goals[0].status = "completed";
+    const valid = {
+      ...dataset.records[0],
+      counterpartyName: "New CSV row",
+      tagIds: [dataset.tags[0].id],
+      goalIds: [],
+      goalAssociations: [],
+    };
+    const invalid = {
+      ...valid,
+      [field]:
+        field === "goalAssociations"
+          ? [
+              {
+                goalId: dataset.goals[0].id,
+                assignmentSource: "manual",
+                useReserved: true,
+                reserveIncome: true,
+              },
+            ]
+          : [dataset.goals[0].id],
+    };
+    const result = prepareCsvRecords(
+      recordsCsv([invalid, valid]),
+      dataset,
+      dataset.accounts[0].id,
+      dataset.categories[0].id,
+      dataset.categories[0].id,
+    );
+    expect(result[0].error).toMatch(/active goal/i);
+    expect(result[1].error).toBeUndefined();
+  },
+);
