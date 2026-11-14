@@ -296,3 +296,31 @@ exit 0: 112 archivos / 807 pruebas, formato/lint/build/OpenAPI verdes, en
 `/tmp/wallet-package4-record-draft-check.log`, con estado en `.status`.
 Pendiente separar diálogo/filtros/lista y conectar los consumidores de Query;
 WalletSync sigue activo. No se modificaron DB, producción ni Apps Script.
+
+## Task 3 · presentación de Records separada
+
+La extracción preservada se retomó sobre `5c875bb`, confirmado remoto, con main
+`6701646` y sin PR 4. RecordsView queda en 63 líneas y compone diálogo, filtros,
+banner de revisión y lista. La lógica de formulario y presentación se conserva
+en hooks específicos. RecordList → RecordDayGroup → RecordRow usa índices de
+cuentas, categorías, tarjetas y tags, y agrupa sólo cuando cambian los records.
+La acción principal de fila es un botón nativo; borrar es un control hermano.
+Testing Library comprueba que borrar no abre el registro ni hay controles anidados.
+Los estilos de inputs y notas se toman del kit en vez de declarar copias locales.
+
+Target: 7 archivos / 61 pruebas verdes en `record-row-target2.log`, repetidas
+después de resolver la propiedad de refs en `record-owned-refs-target2.log`.
+Lint detectó refs mutadas desde props. Se trasladaron los callbacks completos a
+los hooks propietarios, manteniendo los cuerpos originales y sin omitir reglas.
+El primer traslado dejó un error de sintaxis, detectado y corregido antes de
+repetir las 61 pruebas. Se quitó también un import sobrante. Validación completa
+actual en `/tmp/wallet-package4-record-presentation-check2.log`, estado `.status`.
+Pendiente: terminar consumidores de Query/lecturas Cards/metadata y retirar
+WalletSync; completar la aplicación del kit y las otras vistas antes del PR 4.
+
+Validación final de presentación: exit 0, 113 archivos / 808 pruebas y
+formato/lint/build/OpenAPI verdes. Log
+`/tmp/wallet-package4-record-presentation-check2.log` y `.status`. No quedaron
+excepciones nuevas de lint. Próximo bloque independiente: lecturas agregadas de
+agenda/uso de tarjetas y ledger por tarjeta, y metadata suficiente de referencia
+para conectar Query sin convertir una página parcial en saldos o totales.

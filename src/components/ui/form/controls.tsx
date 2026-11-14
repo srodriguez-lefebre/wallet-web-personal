@@ -8,6 +8,8 @@ import { cn, limitDecimalPlaces } from "@/lib/utils";
 
 export const controlClassName =
   "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
+export const textareaClassName =
+  "block min-h-24 max-h-64 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [field-sizing:content]";
 export const Label = LabelPrimitive.Root;
 export function Field({
   label,
@@ -43,12 +45,7 @@ export function Input({ className, ...props }: ComponentProps<"input">) {
   return <input className={cn(controlClassName, className)} {...props} />;
 }
 export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
-  return (
-    <textarea
-      className={cn(controlClassName, "min-h-24 resize-y py-2 [field-sizing:content]", className)}
-      {...props}
-    />
-  );
+  return <textarea className={cn(textareaClassName, className)} {...props} />;
 }
 export interface SelectOption<T extends string = string> {
   value: T;
