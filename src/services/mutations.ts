@@ -106,6 +106,13 @@ export function createWalletMutations(client: WalletClient, cache: QueryClient):
         mutationKey: ["wallet-mutation", operationId],
         retry: false,
         mutationFn: call,
+        // Invalidation alone can join an initial GET with no cached data. Cancel
+        // its result before writing, so settlement always reads canonical state.
+        onMutate: async () => {
+          await Promise.all(
+            mutationDefinitions[operationId].map((key) => cache.cancelQueries({ queryKey: [key] })),
+          );
+        },
         onSettled: async () => {
           await Promise.all(
             mutationDefinitions[operationId].map((key) =>

@@ -12,58 +12,8 @@ import {
   recordsQueryOptions,
   referenceQueryOptions,
 } from "./wallet-queries";
+import { id, record, reference, page, boot } from "../test/wallet-fixtures";
 
-const id = "00000000-0000-4000-8000-000000000001";
-const record = {
-  id,
-  type: "expense",
-  amount: 10,
-  currency: "UYU",
-  accountId: id,
-  categoryId: id,
-  tagIds: [],
-  goalIds: [],
-  goalAssociations: [],
-  paymentType: "debit",
-  paymentStatus: "cleared",
-  exchangeRateToPrimary: 1,
-  occurredAt: "2026-11-01T12:00:00.000Z",
-};
-const reference = {
-  settings: {
-    primaryCurrency: "UYU",
-    theme: "system",
-    defaultDashboardPreset: "monthly-review",
-    locale: "es-UY",
-    includeHiddenAccountsInReports: false,
-    defaultPaymentType: "debit",
-    defaultPaymentStatus: "cleared",
-  },
-  accounts: [],
-  categories: [],
-  tags: [],
-  creditCards: [],
-  goals: [],
-  goalReservations: [],
-  budgets: [],
-  exchangeRates: [],
-  investments: [],
-  debts: [],
-  recurringDebts: [],
-  installmentPlans: [],
-  recordTemplates: [],
-  recordSummary: {
-    from: "2026-11-01",
-    to: "2026-11-01",
-    months: ["2026-11"],
-    total: 1,
-    review: 0,
-    newReviews: 0,
-    latestReviewAt: null,
-  },
-};
-const page = { items: [record], nextCursor: null, hasMore: false };
-const boot = { reference, recordsPage: page, generatedDebts: [], serverDate: "2026-11-14" };
 const server = setupServer();
 const clients: ReturnType<typeof createWalletQueryClient>[] = [];
 const unsubscribers: (() => void)[] = [];
@@ -177,4 +127,45 @@ test("an aborted bootstrap cannot seed financial data after its session ends", a
       .getAll()
       .filter((q) => q.queryKey[0] === "records"),
   ).toEqual([]);
+});
+
+test("an initial stale read cannot overwrite canonical reference after a mutation settles", async () => {
+  let release!: () => void, arrived!: () => void;
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  let reads = 0;
+  server.use(
+    http.get("http://test.local/api/wallet/reference", async () => {
+      reads++;
+      if (reads === 1) {
+        arrived();
+        await new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return response(reference);
+      }
+      return response({ ...reference, settings: { ...reference.settings, theme: "dark" } });
+    }),
+    http.patch("http://test.local/api/settings", () =>
+      response({ ...reference.settings, theme: "dark" }),
+    ),
+  );
+  const value = cache();
+  const observer = new QueryObserver(value, referenceQueryOptions(client));
+  unsubscribers.push(observer.subscribe(() => {}));
+  await started;
+  // Release the old server response exactly when settlement invalidates the read.
+  unsubscribers.push(
+    value.getQueryCache().subscribe((event) => {
+      if (event.type === "updated" && event.action.type === "invalidate") release();
+    }),
+  );
+  try {
+    await createWalletMutations(client, value)["settings.patch"]({ body: { theme: "dark" } });
+    expect(value.getQueryData(["reference"])).toMatchObject({ settings: { theme: "dark" } });
+    expect(reads).toBe(2);
+  } finally {
+    release();
+  }
 });

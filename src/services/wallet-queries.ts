@@ -44,13 +44,13 @@ export function recordsQueryOptions(client: WalletClient, filters: RecordQueryFi
     getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.nextCursor : null),
   });
 }
-export function ensureWalletBootstrap(
+export function walletBootstrapQueryOptions(
   cache: QueryClient,
   client: WalletClient,
   options: { signal?: AbortSignal; timeZone?: string; recordsLimit?: number } = {},
 ) {
   const limit = options.recordsLimit ?? defaultPageSize;
-  return cache.fetchQuery({
+  return queryOptions({
     queryKey: ["bootstrap"],
     staleTime: Infinity,
     gcTime: Infinity,
@@ -74,6 +74,13 @@ export function ensureWalletBootstrap(
       return data;
     },
   });
+}
+export function ensureWalletBootstrap(
+  cache: QueryClient,
+  client: WalletClient,
+  options: { signal?: AbortSignal; timeZone?: string; recordsLimit?: number } = {},
+) {
+  return cache.fetchQuery(walletBootstrapQueryOptions(cache, client, options));
 }
 export function analyticsQueryOptions(
   client: WalletClient,

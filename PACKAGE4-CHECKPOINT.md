@@ -205,3 +205,23 @@ Check completo final exit 0: 106 archivos / 778 pruebas, formato, lint, build y
 OpenAPI verdes. Log: `/tmp/wallet-package4-reports-check2.log`. El bloque agrega
 lecturas compatibles y no requiere migraciones. Próximo: sesión de Query React,
 restantes lecturas de Cards/metadata y migración de consumidores/vistas.
+
+Commit reportes `93361af8cea63c57fdb5827ea347b06c3ed3cf60` confirmado en GitHub.
+
+## Task 2b · ciclo de sesión React preparado
+
+WalletQueryProvider posee una caché aislada por sesión, bootstrap compartido que
+siembra referencia/página y limpieza al desmontar por bloqueo/cambio de sesión.
+La limpieza diferida a microtask reconoce el replay de StrictMode sin duplicar
+el POST, aborta respuestas tardías y borra el cache obsoleto de localStorage.
+Todavía no se conecta en App: hacerlo junto con la migración de consumidores,
+para evitar dos bootstraps y conservar paridad de Cards/notificaciones.
+
+Testing Library/MSW: RED por proveedor inexistente; GREEN 8/8 con pruebas previas
+de Query. Caso nuevo reprodujo la carrera de un GET inicial sin datos: al guardar
+settings podía conservar `system` en vez de `dark`. RED 1 fallo / 4 pass.
+Se cancelan lecturas afectadas antes de mutar, y al terminar se invalidan para
+leer el estado canónico. GREEN final 3 archivos / 13 tests, incluyendo QA HTTP
+de gasto/meta/saldo y undo. Log `/tmp/wallet-package4-query-session-race-green.log`.
+TypeScript exit 0 (`query-session-types2.log`), imports corregidos por ESLint sin
+desactivar reglas. No cambia App, sesiones productivas, DB ni Apps Script.
