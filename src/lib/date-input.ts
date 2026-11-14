@@ -11,3 +11,17 @@ export function dateInputToIso(value: string): string {
   if (localDateInput(date) !== value) throw new Error("Invalid calendar date");
   return date.toISOString();
 }
+
+/** HTML datetime-local values are wall-clock minutes, never UTC substrings. */
+export function localDateTimeInput(value: Date | string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) throw new Error("Invalid local date and time");
+  return `${localDateInput(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+export function dateTimeInputToIso(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value))
+    throw new Error("Invalid local date and time");
+  const date = new Date(value);
+  if (localDateTimeInput(date) !== value) throw new Error("Invalid local date and time");
+  return date.toISOString();
+}

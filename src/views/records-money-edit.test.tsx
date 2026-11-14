@@ -6,7 +6,6 @@ import type { PropsWithChildren } from "react";
 
 import { RecordsView } from "@/features/records/RecordsView";
 
-
 const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)(), update: vi.fn() }));
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({

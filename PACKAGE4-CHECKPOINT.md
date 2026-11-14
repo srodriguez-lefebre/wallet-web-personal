@@ -249,3 +249,25 @@ Lint limpio (`view-extraction-lint.log`). TypeScript directo exit 0, registrado 
 sin cierre visible y no se usaron como prueba de éxito. No se interrumpió proceso.
 Pendientes: kit, RecordDraft/reducer y separación de filtros/lista/formulario,
 lecturas Cards/metadata, integración Query y retiro definitivo de WalletSync.
+
+Extracción subida en `ea36dd7531fd5463bb77a6ce70467a9fb8c81db8`, confirmada en GitHub.
+
+## Task 3 · kit de formulario, primer consumidor
+
+Kit en `src/components/ui/form`: Field/Label, Input/Textarea, Select Radix,
+MoneyInput con conversión opcional, CurrencySelect desde schema, Date/DateTime,
+AccountSelect (alternativas activas/visibles y valor histórico legible), CategoryField,
+ColorInput, SegmentedControl accesible, FormDialog y ConfirmDialog. Cards usa el
+kit y Limit tiene label propio; se conserva submit y retención de draft ante error.
+CategoryPicker admite id para el label. Fecha/hora local está centralizada en
+date-input; Records conserva el timestamp exacto si no se editó y su fallback de
+fecha vacía. Valores de calendario imposibles se rechazan en el helper.
+
+RED kit inexistente → GREEN 4/4. Teclado Radix/moneda/pestañas y regresiones de
+Records: 5 archivos / 39 verdes. Cards/agenda/kit: 3 / 18. Fecha/hora RED función
+faltante → GREEN 3/3. Primer check se detuvo en formato de imports largos de cuatro
+tests movidos; se corrigieron y se repitió el check entero.
+Check final exit 0: 110 archivos / 798 pruebas, lint/formato/build/OpenAPI verdes.
+Log `/tmp/wallet-package4-form-kit-check2.log`, estado explícito en `.status`.
+La app sigue usando WalletSync; aún no afirmar caché por entidad completa ni
+separación final de Records, que conserva lógica de draft/formulario y lista.

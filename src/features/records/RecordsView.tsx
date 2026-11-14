@@ -31,6 +31,7 @@ import type {
   WalletRecord,
 } from "@shared/types";
 
+import { localDateTimeInput as toDateTimeLocal, dateTimeInputToIso } from "@/lib/date-input";
 import { ReviewRecordActions } from "@/components/wallet/review-record-actions";
 import { ImportHistory } from "@/components/wallet/record-import-history";
 import { CategoryFilterSelect } from "@/components/wallet/category-filter-select";
@@ -92,15 +93,8 @@ function defaultDestinationAccountId(dataset: WalletDataset, sourceAccountId: st
   );
 }
 
-function toDateTimeLocal(value: string | Date) {
-  const date = typeof value === "string" ? new Date(value) : value;
-  const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-
-  return localDate.toISOString().slice(0, 16);
-}
-
 function dateTimeLocalToIso(value: string) {
-  return value ? new Date(value).toISOString() : new Date().toISOString();
+  return value ? dateTimeInputToIso(value) : new Date().toISOString();
 }
 
 function typeButtonClassName(item: RecordType, currentType: RecordType) {

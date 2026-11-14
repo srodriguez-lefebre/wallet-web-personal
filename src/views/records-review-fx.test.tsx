@@ -2,7 +2,6 @@ import { act, create, type ReactTestRenderer, type ReactTestInstance } from "rea
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
-
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 

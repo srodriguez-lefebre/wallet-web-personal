@@ -85,7 +85,7 @@ function fillNewCard() {
   fireEvent.change(screen.getByLabelText<HTMLInputElement>("Last four digits"), {
     target: { value: "12a345" },
   });
-  fireEvent.change(screen.getByRole("spinbutton", { name: "" }), {
+  fireEvent.change(screen.getByRole("textbox", { name: "Limit" }), {
     target: { value: "2500.5" },
   });
 }

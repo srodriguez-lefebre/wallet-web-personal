@@ -2,7 +2,6 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
-
 import type { RecordTemplate, WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
