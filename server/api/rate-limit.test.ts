@@ -58,3 +58,26 @@ test("expired windows can unlock again while a different live IP remains indepen
   );
   expect((await assertUnlockAllowed(db, request("192.0.2.2"))).allowed).toBe(true);
 });
+
+test("unlock prunes old attempts at most hourly with a persisted claim", async () => {
+  await fixture.pool.query("TRUNCATE settings,auth_attempts");
+  await fixture.pool.query(
+    "INSERT INTO auth_attempts(key,failed_count,window_started_at) VALUES('old-key',3,now()-interval '2 days')",
+  );
+  await assertUnlockAllowed(createDb(), request("192.0.2.90"));
+  expect(
+    (await fixture.pool.query("SELECT key FROM auth_attempts WHERE key='old-key'")).rows,
+  ).toEqual([]);
+  await fixture.pool.query(
+    "INSERT INTO auth_attempts(key,failed_count,window_started_at) VALUES('old-key',3,now()-interval '2 days')",
+  );
+  await assertUnlockAllowed(createDb(), request("192.0.2.90"));
+  expect(
+    (await fixture.pool.query("SELECT key FROM auth_attempts WHERE key='old-key'")).rows,
+  ).toHaveLength(1);
+  await fixture.pool.query("UPDATE settings SET auth_attempts_pruned_at=now()-interval '2 hours'");
+  await assertUnlockAllowed(createDb(), request("192.0.2.90"));
+  expect(
+    (await fixture.pool.query("SELECT key FROM auth_attempts WHERE key='old-key'")).rows,
+  ).toEqual([]);
+});

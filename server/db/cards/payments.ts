@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { conflictError, validationError } from "../../api/errors.js";
 import { mapCreditCardPayment, toNumeric } from "../mappers.js";
@@ -64,7 +64,7 @@ export async function payCreditCardStatement(
       ), totals AS (
         SELECT coalesce((SELECT sum(net) FROM net_purchases), 0) AS total,
           coalesce((SELECT sum(amount_in_limit_currency) FROM credit_card_payments
-            WHERE credit_card_id = ${creditCardId} AND statement_id = ${statementId}), 0) AS paid
+            WHERE credit_card_id = ${creditCardId} AND statement_id = ${statementId} AND deleted_at IS NULL), 0) AS paid
       ), ordered AS (
         SELECT p.*, coalesce(sum(net) OVER (ORDER BY occurred_at, id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS prior
         FROM net_purchases p
@@ -126,7 +126,11 @@ export async function deleteCreditCardPayment(db: Db, creditCardId: string, paym
     .select()
     .from(creditCardPayments)
     .where(
-      and(eq(creditCardPayments.id, paymentId), eq(creditCardPayments.creditCardId, creditCardId)),
+      and(
+        eq(creditCardPayments.id, paymentId),
+        eq(creditCardPayments.creditCardId, creditCardId),
+        isNull(creditCardPayments.deletedAt),
+      ),
     )
     .limit(1);
   if (!payment) return false;
@@ -136,6 +140,7 @@ export async function deleteCreditCardPayment(db: Db, creditCardId: string, paym
       .delete(creditCardPayments)
       .where(
         and(
+          isNull(creditCardPayments.deletedAt),
           eq(creditCardPayments.id, paymentId),
           eq(creditCardPayments.creditCardId, creditCardId),
         ),

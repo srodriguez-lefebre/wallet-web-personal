@@ -52,6 +52,8 @@ for (const operation of apiOperations as readonly ApiOperation[]) {
       },
     },
   };
+  for (const status of operation.additionalSuccessStatuses ?? [])
+    responses[status] = responses[operation.successStatus];
   for (const status of operation.errors) {
     responses[status] = {
       description: `Error ${status}`,

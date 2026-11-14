@@ -77,9 +77,9 @@ reciben la DB como primer argumento. El router crea como máximo un cliente por
 request y rechaza cuerpos de unlock inválidos antes de consultar la base. El
 límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
 ventana de quince minutos. Un desbloqueo válido no borra el contador global.
-El refactor compatible no cambia el formato de sesión ni requiere migraciones
-nuevas; revocación versionada y cambios de esquema siguen pendientes según
-`REFACTOR-CHECKPOINT.md`.
+El perfil por defecto conserva el formato y las sesiones existentes. La baseline
+aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
+activar según `REFACTOR-CHECKPOINT.md`.
 
 ## Funcionalidades nuevas
 
@@ -109,7 +109,9 @@ verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
 a partir de intenciones de movimientos en revisión: se conserva el libro de
 reservas registrado y cualquier discrepancia histórica requiere revisión.
 El estado real de las migraciones en producción debe comprobarse en el destino;
-este texto no confirma cuáles se aplicaron.
+la comprobación de 2026-11-14 confirmó 0000–0022 aplicadas, con hashes CRLF
+históricos verificados para 0015–0020. No repetirlas ni modificar el journal;
+volver a ejecutar el preflight antes de cualquier ampliación futura.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
 
 ## Verificación del refactor
@@ -417,3 +419,89 @@ npm run db:import-wallet-records
 El script crea categorias padre/hija con icono y color inferidos desde
 `categories-from-wallet-records.md`, normaliza categorias con espacios sobrantes y
 carga los records en Neon.
+
+## Refactor de contrato y baseline aditiva
+
+El router se deriva del contrato y autentica antes de validar entradas privadas.
+Cada request comparte una DB lazy y un requestId; el log JSON final contiene
+operación, status y duración, sin cuerpo, query string ni parámetros SQL. Las
+lecturas de wallet y estados de tarjeta no reparan datos. Abrir Tarjetas dispara
+`POST /api/cards/refresh-statements`; las mutaciones sincronizan sus estados
+dentro del batch financiero. `GET /api/cards/:id/summary` agrega una sola tarjeta
+en SQL. Archivar tarjeta responde `{ archived: true }`; generar recurrentes usa
+200 sin altas y 201 cuando crea instancias.
+
+`GET /api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` devuelve totales,
+categorías (incluidos ancestros), meses y presupuestos sin descargar el historial.
+Acepta `accountId` y `timeZone` IANA (America/Montevideo por defecto). Las fechas
+son inclusivas en esa zona. Respeta cuentas ocultas y las cotizaciones congeladas;
+`needs_review` conserva su impacto y cancelados/eliminados se excluyen. Una
+conversión pendiente aparece en `unresolvedRecords`; los presupuestos sin
+conversión congelada disponible devuelven importes `null` y estado warning.
+El snapshot completo continúa disponible hasta migrar todos sus consumidores.
+
+La migración `0022_repository_baseline` agrega índices, singleton de settings,
+metadatos y columnas de archivo. No borra ni transforma importes y conserva
+`goal_reservations`. Rechaza settings duplicados antes del DDL; no los reconcilia
+automáticamente. La activación de los nuevos soft deletes, unicidad de tags
+activos y FK de deudas se prepara para el siguiente paquete, cuando esta versión
+ya sea un destino de rollback capaz de leer archivos. No aplicar FK sobre
+referencias antiguas sin diagnóstico ni ejecutar drops sobre datos reales.
+
+Antes de aplicar 0022, verificar destino, journal y recuperación sintética:
+
+```bash
+npm run db:preflight -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada>
+WALLET_TEST_WORKERS=1 npm run check
+WALLET_TEST_WORKERS=1 npm run sandbox:check
+```
+
+El preflight sólo lee metadata y guards agregados; no aplica migraciones ni
+imprime credenciales o filas financieras. La huella SHA-256 corresponde al
+hostname normalizado sin `-pooler`, cotejado con un origen independiente del
+archivo local. Detenerse si faltan migraciones anteriores, hay hashes desconocidos,
+DDL parcial o más de una fila de settings. El journal histórico conserva hashes CRLF de
+0015–0020: el preflight acepta sólo sus variantes byte a byte verificadas y fechas
+originales, las informa en `legacyCrlfMigrations` y no modifica el journal ni
+repite SQL. BOM, otros hashes, fechas alteradas o identidades duplicadas siguen
+bloqueando la operación. No marcar migraciones como aplicadas
+por suposición ni crear una copia de datos reales para ensayar. Migración antes
+del deploy del código que lee sus columnas; rollback de código conservando las
+columnas. Los tests restauran un backup sintético antiguo y comprueban rollback
+de una migración rechazada. El restore financiero conserva la versión de sesión
+y la marca de poda actuales; esos contadores no se importan desde un JSON.
+
+`WALLET_TEST_WORKERS=1` limita Vitest a un worker en la HP; CI usa dos por defecto.
+
+## Sesiones revocables preparadas, sin activar
+
+Por defecto se conserva el formato y validación de sesión actuales.
+`GET /api/auth/session` indica `revocable: false`; el botón para cerrar todas las
+sesiones no aparece y `POST /api/auth/lock-all` devuelve 503 sin modificar versiones.
+La poda de intentos se ejecuta en unlock con una marca persistente como máximo
+una vez por hora y borra ventanas con más de 24 horas.
+
+El perfil optativo requiere `SESSION_SECRET` independiente de ambos tokens
+maestros, `LEGACY_SESSION_ACCEPT_UNTIL` con una fecha ISO explícita, y
+`WALLET_REVOCABLE_SESSIONS=true`. No crear/rotar el secreto ni activar el perfil sin
+la aprobación del dueño y sin confirmar 0022, despliegue y recuperación. No
+aplicar parcialmente esta configuración. Preparar una ventana que cubra la
+caducidad de las sesiones existentes (45 días por defecto) y probar la secuencia
+con claves sintéticas. La fecha habilita transitoriamente firmas legacy de los
+tokens maestros; después caduca. La activación sin esa ventana rechaza la
+configuración en lugar de asumir un corte silencioso.
+
+Los tokens nuevos llevan `ver` y no contienen `sub`; cada request privado
+contrasta la versión persistida. El botón Lock all sessions incrementa la versión,
+revoca también la pestaña que lo solicita y limpia su sesión local. Un restore
+no reduce la versión. `API_TOKEN_PREVIOUS` mantiene el unlock al rotar el maestro;
+con firma independiente las sesiones nuevas no dependen de esa rotación. No
+rotar SESSION_SECRET como forma de probar revocación: se usa el endpoint explícito.
+
+En la transición desactivada, una fecha legacy explícita permite introducir el
+secreto independiente manteniendo las firmas anteriores hasta el plazo. No
+desplegar estados intermedios sin haber comprobado esa compatibilidad. El perfil
+está probado con dos sesiones sintéticas y queda desactivado hasta aprobación.
+La caché de referencia legacy que requiere sub deja de persistirse con tokens
+versionados; el cliente consulta la API normalmente y el paquete de caché por
+entidad retira esa persistencia.

@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 
 import {
   type BudgetPatch,
@@ -15,7 +15,11 @@ import { budgets, installmentPlans, investments } from "./schema.js";
 import type { Db, NewBudget, NewInstallmentPlan, NewInvestment } from "./input-types.js";
 
 export async function listBudgets(db: Db) {
-  const rows = await db.select().from(budgets).orderBy(desc(budgets.createdAt));
+  const rows = await db
+    .select()
+    .from(budgets)
+    .where(isNull(budgets.deletedAt))
+    .orderBy(desc(budgets.createdAt));
   return rows.map(mapBudget);
 }
 
@@ -35,7 +39,11 @@ export async function createBudget(db: Db, input: NewBudget) {
 }
 
 export async function updateBudget(db: Db, id: string, input: BudgetPatch) {
-  const [current] = await db.select().from(budgets).where(eq(budgets.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(budgets)
+    .where(and(eq(budgets.id, id), isNull(budgets.deletedAt)))
+    .limit(1);
   if (!current) return null;
   const mapped = mapBudget(current);
   const merged = mergePatch(budgetSchema, mapped, input, [
@@ -61,17 +69,26 @@ export async function updateBudget(db: Db, id: string, input: BudgetPatch) {
       }),
       updatedAt: new Date(),
     })
-    .where(eq(budgets.id, id))
+    .where(and(eq(budgets.id, id), isNull(budgets.deletedAt)))
     .returning();
   return row ? mapBudget(row) : null;
 }
 
 export async function deleteBudget(db: Db, id: string) {
-  return (await db.delete(budgets).where(eq(budgets.id, id)).returning()).length > 0;
+  return (
+    (
+      await db
+        .delete(budgets)
+        .where(and(eq(budgets.id, id), isNull(budgets.deletedAt)))
+        .returning()
+    ).length > 0
+  );
 }
 
 export async function listInstallmentPlans(db: Db) {
-  return (await db.select().from(installmentPlans)).map(mapInstallmentPlan);
+  return (await db.select().from(installmentPlans).where(isNull(installmentPlans.deletedAt))).map(
+    mapInstallmentPlan,
+  );
 }
 
 export async function createInstallmentPlan(db: Db, input: NewInstallmentPlan) {
@@ -93,7 +110,7 @@ export async function updateInstallmentPlan(db: Db, id: string, input: Installme
   const [current] = await db
     .select()
     .from(installmentPlans)
-    .where(eq(installmentPlans.id, id))
+    .where(and(eq(installmentPlans.id, id), isNull(installmentPlans.deletedAt)))
     .limit(1);
   if (!current) return null;
   const mapped = mapInstallmentPlan(current);
@@ -101,6 +118,7 @@ export async function updateInstallmentPlan(db: Db, id: string, input: Installme
   const [row] = await db
     .update(installmentPlans)
     .set({
+      updatedAt: new Date(),
       ...changedColumns(input, merged, {
         name: (row) => row.name,
         totalAmount: (row) => toNumeric(row.totalAmount),
@@ -113,19 +131,28 @@ export async function updateInstallmentPlan(db: Db, id: string, input: Installme
         note: (row) => row.note ?? null,
       }),
     })
-    .where(eq(installmentPlans.id, id))
+    .where(and(eq(installmentPlans.id, id), isNull(installmentPlans.deletedAt)))
     .returning();
   return row ? mapInstallmentPlan(row) : null;
 }
 
 export async function deleteInstallmentPlan(db: Db, id: string) {
   return (
-    (await db.delete(installmentPlans).where(eq(installmentPlans.id, id)).returning()).length > 0
+    (
+      await db
+        .delete(installmentPlans)
+        .where(and(eq(installmentPlans.id, id), isNull(installmentPlans.deletedAt)))
+        .returning()
+    ).length > 0
   );
 }
 
 export async function listInvestments(db: Db) {
-  const rows = await db.select().from(investments).orderBy(desc(investments.startedAt));
+  const rows = await db
+    .select()
+    .from(investments)
+    .where(isNull(investments.deletedAt))
+    .orderBy(desc(investments.startedAt));
   return rows.map(mapInvestment);
 }
 
@@ -147,7 +174,11 @@ export async function createInvestment(db: Db, input: NewInvestment) {
 }
 
 export async function updateInvestment(db: Db, id: string, input: InvestmentPatch) {
-  const [current] = await db.select().from(investments).where(eq(investments.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(investments)
+    .where(and(eq(investments.id, id), isNull(investments.deletedAt)))
+    .limit(1);
   if (!current) return null;
   const mapped = mapInvestment(current);
   const merged = mergePatch(investmentSchema, mapped, input, ["note"]);
@@ -159,11 +190,18 @@ export async function updateInvestment(db: Db, id: string, input: InvestmentPatc
   if (hasOwn(input, "currentValue")) values.currentValue = toNumeric(merged.currentValue);
   if (hasOwn(input, "startedAt")) values.startedAt = new Date(merged.startedAt);
   if (hasOwn(input, "note")) values.note = merged.note ?? null;
-  const [row] = await db.update(investments).set(values).where(eq(investments.id, id)).returning();
+  const [row] = await db
+    .update(investments)
+    .set(values)
+    .where(and(eq(investments.id, id), isNull(investments.deletedAt)))
+    .returning();
   return row ? mapInvestment(row) : null;
 }
 
 export async function deleteInvestment(db: Db, id: string) {
-  const rows = await db.delete(investments).where(eq(investments.id, id)).returning();
+  const rows = await db
+    .delete(investments)
+    .where(and(eq(investments.id, id), isNull(investments.deletedAt)))
+    .returning();
   return rows.length > 0;
 }

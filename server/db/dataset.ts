@@ -1,7 +1,6 @@
 import { desc, isNull, sql } from "drizzle-orm";
 
 import { namedBatch } from "./batch.js";
-import { ensureCreditCardStatements } from "./cards/cycles.js";
 import { generateDueRecurringDebts } from "./debts.js";
 import { goalReservationBalancesQuery, mapGoalReservationBalance } from "./goals/ledger.js";
 import {
@@ -70,7 +69,6 @@ export async function getWalletDataset(
     includeArchived?: boolean;
   } = {},
 ): Promise<WalletDataset> {
-  if (!options.includeArchived) await ensureCreditCardStatements(db);
   const {
     settingsRows,
     accountRows,
@@ -111,11 +109,15 @@ export async function getWalletDataset(
       .select()
       .from(categories)
       .where(options.includeArchived ? undefined : isNull(categories.deletedAt)),
-    tagRows: db.select().from(tags),
+    tagRows: db
+      .select()
+      .from(tags)
+      .where(options.includeArchived ? undefined : isNull(tags.deletedAt)),
     creditCardRows: db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
     creditCardPaymentRows: db
       .select()
       .from(creditCardPayments)
+      .where(options.includeArchived ? undefined : isNull(creditCardPayments.deletedAt))
       .orderBy(desc(creditCardPayments.occurredAt)),
     creditCardRecordRows: db
       .select()
@@ -162,12 +164,29 @@ export async function getWalletDataset(
       .from(goalReservationMovements)
       .orderBy(desc(goalReservationMovements.createdAt)),
     reservationBalanceRows: goalReservationBalancesQuery(db),
-    budgetRows: db.select().from(budgets),
+    budgetRows: db
+      .select()
+      .from(budgets)
+      .where(options.includeArchived ? undefined : isNull(budgets.deletedAt)),
     exchangeRateRows: db.select().from(exchangeRates).orderBy(desc(exchangeRates.date)),
-    investmentRows: db.select().from(investments).orderBy(desc(investments.startedAt)),
-    debtRows: db.select().from(debts),
-    recurringDebtRows: db.select().from(recurringDebts).orderBy(desc(recurringDebts.startedAt)),
-    installmentPlanRows: db.select().from(installmentPlans),
+    investmentRows: db
+      .select()
+      .from(investments)
+      .where(options.includeArchived ? undefined : isNull(investments.deletedAt))
+      .orderBy(desc(investments.startedAt)),
+    debtRows: db
+      .select()
+      .from(debts)
+      .where(options.includeArchived ? undefined : isNull(debts.deletedAt)),
+    recurringDebtRows: db
+      .select()
+      .from(recurringDebts)
+      .where(options.includeArchived ? undefined : isNull(recurringDebts.deletedAt))
+      .orderBy(desc(recurringDebts.startedAt)),
+    installmentPlanRows: db
+      .select()
+      .from(installmentPlans)
+      .where(options.includeArchived ? undefined : isNull(installmentPlans.deletedAt)),
     merchantRows: db
       .select()
       .from(merchants)

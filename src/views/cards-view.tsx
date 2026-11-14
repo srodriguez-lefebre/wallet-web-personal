@@ -1,5 +1,14 @@
-import { FormEvent, useMemo, useState } from "react";
+import {
+  buildExpenseComparisonSeries,
+  calculateCreditCardCategoryUsage,
+  calculateCreditCardSummaries,
+  dateRangeForMonth,
+  formatMoney,
+  relativeDateRanges,
+  relativeMonthKeys,
+} from "@shared/calculations";
 import { CreditCard as CreditCardIcon, Plus } from "lucide-react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
@@ -14,25 +23,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  calculateCreditCardCategoryUsage,
-  calculateCreditCardSummaries,
-  buildExpenseComparisonSeries,
-  dateRangeForMonth,
-  formatMoney,
-  relativeDateRanges,
-  relativeMonthKeys,
-} from "@shared/calculations";
 
 import type { CreditCard, CurrencyCode } from "@shared/types";
 
-import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -40,11 +38,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useActionToast } from "@/lib/use-action-toast";
+import { Progress } from "@/components/ui/progress";
+import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
+import { finishAction } from "@/lib/async-event";
 import { selectPendingCardStatements } from "@/lib/cards-presentation";
+import { useActionToast } from "@/lib/use-action-toast";
 import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
 
 const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
 const fieldClassName =
@@ -97,11 +97,15 @@ export function CardsView() {
     selectedMonth,
     selectedPeriodMode,
     selectedDateRange,
+    refreshCardStatements,
     addCreditCard,
     updateCreditCard,
     deleteCreditCard,
     isAllHistoryComplete,
   } = useWallet();
+  useEffect(() => {
+    void refreshCardStatements().catch(() => undefined);
+  }, [refreshCardStatements]);
   const [draft, setDraft] = useState<CardDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);

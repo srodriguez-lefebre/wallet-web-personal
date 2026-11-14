@@ -19,6 +19,8 @@ export function configureLocalEnvironment() {
     "API_TOKEN_PREVIOUS",
     "SESSION_SECRET",
     "SESSION_TTL_SECONDS",
+    "WALLET_REVOCABLE_SESSIONS",
+    "LEGACY_SESSION_ACCEPT_UNTIL",
     "INGEST_API_TOKEN",
     "OPENAI_API_KEY",
     "OPENAI_MODEL",

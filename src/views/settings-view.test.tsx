@@ -1,11 +1,14 @@
+import { mockWalletData } from "@shared/mock-data";
 import { act, create } from "react-test-renderer";
 import { afterEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "@shared/mock-data";
 
 import { SettingsView } from "./settings-view";
 
 import type { SettingsPatch } from "@shared/schemas";
 
+import * as walletApi from "@/services/wallet-api";
+
+const auth = vi.hoisted(() => ({ lock: vi.fn(), token: undefined as string | undefined }));
 const update = vi.hoisted(() => vi.fn());
 const addTag = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
@@ -16,7 +19,7 @@ vi.mock("@/providers/wallet-provider", () => ({
   }),
 }));
 vi.mock("@/providers/auth-provider", () => ({
-  useAuth: () => ({ lock: vi.fn() }),
+  useAuth: () => auth,
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
@@ -26,6 +29,8 @@ vi.mock("@/lib/use-action-toast", () => ({
   }),
 }));
 afterEach(() => {
+  auth.token = undefined;
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -98,4 +103,44 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
   expect(persisted.theme).toBe("dark");
   expect(update.mock.calls[1]![0]).not.toHaveProperty("includeHiddenAccountsInReports");
   await act(async () => tree.unmount());
+});
+
+test("the optional lock-all control appears only when supported and clears the local session after success", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  auth.token = "synthetic-session";
+  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: true });
+  const revoke = vi.spyOn(walletApi, "lockAllSessions").mockResolvedValue({ locked: true });
+  let tree!: ReturnType<typeof create>;
+  await act(async () => {
+    tree = create(<SettingsView />);
+  });
+  try {
+    const button = tree.root
+      .findAllByType("button")
+      .find((b) => b.children.includes("Lock all sessions"));
+    expect(button).toBeDefined();
+    await act(async () => {
+      button!.props.onClick();
+    });
+    expect(revoke).toHaveBeenCalledWith("synthetic-session");
+    expect(auth.lock).toHaveBeenCalledTimes(1);
+  } finally {
+    await act(async () => tree.unmount());
+  }
+});
+test("disabled revocation never renders the lock-all action", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  auth.token = "synthetic-session";
+  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: false });
+  let tree!: ReturnType<typeof create>;
+  await act(async () => {
+    tree = create(<SettingsView />);
+  });
+  try {
+    expect(
+      tree.root.findAllByType("button").some((b) => b.children.includes("Lock all sessions")),
+    ).toBe(false);
+  } finally {
+    await act(async () => tree.unmount());
+  }
 });

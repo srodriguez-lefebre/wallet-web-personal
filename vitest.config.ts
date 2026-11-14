@@ -8,7 +8,7 @@ export default mergeConfig(
   defineConfig({
     // Two isolated workers share a migrated cluster, never fixture rows.
     test: {
-      maxWorkers: 2,
+      maxWorkers: process.env.WALLET_TEST_WORKERS === "1" ? 1 : 2,
       globalSetup: ["./scripts/sandbox/postgres-global.ts"],
       environmentOptions: { jsdom: { url: "http://test.local" } },
     },

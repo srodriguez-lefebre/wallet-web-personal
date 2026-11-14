@@ -1,8 +1,14 @@
 import { z, type ZodType } from "zod";
 
+import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
   accountPatchSchema,
   accountSchema,
+  budgetPatchSchema,
+  budgetSchema,
+  cardPaymentResponseSchema,
+  cardRecordResponseSchema,
+  cardStatementResponseSchema,
   categoryPatchSchema,
   categorySchema,
   creditCardPatchSchema,
@@ -13,40 +19,35 @@ import {
   debtPatchSchema,
   debtPaymentSchema,
   debtSchema,
+  goalPatchSchema,
+  goalReservationReleaseSchema,
+  goalReservationSchema,
+  goalResponseSchema,
+  goalSchema,
+  installmentPlanPatchSchema,
+  installmentPlanSchema,
+  investmentPatchSchema,
+  investmentSchema,
   mailIngestionSchema,
-  recordFiltersSchema,
-  recordPatchSchema,
   recordCreateSchema,
+  recordFiltersSchema,
+  recordImportSchema,
+  recordPatchSchema,
+  recordTemplatePatchSchema,
+  recordTemplateSchema,
   recurringDebtPatchSchema,
   recurringDebtSchema,
+  reservationMovementResponseSchema,
   settingsPatchSchema,
   settingsSchema,
+  tagPatchSchema,
+  tagSchema,
   unlockSchema,
   uuidSchema,
-  walletBootstrapSchema,
-  tagSchema,
-  tagPatchSchema,
-  goalSchema,
-  goalPatchSchema,
-  goalReservationSchema,
-  goalReservationReleaseSchema,
-  budgetSchema,
-  budgetPatchSchema,
-  investmentSchema,
-  investmentPatchSchema,
-  installmentPlanSchema,
-  installmentPlanPatchSchema,
-  recordImportSchema,
   walletBackupSchema,
+  walletBootstrapSchema,
   walletDatasetSchema,
   walletRecordResponseSchema,
-  cardStatementResponseSchema,
-  recordTemplateSchema,
-  recordTemplatePatchSchema,
-  cardPaymentResponseSchema,
-  cardRecordResponseSchema,
-  reservationMovementResponseSchema,
-  goalResponseSchema,
 } from "./schemas.js";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -63,6 +64,7 @@ export interface ApiOperation {
   body?: ZodType;
   response: ZodType;
   successStatus: number;
+  additionalSuccessStatuses?: readonly number[];
   errors: number[];
   summary: string;
 }
@@ -92,6 +94,11 @@ const entities = {
 };
 const pagination = z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() });
 function operationResponse(operationId: string): ZodType {
+  if (operationId === "analytics.summary") return analyticsSummarySchema;
+  if (operationId === "cards.refreshStatements") return z.object({ refreshed: z.literal(true) });
+  if (operationId === "cards.delete") return z.object({ archived: z.literal(true) });
+  if (operationId === "auth.session") return z.object({ revocable: z.boolean() });
+  if (operationId === "auth.lockAll") return z.object({ locked: z.literal(true) });
   if (operationId === "auth.unlock")
     return z.object({ token: z.string(), expiresAt: z.string().datetime() });
   if (operationId === "health.get")
@@ -155,12 +162,53 @@ function operationResponse(operationId: string): ZodType {
   const response = entities[entity as keyof typeof entities];
   return action === "list" ? z.array(response) : response;
 }
-const op = <T extends Omit<ApiOperation, "response">>(definition: T) => ({
+const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
   ...definition,
   response: operationResponse(definition.operationId),
 });
 
 export const apiOperations = [
+  op({
+    operationId: "auth.session",
+    method: "GET",
+    path: "/api/auth/session",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Read optional session revocation capability",
+  }),
+  op({
+    operationId: "auth.lockAll",
+    method: "POST",
+    path: "/api/auth/lock-all",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 503, 500],
+    summary: "Revoke all sessions when the optional profile is activated",
+  }),
+  op({
+    operationId: "analytics.summary",
+    method: "GET",
+    path: "/api/analytics/summary",
+    auth: "session",
+    stability: "stable",
+    query: analyticsQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate frozen record values, categories, monthly totals and budget usage",
+  }),
+  op({
+    operationId: "cards.refreshStatements",
+    method: "POST",
+    path: "/api/cards/refresh-statements",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Refresh derived card statement cycles and status",
+  }),
   op({
     operationId: "recordTemplates.list",
     method: "GET",
@@ -308,6 +356,7 @@ export const apiOperations = [
     stability: "stable",
     body: mailIngestionSchema,
     successStatus: 201,
+    additionalSuccessStatuses: [200],
     errors: [400, 401, 409, 422, 500, 503],
     summary: "Ingest a parsed Gmail transaction",
   }),
@@ -681,7 +730,8 @@ export const apiOperations = [
     path: "/api/debts/generate-recurring",
     auth: "session",
     stability: "stable",
-    successStatus: 201,
+    successStatus: 200,
+    additionalSuccessStatuses: [201],
     errors: [401, 500],
     summary: "Generate due recurring-debt instances idempotently",
   }),

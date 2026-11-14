@@ -22,7 +22,18 @@ function clientKey(req: VercelRequest) {
   return createHmac("sha256", sessionSigningSecret()).update(ip).digest("hex");
 }
 
+async function pruneUnlockAttempts(db: DbClient) {
+  await db.execute(sql`WITH initial AS (
+    INSERT INTO settings(auth_attempts_pruned_at) VALUES(now()) ON CONFLICT(singleton) DO NOTHING RETURNING 1
+  ), claimed AS (
+    UPDATE settings SET auth_attempts_pruned_at=now() WHERE singleton=true
+      AND (auth_attempts_pruned_at IS NULL OR auth_attempts_pruned_at<=now()-interval '1 hour') RETURNING 1
+  ) DELETE FROM auth_attempts WHERE window_started_at<now()-interval '24 hours'
+    AND (EXISTS(SELECT 1 FROM initial) OR EXISTS(SELECT 1 FROM claimed))`);
+}
+
 export async function assertUnlockAllowed(db: DbClient, req: VercelRequest) {
+  await pruneUnlockAttempts(db);
   const key = clientKey(req);
   const rows = await db
     .select()

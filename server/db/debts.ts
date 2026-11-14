@@ -18,7 +18,11 @@ import type { WalletRecord } from "../../shared/types.js";
 import type { Db, DebtPaymentInput, NewDebt, NewRecurringDebt } from "./input-types.js";
 
 export async function listDebts(db: Db) {
-  const rows = await db.select().from(debts).orderBy(desc(debts.startedAt));
+  const rows = await db
+    .select()
+    .from(debts)
+    .where(isNull(debts.deletedAt))
+    .orderBy(desc(debts.startedAt));
   return rows.map(mapDebt);
 }
 
@@ -68,6 +72,9 @@ export async function generateDueRecurringDebts(db: Db, currentDate = new Date()
     .select(
       db
         .select({
+          createdAt: sql<Date>`now()`.as("created_at"),
+          updatedAt: sql<Date>`now()`.as("updated_at"),
+          deletedAt: sql<Date | null>`NULL::timestamptz`.as("deleted_at"),
           id: sql<string>`gen_random_uuid()`.as("id"),
           name: sql<string>`${recurringDebts.name} || ' - ' || ${monthKey}`.as("name"),
           direction: recurringDebts.direction,
@@ -92,7 +99,8 @@ export async function generateDueRecurringDebts(db: Db, currentDate = new Date()
     date_trunc('month', ${currentDate.toISOString()}::timestamptz AT TIME ZONE 'UTC'),
     interval '1 month') AS generated(month_start)`,
           sql`true`,
-        ).where(sql`${recurringDebts.isActive} = true AND ${dueAt} >= ${recurringDebts.startedAt}
+        )
+        .where(sql`${recurringDebts.isActive} = true AND ${recurringDebts.deletedAt} IS NULL AND ${dueAt} >= ${recurringDebts.startedAt}
       AND ${dueAt} <= ${currentDate.toISOString()}::timestamptz`),
     )
     .onConflictDoNothing({ target: [debts.recurringDebtId, debts.recurringMonth] })
@@ -101,7 +109,11 @@ export async function generateDueRecurringDebts(db: Db, currentDate = new Date()
 }
 
 export async function updateDebt(db: Db, id: string, input: DebtPatch) {
-  const [current] = await db.select().from(debts).where(eq(debts.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(debts)
+    .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+    .limit(1);
   if (!current) return null;
   const mapped = mapDebt(current);
   const merged = mergePatch(debtSchema, mapped, input, [
@@ -113,7 +125,7 @@ export async function updateDebt(db: Db, id: string, input: DebtPatch) {
     "recurringDebtId",
     "recurringMonth",
   ]);
-  const values: Partial<typeof debts.$inferInsert> = {};
+  const values: Partial<typeof debts.$inferInsert> = { updatedAt: new Date() };
   for (const key of [
     "name",
     "direction",
@@ -136,17 +148,28 @@ export async function updateDebt(db: Db, id: string, input: DebtPatch) {
   if (hasOwn(input, "note")) values.note = merged.note ?? null;
   if (hasOwn(input, "recurringDebtId")) values.recurringDebtId = merged.recurringDebtId ?? null;
   if (hasOwn(input, "recurringMonth")) values.recurringMonth = merged.recurringMonth ?? null;
-  const [row] = await db.update(debts).set(values).where(eq(debts.id, id)).returning();
+  const [row] = await db
+    .update(debts)
+    .set(values)
+    .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+    .returning();
   return row ? mapDebt(row) : null;
 }
 
 export async function deleteDebt(db: Db, id: string) {
-  const rows = await db.delete(debts).where(eq(debts.id, id)).returning();
+  const rows = await db
+    .delete(debts)
+    .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+    .returning();
   return rows.length > 0;
 }
 
 export async function listRecurringDebts(db: Db) {
-  const rows = await db.select().from(recurringDebts).orderBy(desc(recurringDebts.startedAt));
+  const rows = await db
+    .select()
+    .from(recurringDebts)
+    .where(isNull(recurringDebts.deletedAt))
+    .orderBy(desc(recurringDebts.startedAt));
   return rows.map(mapRecurringDebt);
 }
 
@@ -174,7 +197,7 @@ export async function updateRecurringDebt(db: Db, id: string, input: RecurringDe
   const [current] = await db
     .select()
     .from(recurringDebts)
-    .where(eq(recurringDebts.id, id))
+    .where(and(eq(recurringDebts.id, id), isNull(recurringDebts.deletedAt)))
     .limit(1);
   if (!current) return null;
   const mapped = mapRecurringDebt(current);
@@ -198,13 +221,16 @@ export async function updateRecurringDebt(db: Db, id: string, input: RecurringDe
   const [row] = await db
     .update(recurringDebts)
     .set(values)
-    .where(eq(recurringDebts.id, id))
+    .where(and(eq(recurringDebts.id, id), isNull(recurringDebts.deletedAt)))
     .returning();
   return row ? mapRecurringDebt(row) : null;
 }
 
 export async function deleteRecurringDebt(db: Db, id: string) {
-  const rows = await db.delete(recurringDebts).where(eq(recurringDebts.id, id)).returning();
+  const rows = await db
+    .delete(recurringDebts)
+    .where(and(eq(recurringDebts.id, id), isNull(recurringDebts.deletedAt)))
+    .returning();
   return rows.length > 0;
 }
 
@@ -237,7 +263,11 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       : null;
   }
   const [[debtRow], [accountRow], [settingsRow]] = await Promise.all([
-    db.select().from(debts).where(eq(debts.id, id)).limit(1),
+    db
+      .select()
+      .from(debts)
+      .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+      .limit(1),
     db
       .select()
       .from(accounts)
@@ -277,10 +307,10 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
     await db.execute(sql`
       WITH updated_debt AS (
         UPDATE ${debts}
-        SET pending_amount = pending_amount - ${toNumeric(input.amount)}::numeric,
+        SET updated_at=now(), pending_amount = pending_amount - ${toNumeric(input.amount)}::numeric,
             status = CASE WHEN pending_amount - ${toNumeric(input.amount)}::numeric = 0 THEN 'paid'::debt_status ELSE status END,
             account_id = CASE WHEN ${Boolean(input.saveAccountToDebt)} THEN ${input.accountId}::uuid ELSE account_id END
-        WHERE id = ${id}::uuid
+        WHERE id = ${id}::uuid AND deleted_at IS NULL
           AND pending_amount IS NOT NULL
           AND pending_amount >= ${toNumeric(input.amount)}::numeric
           AND status <> 'paid'::debt_status
@@ -309,7 +339,11 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       throw conflictError("Idempotency key was already used with another payment");
   }
   const [[updatedDebtRow], [recordRow]] = await Promise.all([
-    db.select().from(debts).where(eq(debts.id, id)).limit(1),
+    db
+      .select()
+      .from(debts)
+      .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+      .limit(1),
     db.select().from(records).where(eq(records.idempotencyKey, idempotencyKey)).limit(1),
   ]);
   if (!updatedDebtRow) return null;
