@@ -1,6 +1,11 @@
-﻿import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRef, useState, type FormEvent } from "react";
+import { formatMoney } from "@shared/calculations";
+import { investmentTypeLabels } from "@shared/constants";
+import { investmentPatchSchema } from "@shared/schemas";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,9 +21,6 @@ import {
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney } from "@shared/calculations";
-import { investmentTypeLabels } from "@shared/constants";
-import { investmentPatchSchema } from "@shared/schemas";
 
 export function InvestmentDetailView() {
   const { investmentId } = useParams();
@@ -30,18 +32,18 @@ export function InvestmentDetailView() {
   const [valueError, setValueError] = useState("");
   const [isSavingValue, setIsSavingValue] = useState(false);
   const savingValue = useRef(false);
-  const investment = dataset.investments.find(
-    (item) => item.id === investmentId,
-  );
+  const investment = dataset.investments.find((item) => item.id === investmentId);
 
   if (!investment) {
     return (
       <div>
-        <PageHeader
-          title="Investment not found"
-          description="This investment does not exist."
-        />
-        <Button variant="outline" onClick={() => navigate("/investments")}>
+        <PageHeader title="Investment not found" description="This investment does not exist." />
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/investments");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Back
         </Button>
@@ -51,13 +53,9 @@ export function InvestmentDetailView() {
 
   const gain = investment.currentValue - investment.amountInvested;
   const gainPercentage =
-    investment.amountInvested > 0
-      ? (gain / investment.amountInvested) * 100
-      : null;
+    investment.amountInvested > 0 ? (gain / investment.amountInvested) * 100 : null;
   const performanceValue =
-    investment.amountInvested > 0
-      ? (investment.currentValue / investment.amountInvested) * 100
-      : 0;
+    investment.amountInvested > 0 ? (investment.currentValue / investment.amountInvested) * 100 : 0;
 
   async function saveCurrentValue(event: FormEvent) {
     event.preventDefault();
@@ -81,9 +79,7 @@ export function InvestmentDetailView() {
       setValueDialogOpen(false);
     } catch (error) {
       setValueError(
-        error instanceof Error
-          ? error.message
-          : "Could not update current value. Try again.",
+        error instanceof Error ? error.message : "Could not update current value. Try again.",
       );
     } finally {
       savingValue.current = false;
@@ -109,7 +105,12 @@ export function InvestmentDetailView() {
         >
           Update current value
         </Button>
-        <Button variant="outline" onClick={() => navigate("/investments")}>
+        <Button
+          variant="outline"
+          onClick={() => {
+            void navigate("/investments");
+          }}
+        >
           <ArrowLeft className="h-4 w-4" />
           Investments
         </Button>
@@ -127,8 +128,7 @@ export function InvestmentDetailView() {
                   <div>
                     <CardTitle>{investment.name}</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      {investmentTypeLabels[investment.type]} · started{" "}
-                      {investment.startedAt}
+                      {investmentTypeLabels[investment.type]} · started {investment.startedAt}
                     </p>
                   </div>
                 </div>
@@ -146,10 +146,7 @@ export function InvestmentDetailView() {
                 <div className="rounded-md bg-secondary p-3">
                   <p className="text-sm text-muted-foreground">Invested</p>
                   <p className="font-semibold">
-                    {formatMoney(
-                      investment.amountInvested,
-                      investment.currency,
-                    )}
+                    {formatMoney(investment.amountInvested, investment.currency)}
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
@@ -162,9 +159,7 @@ export function InvestmentDetailView() {
                   <p className="text-sm text-muted-foreground">Result</p>
                   <p
                     className={
-                      gain >= 0
-                        ? "font-semibold text-emerald-600"
-                        : "font-semibold text-red-600"
+                      gain >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-600"
                     }
                   >
                     {formatMoney(gain, investment.currency)}
@@ -188,19 +183,13 @@ export function InvestmentDetailView() {
                   )}
                   <span className="font-medium">Performance</span>
                 </div>
-                <span
-                  className={gain >= 0 ? "text-emerald-600" : "text-red-600"}
-                >
-                  {gainPercentage === null
-                    ? "Unavailable"
-                    : `${gainPercentage.toFixed(2)}%`}
+                <span className={gain >= 0 ? "text-emerald-600" : "text-red-600"}>
+                  {gainPercentage === null ? "Unavailable" : `${gainPercentage.toFixed(2)}%`}
                 </span>
               </div>
               <div className="rounded-md border p-3">
                 <p className="text-sm text-muted-foreground">Note</p>
-                <p className="mt-1 font-medium">
-                  {investment.note ?? "No note attached."}
-                </p>
+                <p className="mt-1 font-medium">{investment.note ?? "No note attached."}</p>
               </div>
             </CardContent>
           </Card>
@@ -217,9 +206,7 @@ export function InvestmentDetailView() {
             </div>
             <div className="rounded-md border p-3">
               <p className="text-sm text-muted-foreground">Type</p>
-              <p className="font-semibold">
-                {investmentTypeLabels[investment.type]}
-              </p>
+              <p className="font-semibold">{investmentTypeLabels[investment.type]}</p>
             </div>
             <div className="rounded-md border p-3">
               <p className="text-sm text-muted-foreground">Tracking</p>
@@ -238,19 +225,19 @@ export function InvestmentDetailView() {
           <DialogHeader>
             <DialogTitle>Update current value</DialogTitle>
             <DialogDescription>
-              Enter the current value in {investment.currency}. Acquisition cost
-              and start date stay unchanged.
+              Enter the current value in {investment.currency}. Acquisition cost and start date stay
+              unchanged.
             </DialogDescription>
           </DialogHeader>
           <form
             aria-label="Update investment valuation"
             className="space-y-4"
-            onSubmit={saveCurrentValue}
+            onSubmit={(event) => {
+              finishAction(saveCurrentValue(event));
+            }}
           >
             <label className="block space-y-2">
-              <span className="text-sm font-medium">
-                Current value ({investment.currency})
-              </span>
+              <span className="text-sm font-medium">Current value ({investment.currency})</span>
               <input
                 aria-label="Current investment value"
                 value={value}
@@ -276,11 +263,7 @@ export function InvestmentDetailView() {
               >
                 Cancel
               </Button>
-              <Button
-                type="submit"
-                aria-label="Save current value"
-                disabled={isSavingValue}
-              >
+              <Button type="submit" aria-label="Save current value" disabled={isSavingValue}>
                 {isSavingValue ? "Saving..." : "Save current value"}
               </Button>
             </div>

@@ -14,7 +14,12 @@
       "@/*": ["./src/*"],
       "@shared/*": ["./shared/*"],
       "@server/*": ["./server/*"]
-    }
+    },
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true
   },
   "include": [
     "vite.config.ts",
@@ -24,6 +29,7 @@
     "api",
     "server",
     "shared",
-    "scripts/sandbox"
+    "scripts/**/*.ts",
+    "tailwind.config.ts"
   ]
 }

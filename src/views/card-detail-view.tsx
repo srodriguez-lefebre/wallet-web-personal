@@ -1,21 +1,16 @@
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
-import {
-  ArrowLeft,
-  Pencil,
-  Plus,
-  ReceiptText,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { ArrowLeft, Pencil, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
+
+import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { CategoryPicker } from "@/components/wallet/category-picker";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import {
-  cardStatementBalanceAsOf,
-  selectCardStatement,
-} from "@/lib/cards-presentation";
+import { cardStatementBalanceAsOf, selectCardStatement } from "@/lib/cards-presentation";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,8 +26,6 @@ import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
 import { localDateInput } from "@/lib/date-input";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
-import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
 const field =
   "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
@@ -64,33 +57,20 @@ export function CardDetailView() {
     () => (card ? calculateCreditCardSummary(dataset, card) : null),
     [card, dataset],
   );
-  const movements = dataset.creditCardRecords.filter(
-    (item) => item.creditCardId === cardId,
-  );
-  const statements = dataset.creditCardStatements.filter(
-    (item) => item.creditCardId === cardId,
-  );
-  const payments = dataset.creditCardPayments.filter(
-    (item) => item.creditCardId === cardId,
-  );
+  const movements = dataset.creditCardRecords.filter((item) => item.creditCardId === cardId);
+  const statements = dataset.creditCardStatements.filter((item) => item.creditCardId === cardId);
+  const payments = dataset.creditCardPayments.filter((item) => item.creditCardId === cardId);
   const payableStatement = isAllHistoryComplete
     ? selectCardStatement(dataset, cardId, searchParams.get("statementId"))
     : undefined;
   const payableStatementBalance = useMemo(
-    () =>
-      payableStatement
-        ? cardStatementBalanceAsOf(dataset, payableStatement)
-        : null,
+    () => (payableStatement ? cardStatementBalanceAsOf(dataset, payableStatement) : null),
     [dataset, payableStatement],
   );
   const [showMovement, setShowMovement] = useState(false);
-  const [editingMovementId, setEditingMovementId] = useState<string | null>(
-    null,
-  );
+  const [editingMovementId, setEditingMovementId] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<CurrencyCode>(
-    card?.limitCurrency ?? "UYU",
-  );
+  const [currency, setCurrency] = useState<CurrencyCode>(card?.limitCurrency ?? "UYU");
   const [rate, setRate] = useState("1");
   const [categoryId, setCategoryId] = useState("");
   const [counterparty, setCounterparty] = useState("");
@@ -147,11 +127,7 @@ export function CardDetailView() {
     setDate(localDateInput(movement.occurredAt));
     setImpactAccount(movement.accountImpactAtCreation);
     setAccountId(movement.accountId ?? "");
-    setAccountAmount(
-      movement.accountAmount === undefined
-        ? ""
-        : String(movement.accountAmount),
-    );
+    setAccountAmount(movement.accountAmount === undefined ? "" : String(movement.accountAmount));
     setShowMovement(true);
   }
 
@@ -182,9 +158,10 @@ export function CardDetailView() {
       accountId: impactAccount ? accountId : undefined,
       accountAmount: impactAccount ? Number(accountAmount) : undefined,
       accountImpactAtCreation: impactAccount,
-      occurredAt: original && date === localDateInput(original.occurredAt)
-        ? original.occurredAt
-        : new Date(`${date}T12:00:00`).toISOString(),
+      occurredAt:
+        original && date === localDateInput(original.occurredAt)
+          ? original.occurredAt
+          : new Date(`${date}T12:00:00`).toISOString(),
     };
     await runAction(
       () =>
@@ -261,9 +238,7 @@ export function CardDetailView() {
           currency: card!.limitCurrency,
           amountInLimitCurrency: Number(paymentAmount),
           accountId: paymentAccountId || undefined,
-          accountAmount: paymentAccountId
-            ? Number(paymentAccountAmount)
-            : undefined,
+          accountAmount: paymentAccountId ? Number(paymentAccountAmount) : undefined,
           idempotencyKey: request.idempotencyKey,
           occurredAt: request.occurredAt,
         }),
@@ -281,14 +256,10 @@ export function CardDetailView() {
 
   function fillFullPaymentAmount() {
     if (!payableStatementBalance) return;
-    const amount = Number(
-      payableStatementBalance.dueAmountInLimitCurrency.toFixed(2),
-    );
+    const amount = Number(payableStatementBalance.dueAmountInLimitCurrency.toFixed(2));
     const value = String(amount);
     setPaymentAmount(value);
-    const account = dataset.accounts.find(
-      (item) => item.id === paymentAccountId,
-    );
+    const account = dataset.accounts.find((item) => item.id === paymentAccountId);
     if (account?.currency === card!.limitCurrency) {
       setPaymentAccountAmount(value);
     }
@@ -297,7 +268,12 @@ export function CardDetailView() {
   return (
     <div className="space-y-6">
       <ActionToast toast={toast} />
-      <Button variant="ghost" onClick={() => navigate("/cards")}>
+      <Button
+        variant="ghost"
+        onClick={() => {
+          void navigate("/cards");
+        }}
+      >
         <ArrowLeft className="mr-2 h-4 w-4" /> Cards
       </Button>
       <PageHeader
@@ -313,16 +289,18 @@ export function CardDetailView() {
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>
-              {editingMovementId
-                ? "Edit card movement"
-                : "New card-only movement"}
+              {editingMovementId ? "Edit card movement" : "New card-only movement"}
             </DialogTitle>
             <DialogDescription>
-              Card-only movements stay outside Records unless you choose an
-              account impact.
+              Card-only movements stay outside Records unless you choose an account impact.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4 md:grid-cols-3" onSubmit={submitMovement}>
+          <form
+            className="grid gap-4 md:grid-cols-3"
+            onSubmit={(event) => {
+              finishAction(submitMovement(event));
+            }}
+          >
             <label className="space-y-2">
               <span className="text-sm font-medium">Amount</span>
               <input
@@ -350,9 +328,7 @@ export function CardDetailView() {
               </select>
             </label>
             <label className="space-y-2">
-              <span className="text-sm font-medium">
-                Rate to {card.limitCurrency}
-              </span>
+              <span className="text-sm font-medium">Rate to {card.limitCurrency}</span>
               <input
                 className={field}
                 type="number"
@@ -368,9 +344,7 @@ export function CardDetailView() {
                 value={categoryId}
                 onChange={setCategoryId}
                 inputClassName={field}
-                getLabel={(category) =>
-                  formatCategoryName(dataset.categories, category)
-                }
+                getLabel={(category) => formatCategoryName(dataset.categories, category)}
               />
             </div>
             <label className="space-y-2">
@@ -436,11 +410,7 @@ export function CardDetailView() {
               <Button type="submit" disabled={toast?.status === "processing"}>
                 Save movement
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowMovement(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setShowMovement(false)}>
                 Cancel
               </Button>
             </div>
@@ -459,13 +429,10 @@ export function CardDetailView() {
             </p>
             <Progress value={Math.min(100, summary.utilizationPercent)} />
             {isAllHistoryComplete && (
-              <LimitUsageAlert
-                utilizationPercent={summary.utilizationPercent}
-              />
+              <LimitUsageAlert utilizationPercent={summary.utilizationPercent} />
             )}
             <p className="text-sm text-muted-foreground">
-              {formatMoney(summary.availableLimit, card.limitCurrency)}{" "}
-              available
+              {formatMoney(summary.availableLimit, card.limitCurrency)} available
             </p>
           </CardContent>
         </Card>
@@ -503,9 +470,7 @@ export function CardDetailView() {
                     paymentRequest.current = null;
                   }}
                 >
-                  {!payableStatement && (
-                    <option value="">Select a closed statement</option>
-                  )}
+                  {!payableStatement && <option value="">Select a closed statement</option>}
                   {[...statements]
                     .sort((a, b) => a.dueAt.localeCompare(b.dueAt))
                     .map((statement) => (
@@ -521,28 +486,20 @@ export function CardDetailView() {
           <CardContent className="space-y-2">
             <Badge
               variant={
-                !payableStatementBalance ||
-                payableStatementBalance.dueAmountInLimitCurrency <= 0
+                !payableStatementBalance || payableStatementBalance.dueAmountInLimitCurrency <= 0
                   ? "success"
                   : payableStatement &&
-                      differenceInCalendarDays(
-                        parseISO(payableStatement.dueAt),
-                        new Date(),
-                      ) < 0
+                      differenceInCalendarDays(parseISO(payableStatement.dueAt), new Date()) < 0
                     ? "danger"
                     : "warning"
               }
             >
               {!isAllHistoryComplete
                 ? "Loading history..."
-                : !payableStatementBalance ||
-                    payableStatementBalance.dueAmountInLimitCurrency <= 0
+                : !payableStatementBalance || payableStatementBalance.dueAmountInLimitCurrency <= 0
                   ? "Settled"
                   : payableStatement &&
-                      differenceInCalendarDays(
-                        parseISO(payableStatement.dueAt),
-                        new Date(),
-                      ) < 0
+                      differenceInCalendarDays(parseISO(payableStatement.dueAt), new Date()) < 0
                     ? "Overdue"
                     : payableStatementBalance.paidAmountInLimitCurrency > 0
                       ? "Partially paid"
@@ -604,7 +561,9 @@ export function CardDetailView() {
           <CardContent>
             <form
               className="grid gap-4 md:grid-cols-4"
-              onSubmit={submitPayment}
+              onSubmit={(event) => {
+                finishAction(submitPayment(event));
+              }}
             >
               <div className="flex gap-2">
                 <input
@@ -648,9 +607,7 @@ export function CardDetailView() {
                   step="0.01"
                   placeholder="Amount debited"
                   value={paymentAccountAmount}
-                  onChange={(event) =>
-                    setPaymentAccountAmount(event.target.value)
-                  }
+                  onChange={(event) => setPaymentAccountAmount(event.target.value)}
                 />
               ) : (
                 <div />
@@ -660,9 +617,7 @@ export function CardDetailView() {
                 disabled={
                   toast?.status === "processing" ||
                   !(Number(paymentAmount) > 0) ||
-                  Boolean(
-                    paymentAccountId && !(Number(paymentAccountAmount) > 0),
-                  )
+                  Boolean(paymentAccountId && !(Number(paymentAccountAmount) > 0))
                 }
               >
                 Pay
@@ -679,32 +634,23 @@ export function CardDetailView() {
           </CardHeader>
           <CardContent className="space-y-3">
             {movements.map((movement) => (
-              <div
-                key={movement.id}
-                className="flex items-center justify-between border-b pb-3"
-              >
+              <div key={movement.id} className="flex items-center justify-between border-b pb-3">
                 <div className="flex gap-2">
                   <ReceiptText className="mt-1 h-4 w-4" />
                   <div>
                     <p className="text-sm font-medium">
-                      {movement.counterpartyName ??
-                        movement.note ??
-                        "Card movement"}
+                      {movement.counterpartyName ?? movement.note ?? "Card movement"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {format(parseISO(movement.occurredAt), "dd/MM/yyyy")} ·{" "}
-                      {movement.walletRecordId
-                        ? "Linked to Records"
-                        : "Card only"}
+                      {movement.walletRecordId ? "Linked to Records" : "Card only"}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <p
                     className={
-                      movement.kind === "refund"
-                        ? "font-medium text-emerald-600"
-                        : "font-medium"
+                      movement.kind === "refund" ? "font-medium text-emerald-600" : "font-medium"
                     }
                   >
                     {movement.kind === "refund" ? "+" : "-"}
@@ -734,9 +680,7 @@ export function CardDetailView() {
                         size="icon"
                         variant="ghost"
                         title="Delete"
-                        onClick={() =>
-                          void deleteCreditCardRecord(cardId, movement.id)
-                        }
+                        onClick={() => void deleteCreditCardRecord(cardId, movement.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -756,10 +700,7 @@ export function CardDetailView() {
           </CardHeader>
           <CardContent className="space-y-3">
             {payments.map((payment) => (
-              <div
-                key={payment.id}
-                className="flex items-center justify-between border-b pb-3"
-              >
+              <div key={payment.id} className="flex items-center justify-between border-b pb-3">
                 <div>
                   <p className="text-sm font-medium">
                     {formatMoney(payment.amount, payment.currency)}
@@ -772,9 +713,7 @@ export function CardDetailView() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() =>
-                    void deleteCreditCardPayment(cardId, payment.id)
-                  }
+                  onClick={() => void deleteCreditCardPayment(cardId, payment.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

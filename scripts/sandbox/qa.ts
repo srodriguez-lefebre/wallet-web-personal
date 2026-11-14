@@ -2,10 +2,12 @@
  * Run: npx tsx scripts/sandbox/qa.ts (http://127.0.0.1:4175).
  * Stop: POST /__qa/stop or Ctrl+C. No .env, backup, or .local-wallet access.
  */
-import { PGlite } from "@electric-sql/pglite";
 import { createServer } from "node:http";
 import { randomUUID } from "node:crypto";
+
+import { PGlite } from "@electric-sql/pglite";
 import { createServer as createViteServer } from "vite";
+
 import { applyMigrations, installLocalTransport } from "./database.js";
 import { configureLocalEnvironment } from "./workspace.js";
 
@@ -14,14 +16,9 @@ const origin = "http://127.0.0.1:4175";
 const originalFetch = globalThis.fetch;
 globalThis.fetch = (input, init) => {
   const url = new URL(
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url,
+    typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
   );
-  if (url.origin !== origin)
-    return Promise.reject(new Error("QA refuses external network"));
+  if (url.origin !== origin) return Promise.reject(new Error("QA refuses external network"));
   return originalFetch(input, init);
 };
 const pg = await PGlite.create();
@@ -42,10 +39,9 @@ await pg.query(
   [category],
 );
 for (let i = 1; i <= 45; i++)
-  await pg.query(
-    "INSERT INTO categories(name,color,icon) VALUES($1,'#2563eb','tag')",
-    [`QA Category ${String(i).padStart(2, "0")}`],
-  );
+  await pg.query("INSERT INTO categories(name,color,icon) VALUES($1,'#2563eb','tag')", [
+    `QA Category ${String(i).padStart(2, "0")}`,
+  ]);
 await pg.query(
   "INSERT INTO settings(primary_currency,primary_account_id,review_seen_through) VALUES('UYU',$1,'2026-11-01T12:00:00Z')",
   [bank],

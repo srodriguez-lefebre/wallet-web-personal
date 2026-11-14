@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
+
 import { findExchangeRate } from "./money.js";
+
 import type { ExchangeRate } from "./types.js";
 const rates: ExchangeRate[] = [
   { id: "a", fromCurrency: "USD", toCurrency: "UYU", rate: 40, date: "2026-01-01" },

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { ThemeProvider } from "@/providers/theme-provider";
@@ -102,10 +103,7 @@ function ProtectedApp() {
             <Route path="/goals/:goalId" element={<GoalDetailView />} />
             <Route path="/debts" element={<DebtsView />} />
             <Route path="/investments" element={<InvestmentsView />} />
-            <Route
-              path="/investments/:investmentId"
-              element={<InvestmentDetailView />}
-            />
+            <Route path="/investments/:investmentId" element={<InvestmentDetailView />} />
             <Route path="/data" element={<ImportsView />} />
             <Route path="/imports" element={<Navigate to="/data" replace />} />
             <Route path="/settings" element={<SettingsView />} />

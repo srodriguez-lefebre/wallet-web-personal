@@ -1,5 +1,6 @@
 import { recordsForDateRange } from "./calculations.js";
 import { isPrimaryReportingRecord } from "./record-status.js";
+
 import type { DateRange, WalletRecord } from "./types.js";
 
 export interface MerchantSpending {
@@ -11,7 +12,10 @@ export interface MerchantSpending {
 }
 
 /** Gross wallet purchases at their frozen primary-currency conversion. */
-export function calculateMerchantSpending(records: WalletRecord[], range: DateRange): MerchantSpending[] {
+export function calculateMerchantSpending(
+  records: WalletRecord[],
+  range: DateRange,
+): MerchantSpending[] {
   const merchants = new Map<string, MerchantSpending>();
   for (const record of recordsForDateRange(records, range)) {
     if (record.type !== "expense" || !isPrimaryReportingRecord(record)) continue;
@@ -23,6 +27,6 @@ export function calculateMerchantSpending(records: WalletRecord[], range: DateRa
     merchants.set(key, merchant);
   }
   return [...merchants.values()]
-    .map(merchant => ({ ...merchant, average: merchant.total / merchant.purchases }))
+    .map((merchant) => ({ ...merchant, average: merchant.total / merchant.purchases }))
     .sort((a, b) => b.total - a.total || b.purchases - a.purchases || a.name.localeCompare(b.name));
 }

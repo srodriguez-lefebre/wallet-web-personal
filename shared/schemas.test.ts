@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { creditCardPaymentSchema, creditCardRecordSchema, recordFiltersSchema, recordSchema, recordCreateSchema, recordPatchSchema } from "./schemas";
+
+import {
+  creditCardPaymentSchema,
+  creditCardRecordSchema,
+  recordFiltersSchema,
+  recordSchema,
+  recordCreateSchema,
+  recordPatchSchema,
+} from "./schemas";
 
 const categoryId = "00000000-0000-4000-8000-000000000001";
 const cardId = "00000000-0000-4000-8000-000000000002";
@@ -18,21 +26,45 @@ const baseRecord = {
 };
 
 describe("credit-card validation", () => {
-  it("preserves an explicitly unknown primary rate in review and cancelled history",()=>{
-    const input={...baseRecord,accountId,paymentStatus:"needs_review",exchangeRateToPrimary:0};
+  it("preserves an explicitly unknown primary rate in review and cancelled history", () => {
+    const input = {
+      ...baseRecord,
+      accountId,
+      paymentStatus: "needs_review",
+      exchangeRateToPrimary: 0,
+    };
     expect(recordSchema.safeParse(input).success).toBe(true);
-    expect(recordPatchSchema.safeParse({paymentStatus:"needs_review",exchangeRateToPrimary:0}).success).toBe(true);
-    expect(recordSchema.safeParse({...input,paymentStatus:"cancelled"}).success).toBe(true);
-    expect(recordSchema.safeParse({...input,paymentStatus:"cleared"}).success).toBe(false);
-    expect(recordSchema.safeParse({...input,paymentStatus:"pending"}).success).toBe(false);
-    expect(recordSchema.safeParse({...input,exchangeRateToPrimary:-1}).success).toBe(false);
+    expect(
+      recordPatchSchema.safeParse({ paymentStatus: "needs_review", exchangeRateToPrimary: 0 })
+        .success,
+    ).toBe(true);
+    expect(recordSchema.safeParse({ ...input, paymentStatus: "cancelled" }).success).toBe(true);
+    expect(recordSchema.safeParse({ ...input, paymentStatus: "cleared" }).success).toBe(false);
+    expect(recordSchema.safeParse({ ...input, paymentStatus: "pending" }).success).toBe(false);
+    expect(recordSchema.safeParse({ ...input, exchangeRateToPrimary: -1 }).success).toBe(false);
   });
-  it("cancels incomplete review history without inventing an account, category or conversion",()=>{
-    const cancelled={...baseRecord,categoryId:undefined,accountId:undefined,exchangeRateToPrimary:0,paymentStatus:"cancelled"};
+  it("cancels incomplete review history without inventing an account, category or conversion", () => {
+    const cancelled = {
+      ...baseRecord,
+      categoryId: undefined,
+      accountId: undefined,
+      exchangeRateToPrimary: 0,
+      paymentStatus: "cancelled",
+    };
     expect(recordSchema.safeParse(cancelled).success).toBe(true);
-    expect(recordSchema.safeParse({...cancelled,type:"transfer",destinationAccountId:undefined}).success).toBe(true);
-    expect(recordSchema.safeParse({...cancelled,creditCardId:cardId,amountInLimitCurrency:undefined,exchangeRateToLimitCurrency:undefined}).success).toBe(true);
-    expect(recordSchema.safeParse({...cancelled,paymentStatus:"cleared"}).success).toBe(false);
+    expect(
+      recordSchema.safeParse({ ...cancelled, type: "transfer", destinationAccountId: undefined })
+        .success,
+    ).toBe(true);
+    expect(
+      recordSchema.safeParse({
+        ...cancelled,
+        creditCardId: cardId,
+        amountInLimitCurrency: undefined,
+        exchangeRateToLimitCurrency: undefined,
+      }).success,
+    ).toBe(true);
+    expect(recordSchema.safeParse({ ...cancelled, paymentStatus: "cleared" }).success).toBe(false);
   });
   it("requires a category and limit conversion for a card movement", () => {
     const result = recordSchema.safeParse({
@@ -43,7 +75,7 @@ describe("credit-card validation", () => {
 
     expect(result.success).toBe(false);
     if (result.success) return;
-    expect(result.error.issues.map((issue) => issue.path[0])).toEqual(
+    expect(result.error.issues.map((issue) => issue.path[0]!)).toEqual(
       expect.arrayContaining([
         "categoryId",
         "amountInLimitCurrency",
@@ -124,18 +156,31 @@ describe("record filters", () => {
 
   it("rejects invalid or reversed date ranges", () => {
     expect(recordFiltersSchema.safeParse({ from: "2026-02-30" }).success).toBe(false);
-    expect(recordFiltersSchema.safeParse({ from: "2026-06-20", to: "2026-06-01" }).success).toBe(false);
+    expect(recordFiltersSchema.safeParse({ from: "2026-06-20", to: "2026-06-01" }).success).toBe(
+      false,
+    );
   });
 });
 
-
 describe("new credit-card record contracts", () => {
-  const cardRecord = { ...baseRecord, accountId, creditCardId: cardId, amountInLimitCurrency: 100, exchangeRateToLimitCurrency: 1 };
+  const cardRecord = {
+    ...baseRecord,
+    accountId,
+    creditCardId: cardId,
+    amountInLimitCurrency: 100,
+    exchangeRateToLimitCurrency: 1,
+  };
   it("rejects new card refunds while preserving the historical record schema", () => {
     const historical = { ...cardRecord, type: "income" as const };
     expect(recordSchema.safeParse(historical).success).toBe(true);
     expect(recordCreateSchema.safeParse(historical).success).toBe(false);
-    expect(recordCreateSchema.safeParse({ ...cardRecord, type: "transfer", destinationAccountId: categoryId }).success).toBe(false);
+    expect(
+      recordCreateSchema.safeParse({
+        ...cardRecord,
+        type: "transfer",
+        destinationAccountId: categoryId,
+      }).success,
+    ).toBe(false);
     expect(recordCreateSchema.safeParse(cardRecord).success).toBe(true);
   });
   it("accepts a JSON null card association for PATCH but not creation", () => {

@@ -1,10 +1,8 @@
-import { expect, test } from "vitest";
 import { readFileSync } from "node:fs";
-import {
-  runMailAutomation,
-  type MailRunInput,
-  type SimulatedMessage,
-} from "./mail.js";
+
+import { expect, test } from "vitest";
+
+import { runMailAutomation, type MailRunInput, type SimulatedMessage } from "./mail.js";
 
 const credit: SimulatedMessage = {
   id: "message-test",
@@ -40,14 +38,12 @@ const input: MailRunInput = {
   ingestUrl: "http://127.0.0.1:4173/api/ingest/mail/transactions",
   ingestToken: "test-only",
   targets: { cards: { "1234": { creditCardId: "card-test" } } },
-  threads: [
-    { id: "thread-test", labels: ["Wallet/Pendiente"], messages: [credit] },
-  ],
+  threads: [{ id: "thread-test", labels: ["Wallet/Pendiente"], messages: [credit] }],
 };
 const ok = () => ({ status: 201, body: '{"data":{"status":"created"}}' });
 function mail(...messages: SimulatedMessage[]): MailRunInput {
   const value = structuredClone(input);
-  value.threads[0].messages = structuredClone(messages);
+  value.threads[0]!.messages = structuredClone(messages);
   return value;
 }
 
@@ -57,71 +53,111 @@ test("personal Visa debit 9986 is routed to Banco using the configured debit map
     subject: "Aviso de consumo aprobado con tarjeta de débito",
     body: "Se aprobo un consumo de su tarjeta Visa terminada en 9986. Realizado en MERPAGO*CABIFY2644ILTVIS3 Monto: 257.60 Pesos. Si no fuiste tú comunícate al 1784.",
   });
-  const personalTargets = JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json", import.meta.url), "utf8"));
+  const personalTargets = JSON.parse(
+    readFileSync(new URL("../../mail-service/bank-account-targets.json", import.meta.url), "utf8"),
+  );
   value.targets = { ...value.targets, ...personalTargets, defaultAccountId: "must-not-use" };
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.deliveries[0].payload).toMatchObject({
-    transaction: { source: "itau_debit_card", paymentType: "debit", cardNumber: "****9986", amount: 257.6, currency: "UYU", merchantRaw: "MERPAGO*CABIFY2644ILTVIS3" },
+  expect(result.deliveries[0]!.payload).toMatchObject({
+    transaction: {
+      source: "itau_debit_card",
+      paymentType: "debit",
+      cardNumber: "****9986",
+      amount: 257.6,
+      currency: "UYU",
+      merchantRaw: "MERPAGO*CABIFY2644ILTVIS3",
+    },
     destination: { accountId: "da81224b-90f3-4413-aa96-46197d6d31e9" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each([
-  ["$ 1050.55.",1050.55,"UYU"],
-  ["$ 1.050,55.",1050.55,"UYU"],
-  ["USD 15.20.",15.2,"USD"],
-  ["15,20 USD.",15.2,"USD"],
-  ["*$ 1050.55*.",1050.55,"UYU"],
-])("Pago realizado reads amount %s and maps its origin without using card defaults",(raw,amount,currency)=>{
-  const value=mail({...payment,body:payment.body.replace("$ 1050.55.",String(raw))});
-  value.targets.bankAccounts={"1440":{accountId:"fallback"},[`1440:${currency}`]:{accountId:"origin"}};
-  value.targets.defaultAccountId="must-not-use";
-  const result=runMailAutomation(value,ok);
-  expect(result.deliveries).toHaveLength(1);
-  expect(result.deliveries[0].payload).toMatchObject({idempotencyKey:"gmail:itau_payment:message-test",transaction:{source:"itau_payment",paymentType:"transfer",amount,currency,accountNumber:"****1440",merchantRaw:"SISTARBANC"},destination:{accountId:"origin"}});
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
+  ["$ 1050.55.", 1050.55, "UYU"],
+  ["$ 1.050,55.", 1050.55, "UYU"],
+  ["USD 15.20.", 15.2, "USD"],
+  ["15,20 USD.", 15.2, "USD"],
+  ["*$ 1050.55*.", 1050.55, "UYU"],
+])(
+  "Pago realizado reads amount %s and maps its origin without using card defaults",
+  (raw, amount, currency) => {
+    const value = mail({ ...payment, body: payment.body.replace("$ 1050.55.", String(raw)) });
+    value.targets.bankAccounts = {
+      "1440": { accountId: "fallback" },
+      [`1440:${currency}`]: { accountId: "origin" },
+    };
+    value.targets.defaultAccountId = "must-not-use";
+    const result = runMailAutomation(value, ok);
+    expect(result.deliveries).toHaveLength(1);
+    expect(result.deliveries[0]!.payload).toMatchObject({
+      idempotencyKey: "gmail:itau_payment:message-test",
+      transaction: {
+        source: "itau_payment",
+        paymentType: "transfer",
+        amount,
+        currency,
+        accountNumber: "****1440",
+        merchantRaw: "SISTARBANC",
+      },
+      destination: { accountId: "origin" },
+    });
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+  },
+);
+
+test("Pago realizado preserves payee punctuation and Gmail bold formatting", () => {
+  const value = mail({
+    ...payment,
+    body: payment.body
+      .replace("...1440.", "...*1440*.")
+      .replace("Pago a SISTARBANC.", "Pago a *TEST*PAYMENT GATEWAY*."),
+  });
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
+    transaction: { accountNumber: "****1440", merchantRaw: "TEST*PAYMENT GATEWAY" },
+  });
 });
 
-test("Pago realizado preserves payee punctuation and Gmail bold formatting",()=>{
-  const value=mail({...payment,body:payment.body.replace("...1440.","...*1440*.").replace("Pago a SISTARBANC.","Pago a *TEST*PAYMENT GATEWAY*." )});
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({transaction:{accountNumber:"****1440",merchantRaw:"TEST*PAYMENT GATEWAY"}});
+test("Pago realizado uses the existing personal savings origin configuration", () => {
+  const value = mail({
+    ...payment,
+    body: payment.body.replace("1440", "1431").replace("$ 1050.55.", "USD 15.20."),
+  });
+  value.targets.bankAccounts = JSON.parse(
+    readFileSync(new URL("../../mail-service/bank-account-targets.json", import.meta.url), "utf8"),
+  ).bankAccounts;
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
+    destination: { accountId: "86b72caa-9e03-4afa-af9f-40af2b98f008" },
+  });
 });
 
-test("Pago realizado uses the existing personal savings origin configuration",()=>{
-  const value=mail({...payment,body:payment.body.replace("1440","1431").replace("$ 1050.55.","USD 15.20.")});
-  value.targets.bankAccounts=JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json",import.meta.url),"utf8")).bankAccounts;
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"86b72caa-9e03-4afa-af9f-40af2b98f008"}});
-});
-
-test("Pago realizado with an unknown origin never falls back to a card or default account",()=>{
-  const value=mail({...payment,body:payment.body.replace("1440","9999")});
-  value.targets.defaultAccountId="must-not-use";
-  value.targets.cards["9999"]={accountId:"must-not-use",creditCardId:"must-not-use"};
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{}});
+test("Pago realizado with an unknown origin never falls back to a card or default account", () => {
+  const value = mail({ ...payment, body: payment.body.replace("1440", "9999") });
+  value.targets.defaultAccountId = "must-not-use";
+  value.targets.cards["9999"] = { accountId: "must-not-use", creditCardId: "must-not-use" };
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({ destination: {} });
 });
 
 test.each([
-  payment.body.replace("Cuenta origen terminada en ...1440.",""),
-  payment.body.replace("1440","12345"),
-  payment.body.replace("Monto: $ 1050.55.",""),
-  payment.body.replace("$ 1050.55.","1050.55."),
-  payment.body.replace("$ 1050.55.","UYU 10 USD."),
-  payment.body.replace("$ 1050.55.","$ 1.2,34."),
-  payment.body.replace("Pago a SISTARBANC.","Pago a ."),
-  payment.body.replace("fue realizado con éxito","no se pudo realizar"),
-])("incomplete or invalid Pago realizado is retained pending and unread (%#)",(body)=>{
-  const result=runMailAutomation(mail({...payment,body}),ok);
+  payment.body.replace("Cuenta origen terminada en ...1440.", ""),
+  payment.body.replace("1440", "12345"),
+  payment.body.replace("Monto: $ 1050.55.", ""),
+  payment.body.replace("$ 1050.55.", "1050.55."),
+  payment.body.replace("$ 1050.55.", "UYU 10 USD."),
+  payment.body.replace("$ 1050.55.", "$ 1.2,34."),
+  payment.body.replace("Pago a SISTARBANC.", "Pago a ."),
+  payment.body.replace("fue realizado con éxito", "no se pudo realizar"),
+])("incomplete or invalid Pago realizado is retained pending and unread (%#)", (body) => {
+  const result = runMailAutomation(mail({ ...payment, body }), ok);
   expect(result.deliveries).toHaveLength(0);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("actual Apps Script builds credit payload and marks the completed message read", () => {
   const result = runMailAutomation(input, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:itau_credit_card:message-test",
     transaction: {
       amount: 1234.56,
@@ -131,16 +167,16 @@ test("actual Apps Script builds credit payload and marks the completed message r
     },
     destination: { creditCardId: "card-test" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
-  expect(input.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+  expect(input.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("unsupported mail completes and is read without an ingestion request", () => {
   const result = runMailAutomation(mail(ignored), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
 });
 
 test.each(["Aviso de devolución", "Pago de tarjeta recibido"])(
@@ -148,8 +184,8 @@ test.each(["Aviso de devolución", "Pago de tarjeta recibido"])(
   (subject) => {
     const result = runMailAutomation(mail({ ...credit, subject }), ok);
     expect(result.deliveries).toEqual([]);
-    expect(result.threads[0].messages[0].isRead).toBe(true);
-    expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
   },
 );
 
@@ -160,7 +196,7 @@ test.each([
 ])("does not ingest misleading sender %s", (from) => {
   const result = runMailAutomation(mail({ ...credit, from }), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test("display-name sender and accent-free credit subject are recognized", () => {
@@ -172,7 +208,7 @@ test("display-name sender and accent-free credit subject are recognized", () => 
     }),
     ok,
   );
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "credit_card" },
   });
 });
@@ -187,7 +223,7 @@ test.each(["1.234,56", "1,234.56", "1234.56", "1234,56", "1.234", "1,234"])(
       }),
       ok,
     );
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       transaction: {
         amount: raw === "1.234" || raw === "1,234" ? 1234 : 1234.56,
       },
@@ -198,16 +234,11 @@ test.each(["1.234,56", "1,234.56", "1234.56", "1234,56", "1.234", "1,234"])(
 test.each([credit, debit, transfer])(
   "malformed recognized $subject remains unread and pending",
   (message) => {
-    const result = runMailAutomation(
-      mail({ ...message, body: "Financial fields missing" }),
-      ok,
-    );
+    const result = runMailAutomation(mail({ ...message, body: "Financial fields missing" }), ok);
     expect(result.deliveries).toEqual([]);
-    expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-    expect(result.threads[0].messages[0].isRead).toBe(false);
-    expect(result.logs.some((log) => log.includes("queda pendiente"))).toBe(
-      true,
-    );
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
+    expect(result.logs.some((log) => log.includes("queda pendiente"))).toBe(true);
   },
 );
 
@@ -226,7 +257,7 @@ test.each([
     },
   };
   const result = runMailAutomation(value, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:itau_debit_card:message-test",
     transaction: {
       paymentType: "debit",
@@ -238,9 +269,9 @@ test.each([
     },
     destination: { accountId: "currency-account" },
   });
-  expect(
-    (result.deliveries[0].payload as { destination: unknown }).destination,
-  ).toEqual({ accountId: "currency-account" });
+  expect((result.deliveries[0]!.payload as { destination: unknown }).destination).toEqual({
+    accountId: "currency-account",
+  });
 });
 
 test("unmapped debit never falls back to a credit card or default account", () => {
@@ -252,18 +283,16 @@ test("unmapped debit never falls back to a credit card or default account", () =
     defaultAccountId: "must-not-guess",
   };
   const result = runMailAutomation(value, ok);
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "debit" },
   });
-  expect(
-    (result.deliveries[0].payload as { destination: unknown }).destination,
-  ).toEqual({});
+  expect((result.deliveries[0]!.payload as { destination: unknown }).destination).toEqual({});
 });
 
 test("reference-only debit mapping remains supported", () => {
   const value = mail(debit);
   value.targets.debitCards = { "2468": { accountId: "fallback" } };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "fallback" },
   });
 });
@@ -289,7 +318,7 @@ test.each([
       [`ITAU:9876540:${currency}`]: { accountId: "destination-currency" },
     };
     const result = runMailAutomation(value, ok);
-    expect(result.deliveries[0].payload).toMatchObject({
+    expect(result.deliveries[0]!.payload).toMatchObject({
       idempotencyKey: "gmail:itau_transfer:message-test",
       transaction: {
         paymentType: "transfer",
@@ -318,7 +347,7 @@ test("unknown transfer account references never match cards or default account",
   };
   expect(
     (
-      runMailAutomation(value, ok).deliveries[0].payload as {
+      runMailAutomation(value, ok).deliveries[0]!.payload as {
         destination: unknown;
       }
     ).destination,
@@ -328,22 +357,45 @@ test("unknown transfer account references never match cards or default account",
 test.each([
   ["1440", "UYU", "da81224b-90f3-4413-aa96-46197d6d31e9"],
   ["1431", "USD", "86b72caa-9e03-4afa-af9f-40af2b98f008"],
-])("personal transfer origin %s uses its configured Wallet account", (origin,currency,accountId)=>{
-  const value=mail({...transfer,body:`Transferencia realizada desde la cuenta ****${origin}\nImporte: 630.00 ${currency === "UYU" ? "$" : currency}\nCuenta destino: 0123929\nBanco/Institución destino: Banco Itau`});
-  value.targets.bankAccounts=JSON.parse(readFileSync(new URL("../../mail-service/bank-account-targets.json",import.meta.url),"utf8")).bankAccounts;
-  const result=runMailAutomation(value,ok);
-  expect(result.deliveries[0].payload).toMatchObject({
-    transaction:{accountNumber:`****${origin}`,amount:630,currency,destinationAccountNumber:"0123929",destinationBank:"Banco Itau"},
-    destination:{accountId},
-  });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
-});
+])(
+  "personal transfer origin %s uses its configured Wallet account",
+  (origin, currency, accountId) => {
+    const value = mail({
+      ...transfer,
+      body: `Transferencia realizada desde la cuenta ****${origin}\nImporte: 630.00 ${currency === "UYU" ? "$" : currency}\nCuenta destino: 0123929\nBanco/Institución destino: Banco Itau`,
+    });
+    value.targets.bankAccounts = JSON.parse(
+      readFileSync(
+        new URL("../../mail-service/bank-account-targets.json", import.meta.url),
+        "utf8",
+      ),
+    ).bankAccounts;
+    const result = runMailAutomation(value, ok);
+    expect(result.deliveries[0]!.payload).toMatchObject({
+      transaction: {
+        accountNumber: `****${origin}`,
+        amount: 630,
+        currency,
+        destinationAccountNumber: "0123929",
+        destinationBank: "Banco Itau",
+      },
+      destination: { accountId },
+    });
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
+  },
+);
 
-test("currency-specific origin configuration takes precedence without losing destination mappings",()=>{
-  const value=mail({...transfer,body:transfer.body.replace("****1357","****1440")});
-  value.targets.bankAccounts={"1440":{accountId:"fallback-source"},"1440:USD":{accountId:"explicit-source"},"ITAU:9876540:USD":{accountId:"explicit-destination"}};
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"explicit-source",destinationAccountId:"explicit-destination"}});
+test("currency-specific origin configuration takes precedence without losing destination mappings", () => {
+  const value = mail({ ...transfer, body: transfer.body.replace("****1357", "****1440") });
+  value.targets.bankAccounts = {
+    "1440": { accountId: "fallback-source" },
+    "1440:USD": { accountId: "explicit-source" },
+    "ITAU:9876540:USD": { accountId: "explicit-destination" },
+  };
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
+    destination: { accountId: "explicit-source", destinationAccountId: "explicit-destination" },
+  });
 });
 
 test("reference-only transfer mappings are supported without guessing ownership", () => {
@@ -352,39 +404,53 @@ test("reference-only transfer mappings are supported without guessing ownership"
     "1357": { accountId: "source" },
     "ITAU:9876540": { accountId: "destination" },
   };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     destination: { accountId: "source", destinationAccountId: "destination" },
   });
 });
 
-test("owned destination matching includes the destination bank and cannot credit an account at another bank",()=>{
-  const value=mail({...transfer,body:transfer.body.replace("Banco Itau","Other bank")});
-  value.targets.bankAccounts={"1357:USD":{accountId:"source"},"9876540:USD":{accountId:"unscoped-must-not-use"},"ITAU:9876540:USD":{accountId:"owned-itau"}};
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"source"}});
-  expect((runMailAutomation(value,ok).deliveries[0].payload as {destination:Record<string,string>}).destination.destinationAccountId).toBeUndefined();
-  value.targets.bankAccounts["OTHER BANK:9876540:USD"]={accountId:"owned-other"};
-  expect(runMailAutomation(value,ok).deliveries[0].payload).toMatchObject({destination:{accountId:"source",destinationAccountId:"owned-other"}});
+test("owned destination matching includes the destination bank and cannot credit an account at another bank", () => {
+  const value = mail({ ...transfer, body: transfer.body.replace("Banco Itau", "Other bank") });
+  value.targets.bankAccounts = {
+    "1357:USD": { accountId: "source" },
+    "9876540:USD": { accountId: "unscoped-must-not-use" },
+    "ITAU:9876540:USD": { accountId: "owned-itau" },
+  };
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
+    destination: { accountId: "source" },
+  });
+  expect(
+    (runMailAutomation(value, ok).deliveries[0]!.payload as { destination: Record<string, string> })
+      .destination.destinationAccountId,
+  ).toBeUndefined();
+  value.targets.bankAccounts["OTHER BANK:9876540:USD"] = { accountId: "owned-other" };
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
+    destination: { accountId: "source", destinationAccountId: "owned-other" },
+  });
 });
 
-test("a known owned destination without source mapping remains pending until configuration is completed",()=>{
-  const value=mail(transfer);
-  value.targets.bankAccounts={"ITAU:9876540:USD":{accountId:"destination"}};
-  const pending=runMailAutomation(value,ok);
+test("a known owned destination without source mapping remains pending until configuration is completed", () => {
+  const value = mail(transfer);
+  value.targets.bankAccounts = { "ITAU:9876540:USD": { accountId: "destination" } };
+  const pending = runMailAutomation(value, ok);
   expect(pending.deliveries).toHaveLength(0);
-  expect(pending.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(pending.threads[0].messages[0].isRead).toBe(false);
+  expect(pending.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(pending.threads[0]!.messages[0]!.isRead).toBe(false);
   expect(pending.logs.join(" ")).toMatch(/origen/i);
-  value.targets.bankAccounts["1357:USD"]={accountId:"source"};
-  expect(runMailAutomation(value,ok).threads[0].labels).toEqual(["Wallet/Procesado"]);
+  value.targets.bankAccounts["1357:USD"] = { accountId: "source" };
+  expect(runMailAutomation(value, ok).threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
-test.each(["1.2,34 UYU","1,2.34 UYU","12.3456 UYU","1.23.456,78 UYU"])("malformed transfer amount %s is retained unread instead of silently changing value",raw=>{
-  const value=mail({...transfer,body:transfer.body.replace("44.00 USD",raw)});
-  const result=runMailAutomation(value,ok);
-  expect(result.deliveries).toHaveLength(0);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
-});
+test.each(["1.2,34 UYU", "1,2.34 UYU", "12.3456 UYU", "1.23.456,78 UYU"])(
+  "malformed transfer amount %s is retained unread instead of silently changing value",
+  (raw) => {
+    const value = mail({ ...transfer, body: transfer.body.replace("44.00 USD", raw) });
+    const result = runMailAutomation(value, ok);
+    expect(result.deliveries).toHaveLength(0);
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+    expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
+  },
+);
 
 test("mixed ignored, successful and failed messages close only after idempotent retry", () => {
   const value = mail(ignored, credit, { ...credit, id: "message-two" });
@@ -393,29 +459,19 @@ test("mixed ignored, successful and failed messages close only after idempotent 
       ? { status: 503, body: "temporary failure" }
       : ok(),
   );
-  expect(failed.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(failed.threads[0].messages.map((message) => message.isRead)).toEqual([
-    true,
-    true,
-    false,
-  ]);
-  const retried = runMailAutomation(
-    { ...value, threads: failed.threads },
-    () => ({ status: 200, body: '{"data":{"status":"duplicate"}}' }),
-  );
-  expect(retried.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(retried.threads[0].messages.every((message) => message.isRead)).toBe(
-    true,
-  );
+  expect(failed.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(failed.threads[0]!.messages.map((message) => message.isRead)).toEqual([true, true, false]);
+  const retried = runMailAutomation({ ...value, threads: failed.threads }, () => ({
+    status: 200,
+    body: '{"data":{"status":"duplicate"}}',
+  }));
+  expect(retried.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(retried.threads[0]!.messages.every((message) => message.isRead)).toBe(true);
   expect(
     retried.deliveries.map(
-      (delivery) =>
-        (delivery.payload as { idempotencyKey: string }).idempotencyKey,
+      (delivery) => (delivery.payload as { idempotencyKey: string }).idempotencyKey,
     ),
-  ).toEqual([
-    "gmail:itau_credit_card:message-test",
-    "gmail:itau_credit_card:message-two",
-  ]);
+  ).toEqual(["gmail:itau_credit_card:message-test", "gmail:itau_credit_card:message-two"]);
 });
 
 test("a parser failure does not prevent other messages being completed and read", () => {
@@ -430,30 +486,23 @@ test("a parser failure does not prevent other messages being completed and read"
   );
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages.map((message) => message.isRead)).toEqual([
-    false,
-    true,
-    true,
-  ]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages.map((message) => message.isRead)).toEqual([false, true, true]);
 });
 
 test("new pending mail runs even when its thread retains the processed label", () => {
   const value = mail(credit);
-  value.threads[0].labels.push("Wallet/Procesado");
+  value.threads[0]!.labels.push("Wallet/Procesado");
   const result = runMailAutomation(value, ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-  expect(result.threads[0].messages[0].isRead).toBe(true);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(true);
 });
 
 test("pending history older than 30 days is recovered", () => {
-  const result = runMailAutomation(
-    mail({ ...credit, date: "2026-08-01T12:00:00.000Z" }),
-    ok,
-  );
+  const result = runMailAutomation(mail({ ...credit, date: "2026-08-01T12:00:00.000Z" }), ok);
   expect(result.deliveries).toHaveLength(1);
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
 test.each([
@@ -461,18 +510,15 @@ test.each([
   { ...transfer, body: transfer.body.replace("44.00 USD", "44.00") },
   {
     ...transfer,
-    body: transfer.body.replace(
-      "Cuenta destino: 9876540",
-      "Cuenta destino: unknown",
-    ),
+    body: transfer.body.replace("Cuenta destino: 9876540", "Cuenta destino: unknown"),
   },
   { ...transfer, body: transfer.body.replace("44.00 USD", "1.23. USD") },
   { ...credit, body: credit.body.replace("UYU", "XYZ") },
 ])("invalid financial metadata stays pending: $body", (message) => {
   const result = runMailAutomation(mail(message), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("malformed recognized automation purchase is retained instead of ignored", () => {
@@ -482,8 +528,8 @@ test("malformed recognized automation purchase is retained instead of ignored", 
   };
   const result = runMailAutomation(mail(message), ok);
   expect(result.deliveries).toEqual([]);
-  expect(result.threads[0].labels).toEqual(["Wallet/Pendiente"]);
-  expect(result.threads[0].messages[0].isRead).toBe(false);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Pendiente"]);
+  expect(result.threads[0]!.messages[0]!.isRead).toBe(false);
 });
 
 test("automation alias credit mapping keeps the existing idempotency contract", () => {
@@ -493,7 +539,7 @@ test("automation alias credit mapping keeps the existing idempotency contract", 
   };
   const value = mail(message);
   value.targets.cards.INTERNACIONAL = { creditCardId: "alias-card" };
-  expect(runMailAutomation(value, ok).deliveries[0].payload).toMatchObject({
+  expect(runMailAutomation(value, ok).deliveries[0]!.payload).toMatchObject({
     idempotencyKey: "gmail:automation_wallet:ignored",
     transaction: { paymentType: "credit_card", amount: 125.5, currency: "UYU" },
     destination: { creditCardId: "alias-card" },
@@ -505,38 +551,48 @@ test("HTML-only debit body is normalized before ingestion", () => {
     mail({ ...debit, body: "", html: `<div>${debit.body}</div>` }),
     ok,
   );
-  expect(result.deliveries[0].payload).toMatchObject({
+  expect(result.deliveries[0]!.payload).toMatchObject({
     transaction: { paymentType: "debit", amount: 95.84 },
   });
 });
 
 test("Gmail wraps the approved debit sentence and merchant without changing the purchase", () => {
-  const result = runMailAutomation(mail({
-    ...debit,
-    body: "*Aviso de consumo aprobado con tarjeta de débito* *Se aprobo un consumo de\nsu tarjeta Visa terminada en 2468 . Realizado en TEST *SUBSCRIPTION\nMonto: 95.84 Dolares. Si no fuiste tú comunícate al 1784.*",
-  }), ok);
+  const result = runMailAutomation(
+    mail({
+      ...debit,
+      body: "*Aviso de consumo aprobado con tarjeta de débito* *Se aprobo un consumo de\nsu tarjeta Visa terminada en 2468 . Realizado en TEST *SUBSCRIPTION\nMonto: 95.84 Dolares. Si no fuiste tú comunícate al 1784.*",
+    }),
+    ok,
+  );
   expect(result.deliveries[0]?.payload).toMatchObject({
     transaction: { paymentType: "debit", amount: 95.84, merchantRaw: "TEST *SUBSCRIPTION" },
   });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
+  expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
 });
 
-test.each(["*44.00* *USD*", "*44.00 USD*", "*USD 44.00*"])("Gmail transfer amount %s preserves the masked account and amount", (formattedAmount) => {
-  const value = mail({
-    ...transfer,
-    body: `*Aviso de transferencia realizada*\nTransferencia realizada desde la cuenta *****1357*\nImporte: ${formattedAmount}\nCuenta destino: *9876540*\nBanco/Institución destino: *Banco Itau*`,
-  });
-  value.targets.bankAccounts = {
-    "1357:USD": { accountId: "origin-account" },
-    "ITAU:9876540:USD": { accountId: "destination-account" },
-  };
-  const result = runMailAutomation(value, ok);
-  expect(result.deliveries[0]?.payload).toMatchObject({
-    transaction: {
-      paymentType: "transfer", amount: 44, currency: "USD", accountNumber: "****1357",
-      destinationAccountNumber: "9876540", destinationBank: "Banco Itau",
-    },
-    destination: { accountId: "origin-account", destinationAccountId: "destination-account" },
-  });
-  expect(result.threads[0].labels).toEqual(["Wallet/Procesado"]);
-});
+test.each(["*44.00* *USD*", "*44.00 USD*", "*USD 44.00*"])(
+  "Gmail transfer amount %s preserves the masked account and amount",
+  (formattedAmount) => {
+    const value = mail({
+      ...transfer,
+      body: `*Aviso de transferencia realizada*\nTransferencia realizada desde la cuenta *****1357*\nImporte: ${formattedAmount}\nCuenta destino: *9876540*\nBanco/Institución destino: *Banco Itau*`,
+    });
+    value.targets.bankAccounts = {
+      "1357:USD": { accountId: "origin-account" },
+      "ITAU:9876540:USD": { accountId: "destination-account" },
+    };
+    const result = runMailAutomation(value, ok);
+    expect(result.deliveries[0]?.payload).toMatchObject({
+      transaction: {
+        paymentType: "transfer",
+        amount: 44,
+        currency: "USD",
+        accountNumber: "****1357",
+        destinationAccountNumber: "9876540",
+        destinationBank: "Banco Itau",
+      },
+      destination: { accountId: "origin-account", destinationAccountId: "destination-account" },
+    });
+    expect(result.threads[0]!.labels).toEqual(["Wallet/Procesado"]);
+  },
+);

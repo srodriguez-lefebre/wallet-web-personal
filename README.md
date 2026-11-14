@@ -1,4 +1,4 @@
-﻿# Wallet Web Personal
+# Wallet Web Personal
 
 Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credito, goals, presupuestos y analiticas.
 
@@ -95,6 +95,21 @@ a partir de intenciones de movimientos en revisión: se conserva el libro de
 reservas registrado y cualquier discrepancia histórica requiere revisión.
 Ninguna migración se ha ejecutado en producción.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
+
+## Verificación del refactor
+
+`npm run check` incluye formato versionado, lint con tipos, pruebas locales,
+build y verificación del contrato generado. `npm run format` aplica Prettier;
+`npm run format:check` sólo verifica. El índice usa LF.
+
+Las pruebas usan hasta dos workers aislados. Un clúster `embedded-postgres`
+por ejecución corre en un proceso hijo y contiene una plantilla migrada; cada archivo recibe una base
+sintética independiente. PGlite sigue cubriendo el sandbox. No se conecta Neon
+ni se leen credenciales productivas. Las pruebas de providers usan Testing
+Library con jsdom; otras pruebas de vistas conservan temporalmente el renderer.
+
+El alcance, compatibilidad y avance de los cinco paquetes están en
+[REFACTOR-CHECKPOINT.md](REFACTOR-CHECKPOINT.md).
 
 ## Stack
 

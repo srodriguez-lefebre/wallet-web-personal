@@ -1,16 +1,12 @@
 import { FormEvent, useRef, useState } from "react";
-import {
-  BarChart3,
-  Edit3,
-  Eye,
-  EyeOff,
-  Plus,
-  Save,
-  Star,
-  Trash2,
-  X,
-} from "lucide-react";
+import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateAccountBalances, formatMoney } from "@shared/calculations";
+import { accountTypeLabels } from "@shared/constants";
+
+import type { Account, AccountType, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -26,9 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { useWallet } from "@/providers/wallet-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import { calculateAccountBalances, formatMoney } from "@shared/calculations";
-import { accountTypeLabels } from "@shared/constants";
-import type { Account, AccountType, CurrencyCode } from "@shared/types";
 
 interface AccountDraft {
   id: string;
@@ -54,10 +47,7 @@ const accountTypeOptions: Array<{ value: AccountType; label: string }> = [
   { value: "custom", label: accountTypeLabels.custom },
 ];
 
-function buildAccountDrafts(
-  accounts: Account[],
-  primaryAccountId?: string,
-): AccountDraft[] {
+function buildAccountDrafts(accounts: Account[], primaryAccountId?: string): AccountDraft[] {
   return accounts.map((account) => ({
     id: account.id,
     name: account.name,
@@ -93,9 +83,7 @@ export function AccountsView() {
   const createdAccount = useRef<string | null>(null);
   const [createdAccountId, setCreatedAccountId] = useState<string | null>(null);
   const editBaseline = useRef<AccountDraft[]>([]);
-  const savedPrimary = useRef<string | undefined>(
-    dataset.settings.primaryAccountId,
-  );
+  const savedPrimary = useRef<string | undefined>(dataset.settings.primaryAccountId);
   const { toast, runAction } = useActionToast();
   const [accountDrafts, setAccountDrafts] = useState<AccountDraft[]>(() =>
     buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
@@ -108,12 +96,8 @@ export function AccountsView() {
   const [isVisible, setIsVisible] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [note, setNote] = useState("");
-  const balances = isAllHistoryComplete
-    ? calculateAccountBalances(dataset)
-    : [];
-  const visibleBalances = balances.filter(
-    (item) => showHidden || item.account.isVisible,
-  );
+  const balances = isAllHistoryComplete ? calculateAccountBalances(dataset) : [];
+  const visibleBalances = balances.filter((item) => showHidden || item.account.isVisible);
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
@@ -126,41 +110,31 @@ export function AccountsView() {
 
   function openAccountRecords(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
-    navigate("/records");
+    void navigate("/records");
   }
 
   function openAccountAnalytics(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
-    navigate("/analytics");
+    void navigate("/analytics");
   }
 
   function startEditingAccounts() {
-    editBaseline.current = buildAccountDrafts(
-      dataset.accounts,
-      dataset.settings.primaryAccountId,
-    );
+    editBaseline.current = buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId);
     savedPrimary.current = dataset.settings.primaryAccountId;
-    setAccountDrafts(
-      buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
-    );
+    setAccountDrafts(buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId));
     setShowHidden(false);
     setEditError("");
     setIsEditing(true);
   }
 
   function cancelEditingAccounts() {
-    setAccountDrafts(
-      buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
-    );
+    setAccountDrafts(buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId));
     setShowHidden(false);
     setEditError("");
     setIsEditing(false);
   }
 
-  function updateAccountDraft(
-    accountIdToUpdate: string,
-    patch: Partial<AccountDraft>,
-  ) {
+  function updateAccountDraft(accountIdToUpdate: string, patch: Partial<AccountDraft>) {
     setAccountDrafts((current) =>
       current.map((draft) => {
         if (patch.isPrimary && draft.id !== accountIdToUpdate) {
@@ -198,8 +172,7 @@ export function AccountsView() {
     if (mutationPending.current) return;
     const activeDrafts = accountDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
-      (draft) =>
-        !draft.name.trim() || !Number.isFinite(Number(draft.initialBalance)),
+      (draft) => !draft.name.trim() || !Number.isFinite(Number(draft.initialBalance)),
     );
 
     if (invalidDraft) {
@@ -215,9 +188,7 @@ export function AccountsView() {
         async () => {
           const failures: string[] = [];
           for (const draft of accountDrafts) {
-            const baseline = editBaseline.current.find(
-              (item) => item.id === draft.id,
-            );
+            const baseline = editBaseline.current.find((item) => item.id === draft.id);
             const payload = (item: AccountDraft) => ({
               name: item.name.trim(),
               type: item.type,
@@ -232,13 +203,10 @@ export function AccountsView() {
               baseline?.isDeleted ||
               (!draft.isDeleted &&
                 baseline &&
-                JSON.stringify(payload(draft)) ===
-                  JSON.stringify(payload(baseline)))
+                JSON.stringify(payload(draft)) === JSON.stringify(payload(baseline)))
             )
               continue;
-            const currentAccount = dataset.accounts.find(
-              (account) => account.id === draft.id,
-            );
+            const currentAccount = dataset.accounts.find((account) => account.id === draft.id);
             if (!currentAccount) continue;
             try {
               if (draft.isDeleted) await deleteAccount(draft.id);
@@ -279,11 +247,7 @@ export function AccountsView() {
       setShowHidden(false);
       setIsEditing(false);
     } catch (error) {
-      setEditError(
-        error instanceof Error
-          ? error.message
-          : "Could not save account changes",
-      );
+      setEditError(error instanceof Error ? error.message : "Could not save account changes");
     } finally {
       mutationPending.current = false;
       setIsWorking(false);
@@ -292,12 +256,7 @@ export function AccountsView() {
 
   async function handleCreateAccount(event: FormEvent) {
     event.preventDefault();
-    if (
-      mutationPending.current ||
-      !name.trim() ||
-      !Number.isFinite(Number(initialBalance))
-    )
-      return;
+    if (mutationPending.current || !name.trim() || !Number.isFinite(Number(initialBalance))) return;
     mutationPending.current = true;
     setIsWorking(true);
     setEditError("");
@@ -325,9 +284,7 @@ export function AccountsView() {
         },
         {
           singleFlight: "create-account",
-          processing: createdAccount.current
-            ? "Setting primary account..."
-            : "Creating account...",
+          processing: createdAccount.current ? "Setting primary account..." : "Creating account...",
           success: "Account created",
           error: createdAccount.current
             ? "Account exists; retry setting it as primary."
@@ -366,11 +323,7 @@ export function AccountsView() {
         error: "Could not select primary account",
       });
     } catch (error) {
-      setEditError(
-        error instanceof Error
-          ? error.message
-          : "Could not select primary account",
-      );
+      setEditError(error instanceof Error ? error.message : "Could not select primary account");
     } finally {
       mutationPending.current = false;
       setIsWorking(false);
@@ -390,26 +343,21 @@ export function AccountsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={
-                showHidden ? "Hide hidden accounts" : "Show hidden accounts"
-              }
+              aria-label={showHidden ? "Hide hidden accounts" : "Show hidden accounts"}
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
-            <Button
-              disabled={isWorking}
-              variant="outline"
-              onClick={cancelEditingAccounts}
-            >
+            <Button disabled={isWorking} variant="outline" onClick={cancelEditingAccounts}>
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button disabled={isWorking} onClick={saveAccountEdits}>
+            <Button
+              disabled={isWorking}
+              onClick={() => {
+                finishAction(saveAccountEdits());
+              }}
+            >
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -419,26 +367,16 @@ export function AccountsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={
-                showHidden ? "Hide hidden accounts" : "Show hidden accounts"
-              }
+              aria-label={showHidden ? "Hide hidden accounts" : "Show hidden accounts"}
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Button
               size="icon"
               variant="outline"
               aria-label="Edit accounts"
-              disabled={
-                isWorking ||
-                Boolean(createdAccountId) ||
-                dataset.accounts.length === 0
-              }
+              disabled={isWorking || Boolean(createdAccountId) || dataset.accounts.length === 0}
               onClick={startEditingAccounts}
             >
               <Edit3 className="h-5 w-5" />
@@ -450,11 +388,7 @@ export function AccountsView() {
               }}
             >
               <DialogTrigger asChild>
-                <Button
-                  disabled={isWorking}
-                  size="icon"
-                  aria-label="New account"
-                >
+                <Button disabled={isWorking} size="icon" aria-label="New account">
                   <Plus className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
@@ -462,15 +396,16 @@ export function AccountsView() {
                 <DialogHeader>
                   <DialogTitle>New account</DialogTitle>
                   <DialogDescription>
-                    Create an account for cash, bank, card, savings, or custom
-                    use.
+                    Create an account for cash, bank, card, savings, or custom use.
                   </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={handleCreateAccount}>
-                  <fieldset
-                    disabled={isWorking || Boolean(createdAccountId)}
-                    className="space-y-4"
-                  >
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    finishAction(handleCreateAccount(event));
+                  }}
+                >
+                  <fieldset disabled={isWorking || Boolean(createdAccountId)} className="space-y-4">
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Name</span>
                       <input
@@ -485,9 +420,7 @@ export function AccountsView() {
                         <span className="text-sm font-medium">Type</span>
                         <select
                           value={type}
-                          onChange={(event) =>
-                            setType(event.target.value as AccountType)
-                          }
+                          onChange={(event) => setType(event.target.value as AccountType)}
                           className={inputClassName}
                         >
                           {accountTypeOptions.map((option) => (
@@ -501,9 +434,7 @@ export function AccountsView() {
                         <span className="text-sm font-medium">Currency</span>
                         <select
                           value={currency}
-                          onChange={(event) =>
-                            setCurrency(event.target.value as CurrencyCode)
-                          }
+                          onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
                           className={inputClassName}
                         >
                           <option value="UYU">UYU</option>
@@ -516,14 +447,10 @@ export function AccountsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">
-                          Initial balance
-                        </span>
+                        <span className="text-sm font-medium">Initial balance</span>
                         <input
                           value={initialBalance}
-                          onChange={(event) =>
-                            setInitialBalance(event.target.value)
-                          }
+                          onChange={(event) => setInitialBalance(event.target.value)}
                           type="number"
                           className={inputClassName}
                           placeholder="0"
@@ -544,9 +471,7 @@ export function AccountsView() {
                         <span className="text-sm font-medium">Visibility</span>
                         <select
                           value={isVisible ? "visible" : "hidden"}
-                          onChange={(event) =>
-                            setIsVisible(event.target.value === "visible")
-                          }
+                          onChange={(event) => setIsVisible(event.target.value === "visible")}
                           className={inputClassName}
                         >
                           <option value="visible">Visible</option>
@@ -557,9 +482,7 @@ export function AccountsView() {
                         <span className="text-sm font-medium">Status</span>
                         <select
                           value={isActive ? "active" : "inactive"}
-                          onChange={(event) =>
-                            setIsActive(event.target.value === "active")
-                          }
+                          onChange={(event) => setIsActive(event.target.value === "active")}
                           className={inputClassName}
                         >
                           <option value="active">Active</option>
@@ -579,8 +502,7 @@ export function AccountsView() {
                   </fieldset>
                   {createdAccountId && (
                     <p className="text-sm text-muted-foreground">
-                      The account has been created. Only primary selection
-                      remains; retry below.
+                      The account has been created. Only primary selection remains; retry below.
                     </p>
                   )}
                   {editError && (
@@ -590,9 +512,7 @@ export function AccountsView() {
                   )}
                   <Button disabled={isWorking} className="w-full" type="submit">
                     <Plus className="h-4 w-4" />
-                    {createdAccountId
-                      ? "Retry primary selection"
-                      : "Create account"}
+                    {createdAccountId ? "Retry primary selection" : "Create account"}
                   </Button>
                 </form>
               </DialogContent>
@@ -602,10 +522,7 @@ export function AccountsView() {
       </PageHeader>
 
       {isEditing ? (
-        <fieldset
-          disabled={isWorking}
-          className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
-        >
+        <fieldset disabled={isWorking} className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {visibleAccountDrafts.map((draft) => (
             <Card key={draft.id} className="border-primary/30 shadow-sm">
               <CardHeader>
@@ -644,9 +561,7 @@ export function AccountsView() {
                       type="button"
                       variant="outline"
                       size="icon"
-                      aria-label={
-                        draft.isVisible ? "Hide account" : "Show account"
-                      }
+                      aria-label={draft.isVisible ? "Hide account" : "Show account"}
                       title={draft.isVisible ? "Hide account" : "Show account"}
                       onClick={() =>
                         updateAccountDraft(draft.id, {
@@ -764,9 +679,7 @@ export function AccountsView() {
                   <span className="text-sm font-medium">Note</span>
                   <textarea
                     value={draft.note}
-                    onChange={(event) =>
-                      updateAccountDraft(draft.id, { note: event.target.value })
-                    }
+                    onChange={(event) => updateAccountDraft(draft.id, { note: event.target.value })}
                     className={textareaClassName}
                     placeholder="Optional context"
                   />
@@ -782,112 +695,100 @@ export function AccountsView() {
               Loading complete history to calculate current balances...
             </p>
           ) : null}
-          {visibleBalances.map(
-            ({ account, balance, totalBalance, reserved }) => {
-              const isPrimary =
-                dataset.settings.primaryAccountId === account.id;
+          {visibleBalances.map(({ account, balance, totalBalance, reserved }) => {
+            const isPrimary = dataset.settings.primaryAccountId === account.id;
 
-              return (
-                <Card
-                  key={account.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openAccountRecords(account.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      openAccountRecords(account.id);
-                    }
-                  }}
-                  className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          {account.name}
-                          {isPrimary ? (
-                            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-                          ) : null}
-                        </CardTitle>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {accountTypeLabels[account.type]}
-                        </p>
-                      </div>
-                      <Badge variant={account.isVisible ? "success" : "muted"}>
-                        {account.isVisible ? (
-                          <Eye className="mr-1 h-3 w-3" />
-                        ) : (
-                          <EyeOff className="mr-1 h-3 w-3" />
-                        )}
-                        {account.isVisible ? "Visible" : "Hidden"}
-                      </Badge>
+            return (
+              <Card
+                key={account.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => openAccountRecords(account.id)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openAccountRecords(account.id);
+                  }
+                }}
+                className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              >
+                <CardHeader>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        {account.name}
+                        {isPrimary ? (
+                          <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
+                        ) : null}
+                      </CardTitle>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {accountTypeLabels[account.type]}
+                      </p>
                     </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-3xl font-semibold">
-                      {formatMoney(balance, account.currency)}
-                    </p>
-                    <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-md bg-secondary p-3">
-                        <p className="text-muted-foreground">Total</p>
-                        <p className="font-medium">
-                          {formatMoney(totalBalance, account.currency)}
-                        </p>
-                      </div>
-                      <div className="rounded-md bg-secondary p-3">
-                        <p className="text-muted-foreground">Reserved</p>
-                        <p className="font-medium">
-                          {formatMoney(reserved, account.currency)}
-                        </p>
-                      </div>
+                    <Badge variant={account.isVisible ? "success" : "muted"}>
+                      {account.isVisible ? (
+                        <Eye className="mr-1 h-3 w-3" />
+                      ) : (
+                        <EyeOff className="mr-1 h-3 w-3" />
+                      )}
+                      {account.isVisible ? "Visible" : "Hidden"}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-3xl font-semibold">{formatMoney(balance, account.currency)}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-muted-foreground">Total</p>
+                      <p className="font-medium">{formatMoney(totalBalance, account.currency)}</p>
                     </div>
-                    <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: account.color }}
-                      />
-                      {account.currency} ·{" "}
-                      {account.isActive ? "Active" : "Inactive"}
+                    <div className="rounded-md bg-secondary p-3">
+                      <p className="text-muted-foreground">Reserved</p>
+                      <p className="font-medium">{formatMoney(reserved, account.currency)}</p>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openAccountAnalytics(account.id);
-                        }}
-                      >
-                        <BarChart3 className="h-4 w-4" />
-                        Analytics
-                      </Button>
-                      <Button
-                        variant={isPrimary ? "secondary" : "outline"}
-                        disabled={isWorking || isPrimary || !account.isActive}
-                        size="sm"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void selectPrimary(account.id);
-                        }}
-                      >
-                        <Star className="h-4 w-4" />
-                        {isPrimary ? "Primary" : "Set primary"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            },
-          )}
+                  </div>
+                  <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className="h-3 w-3 rounded-full"
+                      style={{ backgroundColor: account.color }}
+                    />
+                    {account.currency} · {account.isActive ? "Active" : "Inactive"}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openAccountAnalytics(account.id);
+                      }}
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                      Analytics
+                    </Button>
+                    <Button
+                      variant={isPrimary ? "secondary" : "outline"}
+                      disabled={isWorking || isPrimary || !account.isActive}
+                      size="sm"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void selectPrimary(account.id);
+                      }}
+                    >
+                      <Star className="h-4 w-4" />
+                      {isPrimary ? "Primary" : "Set primary"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
       {editError ? (
         <Card className="mt-4 border-destructive/40 bg-destructive/5">
-          <CardContent className="py-4 text-sm text-destructive">
-            {editError}
-          </CardContent>
+          <CardContent className="py-4 text-sm text-destructive">{editError}</CardContent>
         </Card>
       ) : null}
     </div>

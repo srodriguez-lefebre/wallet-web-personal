@@ -1,11 +1,13 @@
-import type { ReactNode } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { CardDetailView } from "./card-detail-view";
 import { CardsView } from "./cards-view";
 import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
+
+import type { ReactNode } from "react";
 
 let dataset = structuredClone(mockWalletData);
 const payment = vi.hoisted(() => vi.fn());
@@ -67,21 +69,19 @@ beforeEach(() => {
     closedAt: "2020-02-01",
     status: "paid",
   }));
-  dataset.creditCardRecords = dataset.creditCardStatements.map(
-    (statement, index) => ({
-      id: `purchase-${statement.id}`,
-      creditCardId: "card",
-      statementId: statement.id,
-      kind: "purchase",
-      amount: (index + 1) * 100,
-      currency: "USD",
-      amountInLimitCurrency: (index + 1) * 100,
-      exchangeRateToLimitCurrency: 1,
-      categoryId: dataset.categories[0].id,
-      accountImpactAtCreation: false,
-      occurredAt: "2020-01-10",
-    }),
-  );
+  dataset.creditCardRecords = dataset.creditCardStatements.map((statement, index) => ({
+    id: `purchase-${statement.id}`,
+    creditCardId: "card",
+    statementId: statement.id,
+    kind: "purchase",
+    amount: (index + 1) * 100,
+    currency: "USD",
+    amountInLimitCurrency: (index + 1) * 100,
+    exchangeRateToLimitCurrency: 1,
+    categoryId: dataset.categories[0]!.id,
+    accountImpactAtCreation: false,
+    occurredAt: "2020-01-10",
+  }));
   dataset.creditCardPayments = [];
   dataset.creditCardPaymentAllocations = [];
 });
@@ -106,8 +106,8 @@ async function detail(query = "") {
 
 test("purchase and payment history use Uruguay's local day and preserve calendar dates", async () => {
   vi.stubEnv("TZ", "America/Montevideo");
-  dataset.creditCardRecords[0].occurredAt = "2026-11-13T02:38:00Z";
-  dataset.creditCardRecords[1].occurredAt = "2026-11-13";
+  dataset.creditCardRecords[0]!.occurredAt = "2026-11-13T02:38:00Z";
+  dataset.creditCardRecords[1]!.occurredAt = "2026-11-13";
   dataset.creditCardPayments = [
     {
       id: "night-payment",
@@ -129,8 +129,8 @@ test("purchase and payment history use Uruguay's local day and preserve calendar
 test("Cards distinguishes the open cycle from actual closed statement debt", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-11-13T15:00:00Z"));
-  dataset.creditCards[0].closingDay = 3;
-  dataset.creditCards[0].dueDay = 12;
+  dataset.creditCards[0]!.closingDay = 3;
+  dataset.creditCards[0]!.dueDay = 12;
   dataset.creditCardStatements = [];
   dataset.creditCardRecords = [];
   await act(async () => {
@@ -168,7 +168,7 @@ test("Cards distinguishes the open cycle from actual closed statement debt", asy
         currency: "USD",
         amountInLimitCurrency: 100,
         exchangeRateToLimitCurrency: 1,
-        categoryId: dataset.categories[0].id,
+        categoryId: dataset.categories[0]!.id,
         accountImpactAtCreation: false,
         occurredAt: "2026-10-20",
       },
@@ -193,34 +193,24 @@ test.each(["2026-11-13T02:38:00.123Z", "2026-11-13"])(
   "editing a movement preserves an unchanged original date: %s",
   async (occurredAt) => {
     vi.stubEnv("TZ", "America/Montevideo");
-    dataset.creditCardRecords = [
-      { ...dataset.creditCardRecords[0], occurredAt },
-    ];
+    dataset.creditCardRecords = [{ ...dataset.creditCardRecords[0]!, occurredAt }];
     dataset.creditCardStatements = [];
     await detail();
-    await act(async () =>
-      tree!.root.findByProps({ title: "Edit" }).props.onClick(),
-    );
+    await act(async () => tree!.root.findByProps({ title: "Edit" }).props.onClick());
     expect(tree!.root.findByProps({ type: "date" }).props.value).toBe(
       occurredAt.includes("T") ? "2026-11-12" : "2026-11-13",
     );
-    await act(async () =>
-      tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-    );
-    expect(updateMovement.mock.calls[0][2].occurredAt).toBe(occurredAt);
+    await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+    expect(updateMovement.mock.calls[0]![2].occurredAt).toBe(occurredAt);
   },
 );
 test("detail defaults to the oldest actual debt and honors the exact statement query", async () => {
   await detail();
-  expect(
-    tree!.root.findByProps({ "aria-label": "Select statement" }).props.value,
-  ).toBe("oldest");
+  expect(tree!.root.findByProps({ "aria-label": "Select statement" }).props.value).toBe("oldest");
   await act(async () => tree!.unmount());
   tree = undefined;
   await detail("?statementId=later");
-  expect(
-    tree!.root.findByProps({ "aria-label": "Select statement" }).props.value,
-  ).toBe("later");
+  expect(tree!.root.findByProps({ "aria-label": "Select statement" }).props.value).toBe("later");
 });
 test("changing a statement updates the query selection and clears the previous payment amount", async () => {
   await detail("?statementId=later");
@@ -231,13 +221,9 @@ test("changing a statement updates the query selection and clears the previous p
   const bank = tree!.root
     .findAllByType("select")
     .find((select) =>
-      select
-        .findAllByType("option")
-        .some((option) => option.children.includes("External payment")),
+      select.findAllByType("option").some((option) => option.children.includes("External payment")),
     )!;
-  await act(async () =>
-    bank.props.onChange({ target: { value: dataset.accounts[0].id } }),
-  );
+  await act(async () => bank.props.onChange({ target: { value: dataset.accounts[0]!.id } }));
   await act(async () =>
     tree!.root
       .findByProps({ placeholder: "Amount debited" })
@@ -248,26 +234,18 @@ test("changing a statement updates the query selection and clears the previous p
       .findByProps({ "aria-label": "Select statement" })
       .props.onChange({ target: { value: "oldest" } }),
   );
+  expect(tree!.root.findByProps({ "aria-label": "Select statement" }).props.value).toBe("oldest");
   expect(
-    tree!.root.findByProps({ "aria-label": "Select statement" }).props.value,
-  ).toBe("oldest");
-  expect(
-    tree!.root
-      .findAllByType("input")
-      .find((input) => input.props.placeholder === "Amount in USD")!.props
-      .value,
+    tree!.root.findAllByType("input").find((input) => input.props.placeholder === "Amount in USD")!
+      .props.value,
   ).toBe("");
-  expect(
-    tree!.root.findByProps({ placeholder: "Amount debited" }).props.value,
-  ).toBe("");
+  expect(tree!.root.findByProps({ placeholder: "Amount debited" }).props.value).toBe("");
   await act(async () =>
     tree!.root
       .findByProps({ placeholder: "Amount in USD" })
       .props.onChange({ target: { value: "10" } }),
   );
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(payment).not.toHaveBeenCalled();
 });
 test("limit alert is absent below eighty and visible at eighty and one hundred", async () => {
@@ -275,13 +253,9 @@ test("limit alert is absent below eighty and visible at eighty and one hundred",
     tree = create(<LimitUsageAlert utilizationPercent={79.99} />);
   });
   expect(tree!.toJSON()).toBeNull();
-  await act(async () =>
-    tree!.update(<LimitUsageAlert utilizationPercent={80} />),
-  );
+  await act(async () => tree!.update(<LimitUsageAlert utilizationPercent={80} />));
   expect(JSON.stringify(tree!.toJSON())).toContain("Approaching credit limit");
-  await act(async () =>
-    tree!.update(<LimitUsageAlert utilizationPercent={100} />),
-  );
+  await act(async () => tree!.update(<LimitUsageAlert utilizationPercent={100} />));
   expect(JSON.stringify(tree!.toJSON())).toContain("Credit limit reached");
 });
 
@@ -294,12 +268,10 @@ test("paying from a statement link submits the exact selected statement", async 
       .find((button) => button.children.includes("Full"))!
       .props.onClick(),
   );
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(payment).toHaveBeenCalledTimes(1);
-  expect(payment.mock.calls[0].slice(0, 2)).toEqual(["card", "later"]);
-  expect(payment.mock.calls[0][2]).toMatchObject({
+  expect(payment.mock.calls[0]!.slice(0, 2)).toEqual(["card", "later"]);
+  expect(payment.mock.calls[0]![2]).toMatchObject({
     amount: 100,
     currency: "USD",
     amountInLimitCurrency: 100,
@@ -319,9 +291,7 @@ test("a settled statement link remains inspectable without a payment form", asyn
     },
   ];
   await detail("?statementId=later");
-  expect(
-    tree!.root.findByProps({ "aria-label": "Select statement" }).props.value,
-  ).toBe("later");
+  expect(tree!.root.findByProps({ "aria-label": "Select statement" }).props.value).toBe("later");
   expect(tree!.root.findAllByType("form")).toHaveLength(0);
   expect(JSON.stringify(tree!.toJSON())).toContain("Settled");
 });

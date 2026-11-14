@@ -15,6 +15,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
 import type { MerchantCorrection } from "../../shared/types.js";
 
 export const accountTypeEnum = pgEnum("account_type", [
@@ -27,11 +28,7 @@ export const accountTypeEnum = pgEnum("account_type", [
   "custom",
 ]);
 
-export const recordTypeEnum = pgEnum("record_type", [
-  "expense",
-  "income",
-  "transfer",
-]);
+export const recordTypeEnum = pgEnum("record_type", ["expense", "income", "transfer"]);
 
 export const paymentTypeEnum = pgEnum("payment_type", [
   "cash",
@@ -48,18 +45,9 @@ export const paymentStatusEnum = pgEnum("payment_status", [
   "cancelled",
 ]);
 
-export const goalStatusEnum = pgEnum("goal_status", [
-  "active",
-  "completed",
-  "paused",
-  "cancelled",
-]);
+export const goalStatusEnum = pgEnum("goal_status", ["active", "completed", "paused", "cancelled"]);
 
-export const debtStatusEnum = pgEnum("debt_status", [
-  "active",
-  "paid",
-  "paused",
-]);
+export const debtStatusEnum = pgEnum("debt_status", ["active", "paid", "paused"]);
 
 export const accounts = pgTable("accounts", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -75,12 +63,8 @@ export const accounts = pgTable("accounts", {
   isVisible: boolean("is_visible").notNull().default(true),
   isActive: boolean("is_active").notNull().default(true),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
@@ -91,35 +75,41 @@ export const categories = pgTable("categories", {
   color: text("color").notNull(),
   icon: text("icon").notNull(),
   systemKey: text("system_key").unique(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
-export const recordTemplates = pgTable("record_templates", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  type: recordTypeEnum("type").notNull(),
-  amount: numeric("amount").notNull(),
-  currency: text("currency").notNull(),
-  accountId: uuid("account_id").references(() => accounts.id),
-  creditCardId: uuid("credit_card_id").references(() => creditCards.id),
-  destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
-  categoryId: uuid("category_id").references(() => categories.id),
-  tagId: uuid("tag_id").references(() => tags.id,{onDelete:"set null"}),
-  counterpartyName: text("counterparty_name"),
-  note: text("note"),
-  paymentType: paymentTypeEnum("payment_type").notNull(),
-}, (table) => [
-  uniqueIndex("record_templates_name_idx").on(sql`lower(btrim(${table.name}))`),
-  check("record_templates_name_check", sql`length(btrim(${table.name})) BETWEEN 1 AND 80`),
-  check("record_templates_amount_check", sql`${table.amount} > 0 AND ${table.amount} NOT IN ('Infinity'::numeric,'NaN'::numeric)`),
-  check("record_templates_currency_check", sql`${table.currency} IN ('UYU','USD','EUR','BRL','ARS')`),
-]);
+export const recordTemplates = pgTable(
+  "record_templates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    type: recordTypeEnum("type").notNull(),
+    amount: numeric("amount").notNull(),
+    currency: text("currency").notNull(),
+    accountId: uuid("account_id").references(() => accounts.id),
+    creditCardId: uuid("credit_card_id").references(() => creditCards.id),
+    destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
+    categoryId: uuid("category_id").references(() => categories.id),
+    tagId: uuid("tag_id").references(() => tags.id, { onDelete: "set null" }),
+    counterpartyName: text("counterparty_name"),
+    note: text("note"),
+    paymentType: paymentTypeEnum("payment_type").notNull(),
+  },
+  (table) => [
+    uniqueIndex("record_templates_name_idx").on(sql`lower(btrim(${table.name}))`),
+    check("record_templates_name_check", sql`length(btrim(${table.name})) BETWEEN 1 AND 80`),
+    check(
+      "record_templates_amount_check",
+      sql`${table.amount} > 0 AND ${table.amount} NOT IN ('Infinity'::numeric,'NaN'::numeric)`,
+    ),
+    check(
+      "record_templates_currency_check",
+      sql`${table.currency} IN ('UYU','USD','EUR','BRL','ARS')`,
+    ),
+  ],
+);
 
 export const merchants = pgTable(
   "merchants",
@@ -130,18 +120,19 @@ export const merchants = pgTable(
       .notNull()
       .references(() => categories.id),
     priority: integer("priority").notNull().default(0),
-    matchMode: text("match_mode", { enum: ["alias", "exact"] }).notNull().default("alias"),
+    matchMode: text("match_mode", { enum: ["alias", "exact"] })
+      .notNull()
+      .default("alias"),
     isActive: boolean("is_active").notNull().default(true),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     nameIdx: uniqueIndex("merchants_name_idx").on(table.name),
-    matchModeCheck: check("merchants_match_mode_check", sql`${table.matchMode} IN ('alias','exact')`),
+    matchModeCheck: check(
+      "merchants_match_mode_check",
+      sql`${table.matchMode} IN ('alias','exact')`,
+    ),
   }),
 );
 
@@ -154,14 +145,10 @@ export const merchantAliases = pgTable(
       .references(() => merchants.id, { onDelete: "cascade" }),
     alias: text("alias").notNull(),
     normalizedAlias: text("normalized_alias").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    normalizedIdx: uniqueIndex("merchant_aliases_normalized_idx").on(
-      table.normalizedAlias,
-    ),
+    normalizedIdx: uniqueIndex("merchant_aliases_normalized_idx").on(table.normalizedAlias),
     merchantIdx: index("merchant_aliases_merchant_idx").on(table.merchantId),
   }),
 );
@@ -171,12 +158,8 @@ export const tags = pgTable("tags", {
   name: text("name").notNull().unique(),
   color: text("color").notNull(),
   isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const creditCards = pgTable("credit_cards", {
@@ -192,12 +175,8 @@ export const creditCards = pgTable("credit_cards", {
   icon: text("icon").notNull(),
   isActive: boolean("is_active").notNull().default(true),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
@@ -212,9 +191,7 @@ export const records = pgTable(
     accountAmount: numeric("account_amount", { precision: 14, scale: 2 }),
     destinationAmount: numeric("destination_amount", { precision: 14, scale: 2 }),
     creditCardId: uuid("credit_card_id").references(() => creditCards.id),
-    destinationAccountId: uuid("destination_account_id").references(
-      () => accounts.id,
-    ),
+    destinationAccountId: uuid("destination_account_id").references(() => accounts.id),
     categoryId: uuid("category_id").references(() => categories.id),
     counterpartyName: text("counterparty_name"),
     paymentType: paymentTypeEnum("payment_type").notNull(),
@@ -242,12 +219,8 @@ export const records = pgTable(
     debtId: uuid("debt_id"),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => ({
@@ -269,9 +242,7 @@ export const creditCardPayments = pgTable(
     creditCardId: uuid("credit_card_id")
       .notNull()
       .references(() => creditCards.id),
-    statementId: uuid("statement_id").references(
-      (): AnyPgColumn => creditCardStatements.id,
-    ),
+    statementId: uuid("statement_id").references((): AnyPgColumn => creditCardStatements.id),
     idempotencyKey: text("idempotency_key"),
     requestHash: text("request_hash"),
     amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
@@ -284,17 +255,13 @@ export const creditCardPayments = pgTable(
     accountAmount: numeric("account_amount", { precision: 14, scale: 2 }),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     note: text("note"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     idempotencyIdx: uniqueIndex("credit_card_payments_idempotency_idx").on(table.idempotencyKey),
     cardIdx: index("credit_card_payments_card_idx").on(table.creditCardId),
     accountIdx: index("credit_card_payments_account_idx").on(table.accountId),
-    occurredAtIdx: index("credit_card_payments_occurred_at_idx").on(
-      table.occurredAt,
-    ),
+    occurredAtIdx: index("credit_card_payments_occurred_at_idx").on(table.occurredAt),
   }),
 );
 
@@ -311,12 +278,8 @@ export const creditCardStatements = pgTable(
     status: text("status").notNull().default("pending"),
     closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
     paidAt: timestamp("paid_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     cardCycleIdx: uniqueIndex("credit_card_statements_card_cycle_idx").on(
@@ -359,26 +322,16 @@ export const creditCardRecords = pgTable(
     note: text("note"),
     accountId: uuid("account_id").references(() => accounts.id),
     accountAmount: numeric("account_amount", { precision: 14, scale: 2 }),
-    accountImpactAtCreation: boolean("account_impact_at_creation")
-      .notNull()
-      .default(false),
+    accountImpactAtCreation: boolean("account_impact_at_creation").notNull().default(false),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
   (table) => ({
     cardIdx: index("credit_card_records_card_idx").on(table.creditCardId),
-    statementIdx: index("credit_card_records_statement_idx").on(
-      table.statementId,
-    ),
-    occurredAtIdx: index("credit_card_records_occurred_at_idx").on(
-      table.occurredAt,
-    ),
+    statementIdx: index("credit_card_records_statement_idx").on(table.statementId),
+    occurredAtIdx: index("credit_card_records_occurred_at_idx").on(table.occurredAt),
   }),
 );
 
@@ -399,12 +352,8 @@ export const creditCardPaymentAllocations = pgTable(
     }).notNull(),
   },
   (table) => ({
-    paymentIdx: index("credit_card_payment_allocations_payment_idx").on(
-      table.paymentId,
-    ),
-    recordIdx: index("credit_card_payment_allocations_record_idx").on(
-      table.creditCardRecordId,
-    ),
+    paymentIdx: index("credit_card_payment_allocations_payment_idx").on(table.paymentId),
+    recordIdx: index("credit_card_payment_allocations_record_idx").on(table.creditCardRecordId),
   }),
 );
 
@@ -438,16 +387,10 @@ export const goals = pgTable("goals", {
   autoCaptureEnabled: boolean("auto_capture_enabled").notNull().default(false),
   autoCaptureStart: date("auto_capture_start"),
   autoCaptureEnd: date("auto_capture_end"),
-  autoReservationAccountId: uuid("auto_reservation_account_id").references(
-    () => accounts.id,
-  ),
+  autoReservationAccountId: uuid("auto_reservation_account_id").references(() => accounts.id),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
@@ -464,15 +407,10 @@ export const recordGoals = pgTable(
     useReserved: boolean("use_reserved").notNull().default(true),
     reserveIncome: boolean("reserve_income").notNull().default(true),
     allocatedAmount: numeric("allocated_amount", { precision: 14, scale: 2 }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    recordGoalIdx: uniqueIndex("record_goals_record_goal_idx").on(
-      table.recordId,
-      table.goalId,
-    ),
+    recordGoalIdx: uniqueIndex("record_goals_record_goal_idx").on(table.recordId, table.goalId),
     goalIdx: index("record_goals_goal_idx").on(table.goalId),
   }),
 );
@@ -496,9 +434,7 @@ export const goalReservationMovements = pgTable(
     ),
     idempotencyKey: text("idempotency_key"),
     note: text("note"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     goalIdx: index("goal_reservation_movements_goal_idx").on(table.goalId),
@@ -536,9 +472,7 @@ export const goalReservations = pgTable("goal_reservations", {
     .references(() => accounts.id),
   amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
   currency: text("currency").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   note: text("note"),
 });
 
@@ -554,12 +488,8 @@ export const budgets = pgTable("budgets", {
   goalId: uuid("goal_id").references(() => goals.id),
   color: text("color").notNull(),
   isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const settings = pgTable("settings", {
@@ -567,27 +497,17 @@ export const settings = pgTable("settings", {
   primaryCurrency: text("primary_currency").notNull().default("UYU"),
   primaryAccountId: uuid("primary_account_id").references(() => accounts.id),
   theme: text("theme").notNull().default("light"),
-  defaultDashboardPreset: text("default_dashboard_preset")
-    .notNull()
-    .default("general"),
+  defaultDashboardPreset: text("default_dashboard_preset").notNull().default("general"),
   locale: text("locale").notNull().default("es-UY"),
   includeHiddenAccountsInReports: boolean("include_hidden_accounts_in_reports")
     .notNull()
     .default(false),
   defaultAccountId: uuid("default_account_id").references(() => accounts.id),
-  defaultPaymentType: paymentTypeEnum("default_payment_type")
-    .notNull()
-    .default("debit"),
-  defaultCreditCardId: uuid("default_credit_card_id").references(
-    () => creditCards.id,
-  ),
-  defaultPaymentStatus: paymentStatusEnum("default_payment_status")
-    .notNull()
-    .default("cleared"),
+  defaultPaymentType: paymentTypeEnum("default_payment_type").notNull().default("debit"),
+  defaultCreditCardId: uuid("default_credit_card_id").references(() => creditCards.id),
+  defaultPaymentStatus: paymentStatusEnum("default_payment_status").notNull().default("cleared"),
   reviewSeenThrough: timestamp("review_seen_through", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const exchangeRates = pgTable(
@@ -624,12 +544,8 @@ export const ingestionEvents = pgTable(
     currency: text("currency"),
     occurredAt: timestamp("occurred_at", { withTimezone: true }),
     recordId: uuid("record_id").references(() => records.id),
-    creditCardRecordId: uuid("credit_card_record_id").references(
-      () => creditCardRecords.id,
-    ),
-    duplicateOfId: uuid("duplicate_of_id").references(
-      (): AnyPgColumn => ingestionEvents.id,
-    ),
+    creditCardRecordId: uuid("credit_card_record_id").references(() => creditCardRecords.id),
+    duplicateOfId: uuid("duplicate_of_id").references((): AnyPgColumn => ingestionEvents.id),
     emailMessageId: text("email_message_id"),
     emailThreadId: text("email_thread_id"),
     emailSubject: text("email_subject"),
@@ -637,17 +553,11 @@ export const ingestionEvents = pgTable(
     sanitizedPayload: jsonb("sanitized_payload"),
     metadataExpiresAt: timestamp("metadata_expires_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    idempotencyIdx: uniqueIndex("ingestion_events_idempotency_idx").on(
-      table.idempotencyKey,
-    ),
+    idempotencyIdx: uniqueIndex("ingestion_events_idempotency_idx").on(table.idempotencyKey),
     fingerprintIdx: index("ingestion_events_fingerprint_idx").on(
       table.fingerprint,
       table.occurredAt,
@@ -659,9 +569,7 @@ export const ingestionEvents = pgTable(
 export const authAttempts = pgTable("auth_attempts", {
   key: text("key").primaryKey(),
   failedCount: integer("failed_count").notNull().default(0),
-  windowStartedAt: timestamp("window_started_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
   blockedUntil: timestamp("blocked_until", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -680,12 +588,8 @@ export const investments = pgTable("investments", {
   isVisible: boolean("is_visible").notNull().default(true),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const debts = pgTable(
@@ -697,9 +601,7 @@ export const debts = pgTable(
     originalAmount: numeric("original_amount", { precision: 14, scale: 2 }),
     pendingAmount: numeric("pending_amount", { precision: 14, scale: 2 }),
     currency: text("currency").notNull(),
-    counterpartyName: text("counterparty_name")
-      .notNull()
-      .default("Counterparty"),
+    counterpartyName: text("counterparty_name").notNull().default("Counterparty"),
     accountId: uuid("account_id").references(() => accounts.id),
     categoryId: uuid("category_id")
       .notNull()
@@ -735,12 +637,8 @@ export const recurringDebts = pgTable("recurring_debts", {
   isActive: boolean("is_active").notNull().default(true),
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
   note: text("note"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const installmentPlans = pgTable("installment_plans", {

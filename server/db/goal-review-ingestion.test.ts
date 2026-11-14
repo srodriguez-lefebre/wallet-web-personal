@@ -1,15 +1,14 @@
 import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
 import * as classification from "../ingestion/openai-category.js";
 import { calculateCreditCardSummary } from "../../shared/calculations.js";
+import { createGoal, createGoalReservation, getWalletDataset } from "./wallet-repository.js";
+
 import type { MailIngestionInput } from "../../shared/schemas.js";
-import {
-  createGoal,
-  createGoalReservation,
-  getWalletDataset,
-} from "./wallet-repository.js";
 
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 beforeAll(async () => {
@@ -32,9 +31,7 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     "insert into credit_cards(id,name,issuer,last_four,credit_limit,limit_currency,closing_day,due_day,color,icon,is_active) values ($1,'Known card','Test','1234',1000,'UYU',20,5,'blue','bank',true)",
     [cardId],
   );
-  await fixture.pool.query(
-    "insert into settings(primary_currency) values ('UYU')",
-  );
+  await fixture.pool.query("insert into settings(primary_currency) values ('UYU')");
   const goal = await createGoal({
     name: "Automatic goal",
     targetAmount: 1000,
@@ -85,24 +82,22 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
   };
   const result = await processMailIngestion(event);
   expect(result.status).toBe("needs_review");
-  expect(
-    result.warnings?.some((warning) => warning.includes("Automatic goal")),
-  ).toBe(true);
+  expect(result.warnings?.some((warning) => warning.includes("Automatic goal"))).toBe(true);
   await processMailIngestion(event);
   const data = await getWalletDataset();
   expect(data.records).toHaveLength(1);
-  expect(data.records[0]).toMatchObject({
+  expect(data.records[0]!).toMatchObject({
     paymentStatus: "needs_review",
     creditCardId: cardId,
     goalIds: [],
   });
-  expect(data.records[0].importHistory?.some((entry) => entry.includes("Automatic goal"))).toBe(true);
-  expect(data.creditCardRecords).toHaveLength(1);
-  expect(calculateCreditCardSummary(data, data.creditCards[0]).usedLimit).toBe(
-    50,
+  expect(data.records[0]!.importHistory?.some((entry) => entry.includes("Automatic goal"))).toBe(
+    true,
   );
-  expect(data.goalReservations[0].amount).toBe(100);
-  expect(
-    (await fixture.pool.query("select status from ingestion_events")).rows,
-  ).toEqual([{ status: "completed" }]);
+  expect(data.creditCardRecords).toHaveLength(1);
+  expect(calculateCreditCardSummary(data, data.creditCards[0]!).usedLimit).toBe(50);
+  expect(data.goalReservations[0]!.amount).toBe(100);
+  expect((await fixture.pool.query("select status from ingestion_events")).rows).toEqual([
+    { status: "completed" },
+  ]);
 });

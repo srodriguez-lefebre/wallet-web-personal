@@ -1,11 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { cardLimitWarning } from "@/lib/cards-presentation";
 
-export function LimitUsageAlert({
-  utilizationPercent,
-}: {
-  utilizationPercent: number;
-}) {
+export function LimitUsageAlert({ utilizationPercent }: { utilizationPercent: number }) {
   const warning = cardLimitWarning(utilizationPercent);
   return warning ? (
     <p className="text-sm">

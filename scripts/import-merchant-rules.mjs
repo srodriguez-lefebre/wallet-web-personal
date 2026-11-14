@@ -50,9 +50,7 @@ function normalize(value) {
 
 const payload = JSON.parse(await fs.readFile(source, "utf8"));
 if (!Array.isArray(payload.reglas) || payload.reglas.length !== 254) {
-  throw new Error(
-    `Expected 254 merchant rules, received ${payload.reglas?.length ?? 0}`,
-  );
+  throw new Error(`Expected 254 merchant rules, received ${payload.reglas?.length ?? 0}`);
 }
 
 const sql = neon(connectionString);
@@ -60,9 +58,7 @@ const categoryRows = await sql.query("select id, name from categories");
 const categoryIdByName = new Map(categoryRows.map((row) => [row.name, row.id]));
 for (const [sourceCategory, targetCategory] of Object.entries(CATEGORY_MAP)) {
   if (!categoryIdByName.has(targetCategory))
-    throw new Error(
-      `Missing category mapping target ${sourceCategory} -> ${targetCategory}`,
-    );
+    throw new Error(`Missing category mapping target ${sourceCategory} -> ${targetCategory}`);
 }
 
 const usedTerms = new Map();
@@ -72,15 +68,11 @@ const prepared = payload.reglas.map((rule, priority) => {
   for (const rawTerm of rawTerms) {
     const normalized = normalize(rawTerm);
     if (!normalized) continue;
-    if (normalized === "PUMA" && rule.categoria === "Estacion de servicio")
-      continue;
-    if (normalized === "PATENTE" && normalize(rule.nombre) !== "SUCIVE")
-      continue;
+    if (normalized === "PUMA" && rule.categoria === "Estacion de servicio") continue;
+    if (normalized === "PATENTE" && normalize(rule.nombre) !== "SUCIVE") continue;
     const owner = usedTerms.get(normalized);
     if (owner && owner !== rule.nombre)
-      throw new Error(
-        `Unresolved alias conflict: ${normalized} (${owner} / ${rule.nombre})`,
-      );
+      throw new Error(`Unresolved alias conflict: ${normalized} (${owner} / ${rule.nombre})`);
     if (!owner) {
       usedTerms.set(normalized, rule.nombre);
       terms.push({ alias: rawTerm, normalized });

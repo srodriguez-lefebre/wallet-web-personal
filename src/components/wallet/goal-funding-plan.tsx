@@ -1,7 +1,9 @@
-import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@shared/calculations";
 import { calculateGoalFundingPlan } from "@shared/planning";
+
 import type { GoalProgress } from "@shared/types";
+
+import { Badge } from "@/components/ui/badge";
 
 const messages = {
   funded: "Target funded",
@@ -47,11 +49,7 @@ export function GoalFundingPlan({ progress }: { progress: GoalProgress }) {
       ) : (
         <Badge
           variant={
-            plan.status === "funded"
-              ? "success"
-              : plan.status === "overdue"
-                ? "danger"
-                : "muted"
+            plan.status === "funded" ? "success" : plan.status === "overdue" ? "danger" : "muted"
           }
         >
           {messages[plan.status]}

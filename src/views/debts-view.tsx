@@ -1,5 +1,4 @@
 import { FormEvent, useMemo, useState, useRef } from "react";
-import { localDateInput,dateInputToIso } from "@/lib/date-input";
 import {
   Banknote,
   CheckCircle2,
@@ -12,6 +11,14 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
+import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
+import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
+
+import type { CurrencyCode, Debt, DebtDirection, DebtStatus, RecurringDebt } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
+import { localDateInput, dateInputToIso } from "@/lib/date-input";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -30,20 +37,6 @@ import { CategoryPicker } from "@/components/wallet/category-picker";
 import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import {
-  calculateVisibleDebtSummary,
-  formatMoney,
-  isOpenDebt,
-} from "@shared/calculations";
-import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
-import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
-import type {
-  CurrencyCode,
-  Debt,
-  DebtDirection,
-  DebtStatus,
-  RecurringDebt,
-} from "@shared/types";
 
 type DebtTab = "open" | "recurring" | "closed";
 
@@ -117,10 +110,8 @@ function debtToForm(debt: Debt): DebtFormState {
   return {
     name: debt.name,
     direction: debt.direction,
-    originalAmount:
-      debt.originalAmount === undefined ? "" : String(debt.originalAmount),
-    pendingAmount:
-      debt.pendingAmount === undefined ? "" : String(debt.pendingAmount),
+    originalAmount: debt.originalAmount === undefined ? "" : String(debt.originalAmount),
+    pendingAmount: debt.pendingAmount === undefined ? "" : String(debt.pendingAmount),
     currency: debt.currency,
     counterpartyName: debt.counterpartyName,
     accountId: debt.accountId ?? "",
@@ -149,14 +140,11 @@ function defaultRecurringForm(categoryId = "", accountId = ""): RecurringDebtFor
   };
 }
 
-function recurringDebtToForm(
-  recurringDebt: RecurringDebt,
-): RecurringDebtFormState {
+function recurringDebtToForm(recurringDebt: RecurringDebt): RecurringDebtFormState {
   return {
     name: recurringDebt.name,
     direction: recurringDebt.direction,
-    amount:
-      recurringDebt.amount === undefined ? "" : String(recurringDebt.amount),
+    amount: recurringDebt.amount === undefined ? "" : String(recurringDebt.amount),
     currency: recurringDebt.currency,
     counterpartyName: recurringDebt.counterpartyName,
     accountId: recurringDebt.accountId ?? "",
@@ -192,15 +180,16 @@ function dueLabel(debt: Debt) {
   return `Due in ${state.days}d`;
 }
 
-function defaultAccountId(dataset: { accounts: Array<{ id: string; isActive: boolean; isVisible: boolean }>; settings: { primaryAccountId?: string } }) {
+function defaultAccountId(dataset: {
+  accounts: Array<{ id: string; isActive: boolean; isVisible: boolean }>;
+  settings: { primaryAccountId?: string };
+}) {
   const visibleActiveAccounts = dataset.accounts.filter(
     (account) => account.isActive && account.isVisible,
   );
 
   return (
-    visibleActiveAccounts.find(
-      (account) => account.id === dataset.settings.primaryAccountId,
-    )?.id ??
+    visibleActiveAccounts.find((account) => account.id === dataset.settings.primaryAccountId)?.id ??
     visibleActiveAccounts[0]?.id ??
     dataset.accounts[0]?.id ??
     ""
@@ -264,12 +253,11 @@ export function DebtsView() {
   const [debtForm, setDebtForm] = useState<DebtFormState>(() =>
     defaultDebtForm("", defaultAccountId(dataset)),
   );
-  const [recurringForm, setRecurringForm] =
-    useState<RecurringDebtFormState>(() =>
-      defaultRecurringForm("", defaultAccountId(dataset)),
-    );
+  const [recurringForm, setRecurringForm] = useState<RecurringDebtFormState>(() =>
+    defaultRecurringForm("", defaultAccountId(dataset)),
+  );
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentAccountAmount,setPaymentAccountAmount] = useState("");
+  const [paymentAccountAmount, setPaymentAccountAmount] = useState("");
   const paymentRequests = useRef(new Map<string, string>());
   function paymentKey(fingerprint: string) {
     let key = paymentRequests.current.get(fingerprint);
@@ -285,17 +273,12 @@ export function DebtsView() {
   const [saveAccountToDebt, setSaveAccountToDebt] = useState(true);
   const { toast, runAction } = useActionToast();
   const [dueWindow, setDueWindow] = useState<DebtDueWindow>("all");
-  const openDebts = useMemo(
-    () => selectDebtsByDueDate(dataset.debts),
-    [dataset.debts],
-  );
+  const openDebts = useMemo(() => selectDebtsByDueDate(dataset.debts), [dataset.debts]);
   const filteredOpenDebts = selectDebtsByDueDate(openDebts, { window: dueWindow });
   const closedDebts = dataset.debts.filter((debt) => !isOpenDebt(debt));
   const summary = calculateVisibleDebtSummary(dataset);
   const hasKnownSummary = summary.openCount === 0 || summary.amountPendingCount < summary.openCount;
-  const activePaymentDebt = dataset.debts.find(
-    (debt) => debt.id === paymentDebtId,
-  );
+  const activePaymentDebt = dataset.debts.find((debt) => debt.id === paymentDebtId);
 
   function openCreateDebt() {
     setEditingDebtId("");
@@ -329,9 +312,7 @@ export function DebtsView() {
 
   function openPayment(debt: Debt) {
     setPaymentDebtId(debt.id);
-    setPaymentAmount(
-      debt.pendingAmount === undefined ? "" : String(debt.pendingAmount),
-    );
+    setPaymentAmount(debt.pendingAmount === undefined ? "" : String(debt.pendingAmount));
     setPaymentAccountId(debt.accountId ?? defaultAccountId(dataset));
     setPaymentDate(todayDate());
     setPaymentAccountAmount("");
@@ -349,22 +330,14 @@ export function DebtsView() {
       !debtForm.originalAmount ||
       !debtForm.startedAt
     ) {
-      setFormError(
-        "Name, counterparty, original amount, category, and start date are required.",
-      );
+      setFormError("Name, counterparty, original amount, category, and start date are required.");
       return null;
     }
 
     const originalAmount = Number(debtForm.originalAmount);
-    const pendingAmount = debtForm.pendingAmount
-      ? Number(debtForm.pendingAmount)
-      : originalAmount;
+    const pendingAmount = debtForm.pendingAmount ? Number(debtForm.pendingAmount) : originalAmount;
 
-    if (
-      originalAmount <= 0 ||
-      pendingAmount < 0 ||
-      pendingAmount > originalAmount
-    ) {
+    if (originalAmount <= 0 || pendingAmount < 0 || pendingAmount > originalAmount) {
       setFormError("Original amount must be positive and pending cannot exceed it.");
       return null;
     }
@@ -456,14 +429,11 @@ export function DebtsView() {
     if (!payload) return;
 
     if (editingRecurringDebtId) {
-      await runAction(
-        () => updateRecurringDebt(editingRecurringDebtId, payload),
-        {
-          processing: "Saving recurring debt...",
-          success: "Recurring debt saved",
-          error: "Could not save recurring debt",
-        },
-      );
+      await runAction(() => updateRecurringDebt(editingRecurringDebtId, payload), {
+        processing: "Saving recurring debt...",
+        success: "Recurring debt saved",
+        error: "Could not save recurring debt",
+      });
     } else {
       await runAction(() => addRecurringDebt(payload), {
         processing: "Creating recurring debt...",
@@ -491,7 +461,10 @@ export function DebtsView() {
       return;
     }
 
-    const fingerprint = JSON.stringify([activePaymentDebt.id, [amount, paymentAccountAmount, paymentAccountId, paymentDate, paymentNote, saveAccountToDebt]]);
+    const fingerprint = JSON.stringify([
+      activePaymentDebt.id,
+      [amount, paymentAccountAmount, paymentAccountId, paymentDate, paymentNote, saveAccountToDebt],
+    ]);
     const succeeded = await runAction(
       async () => {
         await recordDebtPayment(activePaymentDebt.id, {
@@ -507,13 +480,8 @@ export function DebtsView() {
       },
       {
         processing:
-          activePaymentDebt.direction === "receivable"
-            ? "Collecting debt..."
-            : "Paying debt...",
-        success:
-          activePaymentDebt.direction === "receivable"
-            ? "Debt collected"
-            : "Debt paid",
+          activePaymentDebt.direction === "receivable" ? "Collecting debt..." : "Paying debt...",
+        success: activePaymentDebt.direction === "receivable" ? "Debt collected" : "Debt paid",
         error: "Could not save payment",
       },
     );
@@ -526,7 +494,10 @@ export function DebtsView() {
   async function settleDebt(debt: Debt) {
     if (!debt.accountId || debt.pendingAmount === undefined) return;
 
-    const fingerprint = JSON.stringify([debt.id, [debt.pendingAmount, debt.accountId, todayDate(), "settle"]]);
+    const fingerprint = JSON.stringify([
+      debt.id,
+      [debt.pendingAmount, debt.accountId, todayDate(), "settle"],
+    ]);
     const succeeded = await runAction(
       async () => {
         await recordDebtPayment(debt.id, {
@@ -543,12 +514,8 @@ export function DebtsView() {
         return true;
       },
       {
-        processing:
-          debt.direction === "receivable"
-            ? "Receiving debt..."
-            : "Paying debt...",
-        success:
-          debt.direction === "receivable" ? "Debt received" : "Debt paid",
+        processing: debt.direction === "receivable" ? "Receiving debt..." : "Paying debt...",
+        success: debt.direction === "receivable" ? "Debt received" : "Debt paid",
         error: "Could not close debt",
       },
     );
@@ -567,12 +534,8 @@ export function DebtsView() {
     return (
       <div className="space-y-3">
         {debts.map((debt) => {
-          const category = dataset.categories.find(
-            (item) => item.id === debt.categoryId,
-          );
-          const account = dataset.accounts.find(
-            (item) => item.id === debt.accountId,
-          );
+          const category = dataset.categories.find((item) => item.id === debt.categoryId);
+          const account = dataset.accounts.find((item) => item.id === debt.accountId);
           const hasAmount = debt.pendingAmount !== undefined;
 
           return (
@@ -580,16 +543,10 @@ export function DebtsView() {
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge
-                      variant={
-                        debt.direction === "receivable" ? "success" : "danger"
-                      }
-                    >
+                    <Badge variant={debt.direction === "receivable" ? "success" : "danger"}>
                       {debtDirectionLabels[debt.direction]}
                     </Badge>
-                    <Badge variant={dueVariant(debt)}>
-                      {dueLabel(debt)}
-                    </Badge>
+                    <Badge variant={dueVariant(debt)}>{dueLabel(debt)}</Badge>
                     <Badge variant={debt.isVisible ? "info" : "muted"}>
                       {debt.isVisible ? "Home" : "Hidden"}
                     </Badge>
@@ -662,9 +619,7 @@ export function DebtsView() {
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Pending
-                  </p>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Pending</p>
                   <p className="mt-1 font-semibold">
                     {hasAmount
                       ? formatMoney(debt.pendingAmount ?? 0, debt.currency)
@@ -672,9 +627,7 @@ export function DebtsView() {
                   </p>
                 </div>
                 <div className="rounded-md bg-secondary p-3">
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Original
-                  </p>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">Original</p>
                   <p className="mt-1 font-semibold">
                     {debt.originalAmount === undefined
                       ? "Not set"
@@ -686,10 +639,7 @@ export function DebtsView() {
                     Linked records
                   </p>
                   <p className="mt-1 font-semibold">
-                    {
-                      dataset.records.filter((record) => record.debtId === debt.id)
-                        .length
-                    }
+                    {dataset.records.filter((record) => record.debtId === debt.id).length}
                   </p>
                 </div>
               </div>
@@ -699,9 +649,7 @@ export function DebtsView() {
                   value={debtProgress(debt)}
                   className="mt-4"
                   indicatorClassName={
-                    debt.direction === "receivable"
-                      ? "bg-emerald-500"
-                      : "bg-red-500"
+                    debt.direction === "receivable" ? "bg-emerald-500" : "bg-red-500"
                   }
                 />
               ) : null}
@@ -733,29 +681,27 @@ export function DebtsView() {
       <div className="grid gap-3 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">
-              To collect
-            </p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">To collect</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-600">
-              {hasKnownSummary ? formatMoney(summary.toCollect, dataset.settings.primaryCurrency) : "Amount pending"}
+              {hasKnownSummary
+                ? formatMoney(summary.toCollect, dataset.settings.primaryCurrency)
+                : "Amount pending"}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">
-              To pay
-            </p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">To pay</p>
             <p className="mt-2 text-2xl font-semibold text-red-600">
-              {hasKnownSummary ? formatMoney(summary.toPay, dataset.settings.primaryCurrency) : "Amount pending"}
+              {hasKnownSummary
+                ? formatMoney(summary.toPay, dataset.settings.primaryCurrency)
+                : "Amount pending"}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">
-              Net
-            </p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Net</p>
             <p
               className={
                 summary.net >= 0
@@ -763,15 +709,15 @@ export function DebtsView() {
                   : "mt-2 text-2xl font-semibold text-red-600"
               }
             >
-              {hasKnownSummary ? formatMoney(summary.net, dataset.settings.primaryCurrency) : "Amount pending"}
+              {hasKnownSummary
+                ? formatMoney(summary.net, dataset.settings.primaryCurrency)
+                : "Amount pending"}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <p className="text-xs font-semibold uppercase text-muted-foreground">
-              Open
-            </p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Open</p>
             <p className="mt-2 text-2xl font-semibold">
               {summary.openCount}
               <span className="ml-2 text-sm font-normal text-muted-foreground">
@@ -782,7 +728,12 @@ export function DebtsView() {
         </Card>
       </div>
 
-      {summary.amountPendingCount > 0 ? <p className="mt-2 text-xs text-muted-foreground">Totals include known amounts only. {summary.amountPendingCount} debts need an amount or exchange rate.</p> : null}
+      {summary.amountPendingCount > 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Totals include known amounts only. {summary.amountPendingCount} debts need an amount or
+          exchange rate.
+        </p>
+      ) : null}
       <div className="mt-5 flex flex-wrap gap-2 border-b">
         {(
           [
@@ -807,13 +758,31 @@ export function DebtsView() {
       </div>
 
       <div className="mt-5">
-        {tab === "open" ? <>
-          <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter debts by due date">
-            {([["all", "All dates"], ["overdue", "Overdue"], ["next7", "Next 7 days"], ["next30", "Next 30 days"]] as const).map(([value, label]) =>
-              <Button key={value} size="sm" variant={dueWindow === value ? "default" : "outline"} aria-pressed={dueWindow === value} onClick={() => setDueWindow(value)}>{label}</Button>)}
-          </div>
-          {renderDebtList(filteredOpenDebts)}
-        </> : null}
+        {tab === "open" ? (
+          <>
+            <div className="mb-4 flex flex-wrap gap-2" aria-label="Filter debts by due date">
+              {(
+                [
+                  ["all", "All dates"],
+                  ["overdue", "Overdue"],
+                  ["next7", "Next 7 days"],
+                  ["next30", "Next 30 days"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant={dueWindow === value ? "default" : "outline"}
+                  aria-pressed={dueWindow === value}
+                  onClick={() => setDueWindow(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+            {renderDebtList(filteredOpenDebts)}
+          </>
+        ) : null}
         {tab === "closed" ? renderDebtList(closedDebts) : null}
         {tab === "recurring" ? (
           <Card>
@@ -843,9 +812,7 @@ export function DebtsView() {
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge
                             variant={
-                              recurringDebt.direction === "receivable"
-                                ? "success"
-                                : "danger"
+                              recurringDebt.direction === "receivable" ? "success" : "danger"
                             }
                           >
                             {debtDirectionLabels[recurringDebt.direction]}
@@ -853,14 +820,11 @@ export function DebtsView() {
                           <Badge variant={recurringDebt.isActive ? "info" : "muted"}>
                             {recurringDebt.isActive ? "Active" : "Paused"}
                           </Badge>
-                          <Badge variant="muted">
-                            Day {recurringDebt.dayOfMonth}
-                          </Badge>
+                          <Badge variant="muted">Day {recurringDebt.dayOfMonth}</Badge>
                         </div>
                         <p className="mt-3 font-semibold">{recurringDebt.name}</p>
                         <p className="mt-1 text-sm text-muted-foreground">
-                          {recurringDebt.counterpartyName} ·{" "}
-                          {category?.name ?? "Category"} ·{" "}
+                          {recurringDebt.counterpartyName} · {category?.name ?? "Category"} ·{" "}
                           {account?.name ?? "No account"}
                           {recurringDebt.note ? ` · ${recurringDebt.note}` : ""}
                         </p>
@@ -869,10 +833,7 @@ export function DebtsView() {
                         <p className="font-semibold">
                           {recurringDebt.amount === undefined
                             ? "Amount pending"
-                            : formatMoney(
-                                recurringDebt.amount,
-                                recurringDebt.currency,
-                              )}
+                            : formatMoney(recurringDebt.amount, recurringDebt.currency)}
                         </p>
                         <Button
                           variant="outline"
@@ -887,14 +848,11 @@ export function DebtsView() {
                           size="icon"
                           aria-label="Delete recurring debt"
                           onClick={() =>
-                            void runAction(
-                              () => deleteRecurringDebt(recurringDebt.id),
-                              {
-                                processing: "Deleting recurring debt...",
-                                success: "Recurring debt deleted",
-                                error: "Could not delete recurring debt",
-                              },
-                            )
+                            void runAction(() => deleteRecurringDebt(recurringDebt.id), {
+                              processing: "Deleting recurring debt...",
+                              success: "Recurring debt deleted",
+                              error: "Could not delete recurring debt",
+                            })
                           }
                         >
                           <Trash2 className="h-4 w-4" />
@@ -920,15 +878,18 @@ export function DebtsView() {
               Category is required. Account can stay empty until payment.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleDebtSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleDebtSubmit(event));
+            }}
+          >
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span>Name</span>
                 <input
                   value={debtForm.name}
-                  onChange={(event) =>
-                    setDebtForm({ ...debtForm, name: event.target.value })
-                  }
+                  onChange={(event) => setDebtForm({ ...debtForm, name: event.target.value })}
                   className={inputClassName}
                 />
               </label>
@@ -966,9 +927,7 @@ export function DebtsView() {
                   categories={dataset.categories}
                   value={debtForm.categoryId}
                   inputClassName={inputClassName}
-                  onChange={(categoryId) =>
-                    setDebtForm({ ...debtForm, categoryId })
-                  }
+                  onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
                 />
               </div>
               <div className="space-y-1 text-sm md:col-span-2">
@@ -1084,9 +1043,7 @@ export function DebtsView() {
                   <input
                     type="date"
                     value={debtForm.dueAt}
-                    onChange={(event) =>
-                      setDebtForm({ ...debtForm, dueAt: event.target.value })
-                    }
+                    onChange={(event) => setDebtForm({ ...debtForm, dueAt: event.target.value })}
                     className={inputClassName}
                   />
                 </label>
@@ -1107,24 +1064,16 @@ export function DebtsView() {
                   <span>Note</span>
                   <textarea
                     value={debtForm.note}
-                    onChange={(event) =>
-                      setDebtForm({ ...debtForm, note: event.target.value })
-                    }
+                    onChange={(event) => setDebtForm({ ...debtForm, note: event.target.value })}
                     className={textareaClassName}
                   />
                 </label>
               </div>
             ) : null}
 
-            {formError ? (
-              <p className="text-sm text-red-600">{formError}</p>
-            ) : null}
+            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setDebtDialogOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setDebtDialogOpen(false)}>
                 <X className="h-4 w-4" />
                 Cancel
               </Button>
@@ -1143,11 +1092,14 @@ export function DebtsView() {
             <DialogTitle>
               {editingRecurringDebtId ? "Edit recurring debt" : "Create recurring debt"}
             </DialogTitle>
-            <DialogDescription>
-              Monthly rules create one open debt per due month.
-            </DialogDescription>
+            <DialogDescription>Monthly rules create one open debt per due month.</DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handleRecurringSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handleRecurringSubmit(event));
+            }}
+          >
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span>Name</span>
@@ -1314,15 +1266,9 @@ export function DebtsView() {
                 className={textareaClassName}
               />
             </label>
-            {formError ? (
-              <p className="text-sm text-red-600">{formError}</p>
-            ) : null}
+            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setRecurringDialogOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setRecurringDialogOpen(false)}>
                 <X className="h-4 w-4" />
                 Cancel
               </Button>
@@ -1339,22 +1285,23 @@ export function DebtsView() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {activePaymentDebt?.direction === "receivable"
-                ? "Collect debt"
-                : "Pay debt"}
+              {activePaymentDebt?.direction === "receivable" ? "Collect debt" : "Pay debt"}
             </DialogTitle>
             <DialogDescription>
               This creates a normal wallet record linked to the debt.
             </DialogDescription>
           </DialogHeader>
-          <form className="space-y-4" onSubmit={handlePaymentSubmit}>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              finishAction(handlePaymentSubmit(event));
+            }}
+          >
             <label className="space-y-1 text-sm">
               <span>Amount</span>
               <input
                 value={paymentAmount}
-                onChange={(event) =>
-                  setPaymentAmount(limitDecimalPlaces(event.target.value))
-                }
+                onChange={(event) => setPaymentAmount(limitDecimalPlaces(event.target.value))}
                 className={inputClassName}
                 inputMode="decimal"
               />
@@ -1382,7 +1329,25 @@ export function DebtsView() {
                 className={inputClassName}
               />
             </label>
-            {activePaymentDebt && dataset.accounts.find(account=>account.id===paymentAccountId)?.currency !== activePaymentDebt.currency && <label className="space-y-1 text-sm"><span>Importe en cuenta ({dataset.accounts.find(account=>account.id===paymentAccountId)?.currency})</span><input value={paymentAccountAmount} onChange={event=>setPaymentAccountAmount(limitDecimalPlaces(event.target.value))} className={inputClassName} inputMode="decimal" placeholder="Calculado con cotización histórica" /></label>}
+            {activePaymentDebt &&
+              dataset.accounts.find((account) => account.id === paymentAccountId)?.currency !==
+                activePaymentDebt.currency && (
+                <label className="space-y-1 text-sm">
+                  <span>
+                    Importe en cuenta (
+                    {dataset.accounts.find((account) => account.id === paymentAccountId)?.currency})
+                  </span>
+                  <input
+                    value={paymentAccountAmount}
+                    onChange={(event) =>
+                      setPaymentAccountAmount(limitDecimalPlaces(event.target.value))
+                    }
+                    className={inputClassName}
+                    inputMode="decimal"
+                    placeholder="Calculado con cotización histórica"
+                  />
+                </label>
+              )}
             <label className="space-y-1 text-sm">
               <span>Note</span>
               <textarea
@@ -1399,15 +1364,9 @@ export function DebtsView() {
               />
               Save account on this debt
             </label>
-            {formError ? (
-              <p className="text-sm text-red-600">{formError}</p>
-            ) : null}
+            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
             <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPaymentDialogOpen(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)}>
                 <X className="h-4 w-4" />
                 Cancel
               </Button>

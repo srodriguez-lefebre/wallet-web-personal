@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+
 import { limitDecimalPlaces } from "./utils";
 
 describe("number input helpers", () => {

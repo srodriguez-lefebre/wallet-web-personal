@@ -1,5 +1,6 @@
 import { monthKey, relativeMonthKeys } from "./calculations.js";
 import { isFinancialRecord } from "./record-status.js";
+
 import type { Budget, Category, CurrencyCode, WalletDataset } from "./types.js";
 
 export interface BudgetProposal {
@@ -41,17 +42,13 @@ export function conflictingCategoryBudgets(
   budgets: Budget[],
   categoryId: string,
 ): Budget[] {
-  const ancestors = new Set(
-    categoryPath(categories, categoryId).map((category) => category.id),
-  );
+  const ancestors = new Set(categoryPath(categories, categoryId).map((category) => category.id));
   return budgets.filter(
     (budget) =>
       budget.isActive &&
       budget.categoryId &&
       (ancestors.has(budget.categoryId) ||
-        categoryPath(categories, budget.categoryId).some(
-          (category) => category.id === categoryId,
-        )),
+        categoryPath(categories, budget.categoryId).some((category) => category.id === categoryId)),
   );
 }
 
@@ -69,11 +66,7 @@ export function buildBudgetPlan(
     throw new Error(
       "Choose the current month or an earlier month so all source months are complete.",
     );
-  if (
-    !Number.isFinite(headroomPercent) ||
-    headroomPercent < 0 ||
-    headroomPercent > 100
-  )
+  if (!Number.isFinite(headroomPercent) || headroomPercent < 0 || headroomPercent > 100)
     throw new Error("Margin must be between 0 and 100%.");
   const sourceMonths = relativeMonthKeys(targetMonth, 4).slice(0, 3);
   const amounts = new Map<string, Array<number | null>>();
@@ -94,13 +87,10 @@ export function buildBudgetPlan(
     roots.set(category.id, category);
     const monthly = amounts.get(category.id) ?? [0, 0, 0];
     const rate =
-      record.currency === dataset.settings.primaryCurrency
-        ? 1
-        : record.exchangeRateToPrimary;
+      record.currency === dataset.settings.primaryCurrency ? 1 : record.exchangeRateToPrimary;
     const amount = record.amount * rate;
-    if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(amount))
-      monthly[index] = null;
-    else if (monthly[index] !== null) monthly[index] += amount;
+    if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(amount)) monthly[index] = null;
+    else if (monthly[index] !== null) monthly[index] = (monthly[index] ?? 0) + amount;
     amounts.set(category.id, monthly);
   }
   const proposals = [...amounts]
@@ -109,18 +99,12 @@ export function buildBudgetPlan(
       const missingRate = monthlyAmounts.includes(null);
       const total = missingRate
         ? null
-        : monthlyAmounts.reduce<number>(
-            (sum, amount) => sum + (amount ?? 0),
-            0,
-          );
+        : monthlyAmounts.reduce<number>((sum, amount) => sum + (amount ?? 0), 0);
       const average = total === null ? null : total / 3;
-      const rawCents =
-        average === null ? null : average * (1 + headroomPercent / 100) * 100;
+      const rawCents = average === null ? null : average * (1 + headroomPercent / 100) * 100;
       // Discount only floating-point representation noise before rounding upward to cents.
       const limitAmount =
-        rawCents === null
-          ? null
-          : Math.ceil(rawCents - Number.EPSILON * rawCents * 4) / 100;
+        rawCents === null ? null : Math.ceil(rawCents - Number.EPSILON * rawCents * 4) / 100;
       const conflictingBudgetIds = conflictingCategoryBudgets(
         dataset.categories,
         budgets,

@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest";
+
 import { WalletSync } from "./wallet-sync";
 
 function deferred<T>() {

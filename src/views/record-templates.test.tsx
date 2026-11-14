@@ -1,9 +1,11 @@
-import type { PropsWithChildren } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { RecordTemplate, WalletDataset } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import { RecordsView } from "./records-view";
+
+import type { RecordTemplate, WalletDataset } from "@shared/types";
+import type { PropsWithChildren } from "react";
 const actions = vi.hoisted(() => ({
   addTemplate: vi.fn(),
   updateTemplate: vi.fn(),
@@ -94,19 +96,19 @@ beforeEach(() => {
   });
   dataset = structuredClone(mockWalletData);
   dataset.goals = [];
-  dataset.accounts[0].currency = "UYU";
+  dataset.accounts[0]!.currency = "UYU";
   dataset.settings.primaryCurrency = "UYU";
   dataset.records = [
     {
-      ...dataset.records[0],
+      ...dataset.records[0]!,
       occurredAt: "2026-10-01T12:00:00Z",
       type: "expense",
       amount: 10,
       currency: "USD",
-      accountId: dataset.accounts[0].id,
+      accountId: dataset.accounts[0]!.id,
       accountAmount: 410,
       exchangeRateToPrimary: 41,
-      categoryId: dataset.categories[0].id,
+      categoryId: dataset.categories[0]!.id,
       tagIds: [],
       goalIds: [],
       goalAssociations: [],
@@ -144,8 +146,8 @@ function template(): RecordTemplate {
     type: "expense",
     amount: 10,
     currency: "USD",
-    accountId: dataset.accounts[0].id,
-    categoryId: dataset.categories[0].id,
+    accountId: dataset.accounts[0]!.id,
+    categoryId: dataset.categories[0]!.id,
     paymentType: "debit",
   };
 }
@@ -155,9 +157,7 @@ async function mount() {
   });
 }
 function button(text: string) {
-  return tree!.root
-    .findAllByType("button")
-    .find((b) => b.children.includes(text))!;
+  return tree!.root.findAllByType("button").find((b) => b.children.includes(text))!;
 }
 async function openSaved() {
   dataset.recordTemplates = [template()];
@@ -168,21 +168,15 @@ async function openSaved() {
 test("new movements do not expose template management", async () => {
   await mount();
   await act(async () => button("New").props.onClick());
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
   expect(JSON.stringify(tree!.toJSON())).not.toContain("Save as template");
 });
 test("editing a movement does not expose template management", async () => {
   await mount();
   await act(async () =>
-    tree!.root
-      .findAllByProps({ role: "button", tabIndex: 0 })[0]
-      .props.onClick(),
+    tree!.root.findAllByProps({ role: "button", tabIndex: 0 })[0]!.props.onClick(),
   );
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
 });
 test("records no longer contain the template library", async () => {
   await mount();
@@ -192,10 +186,8 @@ test("using a template writes nothing until confirmation then freezes the new da
   await openSaved();
   expect(actions.addRecord).not.toHaveBeenCalled();
   expect(tree!.root.findByType("form")).toBeDefined();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
-  const value = actions.addRecord.mock.calls[0][0];
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
+  const value = actions.addRecord.mock.calls[0]![0];
   expect(value.accountAmount).toBe(440);
   expect(value.exchangeRateToPrimary).toBe(44);
   expect(value.occurredAt).toBe("2026-10-03T12:00:00.000Z");
@@ -204,7 +196,7 @@ test("using a template writes nothing until confirmation then freezes the new da
 });
 test("an archived financial destination leaves an invalid draft that cannot be confirmed", async () => {
   dataset.recordTemplates = [template()];
-  dataset.accounts[0].isActive = false;
+  dataset.accounts[0]!.isActive = false;
   newRecordRequestId = 1;
   newRecordTemplateId = "saved";
   await mount();
@@ -213,17 +205,11 @@ test("an archived financial destination leaves an invalid draft that cannot be c
   expect(actions.addRecord).not.toHaveBeenCalled();
 });
 test("a failed record save retains an editable draft and allows a normal retry", async () => {
-  actions.addRecord.mockRejectedValueOnce(
-    new Error("Saved but refresh failed"),
-  );
+  actions.addRecord.mockRejectedValueOnce(new Error("Saved but refresh failed"));
   await openSaved();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(button("Add").props.disabled).toBe(false);
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(actions.addRecord).toHaveBeenCalledTimes(2);
   expect(actions.read).not.toHaveBeenCalled();
   expect(tree!.root.findAllByType("form")).toHaveLength(0);
@@ -250,28 +236,20 @@ test("pending record submissions remain single flight", async () => {
 test("a global new-record request starts fresh after a failed save", async () => {
   actions.addRecord.mockRejectedValueOnce(new Error("Response lost"));
   await openSaved();
-  await act(async () =>
-    tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
-  );
+  await act(async () => tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }));
   expect(button("Add").props.disabled).toBe(false);
   newRecordRequestId = 2;
   newRecordTemplateId = null;
   await act(async () => tree!.update(<RecordsView />));
-  expect(JSON.stringify(tree!.toJSON())).not.toContain(
-    "save outcome is uncertain",
-  );
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Template name" }),
-  ).toHaveLength(0);
+  expect(JSON.stringify(tree!.toJSON())).not.toContain("save outcome is uncertain");
+  expect(tree!.root.findAllByProps({ "aria-label": "Template name" })).toHaveLength(0);
 });
 
 test("needs-review records display an amber status label", async () => {
-  dataset.records[0].paymentStatus = "needs_review";
+  dataset.records[0]!.paymentStatus = "needs_review";
   await mount();
   const labels = tree!.root
     .findAllByType("span")
     .filter((span) => span.children.includes("Needs review"));
-  expect(
-    labels.some((label) => label.props.className.includes("bg-amber")),
-  ).toBe(true);
+  expect(labels.some((label) => label.props.className.includes("bg-amber"))).toBe(true);
 });

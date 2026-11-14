@@ -1,14 +1,16 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import { calculateGoalProgress, formatMoney } from "../../shared/calculations";
-import type { WalletDataset } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+
 import { DebtsView } from "./debts-view";
 import { InvestmentsView } from "./investments-view";
 import { GoalFundingPlan } from "../components/wallet/goal-funding-plan";
 
-const state = vi.hoisted(() => ({ dataset: undefined as unknown }));
+import type { WalletDataset } from "@shared/types";
+import type { PropsWithChildren } from "react";
+
+const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)() }));
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({ dataset: state.dataset }),
 }));
@@ -50,16 +52,20 @@ afterEach(async () => {
 const text = () => JSON.stringify(tree?.toJSON());
 
 test("completed goals do not show a remaining contribution plan", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0];
+  const progress = calculateGoalProgress(mockWalletData)[0]!;
   await act(async () => {
-    tree = create(<GoalFundingPlan progress={{ ...progress, goal: { ...progress.goal, status: "completed" } }} />);
+    tree = create(
+      <GoalFundingPlan
+        progress={{ ...progress, goal: { ...progress.goal, status: "completed" } }}
+      />,
+    );
   });
   expect(tree!.toJSON()).toBeNull();
 });
 
 test("debt list puts undated amounts last and filters overdue without turning unknown balances into zero", async () => {
   const dataset = state.dataset as WalletDataset;
-  const base = dataset.debts[0];
+  const base = dataset.debts[0]!;
   dataset.debts = [
     {
       ...base,
@@ -91,12 +97,8 @@ test("debt list puts undated amounts last and filters overdue without turning un
   await act(async () => {
     tree = create(<DebtsView />);
   });
-  expect(text().indexOf("Old debt")).toBeLessThan(
-    text().indexOf("Today's debt"),
-  );
-  expect(text().indexOf("Today's debt")).toBeLessThan(
-    text().indexOf("Undated unknown"),
-  );
+  expect(text().indexOf("Old debt")).toBeLessThan(text().indexOf("Today's debt"));
+  expect(text().indexOf("Today's debt")).toBeLessThan(text().indexOf("Undated unknown"));
   expect(text()).toContain("Due today");
   expect(text()).toContain("Amount pending");
   await act(async () => {
@@ -113,7 +115,7 @@ test("when every debt amount is unknown, summary fields display pending instead 
   const dataset = state.dataset as WalletDataset;
   dataset.debts = [
     {
-      ...dataset.debts[0],
+      ...dataset.debts[0]!,
       pendingAmount: undefined,
       originalAmount: undefined,
       isVisible: true,
@@ -127,7 +129,7 @@ test("when every debt amount is unknown, summary fields display pending instead 
 });
 test("portfolio groups currencies and includes hidden investments only after the toggle", async () => {
   const dataset = state.dataset as WalletDataset;
-  const base = dataset.investments[0];
+  const base = dataset.investments[0]!;
   dataset.investments = [
     {
       ...base,
@@ -165,16 +167,14 @@ test("portfolio groups currencies and includes hidden investments only after the
   expect(text()).not.toContain("Hidden fund");
   expect(text()).toContain(formatMoney(12, "USD"));
   await act(async () => {
-    tree!.root
-      .findByProps({ "aria-label": "Show hidden investments" })
-      .props.onClick();
+    tree!.root.findByProps({ "aria-label": "Show hidden investments" }).props.onClick();
   });
   expect(text()).toContain("Hidden fund");
   expect(text()).toContain(formatMoney(112, "USD"));
   expect(text()).toContain("including hidden");
 });
 test("goal funding displays missing FX as unavailable without NaN or zero", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0];
+  const progress = calculateGoalProgress(mockWalletData)[0]!;
   await act(async () => {
     tree = create(
       <GoalFundingPlan
@@ -192,7 +192,7 @@ test("goal funding displays missing FX as unavailable without NaN or zero", asyn
   expect(text()).not.toContain("Per day");
 });
 test("paused goal preserves remaining but does not suggest daily contributions", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0];
+  const progress = calculateGoalProgress(mockWalletData)[0]!;
   await act(async () => {
     tree = create(
       <GoalFundingPlan

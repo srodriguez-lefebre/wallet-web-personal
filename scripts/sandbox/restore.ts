@@ -1,17 +1,15 @@
-import { PGlite } from "@electric-sql/pglite";
 import { randomUUID } from "node:crypto";
 import { rename, rm, stat } from "node:fs/promises";
 import path from "node:path";
+
+import { PGlite } from "@electric-sql/pglite";
+
 import { applyMigrations } from "./database.js";
 import { importSnapshot } from "./snapshot.js";
 import { writePrivateJson } from "./workspace.js";
 
 // The caller owns this directory's lock for the entire operation.
-export async function restoreLocalDatabase(
-  input: unknown,
-  directory: string,
-  reset: boolean,
-) {
+export async function restoreLocalDatabase(input: unknown, directory: string, reset: boolean) {
   const root = path.resolve(directory);
   const active = path.join(root, "db");
   const exists = (file: string) =>
@@ -23,9 +21,7 @@ export async function restoreLocalDatabase(
       },
     );
   if ((await exists(active)) && !reset)
-    throw new Error(
-      "Local database exists. Use --reset explicitly to restore the snapshot.",
-    );
+    throw new Error("Local database exists. Use --reset explicitly to restore the snapshot.");
   const id = randomUUID();
   const staging = path.join(root, `db-pending-${id}`);
   const stagedSnapshot = path.join(root, `snapshot-pending-${id}.json`);
@@ -56,10 +52,7 @@ export async function restoreLocalDatabase(
         if (await exists(file))
           await move(
             file,
-            path.join(
-              root,
-              `${name === "db" ? "db-before-reset" : name + "-before-reset"}-${id}`,
-            ),
+            path.join(root, `${name === "db" ? "db-before-reset" : name + "-before-reset"}-${id}`),
           );
       }
       await move(staging, active);

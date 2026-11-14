@@ -1,11 +1,14 @@
-import type { PropsWithChildren } from "react";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { createActionToastRunner } from "../lib/action-toast-runner";
 import { DebtsView } from "./debts-view";
 
+import type { PropsWithChildren } from "react";
+
 const payment = vi.hoisted(() => vi.fn());
+const reportedToast = vi.hoisted(() => vi.fn());
 const runnerState = vi.hoisted(() => ({ returnFalseOnFailure: false }));
 let dataset = structuredClone(mockWalletData);
 vi.mock("@/providers/wallet-provider", () => ({
@@ -16,7 +19,7 @@ vi.mock("@/lib/use-action-toast", () => ({
     toast: null,
     runAction: async (action: () => Promise<unknown>) => {
       try {
-        return await createActionToastRunner(() => {})(action);
+        return await createActionToastRunner(reportedToast)(action);
       } catch (error) {
         if (runnerState.returnFalseOnFailure) return false;
         throw error;
@@ -43,16 +46,17 @@ let tree: ReactTestRenderer | undefined;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   payment.mockReset().mockResolvedValue(undefined);
+  reportedToast.mockClear();
   runnerState.returnFalseOnFailure = false;
   dataset = structuredClone(mockWalletData);
   dataset.debts = [
     {
-      ...dataset.debts[0],
+      ...dataset.debts[0]!,
       direction: "payable",
       originalAmount: 200,
       pendingAmount: 200,
       status: "active",
-      accountId: dataset.accounts[0].id,
+      accountId: dataset.accounts[0]!.id,
     },
   ];
 });
@@ -65,17 +69,13 @@ afterEach(async () => {
 async function pay(path: "partial" | "settle") {
   const button = tree!.root
     .findAllByType("button")
-    .find((button) =>
-      button.children.includes(path === "partial" ? "Partial" : "Pay"),
-    )!;
+    .find((button) => button.children.includes(path === "partial" ? "Partial" : "Pay"))!;
   await act(async () => {
     await button.props.onClick();
   });
   if (path === "partial")
     await act(async () => {
-      await tree!.root
-        .findByType("form")
-        .props.onSubmit({ preventDefault() {} });
+      await tree!.root.findByType("form").props.onSubmit({ preventDefault() {} });
     });
 }
 test.each(["partial", "settle"] as const)(
@@ -85,9 +85,9 @@ test.each(["partial", "settle"] as const)(
       tree = create(<DebtsView />);
     });
     await pay(path);
-    const firstKey = payment.mock.calls[0][1].idempotencyKey;
+    const firstKey = payment.mock.calls[0]![1].idempotencyKey;
     await pay(path);
-    expect(payment.mock.calls[1][1].idempotencyKey).not.toBe(firstKey);
+    expect(payment.mock.calls[1]![1].idempotencyKey).not.toBe(firstKey);
   },
 );
 
@@ -95,13 +95,12 @@ test("an uncertain partial payment keeps its key for the retry", async () => {
   await act(async () => {
     tree = create(<DebtsView />);
   });
-  payment.mockRejectedValueOnce(
-    new Error("connection lost after server commit"),
-  );
-  await expect(pay("partial")).rejects.toThrow(/connection lost/);
-  const firstKey = payment.mock.calls[0][1].idempotencyKey;
+  payment.mockRejectedValueOnce(new Error("connection lost after server commit"));
   await pay("partial");
-  expect(payment.mock.calls[1][1].idempotencyKey).toBe(firstKey);
+  expect(reportedToast).toHaveBeenCalledWith("error", "Action failed");
+  const firstKey = payment.mock.calls[0]![1].idempotencyKey;
+  await pay("partial");
+  expect(payment.mock.calls[1]![1].idempotencyKey).toBe(firstKey);
 });
 
 test.each(["partial", "settle"] as const)(
@@ -113,8 +112,8 @@ test.each(["partial", "settle"] as const)(
     });
     payment.mockRejectedValueOnce(new Error("reload failed after payment"));
     await pay(path);
-    const firstKey = payment.mock.calls[0][1].idempotencyKey;
+    const firstKey = payment.mock.calls[0]![1].idempotencyKey;
     await pay(path);
-    expect(payment.mock.calls[1][1].idempotencyKey).toBe(firstKey);
+    expect(payment.mock.calls[1]![1].idempotencyKey).toBe(firstKey);
   },
 );

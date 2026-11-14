@@ -1,4 +1,9 @@
 import { useState, type FormEvent } from "react";
+import { currencySchema, goalPatchSchema, goalSchema, type GoalPatch } from "@shared/schemas";
+
+import type { Account, CurrencyCode, Goal } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,17 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  buildGoalUpdatePayload,
-  type GoalUpdateDraft,
-} from "@/lib/goal-update";
-import {
-  currencySchema,
-  goalPatchSchema,
-  goalSchema,
-  type GoalPatch,
-} from "@shared/schemas";
-import type { Account, CurrencyCode, Goal } from "@shared/types";
+import { buildGoalUpdatePayload, type GoalUpdateDraft } from "@/lib/goal-update";
 
 function goalDraft(goal: Goal): GoalUpdateDraft {
   return {
@@ -63,23 +58,16 @@ export function GoalEditDialog({
     const payload = buildGoalUpdatePayload(draft, goal.icon);
     const validation = goalSchema.safeParse(
       Object.fromEntries(
-        Object.entries(payload).map(([key, value]) => [
-          key,
-          value === null ? undefined : value,
-        ]),
+        Object.entries(payload).map(([key, value]) => [key, value === null ? undefined : value]),
       ),
     );
     if (!validation.success) {
-      setError(
-        validation.error.issues[0]?.message ?? "Check the goal details.",
-      );
+      setError(validation.error.issues[0]?.message ?? "Check the goal details.");
       return;
     }
     const previous = buildGoalUpdatePayload(initial, goal.icon);
     const changes = Object.fromEntries(
-      Object.entries(payload).filter(
-        ([key, value]) => value !== previous[key as keyof GoalPatch],
-      ),
+      Object.entries(payload).filter(([key, value]) => value !== previous[key as keyof GoalPatch]),
     );
     if (!Object.keys(changes).length) {
       onClose();
@@ -111,7 +99,9 @@ export function GoalEditDialog({
         <form
           aria-label="Edit goal details"
           className="space-y-4"
-          onSubmit={submit}
+          onSubmit={(event) => {
+            finishAction(submit(event));
+          }}
         >
           <fieldset disabled={pending} className="space-y-4">
             <label className="block space-y-1">
@@ -134,9 +124,7 @@ export function GoalEditDialog({
                   min="0.01"
                   step="0.01"
                   value={draft.targetAmount}
-                  onChange={(event) =>
-                    change({ targetAmount: event.target.value })
-                  }
+                  onChange={(event) => change({ targetAmount: event.target.value })}
                   required
                 />
               </label>
@@ -146,9 +134,7 @@ export function GoalEditDialog({
                   aria-label="Goal currency"
                   className={inputClass}
                   value={draft.currency}
-                  onChange={(event) =>
-                    change({ currency: event.target.value as CurrencyCode })
-                  }
+                  onChange={(event) => change({ currency: event.target.value as CurrencyCode })}
                 >
                   {currencySchema.options.map((currency) => (
                     <option key={currency}>{currency}</option>
@@ -198,9 +184,7 @@ export function GoalEditDialog({
               <input
                 type="checkbox"
                 checked={draft.isVisible}
-                onChange={(event) =>
-                  change({ isVisible: event.target.checked })
-                }
+                onChange={(event) => change({ isVisible: event.target.checked })}
               />
               Visible goal
             </label>
@@ -220,9 +204,7 @@ export function GoalEditDialog({
                     aria-label="Automatic goal capture"
                     type="checkbox"
                     checked={draft.autoCaptureEnabled}
-                    onChange={(event) =>
-                      change({ autoCaptureEnabled: event.target.checked })
-                    }
+                    onChange={(event) => change({ autoCaptureEnabled: event.target.checked })}
                   />
                   Automatically capture expenses in a date range
                 </label>
@@ -236,9 +218,7 @@ export function GoalEditDialog({
                           className={inputClass}
                           type="date"
                           value={draft.autoCaptureStart}
-                          onChange={(event) =>
-                            change({ autoCaptureStart: event.target.value })
-                          }
+                          onChange={(event) => change({ autoCaptureStart: event.target.value })}
                         />
                       </label>
                       <label className="space-y-1">
@@ -248,9 +228,7 @@ export function GoalEditDialog({
                           className={inputClass}
                           type="date"
                           value={draft.autoCaptureEnd}
-                          onChange={(event) =>
-                            change({ autoCaptureEnd: event.target.value })
-                          }
+                          onChange={(event) => change({ autoCaptureEnd: event.target.value })}
                         />
                       </label>
                     </div>
@@ -285,19 +263,10 @@ export function GoalEditDialog({
             </p>
           ) : null}
           <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
               Cancel
             </Button>
-            <Button
-              aria-label="Save goal details"
-              type="submit"
-              disabled={pending}
-            >
+            <Button aria-label="Save goal details" type="submit" disabled={pending}>
               {pending ? "Saving..." : "Save changes"}
             </Button>
           </div>

@@ -6,6 +6,7 @@ import {
   useMemo,
   useState,
 } from "react";
+
 import { readStorage, writeStorage } from "@/lib/storage";
 import { resolveTheme } from "@/lib/preferences";
 
@@ -42,16 +43,13 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const value = useMemo(
     () => ({
       theme,
-      toggleTheme: () =>
-        setThemeState((current) => (current === "dark" ? "light" : "dark")),
+      toggleTheme: () => setThemeState((current) => (current === "dark" ? "light" : "dark")),
       setTheme: setThemeState,
     }),
     [theme],
   );
 
-  return (
-    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme() {

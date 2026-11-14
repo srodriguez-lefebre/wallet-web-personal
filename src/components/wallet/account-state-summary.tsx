@@ -1,8 +1,10 @@
 import { Eye, EyeOff } from "lucide-react";
+import { formatMoney } from "@shared/calculations";
+
+import type { AccountBalance } from "@shared/types";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatMoney } from "@shared/calculations";
-import type { AccountBalance } from "@shared/types";
 
 interface AccountStateSummaryProps {
   balance: AccountBalance;

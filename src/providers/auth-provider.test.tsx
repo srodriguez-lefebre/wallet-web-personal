@@ -1,12 +1,14 @@
+// @vitest-environment jsdom
 import { useEffect } from "react";
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { act, render, type RenderResult } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+
 import { AuthProvider, useAuth } from "./auth-provider";
 import { createSession } from "../services/auth-service";
 
 vi.mock("@/services/auth-service");
 let context: ReturnType<typeof useAuth>,
-  tree: ReactTestRenderer | undefined,
+  tree: RenderResult | undefined,
   storage: Map<string, string>;
 function Consumer() {
   const value = useAuth();
@@ -21,10 +23,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   storage = new Map([
     ["wallet-session-token", "test-session"],
-    [
-      "wallet-session-expires-at",
-      new Date(Date.now() + 30 * 60_000).toISOString(),
-    ],
+    ["wallet-session-expires-at", new Date(Date.now() + 30 * 60_000).toISOString()],
     ["wallet-dataset-cache", "private-data"],
   ]);
   const localStorage = {
@@ -32,31 +31,25 @@ beforeEach(() => {
     setItem: (key: string, value: string) => storage.set(key, value),
     removeItem: (key: string) => storage.delete(key),
   };
-  vi.stubGlobal(
-    "window",
-    Object.assign(new EventTarget(), {
-      localStorage,
-      sessionStorage: { getItem: () => null, removeItem: vi.fn() },
-      atob,
-      setTimeout,
-      clearTimeout,
-    }),
-  );
-  vi.stubGlobal(
-    "document",
-    Object.assign(new EventTarget(), { visibilityState: "visible" }),
-  );
+  vi.spyOn(window, "localStorage", "get").mockReturnValue({
+    ...localStorage,
+    length: 0,
+    clear: () => storage.clear(),
+    key: () => null,
+  });
+  window.sessionStorage.clear();
 });
 afterEach(async () => {
   if (tree) await act(async () => tree!.unmount());
   tree = undefined;
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   vi.clearAllMocks();
 });
 async function mount() {
   await act(async () => {
-    tree = create(
+    tree = render(
       <AuthProvider>
         <Consumer />
       </AuthProvider>,
@@ -70,10 +63,7 @@ async function advance(ms: number) {
 }
 
 test("session expiration locks an already open wallet and removes private cached data", async () => {
-  storage.set(
-    "wallet-session-expires-at",
-    new Date(Date.now() + 60_000).toISOString(),
-  );
+  storage.set("wallet-session-expires-at", new Date(Date.now() + 60_000).toISOString());
   await mount();
   expect(context.isUnlocked).toBe(true);
   await advance(60_001);
@@ -133,9 +123,7 @@ test("the signed expiration cannot be extended by browser storage", async () => 
 test("obsolete inactivity events are ignored while session expiration remains active", async () => {
   await mount();
   await act(async () => {
-    window.dispatchEvent(
-      new CustomEvent("wallet:auto-lock-change", { detail: 5 }),
-    );
+    window.dispatchEvent(new CustomEvent("wallet:auto-lock-change", { detail: 5 }));
   });
   await advance(5 * 60_000 + 1);
   expect(context.isUnlocked).toBe(true);

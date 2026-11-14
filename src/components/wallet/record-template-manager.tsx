@@ -1,5 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { recordTemplateSchema } from "@shared/schemas";
+import { formatMoney } from "@shared/calculations";
+
+import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -17,14 +22,6 @@ import {
   templateReplacementPatch,
 } from "@/lib/record-templates";
 import { useWallet } from "@/providers/wallet-provider";
-import { recordTemplateSchema } from "@shared/schemas";
-import { formatMoney } from "@shared/calculations";
-import type {
-  RecordTemplate,
-  CurrencyCode,
-  RecordType,
-  PaymentType,
-} from "@shared/types";
 
 type Draft = Omit<RecordTemplate, "id" | "amount"> & { amount: string };
 const field =
@@ -74,9 +71,7 @@ export function RecordTemplateManager() {
           (item) =>
             item.isActive &&
             item.isVisible &&
-            item.id ===
-              (dataset.settings.defaultAccountId ??
-                dataset.settings.primaryAccountId),
+            item.id === (dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId),
         ) ?? dataset.accounts.find((item) => item.isActive && item.isVisible);
       setDraft({
         name: "",
@@ -106,23 +101,17 @@ export function RecordTemplateManager() {
       name: draft.name.trim(),
       amount: Number(draft.amount),
       accountId: draft.accountId || undefined,
-      creditCardId:
-        draft.type === "expense" ? draft.creditCardId || undefined : undefined,
+      creditCardId: draft.type === "expense" ? draft.creditCardId || undefined : undefined,
       destinationAccountId:
-        draft.type === "transfer"
-          ? draft.destinationAccountId || undefined
-          : undefined,
-      categoryId:
-        draft.type === "transfer" ? undefined : draft.categoryId || undefined,
+        draft.type === "transfer" ? draft.destinationAccountId || undefined : undefined,
+      categoryId: draft.type === "transfer" ? undefined : draft.categoryId || undefined,
       tagId: draft.tagId || undefined,
       counterpartyName: draft.counterpartyName?.trim() || undefined,
       note: draft.note?.trim() || undefined,
       paymentType: draft.type === "transfer" ? "transfer" : draft.paymentType,
     });
     if (!parsed.success) {
-      setError(
-        parsed.error.issues[0]?.message ?? "Revisá los datos de la plantilla.",
-      );
+      setError(parsed.error.issues[0]?.message ?? "Revisá los datos de la plantilla.");
       return;
     }
     const payload = parsed.data,
@@ -142,11 +131,7 @@ export function RecordTemplateManager() {
             );
             if (found && sameTemplateDetails(found, payload)) return;
           }
-          if (editingId)
-            await updateRecordTemplate(
-              editingId,
-              templateReplacementPatch(payload),
-            );
+          if (editingId) await updateRecordTemplate(editingId, templateReplacementPatch(payload));
           else await addRecordTemplate(payload);
         },
         {
@@ -214,8 +199,8 @@ export function RecordTemplateManager() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground">
-          Guardá datos habituales de un pago o ingreso. Usar una plantilla abre
-          un borrador: el movimiento se registra cuando lo confirmás.
+          Guardá datos habituales de un pago o ingreso. Usar una plantilla abre un borrador: el
+          movimiento se registra cuando lo confirmás.
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -225,9 +210,7 @@ export function RecordTemplateManager() {
           </p>
         )}
         {templates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Todavía no hay plantillas guardadas.
-          </p>
+          <p className="text-sm text-muted-foreground">Todavía no hay plantillas guardadas.</p>
         ) : (
           <ul className="divide-y">
             {templates.map((template) => (
@@ -248,7 +231,7 @@ export function RecordTemplateManager() {
                     aria-label={`Usar plantilla ${template.name}`}
                     onClick={() => {
                       requestNewRecord(template.id);
-                      navigate("/records");
+                      void navigate("/records");
                     }}
                   >
                     Usar
@@ -282,15 +265,17 @@ export function RecordTemplateManager() {
         >
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>
-                {editingId ? "Editar plantilla" : "Crear plantilla"}
-              </DialogTitle>
+              <DialogTitle>{editingId ? "Editar plantilla" : "Crear plantilla"}</DialogTitle>
               <DialogDescription>
-                Configuración reutilizable. Las fechas y conversiones se eligen
-                al usarla.
+                Configuración reutilizable. Las fechas y conversiones se eligen al usarla.
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={save} className="space-y-4">
+            <form
+              onSubmit={(event) => {
+                void save(event);
+              }}
+              className="space-y-4"
+            >
               {error && (
                 <p role="alert" className="text-sm text-destructive">
                   {error}
@@ -339,9 +324,7 @@ export function RecordTemplateManager() {
                     aria-label="Moneda de plantilla"
                     className={field}
                     value={draft.currency}
-                    onChange={(event) =>
-                      change("currency", event.target.value as CurrencyCode)
-                    }
+                    onChange={(event) => change("currency", event.target.value as CurrencyCode)}
                   >
                     {["UYU", "USD", "EUR", "BRL", "ARS"].map((currency) => (
                       <option key={currency}>{currency}</option>
@@ -366,15 +349,11 @@ export function RecordTemplateManager() {
                     aria-label="Cuenta de plantilla"
                     className={field}
                     value={draft.accountId ?? ""}
-                    onChange={(event) =>
-                      change("accountId", event.target.value)
-                    }
+                    onChange={(event) => change("accountId", event.target.value)}
                   >
                     <option value="">Elegir al usarla</option>
                     {dataset.accounts
-                      .filter(
-                        (account) => account.isActive && account.isVisible,
-                      )
+                      .filter((account) => account.isActive && account.isVisible)
                       .map((account) => (
                         <option key={account.id} value={account.id}>
                           {account.name}
@@ -389,17 +368,13 @@ export function RecordTemplateManager() {
                       aria-label="Cuenta destino de plantilla"
                       className={field}
                       value={draft.destinationAccountId ?? ""}
-                      onChange={(event) =>
-                        change("destinationAccountId", event.target.value)
-                      }
+                      onChange={(event) => change("destinationAccountId", event.target.value)}
                     >
                       <option value="">Elegir al usarla</option>
                       {dataset.accounts
                         .filter(
                           (account) =>
-                            account.isActive &&
-                            account.isVisible &&
-                            account.id !== draft.accountId,
+                            account.isActive && account.isVisible && account.id !== draft.accountId,
                         )
                         .map((account) => (
                           <option key={account.id} value={account.id}>
@@ -415,9 +390,7 @@ export function RecordTemplateManager() {
                       aria-label="Categoría de plantilla"
                       className={field}
                       value={draft.categoryId ?? ""}
-                      onChange={(event) =>
-                        change("categoryId", event.target.value)
-                      }
+                      onChange={(event) => change("categoryId", event.target.value)}
                     >
                       <option value="">Elegir al usarla</option>
                       {dataset.categories.map((category) => (
@@ -433,21 +406,13 @@ export function RecordTemplateManager() {
                   <select
                     aria-label="Medio de pago de plantilla"
                     className={field}
-                    value={
-                      draft.creditCardId
-                        ? `card:${draft.creditCardId}`
-                        : draft.paymentType
-                    }
+                    value={draft.creditCardId ? `card:${draft.creditCardId}` : draft.paymentType}
                     onChange={(event) => {
                       const value = event.target.value;
                       setDraft((current) => ({
                         ...current,
-                        creditCardId: value.startsWith("card:")
-                          ? value.slice(5)
-                          : undefined,
-                        paymentType: value.startsWith("card:")
-                          ? "credit"
-                          : (value as PaymentType),
+                        creditCardId: value.startsWith("card:") ? value.slice(5) : undefined,
+                        paymentType: value.startsWith("card:") ? "credit" : (value as PaymentType),
                       }));
                     }}
                   >
@@ -489,9 +454,7 @@ export function RecordTemplateManager() {
                     aria-label="Contraparte de plantilla"
                     className={field}
                     value={draft.counterpartyName ?? ""}
-                    onChange={(event) =>
-                      change("counterpartyName", event.target.value)
-                    }
+                    onChange={(event) => change("counterpartyName", event.target.value)}
                   />
                 </label>
               </div>

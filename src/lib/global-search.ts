@@ -25,12 +25,9 @@ export function normalizeGlobalSearch(value: string): string {
   return value.normalize("NFD").replace(/\p{M}/gu, "").trim().toLowerCase();
 }
 
-export function globalSearchResults(
-  dataset: WalletDataset,
-  query: string,
-): GlobalSearchResult[] {
+export function globalSearchResults(dataset: WalletDataset, query: string): GlobalSearchResult[] {
   const normalized = normalizeGlobalSearch(query);
-  const sections = [
+  const sections: Array<[string, string, string]> = [
     ["dashboard", "Dashboard", "/"],
     ["accounts", "Accounts", "/accounts"],
     ["cards", "Cards", "/cards"],
@@ -63,10 +60,7 @@ export function globalSearchResults(
         label,
         kind: "section",
         description: id === "records" ? "Section · all history" : "Section",
-        action:
-          id === "records"
-            ? { type: "records", filters: {} }
-            : { type: "navigate", href },
+        action: id === "records" ? { type: "records", filters: {} } : { type: "navigate", href },
       }),
     ),
   ];
@@ -84,9 +78,7 @@ export function globalSearchResults(
     });
   }
   for (const category of dataset.categories) {
-    const parent = dataset.categories.find(
-      (candidate) => candidate.id === category.parentId,
-    );
+    const parent = dataset.categories.find((candidate) => candidate.id === category.parentId);
     candidates.push({
       id: `category-${category.id}`,
       label: category.name,
@@ -119,9 +111,7 @@ export function globalSearchResults(
       },
     });
   }
-  for (const investment of dataset.investments.filter(
-    (investment) => investment.isVisible,
-  )) {
+  for (const investment of dataset.investments.filter((investment) => investment.isVisible)) {
     candidates.push({
       id: `investment-${investment.id}`,
       label: investment.name,
@@ -142,9 +132,7 @@ export function globalSearchResults(
       action: { type: "records" as const, filters: { search: query.trim() } },
     },
     ...candidates.filter((result) =>
-      normalizeGlobalSearch(`${result.label} ${result.description}`).includes(
-        normalized,
-      ),
+      normalizeGlobalSearch(`${result.label} ${result.description}`).includes(normalized),
     ),
   ].slice(0, 20);
 }

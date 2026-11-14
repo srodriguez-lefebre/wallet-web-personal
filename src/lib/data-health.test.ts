@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import {
   walletDataHealth,
   summarizeCsvPreview,
@@ -13,7 +14,7 @@ test("diagnostics retain archived dictionaries and ignore archived records", () 
   data.creditCardRecords = [];
   data.records = [
     {
-      ...data.records[0],
+      ...data.records[0]!,
       id: "history",
       type: "expense",
       categoryId: undefined,
@@ -21,14 +22,14 @@ test("diagnostics retain archived dictionaries and ignore archived records", () 
     },
     Object.assign(
       {
-        ...data.records[0],
+        ...data.records[0]!,
         id: "archived",
         paymentStatus: "needs_review" as const,
       },
       { deletedAt: "2026-01-01T12:00:00Z" },
     ),
   ];
-  Object.assign(data.accounts[0], { deletedAt: "2026-01-01T12:00:00Z" });
+  Object.assign(data.accounts[0]!, { deletedAt: "2026-01-01T12:00:00Z" });
   const result = walletDataHealth(data);
   expect(result.review).toBe(0);
   expect(result.uncategorized).toBe(1);
@@ -36,12 +37,12 @@ test("diagnostics retain archived dictionaries and ignore archived records", () 
 });
 test("conversion checks include review activity and count affected records once", () => {
   const data = structuredClone(mockWalletData),
-    account = data.accounts[0];
+    account = data.accounts[0]!;
   account.currency = "UYU";
   data.creditCardRecords = [];
   data.records = [
     {
-      ...data.records[0],
+      ...data.records[0]!,
       id: "missing",
       type: "expense",
       accountId: account.id,
@@ -50,7 +51,7 @@ test("conversion checks include review activity and count affected records once"
       paymentStatus: "cleared",
     },
     {
-      ...data.records[0],
+      ...data.records[0]!,
       id: "draft",
       accountId: account.id,
       currency: "USD",
@@ -61,13 +62,13 @@ test("conversion checks include review activity and count affected records once"
   const result = walletDataHealth(data);
   expect(result.conversions).toBe(2);
   expect(result.review).toBe(1);
-  data.records[0].accountAmount = 400;
+  data.records[0]!.accountAmount = 400;
   expect(walletDataHealth(data).conversions).toBe(1);
-  data.records[1].paymentStatus = "cancelled";
+  data.records[1]!.paymentStatus = "cancelled";
   expect(walletDataHealth(data).conversions).toBe(0);
 });
 test("CSV preview totals keep currencies and directions separate and skip invalid rows", () => {
-  const record = mockWalletData.records[0];
+  const record = mockWalletData.records[0]!;
   expect(
     summarizeCsvPreview([
       {
@@ -95,10 +96,7 @@ test("backup filenames contain timestamps that are valid on Windows", () => {
   );
 });
 test("backup receipt contains only export date and counts", () => {
-  const saved = rememberBackupExport(
-    mockWalletData,
-    new Date("2026-10-03T12:00:00Z"),
-  );
+  const saved = rememberBackupExport(mockWalletData, new Date("2026-10-03T12:00:00Z"));
   expect(saved).toEqual({
     requestedAt: "2026-10-03T12:00:00.000Z",
     records: mockWalletData.records.length,

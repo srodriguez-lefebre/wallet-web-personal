@@ -1,9 +1,7 @@
 import { readStorage, writeStorage } from "./storage";
-import type { WalletDataset } from "../../shared/types";
-export {
-  walletDataHealth,
-  summarizeCsvPreview,
-} from "../../shared/data-quality";
+
+import type { WalletDataset } from "@shared/types";
+export { walletDataHealth, summarizeCsvPreview } from "@shared/data-quality";
 
 export interface BackupReceipt {
   requestedAt: string;
@@ -13,10 +11,7 @@ export interface BackupReceipt {
 export function backupFilename(date = new Date()) {
   return `wallet-backup-${date.toISOString().replaceAll(":", "-").replace(".", "-")}.json`;
 }
-export function rememberBackupExport(
-  dataset: WalletDataset,
-  date = new Date(),
-): BackupReceipt {
+export function rememberBackupExport(dataset: WalletDataset, date = new Date()): BackupReceipt {
   const receipt = {
     requestedAt: date.toISOString(),
     records: dataset.records.length,

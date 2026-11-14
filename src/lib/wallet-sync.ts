@@ -9,9 +9,14 @@ export class WalletSync<T> {
     this.epoch += 1;
   }
 
-  activate() { this.active = true; }
+  activate() {
+    this.active = true;
+  }
 
-  deactivate() { this.active = false; this.invalidate(); }
+  deactivate() {
+    this.active = false;
+    this.invalidate();
+  }
 
   async read(load: () => Promise<T>): Promise<T | undefined> {
     const epoch = ++this.epoch;
@@ -29,13 +34,14 @@ export class WalletSync<T> {
   refresh(load: () => Promise<T>): Promise<T> {
     return this.enqueue(async () => {
       const result = await this.read(load);
-      if (result === undefined)
-        throw new Error("Wallet changed during refresh. Retry loading.");
+      if (result === undefined) throw new Error("Wallet changed during refresh. Retry loading.");
       return result;
     });
   }
 
-  snapshot(load:()=>Promise<T>):Promise<T>{return this.enqueue(load);}
+  snapshot(load: () => Promise<T>): Promise<T> {
+    return this.enqueue(load);
+  }
 
   mutate<R>(write: () => Promise<R>, reload: () => Promise<T>): Promise<R> {
     this.invalidate();

@@ -16,12 +16,13 @@ import {
   X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { monthKey, recentMonthKeys } from "@shared/calculations";
+
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/wallet/global-search";
 import { WalletNotifications } from "@/components/wallet/wallet-notifications";
 import { useWallet } from "@/providers/wallet-provider";
 import { cn } from "@/lib/utils";
-import { monthKey, recentMonthKeys } from "@shared/calculations";
 
 const navItems = [
   { label: "Dashboard", href: "/", icon: Home },
@@ -70,7 +71,7 @@ export function AppShell({ children }: PropsWithChildren) {
 
   function openNewRecord() {
     requestNewRecord();
-    navigate("/records");
+    void navigate("/records");
     setIsMobileNavOpen(false);
   }
 
@@ -141,9 +142,7 @@ export function AppShell({ children }: PropsWithChildren) {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">Personal Wallet</p>
-                  <p className="text-xs text-muted-foreground">
-                    Finance control
-                  </p>
+                  <p className="text-xs text-muted-foreground">Finance control</p>
                 </div>
               </div>
               <Button

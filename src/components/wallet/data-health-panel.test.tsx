@@ -1,6 +1,7 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { DataHealthPanel } from "./data-health-panel";
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -42,19 +43,15 @@ test("data check uses one complete snapshot for repeated clicks and opens the re
   });
   expect(snapshot).toHaveBeenCalledTimes(1);
   const data = structuredClone(mockWalletData);
-  data.records[0].paymentStatus = "needs_review";
+  data.records[0]!.paymentStatus = "needs_review";
   await act(async () => {
     release(data);
     await pending;
   });
   const button = tree!.root
     .findAllByType("button")
-    .find((button) =>
-      button
-        .findAllByType("p")
-        .some((p) => p.children.includes("Needs review")),
-    )!;
-  expect(button.findAllByType("p")[1].children).toEqual(["1"]);
+    .find((button) => button.findAllByType("p").some((p) => p.children.includes("Needs review")))!;
+  expect(button.findAllByType("p")[1]!.children).toEqual(["1"]);
   await act(async () => button.props.onClick());
   expect(review).toHaveBeenCalledTimes(1);
 });
@@ -74,9 +71,12 @@ test("a failed data check gives feedback and can be retried", async () => {
     );
   });
   await act(async () => tree!.root.findByType("button").props.onClick());
-  expect(tree!.root.findByProps({ role: "alert" }).children.join("")).toContain(
-    "Retry",
-  );
+  expect(
+    tree!.root
+      .findByProps({ role: "alert" })
+      .children.map((child) => (typeof child === "object" ? "" : String(child)))
+      .join(""),
+  ).toContain("Retry");
   await act(async () => tree!.root.findByType("button").props.onClick());
   expect(snapshot).toHaveBeenCalledTimes(2);
   expect(tree!.root.findAllByProps({ role: "alert" })).toHaveLength(0);

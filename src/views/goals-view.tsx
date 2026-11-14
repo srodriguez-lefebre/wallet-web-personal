@@ -12,6 +12,12 @@ import {
   X,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
+
+import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,9 +35,6 @@ import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { formatCalendarDate, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
-import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
-import { goalStatusLabels } from "@shared/constants";
-import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
 interface GoalDraft {
   id: string;
@@ -80,14 +83,8 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
 
 export function GoalsView() {
   const navigate = useNavigate();
-  const {
-    dataset,
-    addGoal,
-    updateGoal,
-    updateRecord,
-    deleteGoal,
-    addGoalReservation,
-  } = useWallet();
+  const { dataset, addGoal, updateGoal, updateRecord, deleteGoal, addGoalReservation } =
+    useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const goals = calculateGoalProgress(dataset);
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
@@ -108,9 +105,7 @@ export function GoalsView() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
-  const [goalDrafts, setGoalDrafts] = useState<GoalDraft[]>(() =>
-    buildGoalDrafts(dataset.goals),
-  );
+  const [goalDrafts, setGoalDrafts] = useState<GoalDraft[]>(() => buildGoalDrafts(dataset.goals));
   const visibleGoalDrafts = goalDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
@@ -174,23 +169,39 @@ export function GoalsView() {
     );
 
     if (invalidDraft) {
-      setEditError(
-        "Make sure every goal has a name and an amount greater than zero.",
-      );
+      setEditError("Make sure every goal has a name and an amount greater than zero.");
       return;
     }
 
     const historicalAssociations: Array<{ goalId: string; recordIds: string[] }> = [];
     for (const draft of activeDrafts) {
-      if (!draft.autoCaptureEnabled || !draft.autoCaptureStart || draft.autoCaptureStart > new Date().toISOString().slice(0, 10)) continue;
-      const recordIds = dataset.records.filter((record) => record.type === "expense" && record.paymentStatus !== "cancelled" && record.occurredAt.slice(0, 10) >= draft.autoCaptureStart && record.occurredAt.slice(0, 10) <= draft.autoCaptureEnd && !(record.goalIds ?? []).includes(draft.id)).map((record) => record.id);
-      if (recordIds.length && window.confirm(`Se encontraron ${recordIds.length} gastos históricos para ${draft.name}. ¿Querés asociarlos ahora?`)) historicalAssociations.push({ goalId: draft.id, recordIds });
+      if (
+        !draft.autoCaptureEnabled ||
+        !draft.autoCaptureStart ||
+        draft.autoCaptureStart > new Date().toISOString().slice(0, 10)
+      )
+        continue;
+      const recordIds = dataset.records
+        .filter(
+          (record) =>
+            record.type === "expense" &&
+            record.paymentStatus !== "cancelled" &&
+            record.occurredAt.slice(0, 10) >= draft.autoCaptureStart &&
+            record.occurredAt.slice(0, 10) <= draft.autoCaptureEnd &&
+            !(record.goalIds ?? []).includes(draft.id),
+        )
+        .map((record) => record.id);
+      if (
+        recordIds.length &&
+        window.confirm(
+          `Se encontraron ${recordIds.length} gastos históricos para ${draft.name}. ¿Querés asociarlos ahora?`,
+        )
+      )
+        historicalAssociations.push({ goalId: draft.id, recordIds });
     }
 
     await Promise.all(
-      goalDrafts
-        .filter((draft) => draft.isDeleted)
-        .map((draft) => deleteGoal(draft.id)),
+      goalDrafts.filter((draft) => draft.isDeleted).map((draft) => deleteGoal(draft.id)),
     );
 
     for (const group of historicalAssociations) {
@@ -200,7 +211,15 @@ export function GoalsView() {
         await updateRecord(recordId, {
           ...record,
           goalIds: [...(record.goalIds ?? []), group.goalId],
-          goalAssociations: [...(record.goalAssociations ?? []), { goalId: group.goalId, assignmentSource: "date_rule", useReserved: false, reserveIncome: true }],
+          goalAssociations: [
+            ...(record.goalAssociations ?? []),
+            {
+              goalId: group.goalId,
+              assignmentSource: "date_rule",
+              useReserved: false,
+              reserveIncome: true,
+            },
+          ],
         });
       }
     }
@@ -210,10 +229,7 @@ export function GoalsView() {
         const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
         if (!currentGoal) return Promise.resolve();
 
-        return updateGoal(
-          draft.id,
-          buildGoalUpdatePayload(draft, currentGoal.icon),
-        );
+        return updateGoal(draft.id, buildGoalUpdatePayload(draft, currentGoal.icon));
       }),
     );
 
@@ -254,7 +270,7 @@ export function GoalsView() {
     setTargetAmount("");
     setDeadline("");
     setIsCreateOpen(false);
-    navigate(`/goals/${id}`);
+    void navigate(`/goals/${id}`);
   }
 
   async function handleReserve(event: FormEvent) {
@@ -263,7 +279,14 @@ export function GoalsView() {
     const numericAmount = Number(reserveAmount);
     if (!account || !goalId || !Number.isFinite(numericAmount) || numericAmount <= 0) return;
     const balance = calculateAccountBalances(dataset).find((item) => item.account.id === accountId);
-    if (balance && numericAmount > balance.freeBalance && !window.confirm(`La reserva supera el saldo disponible (${formatMoney(balance.freeBalance, account.currency)}). ¿Continuar?`)) return;
+    if (
+      balance &&
+      numericAmount > balance.freeBalance &&
+      !window.confirm(
+        `La reserva supera el saldo disponible (${formatMoney(balance.freeBalance, account.currency)}). ¿Continuar?`,
+      )
+    )
+      return;
 
     await addGoalReservation({
       goalId,
@@ -288,22 +311,20 @@ export function GoalsView() {
             <Button
               size="icon"
               variant="outline"
-              aria-label={
-                showHidden ? "Hide hidden goals" : "Show hidden goals"
-              }
+              aria-label={showHidden ? "Hide hidden goals" : "Show hidden goals"}
               onClick={() => setShowHidden((current) => !current)}
             >
-              {showHidden ? (
-                <EyeOff className="h-5 w-5" />
-              ) : (
-                <Eye className="h-5 w-5" />
-              )}
+              {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
             <Button variant="outline" onClick={cancelEditingGoals}>
               <X className="h-4 w-4" />
               Cancel
             </Button>
-            <Button onClick={saveGoalEdits}>
+            <Button
+              onClick={() => {
+                finishAction(saveGoalEdits());
+              }}
+            >
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -332,7 +353,12 @@ export function GoalsView() {
                     Set the target, choose a color, and connect it to a tag.
                   </DialogDescription>
                 </DialogHeader>
-                <form className="space-y-4" onSubmit={handleCreateGoal}>
+                <form
+                  className="space-y-4"
+                  onSubmit={(event) => {
+                    finishAction(handleCreateGoal(event));
+                  }}
+                >
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Name</span>
                     <input
@@ -348,9 +374,7 @@ export function GoalsView() {
                       <input
                         value={targetAmount}
                         onChange={(event) =>
-                          setTargetAmount(
-                            limitDecimalPlaces(event.target.value),
-                          )
+                          setTargetAmount(limitDecimalPlaces(event.target.value))
                         }
                         type="number"
                         className={inputClassName}
@@ -362,9 +386,7 @@ export function GoalsView() {
                       <span className="text-sm font-medium">Currency</span>
                       <select
                         value={currency}
-                        onChange={(event) =>
-                          setCurrency(event.target.value as CurrencyCode)
-                        }
+                        onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
                         className={inputClassName}
                       >
                         <option value="UYU">UYU</option>
@@ -446,9 +468,7 @@ export function GoalsView() {
                           type="button"
                           variant="outline"
                           size="icon"
-                          aria-label={
-                            draft.isVisible ? "Hide goal" : "Show goal"
-                          }
+                          aria-label={draft.isVisible ? "Hide goal" : "Show goal"}
                           title={draft.isVisible ? "Hide goal" : "Show goal"}
                           onClick={() =>
                             updateGoalDraft(draft.id, {
@@ -483,9 +503,7 @@ export function GoalsView() {
                           value={draft.targetAmount}
                           onChange={(event) =>
                             updateGoalDraft(draft.id, {
-                              targetAmount: limitDecimalPlaces(
-                                event.target.value,
-                              ),
+                              targetAmount: limitDecimalPlaces(event.target.value),
                             })
                           }
                           type="number"
@@ -548,9 +566,7 @@ export function GoalsView() {
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">
-                          Linked account
-                        </span>
+                        <span className="text-sm font-medium">Linked account</span>
                         <select
                           value={draft.accountId}
                           onChange={(event) =>
@@ -619,9 +635,7 @@ export function GoalsView() {
                             />
                           </label>
                           <label className="space-y-2">
-                            <span className="text-sm font-medium">
-                              Account de reserva
-                            </span>
+                            <span className="text-sm font-medium">Account de reserva</span>
                             <select
                               className={inputClassName}
                               value={draft.autoReservationAccountId}
@@ -672,11 +686,13 @@ export function GoalsView() {
                 key={item.goal.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => navigate(`/goals/${item.goal.id}`)}
+                onClick={() => {
+                  void navigate(`/goals/${item.goal.id}`);
+                }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
-                    navigate(`/goals/${item.goal.id}`);
+                    void navigate(`/goals/${item.goal.id}`);
                   }
                 }}
                 className="cursor-pointer transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
@@ -693,19 +709,11 @@ export function GoalsView() {
                       <div>
                         <CardTitle>{item.goal.name}</CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          Target{" "}
-                          {formatMoney(
-                            item.goal.targetAmount,
-                            item.goal.currency,
-                          )}
+                          Target {formatMoney(item.goal.targetAmount, item.goal.currency)}
                         </p>
                       </div>
                     </div>
-                    <Badge
-                      variant={
-                        item.goal.status === "active" ? "success" : "muted"
-                      }
-                    >
+                    <Badge variant={item.goal.status === "active" ? "success" : "muted"}>
                       {goalStatusLabels[item.goal.status]}
                     </Badge>
                   </div>
@@ -742,7 +750,9 @@ export function GoalsView() {
                     {item.goal.deadline ? (
                       <Badge variant="muted">
                         <CalendarDays className="mr-1 h-3 w-3" />
-                        <time dateTime={item.goal.deadline}>{formatCalendarDate(item.goal.deadline)}</time>
+                        <time dateTime={item.goal.deadline}>
+                          {formatCalendarDate(item.goal.deadline)}
+                        </time>
                       </Badge>
                     ) : null}
                     {!item.goal.isVisible ? (
@@ -761,9 +771,7 @@ export function GoalsView() {
         <div className="space-y-4">
           {editError ? (
             <Card className="border-destructive/40 bg-destructive/5">
-              <CardContent className="py-4 text-sm text-destructive">
-                {editError}
-              </CardContent>
+              <CardContent className="py-4 text-sm text-destructive">{editError}</CardContent>
             </Card>
           ) : null}
           <Card>
@@ -775,12 +783,20 @@ export function GoalsView() {
             </CardHeader>
             <CardContent>
               <p className="mb-4 text-sm text-muted-foreground">
-                You can reserve money for active goals. Completing a goal releases its remaining reservations back to the original accounts.
+                You can reserve money for active goals. Completing a goal releases its remaining
+                reservations back to the original accounts.
               </p>
               {reservationGoals.length === 0 && (
-                <p className="mb-4 text-sm font-medium">Create or reopen a visible goal to reserve money.</p>
+                <p className="mb-4 text-sm font-medium">
+                  Create or reopen a visible goal to reserve money.
+                </p>
               )}
-              <form className="space-y-4" onSubmit={handleReserve}>
+              <form
+                className="space-y-4"
+                onSubmit={(event) => {
+                  finishAction(handleReserve(event));
+                }}
+              >
                 <label className="block space-y-2">
                   <span className="text-sm font-medium">Goal</span>
                   <select
@@ -819,9 +835,7 @@ export function GoalsView() {
                   <span className="text-sm font-medium">Amount</span>
                   <input
                     value={reserveAmount}
-                    onChange={(event) =>
-                      setReserveAmount(limitDecimalPlaces(event.target.value))
-                    }
+                    onChange={(event) => setReserveAmount(limitDecimalPlaces(event.target.value))}
                     type="number"
                     className={inputClassName}
                     placeholder="0"

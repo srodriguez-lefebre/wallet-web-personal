@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+
 import { expect, test, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -87,11 +88,7 @@ vi.mock("vite", () => ({
 
 const stages = ["lock", "database", "migrations", "server", "vite", "listen"];
 const signals = ["SIGINT", "SIGTERM"] as const;
-test.each(
-  stages.flatMap((stage) =>
-    signals.map((signal) => [stage, signal] as const),
-  ),
-)(
+test.each(stages.flatMap((stage) => signals.map((signal) => [stage, signal] as const)))(
   "%s interrupted by %s closes resources before releasing the lock and skips later startup steps",
   async (stage, signal) => {
     vi.resetModules();
@@ -103,56 +100,43 @@ test.each(
     state.gate = new Promise<void>((resolve) => {
       state.finishOpening = resolve;
     });
-    state.directory = await mkdtemp(
-      path.join(os.tmpdir(), "wallet-start-test-"),
-    );
-    const previous = new Map(
-      signals.map((name) => [
-        name,
-        new Set(process.listeners(name)),
-      ]),
-    );
+    state.directory = await mkdtemp(path.join(os.tmpdir(), "wallet-start-test-"));
+    const previous = new Map(signals.map((name) => [name, new Set(process.listeners(name))]));
     const originalFetch = globalThis.fetch;
     const startup = import("./start.js");
     try {
       await state.started;
       const handler = process
         .listeners(signal)
-        .find((listener) => !previous.get(signal)!.has(listener));
+        .find((listener) => !previous.get(signal)!.has(listener))!;
       expect(handler, "startup must already handle cancellation").toBeDefined();
-      handler!(signal);
+      handler(signal);
       if (stage !== "lock")
-        expect(
-          await readFile(path.join(state.directory, "process.lock"), "utf8"),
-        ).toBe("owned");
+        expect(await readFile(path.join(state.directory, "process.lock"), "utf8")).toBe("owned");
       expect(state.events).not.toContain("release");
       state.finishOpening();
       await startup;
       expect(state.events.filter((event) => stages.includes(event))).toEqual(
         stages.slice(0, stages.indexOf(stage) + 1),
       );
-      expect(state.events.at(-1)).toBe("release");
+      expect(state.events.at(-1)!).toBe("release");
       if (stage !== "lock") expect(state.events).toContain("database.close");
-      if (["vite", "listen"].includes(stage))
-        expect(state.events).toContain("vite.close");
+      if (["vite", "listen"].includes(stage)) expect(state.events).toContain("vite.close");
       if (stage === "listen") expect(state.events).toContain("server.close");
-      await expect(
-        readFile(path.join(state.directory, "process.lock")),
-      ).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(readFile(path.join(state.directory, "process.lock"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
       expect(globalThis.fetch).toBe(originalFetch);
       for (const name of signals)
         expect(
-          process
-            .listeners(name)
-            .filter((listener) => !previous.get(name)!.has(listener)),
+          process.listeners(name).filter((listener) => !previous.get(name)!.has(listener)),
         ).toEqual([]);
     } finally {
       state.finishOpening();
       await startup.catch(() => undefined);
       for (const name of signals)
         for (const listener of process.listeners(name))
-          if (!previous.get(name)!.has(listener))
-            process.removeListener(name, listener);
+          if (!previous.get(name)!.has(listener)) process.removeListener(name, listener);
       globalThis.fetch = originalFetch;
       await rm(state.directory, { recursive: true, force: true });
     }

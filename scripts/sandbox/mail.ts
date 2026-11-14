@@ -71,10 +71,8 @@ export function runMailAutomation(
           .filter((thread) => {
             const labels = [...query.matchAll(/(-?)label:"([^"]+)"/g)];
             if (
-              !labels.every(([, excluded, name]) =>
-                excluded
-                  ? !thread.labels.includes(name)
-                  : thread.labels.includes(name),
+              !labels.every(([, excluded, name = ""]) =>
+                excluded ? !thread.labels.includes(name) : thread.labels.includes(name),
               )
             )
               return false;
@@ -106,20 +104,16 @@ export function runMailAutomation(
                 },
               })),
             addLabel: (value: { name: string }) => {
-              if (!thread.labels.includes(value.name))
-                thread.labels.push(value.name);
+              if (!thread.labels.includes(value.name)) thread.labels.push(value.name);
             },
             removeLabel: (value: { name: string }) => {
-              thread.labels = thread.labels.filter(
-                (name) => name !== value.name,
-              );
+              thread.labels = thread.labels.filter((name) => name !== value.name);
             },
           })),
     },
     UrlFetchApp: {
       fetch: (url: string, options: Record<string, unknown>) => {
-        if (url !== input.ingestUrl)
-          throw new Error("Sandbox refused a different ingest URL");
+        if (url !== input.ingestUrl) throw new Error("Sandbox refused a different ingest URL");
         const response = send(url, options);
         deliveries.push({
           payload: JSON.parse(String(options.payload)),
@@ -133,12 +127,7 @@ export function runMailAutomation(
     },
   };
   const source = ["EmailProcessors.gs", "Code.gs"]
-    .map((name) =>
-      readFileSync(
-        new URL(`../../mail-service/${name}`, import.meta.url),
-        "utf8",
-      ),
-    )
+    .map((name) => readFileSync(new URL(`../../mail-service/${name}`, import.meta.url), "utf8"))
     .join("\n");
   try {
     runInNewContext(`${source}\nprocessPendingEmails();`, context, {
@@ -146,9 +135,7 @@ export function runMailAutomation(
     });
   } catch (error) {
     // Preserve successful prior threads and pending failures, like a stopped trigger.
-    logs.push(
-      `Ejecución interrumpida: ${error instanceof Error ? error.message : String(error)}`,
-    );
+    logs.push(`Ejecución interrumpida: ${error instanceof Error ? error.message : String(error)}`);
   }
   return { threads, logs, deliveries };
 }
@@ -167,17 +154,13 @@ export function runMailWorker(input: MailRunInput): Promise<MailRunResult> {
     });
     const timer = setTimeout(() => {
       void worker.terminate();
-      reject(
-        new Error(
-          "Simulated trigger timed out; pending messages can be retried",
-        ),
-      );
+      reject(new Error("Simulated trigger timed out; pending messages can be retried"));
     }, 125_000);
     worker.once("message", (result: MailRunResult) => {
       clearTimeout(timer);
       resolve(result);
     });
-    worker.once("error", (error) => {
+    worker.once("error", (error: Error) => {
       clearTimeout(timer);
       reject(error);
     });

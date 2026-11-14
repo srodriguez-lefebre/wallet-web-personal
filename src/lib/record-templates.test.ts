@@ -1,11 +1,13 @@
 import { expect, test } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
-import type { RecordTemplate } from "../../shared/types";
+import { mockWalletData } from "@shared/mock-data";
+
 import {
   prepareTemplateDraft,
   templateFromRecord,
   templateReplacementPatch,
 } from "./record-templates";
+
+import type { RecordTemplate } from "@shared/types";
 const testCard = {
   id: "card",
   name: "Test card",
@@ -21,7 +23,7 @@ const testCard = {
 };
 test("saving a template omits historical dates, rates, debts and reservation instructions", () => {
   const original = {
-    ...mockWalletData.records[0],
+    ...mockWalletData.records[0]!,
     debtId: "historical-debt",
     exchangeRateToPrimary: 41,
     goalIds: ["historical-goal"],
@@ -47,7 +49,7 @@ test("saving a template omits historical dates, rates, debts and reservation ins
 test("a saved template prepares a draft with today's card rate without writing or retaining missing references", () => {
   const data = structuredClone(mockWalletData);
   data.creditCards = [{ ...testCard }];
-  const card = data.creditCards[0];
+  const card = data.creditCards[0]!;
   data.exchangeRates = [
     {
       id: "old",
@@ -73,26 +75,22 @@ test("a saved template prepares a draft with today's card rate without writing o
     currency: "USD",
     paymentType: "credit",
     creditCardId: card.id,
-    accountId: data.accounts[0].id,
+    accountId: data.accounts[0]!.id,
     categoryId: "missing",
     tagId: "missing",
   };
-  const result = prepareTemplateDraft(
-    template,
-    data,
-    new Date("2026-10-03T12:00:00Z"),
-  );
+  const result = prepareTemplateDraft(template, data, new Date("2026-10-03T12:00:00Z"));
   expect(result.limitRate).toBe("44");
-  expect(result.value.accountId).toBe(data.accounts[0].id);
+  expect(result.value.accountId).toBe(data.accounts[0]!.id);
   expect(result.value.categoryId).toBeUndefined();
   expect(result.value.tagId).toBeUndefined();
   expect(result.problems.length).toBeGreaterThan(0);
-  expect(template.accountId).toBe(data.accounts[0].id);
+  expect(template.accountId).toBe(data.accounts[0]!.id);
 });
 test("archived cards and bank destinations are cleared without choosing another financial destination", () => {
   const data = structuredClone(mockWalletData);
   data.creditCards = [{ ...testCard, isActive: false }];
-  data.accounts[0].isActive = false;
+  data.accounts[0]!.isActive = false;
   const template: RecordTemplate = {
     id: "template",
     name: "Old",
@@ -100,8 +98,8 @@ test("archived cards and bank destinations are cleared without choosing another 
     amount: 10,
     currency: "UYU",
     paymentType: "credit",
-    creditCardId: data.creditCards[0].id,
-    accountId: data.accounts[0].id,
+    creditCardId: data.creditCards[0]!.id,
+    accountId: data.accounts[0]!.id,
   };
   const result = prepareTemplateDraft(template, data);
   expect(result.value.accountId).toBeUndefined();
@@ -133,9 +131,9 @@ test("an archived card cannot silently turn a purchase into a debit from its sav
       amount: 10,
       currency: "UYU",
       paymentType: "credit",
-      accountId: data.accounts[0].id,
+      accountId: data.accounts[0]!.id,
       creditCardId: testCard.id,
-      categoryId: data.categories[0].id,
+      categoryId: data.categories[0]!.id,
     },
     data,
   );
@@ -147,7 +145,7 @@ test("an archived card cannot silently turn a purchase into a debit from its sav
 test("an archived linked bank account cannot silently turn a purchase into card-only", () => {
   const data = structuredClone(mockWalletData);
   data.creditCards = [testCard];
-  data.accounts[0].isActive = false;
+  data.accounts[0]!.isActive = false;
   const result = prepareTemplateDraft(
     {
       id: "template",
@@ -156,9 +154,9 @@ test("an archived linked bank account cannot silently turn a purchase into card-
       amount: 10,
       currency: "UYU",
       paymentType: "credit",
-      accountId: data.accounts[0].id,
+      accountId: data.accounts[0]!.id,
       creditCardId: testCard.id,
-      categoryId: data.categories[0].id,
+      categoryId: data.categories[0]!.id,
     },
     data,
   );

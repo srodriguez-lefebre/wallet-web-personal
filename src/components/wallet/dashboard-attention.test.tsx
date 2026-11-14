@@ -1,43 +1,35 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../../shared/mock-data";
-import { walletAttention } from "@/lib/wallet-attention";
-import { DebtNetBadge } from "./debt-net-badge";
 import { calculateVisibleDebtSummary } from "@shared/calculations";
+import { mockWalletData } from "@shared/mock-data";
+
+import { DebtNetBadge } from "./debt-net-badge";
+
+import { walletAttention } from "@/lib/wallet-attention";
 let tree: ReactTestRenderer | undefined;
 test("debt net distinguishes unknown amounts and partial known totals", async () => {
   const data = structuredClone(mockWalletData);
   data.debts = [
     {
-      ...data.debts[0],
+      ...data.debts[0]!,
       status: "active",
       isVisible: true,
       pendingAmount: undefined,
     },
   ];
   await act(async () => {
-    tree = create(
-      <DebtNetBadge
-        summary={calculateVisibleDebtSummary(data)}
-        currency="UYU"
-      />,
-    );
+    tree = create(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Net unavailable");
   expect(JSON.stringify(tree!.toJSON())).not.toContain("$ 0");
   data.debts.push({
-    ...data.debts[0],
+    ...data.debts[0]!,
     id: "known",
     pendingAmount: 10,
     currency: "UYU",
   });
   await act(async () => {
-    tree!.update(
-      <DebtNetBadge
-        summary={calculateVisibleDebtSummary(data)}
-        currency="UYU"
-      />,
-    );
+    tree!.update(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Known net");
 });
@@ -51,13 +43,13 @@ test("attention includes old review records and overdue visible open debts, excl
   const data = structuredClone(mockWalletData);
   data.records = [
     {
-      ...data.records[0],
+      ...data.records[0]!,
       occurredAt: "2020-01-01T12:00:00Z",
       paymentStatus: "needs_review",
     },
   ];
   const debt = {
-    ...data.debts[0],
+    ...data.debts[0]!,
     status: "active" as const,
     isVisible: true,
     pendingAmount: undefined,
@@ -74,5 +66,5 @@ test("attention includes old review records and overdue visible open debts, excl
   const result = walletAttention(data, new Date("2026-10-03T12:00:00Z"));
   expect(result.review).toBe(1);
   expect(result.debts.map((d) => d.id)).toEqual(["old", "today", "seven"]);
-  expect(result.debts[0].pendingAmount).toBeUndefined();
+  expect(result.debts[0]!.pendingAmount).toBeUndefined();
 });

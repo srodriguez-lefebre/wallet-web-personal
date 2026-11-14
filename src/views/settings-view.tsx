@@ -15,6 +15,11 @@ import {
   WalletCards,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+
+import type { ActionToastOptions } from "@/lib/action-toast-runner";
+import type { Category, CurrencyCode, Tag } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,10 +37,8 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/providers/auth-provider";
 import { useActionToast } from "@/lib/use-action-toast";
-import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import { paymentDefaults } from "@/lib/preferences";
 import { useWallet } from "@/providers/wallet-provider";
-import type { Category, CurrencyCode, Tag } from "@shared/types";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -64,10 +67,7 @@ export function SettingsView() {
   } = useWallet();
   const { lock, expiresAt } = useAuth();
   const { toast, runAction } = useActionToast();
-  async function runSettingAction(
-    work: () => Promise<unknown>,
-    options: ActionToastOptions,
-  ) {
+  async function runSettingAction(work: () => Promise<unknown>, options: ActionToastOptions) {
     try {
       await runAction(work, options);
       return true;
@@ -80,15 +80,9 @@ export function SettingsView() {
   const [newCategoryParentId, setNewCategoryParentId] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
   const [newCategoryIcon, setNewCategoryIcon] = useState("tag");
-  const [editingCategoryIconId, setEditingCategoryIconId] = useState<
-    string | null
-  >(null);
-  const [expandedCategoryIds, setExpandedCategoryIds] = useState<
-    Record<string, boolean>
-  >({});
-  const [categoryDrafts, setCategoryDrafts] = useState<
-    Record<string, CategoryDraft>
-  >({});
+  const [editingCategoryIconId, setEditingCategoryIconId] = useState<string | null>(null);
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Record<string, boolean>>({});
+  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, CategoryDraft>>({});
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#2563EB");
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
@@ -96,9 +90,7 @@ export function SettingsView() {
   const [newBudgetLimit, setNewBudgetLimit] = useState("");
   const [newBudgetCategoryId, setNewBudgetCategoryId] = useState("");
   const [defaultAccountId, setDefaultAccountId] = useState(
-    dataset.settings.defaultAccountId ??
-      dataset.settings.primaryAccountId ??
-      "",
+    dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId ?? "",
   );
   const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(
     dataset.settings.defaultCreditCardId
@@ -120,18 +112,13 @@ export function SettingsView() {
 
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
-    navigate("/records");
+    void navigate("/records");
   }
 
   async function handleAddBudget(event: FormEvent) {
     event.preventDefault();
     const limitAmount = Number(newBudgetLimit);
-    if (
-      !newBudgetName.trim() ||
-      !Number.isFinite(limitAmount) ||
-      limitAmount <= 0
-    )
-      return;
+    if (!newBudgetName.trim() || !Number.isFinite(limitAmount) || limitAmount <= 0) return;
     if (
       !(await runSettingAction(
         () =>
@@ -187,13 +174,8 @@ export function SettingsView() {
     );
   }
 
-  function updateCategoryDraft(
-    categoryId: string,
-    patch: Partial<CategoryDraft>,
-  ) {
-    const currentCategory = dataset.categories.find(
-      (category) => category.id === categoryId,
-    );
+  function updateCategoryDraft(categoryId: string, patch: Partial<CategoryDraft>) {
+    const currentCategory = dataset.categories.find((category) => category.id === categoryId);
     if (!currentCategory) return;
 
     setCategoryDrafts((current) => {
@@ -288,9 +270,7 @@ export function SettingsView() {
 
   async function handleDeleteCategory(categoryId: string) {
     if (
-      !window.confirm(
-        "Delete this category tree and reassign its history to Category eliminated?",
-      )
+      !window.confirm("Delete this category tree and reassign its history to Category eliminated?")
     )
       return;
     if (
@@ -425,9 +405,7 @@ export function SettingsView() {
             key={option.value}
             type="button"
             className={`flex h-10 w-10 items-center justify-center rounded-full border transition hover:border-primary ${
-              selectedIcon === option.value
-                ? "border-primary bg-secondary"
-                : "border-transparent"
+              selectedIcon === option.value ? "border-primary bg-secondary" : "border-transparent"
             }`}
             title={option.label}
             aria-label={`Use ${option.label} icon`}
@@ -486,18 +464,14 @@ export function SettingsView() {
           </button>
           <input
             value={draft.color}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, { color: event.target.value })
-            }
+            onChange={(event) => updateCategoryDraft(category.id, { color: event.target.value })}
             type="color"
             className={colorInputClassName}
             aria-label={`${category.name} color`}
           />
           <input
             value={draft.name}
-            onChange={(event) =>
-              updateCategoryDraft(category.id, { name: event.target.value })
-            }
+            onChange={(event) => updateCategoryDraft(category.id, { name: event.target.value })}
             className={`${inlineFieldClassName} min-w-40 flex-1`}
             placeholder="Name"
           />
@@ -507,7 +481,9 @@ export function SettingsView() {
             aria-label={`Save ${category.name}`}
             title="Save"
             disabled={!isDirty}
-            onClick={() => handleSaveCategory(category)}
+            onClick={() => {
+              finishAction(handleSaveCategory(category));
+            }}
           >
             <Save className="h-4 w-4" />
           </Button>
@@ -524,7 +500,9 @@ export function SettingsView() {
                   ? "Delete category and children"
                   : "Delete"
             }
-            onClick={() => handleDeleteCategory(category.id)}
+            onClick={() => {
+              finishAction(handleDeleteCategory(category.id));
+            }}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -539,9 +517,7 @@ export function SettingsView() {
   }
 
   const editingCategoryIcon = editingCategoryIconId
-    ? dataset.categories.find(
-        (category) => category.id === editingCategoryIconId,
-      )
+    ? dataset.categories.find((category) => category.id === editingCategoryIconId)
     : undefined;
   const editingCategoryIconDraft = editingCategoryIcon
     ? getCategoryDraft(editingCategoryIcon)
@@ -586,9 +562,7 @@ export function SettingsView() {
               <select
                 className={fieldClassName}
                 value={defaultPaymentMethod}
-                onChange={(event) =>
-                  setDefaultPaymentMethod(event.target.value)
-                }
+                onChange={(event) => setDefaultPaymentMethod(event.target.value)}
               >
                 <option value="cash">Cash</option>
                 <option value="debit">Debit</option>
@@ -609,9 +583,7 @@ export function SettingsView() {
                 className={fieldClassName}
                 value={defaultPaymentStatus}
                 onChange={(event) =>
-                  setDefaultPaymentStatus(
-                    event.target.value as typeof defaultPaymentStatus,
-                  )
+                  setDefaultPaymentStatus(event.target.value as typeof defaultPaymentStatus)
                 }
               >
                 <option value="cleared">Cleared</option>
@@ -624,21 +596,14 @@ export function SettingsView() {
               <select
                 className={fieldClassName}
                 value={primaryCurrency}
-                onChange={(event) =>
-                  setPrimaryCurrency(event.target.value as CurrencyCode)
-                }
+                onChange={(event) => setPrimaryCurrency(event.target.value as CurrencyCode)}
               >
-                {(["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]).map(
-                  (currency) => (
-                    <option key={currency}>{currency}</option>
-                  ),
-                )}
+                {(["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]).map((currency) => (
+                  <option key={currency}>{currency}</option>
+                ))}
               </select>
             </label>
-            <Button
-              className="self-end"
-              onClick={() => void saveRecordDefaults()}
-            >
+            <Button className="self-end" onClick={() => void saveRecordDefaults()}>
               <Save className="h-4 w-4" />
               Save
             </Button>
@@ -668,8 +633,7 @@ export function SettingsView() {
                   void runSettingAction(
                     () =>
                       updateWalletSettings({
-                        theme: event.target
-                          .value as typeof dataset.settings.theme,
+                        theme: event.target.value as typeof dataset.settings.theme,
                       }),
                     {
                       processing: "Saving theme...",
@@ -710,10 +674,7 @@ export function SettingsView() {
                 <WalletCards className="h-4 w-4" />
                 Categories
               </CardTitle>
-              <Dialog
-                open={isCategoryDialogOpen}
-                onOpenChange={setIsCategoryDialogOpen}
-              >
+              <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
                 <DialogTrigger asChild>
                   <Button size="icon" aria-label="New category">
                     <Plus className="h-4 w-4" />
@@ -723,18 +684,20 @@ export function SettingsView() {
                   <DialogHeader>
                     <DialogTitle>New category</DialogTitle>
                     <DialogDescription>
-                      Create a parent category or select a parent to create a
-                      child.
+                      Create a parent category or select a parent to create a child.
                     </DialogDescription>
                   </DialogHeader>
-                  <form className="space-y-4" onSubmit={handleAddCategory}>
+                  <form
+                    className="space-y-4"
+                    onSubmit={(event) => {
+                      finishAction(handleAddCategory(event));
+                    }}
+                  >
                     <label className="block space-y-2">
                       <span className="text-sm font-medium">Name</span>
                       <input
                         value={newCategoryName}
-                        onChange={(event) =>
-                          setNewCategoryName(event.target.value)
-                        }
+                        onChange={(event) => setNewCategoryName(event.target.value)}
                         className={fieldClassName}
                         placeholder="Groceries, Butcher, Rent..."
                       />
@@ -743,9 +706,7 @@ export function SettingsView() {
                       <span className="text-sm font-medium">Parent</span>
                       <select
                         value={newCategoryParentId}
-                        onChange={(event) =>
-                          setNewCategoryParentId(event.target.value)
-                        }
+                        onChange={(event) => setNewCategoryParentId(event.target.value)}
                         className={fieldClassName}
                       >
                         <option value="">No parent</option>
@@ -763,15 +724,10 @@ export function SettingsView() {
                       <label className="block space-y-2">
                         <span className="text-sm font-medium">Color</span>
                         <div className="flex items-center gap-2">
-                          <CategoryIcon
-                            icon={newCategoryIcon}
-                            color={newCategoryColor}
-                          />
+                          <CategoryIcon icon={newCategoryIcon} color={newCategoryColor} />
                           <input
                             value={newCategoryColor}
-                            onChange={(event) =>
-                              setNewCategoryColor(event.target.value)
-                            }
+                            onChange={(event) => setNewCategoryColor(event.target.value)}
                             type="color"
                             className={colorInputClassName}
                             aria-label="New category color"
@@ -816,9 +772,7 @@ export function SettingsView() {
         >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>
-                Icon for {editingCategoryIcon?.name ?? "category"}
-              </DialogTitle>
+              <DialogTitle>Icon for {editingCategoryIcon?.name ?? "category"}</DialogTitle>
               <DialogDescription>
                 Choose an icon to combine with the current category color.
               </DialogDescription>
@@ -862,7 +816,9 @@ export function SettingsView() {
             <div className="space-y-4">
               <form
                 className="grid gap-2 sm:grid-cols-[1fr_auto_auto]"
-                onSubmit={handleAddTag}
+                onSubmit={(event) => {
+                  finishAction(handleAddTag(event));
+                }}
               >
                 <input
                   value={newTagName}
@@ -898,18 +854,14 @@ export function SettingsView() {
                     >
                       <input
                         value={draft.color}
-                        onChange={(event) =>
-                          updateTagDraft(tag.id, { color: event.target.value })
-                        }
+                        onChange={(event) => updateTagDraft(tag.id, { color: event.target.value })}
                         type="color"
                         className={colorInputClassName}
                         aria-label={`${tag.name} color`}
                       />
                       <input
                         value={draft.name}
-                        onChange={(event) =>
-                          updateTagDraft(tag.id, { name: event.target.value })
-                        }
+                        onChange={(event) => updateTagDraft(tag.id, { name: event.target.value })}
                         className={fieldClassName}
                         placeholder="Name"
                       />
@@ -931,9 +883,7 @@ export function SettingsView() {
                         size="icon"
                         aria-label={`View records for ${tag.name}`}
                         title="View records"
-                        onClick={() =>
-                          openRecords({ tagId: tag.id, type: "all" })
-                        }
+                        onClick={() => openRecords({ tagId: tag.id, type: "all" })}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -943,7 +893,9 @@ export function SettingsView() {
                         aria-label={`Save ${tag.name}`}
                         title="Save"
                         disabled={!isDirty}
-                        onClick={() => handleSaveTag(tag)}
+                        onClick={() => {
+                          finishAction(handleSaveTag(tag));
+                        }}
                       >
                         <Save className="h-4 w-4" />
                       </Button>
@@ -953,7 +905,9 @@ export function SettingsView() {
                         size="icon"
                         aria-label={`Delete ${tag.name}`}
                         title="Delete"
-                        onClick={() => handleDeleteTag(tag.id)}
+                        onClick={() => {
+                          finishAction(handleDeleteTag(tag.id));
+                        }}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -975,7 +929,9 @@ export function SettingsView() {
           <CardContent className="space-y-4">
             <form
               className="grid gap-2 md:grid-cols-[1fr_140px_1fr_auto]"
-              onSubmit={handleAddBudget}
+              onSubmit={(event) => {
+                finishAction(handleAddBudget(event));
+              }}
             >
               <input
                 value={newBudgetName}
@@ -1074,7 +1030,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/accounts")}
+              onClick={() => {
+                void navigate("/accounts");
+              }}
             >
               Accounts
               <ArrowRight className="h-4 w-4" />
@@ -1082,7 +1040,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/goals")}
+              onClick={() => {
+                void navigate("/goals");
+              }}
             >
               Goals
               <Target className="h-4 w-4" />
@@ -1090,7 +1050,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/investments")}
+              onClick={() => {
+                void navigate("/investments");
+              }}
             >
               Investments
               <ArrowRight className="h-4 w-4" />
@@ -1098,7 +1060,9 @@ export function SettingsView() {
             <Button
               variant="outline"
               className="justify-between"
-              onClick={() => navigate("/data")}
+              onClick={() => {
+                void navigate("/data");
+              }}
             >
               Data
               <Upload className="h-4 w-4" />

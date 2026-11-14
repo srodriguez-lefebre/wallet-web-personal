@@ -1,10 +1,12 @@
 import { useRef, useState } from "react";
+import { walletDataHealth } from "@shared/data-quality";
+
+import type { WalletDataset } from "@shared/types";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
-import { walletDataHealth } from "@shared/data-quality";
-import type { WalletDataset } from "@shared/types";
 
 interface Props {
   getSnapshot: () => Promise<WalletDataset>;
@@ -12,12 +14,7 @@ interface Props {
   onRecords: () => void;
   onCards: () => void;
 }
-export function DataHealthPanel({
-  getSnapshot,
-  onReview,
-  onRecords,
-  onCards,
-}: Props) {
+export function DataHealthPanel({ getSnapshot, onReview, onRecords, onCards }: Props) {
   const [result, setResult] = useState<{
     counts: ReturnType<typeof walletDataHealth>;
     checkedAt: string;
@@ -65,14 +62,20 @@ export function DataHealthPanel({
     <Card className="mb-4">
       <CardHeader className="flex flex-wrap flex-row items-center justify-between gap-3">
         <CardTitle>Data check</CardTitle>
-        <Button variant="outline" disabled={busy} onClick={check}>
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            void check();
+          }}
+        >
           {busy ? "Checking..." : "Check complete history"}
         </Button>
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Review complete history, including archived account and category
-          references. This check leaves your data unchanged.
+          Review complete history, including archived account and category references. This check
+          leaves your data unchanged.
         </p>
         {error ? (
           <p role="alert" className="text-sm text-destructive">
@@ -107,9 +110,7 @@ export function DataHealthPanel({
               </Button>
             ) : null}
             {Object.values(result.counts).every((count) => count === 0) ? (
-              <p className="text-sm text-emerald-600">
-                No issues found by these checks.
-              </p>
+              <p className="text-sm text-emerald-600">No issues found by these checks.</p>
             ) : null}
           </>
         ) : null}

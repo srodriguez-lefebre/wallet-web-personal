@@ -1,11 +1,13 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
-import type { PropsWithChildren } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { InvestmentDetailView } from "./investment-detail-view";
 
+import type { PropsWithChildren } from "react";
+
 const state = vi.hoisted(() => ({
-  dataset: undefined as unknown,
+  dataset: ((): unknown => undefined)(),
   id: "",
   update: vi.fn(),
   messages: [] as Array<{ status: string; message: string }>,
@@ -44,7 +46,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const dataset = structuredClone(mockWalletData);
   state.dataset = dataset;
-  state.id = dataset.investments[0].id;
+  state.id = dataset.investments[0]!.id;
   state.update.mockResolvedValue(undefined);
   state.messages = [];
 });
@@ -59,9 +61,7 @@ async function open() {
     tree = create(<InvestmentDetailView />);
   });
   await act(async () => {
-    tree!.root
-      .findByProps({ "aria-label": "Update current value" })
-      .props.onClick();
+    tree!.root.findByProps({ "aria-label": "Update current value" }).props.onClick();
   });
 }
 async function change(value: string) {
@@ -87,9 +87,9 @@ test("valuation sends only currentValue and accepts a complete loss", async () =
     currentValue: 0,
   });
   expect(state.messages.at(-1)?.status).toBe("success");
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Update investment valuation" }),
-  ).toHaveLength(0);
+  expect(tree!.root.findAllByProps({ "aria-label": "Update investment valuation" })).toHaveLength(
+    0,
+  );
 });
 test("two immediate submissions send one request and disable the pending action", async () => {
   let resolve!: () => void;
@@ -107,10 +107,7 @@ test("two immediate submissions send one request and disable the pending action"
     await submit();
   });
   expect(state.update).toHaveBeenCalledTimes(1);
-  expect(
-    tree!.root.findByProps({ "aria-label": "Save current value" }).props
-      .disabled,
-  ).toBe(true);
+  expect(tree!.root.findByProps({ "aria-label": "Save current value" }).props.disabled).toBe(true);
   await act(async () => {
     resolve();
     await first;
@@ -123,14 +120,11 @@ test("a failed valuation leaves the form open, shows failure and permits retry",
   await act(async () => {
     await submit();
   });
-  expect(
-    tree!.root.findAllByProps({ "aria-label": "Update investment valuation" }),
-  ).toHaveLength(1);
+  expect(tree!.root.findAllByProps({ "aria-label": "Update investment valuation" })).toHaveLength(
+    1,
+  );
   expect(state.messages.at(-1)?.status).toBe("error");
-  expect(
-    tree!.root.findByProps({ "aria-label": "Save current value" }).props
-      .disabled,
-  ).toBe(false);
+  expect(tree!.root.findByProps({ "aria-label": "Save current value" }).props.disabled).toBe(false);
   await act(async () => {
     await submit();
   });

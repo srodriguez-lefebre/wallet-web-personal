@@ -2,22 +2,18 @@ import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { formatMoney } from "@shared/calculations";
+import { debtDirectionLabels } from "@shared/constants";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { walletAttention } from "@/lib/wallet-attention";
 import { useWallet } from "@/providers/wallet-provider";
-import { formatMoney } from "@shared/calculations";
-import { debtDirectionLabels } from "@shared/constants";
 
 export function WalletNotifications() {
   const navigate = useNavigate();
-  const {
-    dataset,
-    isAllHistoryComplete,
-    clearRecordFilters,
-    openReviewQueue,
-    setAllPeriod,
-  } = useWallet();
+  const { dataset, isAllHistoryComplete, clearRecordFilters, openReviewQueue, setAllPeriod } =
+    useWallet();
   const [open, setOpen] = useState(false);
   const attention = isAllHistoryComplete ? walletAttention(dataset) : null;
   const count = attention
@@ -31,7 +27,7 @@ export function WalletNotifications() {
       setAllPeriod();
     }
     setOpen(false);
-    navigate(href);
+    void navigate(href);
   }
 
   return (
@@ -42,11 +38,7 @@ export function WalletNotifications() {
           size="icon"
           className="relative"
           aria-label="Notifications"
-          title={
-            attention
-              ? `${count} pending notifications`
-              : "Loading notifications"
-          }
+          title={attention ? `${count} pending notifications` : "Loading notifications"}
           onClick={() => setOpen(!open)}
         >
           <Bell className="h-4 w-4" />
@@ -86,9 +78,7 @@ export function WalletNotifications() {
                   </Button>
                 )}
                 <section aria-label="Debts due soon">
-                  <h3 className="text-sm font-medium">
-                    Overdue or due within 7 days
-                  </h3>
+                  <h3 className="text-sm font-medium">Overdue or due within 7 days</h3>
                   <ul className="mt-2 space-y-2">
                     {attention.debts.map((debt) => (
                       <li key={debt.id}>
@@ -98,12 +88,9 @@ export function WalletNotifications() {
                           onClick={() => goTo("/debts")}
                           className="w-full rounded-md border p-3 text-left hover:bg-secondary focus-visible:outline focus-visible:outline-ring"
                         >
-                          <span className="block text-sm font-medium">
-                            {debt.name}
-                          </span>
+                          <span className="block text-sm font-medium">{debt.name}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {debtDirectionLabels[debt.direction]} · Due{" "}
-                            {debt.dueAt!.slice(0, 10)} ·{" "}
+                            {debtDirectionLabels[debt.direction]} · Due {debt.dueAt!.slice(0, 10)} ·{" "}
                             {debt.pendingAmount === undefined
                               ? "Amount not set"
                               : formatMoney(debt.pendingAmount, debt.currency)}
@@ -119,9 +106,7 @@ export function WalletNotifications() {
                   </p>
                 )}
                 <section aria-label="Pending card statements">
-                  <h3 className="text-sm font-medium">
-                    Unpaid closed statements
-                  </h3>
+                  <h3 className="text-sm font-medium">Unpaid closed statements</h3>
                   {attention.statements.length === 0 ? (
                     <p className="mt-2 text-sm text-muted-foreground">
                       All closed statements are settled.
@@ -138,9 +123,7 @@ export function WalletNotifications() {
                           >
                             <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                               {entry.card.name}
-                              {!entry.card.isActive && (
-                                <Badge variant="muted">Archived</Badge>
-                              )}
+                              {!entry.card.isActive && <Badge variant="muted">Archived</Badge>}
                             </span>
                             <span className="mt-1 block text-xs text-muted-foreground">
                               Due {entry.statement.dueAt.slice(0, 10)} ·{" "}

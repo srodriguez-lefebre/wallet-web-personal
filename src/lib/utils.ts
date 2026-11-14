@@ -19,16 +19,13 @@ export function formatCalendarDate(value: string) {
 
 export function limitDecimalPlaces(value: string, maxDecimals = 2) {
   const normalized = value.replace(",", ".");
-  const [integerPart, ...fractionParts] = normalized.split(".");
+  const [integerPart = "0", ...fractionParts] = normalized.split(".");
   const integer = integerPart.replace(/\D/g, "");
   const safeMaxDecimals = Math.max(0, maxDecimals);
 
   if (!normalized.includes(".")) return integer;
 
-  const fraction = fractionParts
-    .join("")
-    .replace(/\D/g, "")
-    .slice(0, safeMaxDecimals);
+  const fraction = fractionParts.join("").replace(/\D/g, "").slice(0, safeMaxDecimals);
 
   return `${integer}.${fraction}`;
 }

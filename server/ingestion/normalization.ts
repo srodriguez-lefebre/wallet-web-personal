@@ -13,29 +13,22 @@ export function cardLastFour(value: string) {
   return digits.length >= 4 ? digits.slice(-4) : undefined;
 }
 
-export function merchantTokenSequenceMatch(
-  merchantRaw: string,
-  aliasRaw: string,
-) {
+export function merchantTokenSequenceMatch(merchantRaw: string, aliasRaw: string) {
   const merchantTokens = normalizeMerchantTerm(merchantRaw).split(" ").filter(Boolean);
   const aliasTokens = normalizeMerchantTerm(aliasRaw).split(" ").filter(Boolean);
-  if (aliasTokens.length === 0 || aliasTokens.length > merchantTokens.length)
-    return false;
+  if (aliasTokens.length === 0 || aliasTokens.length > merchantTokens.length) return false;
 
   return merchantTokens.some((_, index) =>
-    aliasTokens.every(
-      (aliasToken, offset) => merchantTokens[index + offset] === aliasToken,
-    ),
+    aliasTokens.every((aliasToken, offset) => merchantTokens[index + offset] === aliasToken),
   );
 }
 
-export function pickLongestMerchantMatch<
-  T extends { normalizedAlias: string; priority: number },
->(merchantRaw: string, candidates: T[]) {
+export function pickLongestMerchantMatch<T extends { normalizedAlias: string; priority: number }>(
+  merchantRaw: string,
+  candidates: T[],
+) {
   return candidates
-    .filter((candidate) =>
-      merchantTokenSequenceMatch(merchantRaw, candidate.normalizedAlias),
-    )
+    .filter((candidate) => merchantTokenSequenceMatch(merchantRaw, candidate.normalizedAlias))
     .sort(
       (a, b) =>
         b.normalizedAlias.length - a.normalizedAlias.length ||

@@ -1,10 +1,12 @@
 import { act, create } from "react-test-renderer";
-import type { PropsWithChildren } from "react";
 import { expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+
 import { DashboardView } from "./dashboard-view";
 
-const state = vi.hoisted(() => ({ dataset: undefined as unknown }));
+import type { PropsWithChildren } from "react";
+
+const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)() }));
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({
     dataset: state.dataset,
@@ -42,7 +44,7 @@ vi.mock("recharts", () => {
 test("dashboard excludes completed visible goals while keeping active goals", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const dataset = structuredClone(mockWalletData);
-  const base = dataset.goals[0];
+  const base = dataset.goals[0]!;
   dataset.goals = [
     {
       ...base,

@@ -14,6 +14,19 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  calculateCreditCardCategoryUsage,
+  calculateCreditCardSummaries,
+  buildExpenseComparisonSeries,
+  dateRangeForMonth,
+  formatMoney,
+  relativeDateRanges,
+  relativeMonthKeys,
+} from "@shared/calculations";
+
+import type { CreditCard, CurrencyCode } from "@shared/types";
+
+import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
@@ -32,16 +45,6 @@ import { selectPendingCardStatements } from "@/lib/cards-presentation";
 import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import {
-  calculateCreditCardCategoryUsage,
-  calculateCreditCardSummaries,
-  buildExpenseComparisonSeries,
-  dateRangeForMonth,
-  formatMoney,
-  relativeDateRanges,
-  relativeMonthKeys,
-} from "@shared/calculations";
-import type { CreditCard, CurrencyCode } from "@shared/types";
 
 const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
 const fieldClassName =
@@ -106,7 +109,7 @@ export function CardsView() {
   const [isSaving, setIsSaving] = useState(false);
   const { toast, runAction } = useActionToast();
   const pendingStatements = useMemo(
-    () => isAllHistoryComplete ? selectPendingCardStatements(dataset) : [],
+    () => (isAllHistoryComplete ? selectPendingCardStatements(dataset) : []),
     [dataset, isAllHistoryComplete],
   );
   const cardSummaries = useMemo(
@@ -132,9 +135,7 @@ export function CardsView() {
           buildExpenseComparisonSeries(
             {
               ...dataset,
-              records: dataset.records.filter(
-                (record) => record.creditCardId === card.id,
-              ),
+              records: dataset.records.filter((record) => record.creditCardId === card.id),
             },
             comparisonPeriods,
           ),
@@ -177,9 +178,7 @@ export function CardsView() {
       dueDay < 1 ||
       dueDay > 31
     ) {
-      setError(
-        "Complete the card details, limit, last four digits, closing and due days.",
-      );
+      setError("Complete the card details, limit, last four digits, closing and due days.");
       return;
     }
     const payload: Omit<CreditCard, "id"> = {
@@ -217,9 +216,7 @@ export function CardsView() {
       setEditingId(null);
       setDraft(emptyDraft());
     } catch (nextError) {
-      setError(
-        nextError instanceof Error ? nextError.message : "Could not save card",
-      );
+      setError(nextError instanceof Error ? nextError.message : "Could not save card");
     } finally {
       setIsSaving(false);
     }
@@ -246,7 +243,12 @@ export function CardsView() {
               Configure the card identity, limit and billing dates.
             </DialogDescription>
           </DialogHeader>
-          <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
+          <form
+            className="grid gap-4 md:grid-cols-2"
+            onSubmit={(event) => {
+              finishAction(submit(event));
+            }}
+          >
             <label className="space-y-2">
               <span className="text-sm font-medium">Name</span>
               <input
@@ -271,10 +273,7 @@ export function CardsView() {
                 className={fieldClassName}
                 value={draft.lastFour}
                 onChange={(e) =>
-                  setField(
-                    "lastFour",
-                    e.target.value.replace(/\D/g, "").slice(0, 4),
-                  )
+                  setField("lastFour", e.target.value.replace(/\D/g, "").slice(0, 4))
                 }
                 inputMode="numeric"
                 placeholder="4006"
@@ -286,9 +285,7 @@ export function CardsView() {
                 <select
                   className={fieldClassName}
                   value={draft.limitCurrency}
-                  onChange={(e) =>
-                    setField("limitCurrency", e.target.value as CurrencyCode)
-                  }
+                  onChange={(e) => setField("limitCurrency", e.target.value as CurrencyCode)}
                 >
                   {currencies.map((currency) => (
                     <option key={currency}>{currency}</option>
@@ -343,18 +340,12 @@ export function CardsView() {
                 onChange={(e) => setField("note", e.target.value)}
               />
             </label>
-            {error ? (
-              <p className="text-sm text-destructive md:col-span-2">{error}</p>
-            ) : null}
+            {error ? <p className="text-sm text-destructive md:col-span-2">{error}</p> : null}
             <div className="flex gap-2 md:col-span-2">
               <Button type="submit" disabled={isSaving}>
                 {isSaving ? "Saving..." : "Save card"}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowForm(false)}
-              >
+              <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
                 Cancel
               </Button>
             </div>
@@ -364,7 +355,9 @@ export function CardsView() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {cardSummaries.map(({ summary, categoryUsage }) => {
-          const cardStatements = pendingStatements.filter((entry) => entry.card.id === summary.card.id);
+          const cardStatements = pendingStatements.filter(
+            (entry) => entry.card.id === summary.card.id,
+          );
           const expenseTrend = expenseTrendsByCard.get(summary.card.id) ?? [];
           const chartData = [
             ...categoryUsage.map((category) => ({
@@ -389,11 +382,13 @@ export function CardsView() {
               key={summary.card.id}
               role="link"
               tabIndex={0}
-              onClick={() => navigate(`/cards/${summary.card.id}`)}
+              onClick={() => {
+                void navigate(`/cards/${summary.card.id}`);
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  navigate(`/cards/${summary.card.id}`);
+                  void navigate(`/cards/${summary.card.id}`);
                 }
               }}
               className={`cursor-pointer transition hover:border-primary/50 hover:shadow-md ${!summary.card.isActive ? "opacity-60" : ""}`}
@@ -419,9 +414,7 @@ export function CardsView() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {isAllHistoryComplete && (
-                  <LimitUsageAlert
-                    utilizationPercent={summary.utilizationPercent}
-                  />
+                  <LimitUsageAlert utilizationPercent={summary.utilizationPercent} />
                 )}
                 <div className="grid items-center gap-4 sm:grid-cols-[11rem_1fr]">
                   <div className="relative h-44 min-w-0">
@@ -442,10 +435,7 @@ export function CardsView() {
                         </Pie>
                         <Tooltip
                           formatter={(value) =>
-                            formatMoney(
-                              Number(value),
-                              summary.card.limitCurrency,
-                            )
+                            formatMoney(Number(value), summary.card.limitCurrency)
                           }
                         />
                       </PieChart>
@@ -453,10 +443,7 @@ export function CardsView() {
                     <div className="pointer-events-none absolute inset-0 grid place-content-center text-center">
                       <p className="text-xs text-muted-foreground">Free</p>
                       <p className="text-sm font-semibold">
-                        {formatMoney(
-                          summary.availableLimit,
-                          summary.card.limitCurrency,
-                        )}
+                        {formatMoney(summary.availableLimit, summary.card.limitCurrency)}
                       </p>
                     </div>
                   </div>
@@ -465,40 +452,26 @@ export function CardsView() {
                       <div>
                         <p className="text-muted-foreground">Used</p>
                         <p className="font-semibold">
-                          {formatMoney(
-                            summary.usedLimit,
-                            summary.card.limitCurrency,
-                          )}
+                          {formatMoney(summary.usedLimit, summary.card.limitCurrency)}
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Available</p>
                         <p className="font-semibold">
-                          {formatMoney(
-                            summary.availableLimit,
-                            summary.card.limitCurrency,
-                          )}
+                          {formatMoney(summary.availableLimit, summary.card.limitCurrency)}
                         </p>
                       </div>
                     </div>
                     <div className="grid gap-1.5 text-xs sm:grid-cols-2">
                       {chartData.map((item) => (
-                        <div
-                          key={item.id}
-                          className="flex min-w-0 items-center gap-2"
-                        >
+                        <div key={item.id} className="flex min-w-0 items-center gap-2">
                           <span
                             className="h-2.5 w-2.5 shrink-0 rounded-full"
                             style={{ backgroundColor: item.color }}
                           />
-                          <span className="truncate text-muted-foreground">
-                            {item.name}
-                          </span>
+                          <span className="truncate text-muted-foreground">{item.name}</span>
                           <span className="ml-auto font-medium">
-                            {formatMoney(
-                              item.amount,
-                              summary.card.limitCurrency,
-                            )}
+                            {formatMoney(item.amount, summary.card.limitCurrency)}
                           </span>
                         </div>
                       ))}
@@ -510,27 +483,38 @@ export function CardsView() {
                   indicatorStyle={{ backgroundColor: summary.card.color }}
                 />
                 <div className="space-y-2 text-xs text-muted-foreground">
-                  <p>Current cycle: {formatCalendarDate(summary.currentCycleStart)} – {formatCalendarDate(summary.currentCycleEnd)}</p>
+                  <p>
+                    Current cycle: {formatCalendarDate(summary.currentCycleStart)} –{" "}
+                    {formatCalendarDate(summary.currentCycleEnd)}
+                  </p>
                   <p>Closes {formatCalendarDate(summary.currentCycleEnd)}</p>
                   {!isAllHistoryComplete ? (
                     <p>Loading closed statements...</p>
-                  ) : cardStatements.length ? cardStatements.map((entry) => (
-                    <button
-                      key={entry.statement.id}
-                      type="button"
-                      className="block w-full rounded-md border p-2 text-left hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
-                      onKeyDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        navigate(entry.href);
-                      }}
-                    >
-                      <span className="block">Statement closed {formatCalendarDate(entry.statement.cycleEnd)}</span>
-                      <span className="block font-medium text-foreground">
-                        {entry.urgency === "overdue" ? "Overdue" : "Due"} {formatCalendarDate(entry.statement.dueAt)} · {formatMoney(entry.dueAmountInLimitCurrency, summary.card.limitCurrency)}
-                      </span>
-                    </button>
-                  )) : <p>No closed statement pending</p>}
+                  ) : cardStatements.length ? (
+                    cardStatements.map((entry) => (
+                      <button
+                        key={entry.statement.id}
+                        type="button"
+                        className="block w-full rounded-md border p-2 text-left hover:bg-secondary focus-visible:ring-2 focus-visible:ring-ring"
+                        onKeyDown={(event) => event.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void navigate(entry.href);
+                        }}
+                      >
+                        <span className="block">
+                          Statement closed {formatCalendarDate(entry.statement.cycleEnd)}
+                        </span>
+                        <span className="block font-medium text-foreground">
+                          {entry.urgency === "overdue" ? "Overdue" : "Due"}{" "}
+                          {formatCalendarDate(entry.statement.dueAt)} ·{" "}
+                          {formatMoney(entry.dueAmountInLimitCurrency, summary.card.limitCurrency)}
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <p>No closed statement pending</p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {summary.outstanding.map((item) => (
@@ -545,7 +529,7 @@ export function CardsView() {
                     style={{ backgroundColor: summary.card.color }}
                     onClick={(event) => {
                       event.stopPropagation();
-                      navigate(`/cards/${summary.card.id}`);
+                      void navigate(`/cards/${summary.card.id}`);
                     }}
                   >
                     Open
@@ -564,14 +548,11 @@ export function CardsView() {
                       variant="ghost"
                       onClick={(event) => {
                         event.stopPropagation();
-                        void runAction(
-                          () => deleteCreditCard(summary.card.id),
-                          {
-                            processing: "Archiving card...",
-                            success: "Card archived",
-                            error: "Could not archive card",
-                          },
-                        );
+                        void runAction(() => deleteCreditCard(summary.card.id), {
+                          processing: "Archiving card...",
+                          success: "Card archived",
+                          error: "Could not archive card",
+                        });
                       }}
                     >
                       Archive
@@ -580,42 +561,25 @@ export function CardsView() {
                 </div>
                 <div className="rounded-md border bg-card/60 p-3">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">
-                      Expense trend by period
-                    </p>
-                    <Badge variant="muted">
-                      {dataset.settings.primaryCurrency}
-                    </Badge>
+                    <p className="text-sm font-semibold">Expense trend by period</p>
+                    <Badge variant="muted">{dataset.settings.primaryCurrency}</Badge>
                   </div>
                   <div className="h-56 min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={expenseTrend}>
-                        <CartesianGrid
-                          strokeDasharray="3 3"
-                          stroke="hsl(var(--border))"
-                        />
-                        <XAxis
-                          dataKey="day"
-                          tickLine={false}
-                          axisLine={false}
-                        />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="day" tickLine={false} axisLine={false} />
                         <YAxis
                           width={80}
                           tickLine={false}
                           axisLine={false}
                           tickFormatter={(value) =>
-                            formatMoney(
-                              Number(value),
-                              dataset.settings.primaryCurrency,
-                            )
+                            formatMoney(Number(value), dataset.settings.primaryCurrency)
                           }
                         />
                         <Tooltip
                           formatter={(value) =>
-                            formatMoney(
-                              Number(value),
-                              dataset.settings.primaryCurrency,
-                            )
+                            formatMoney(Number(value), dataset.settings.primaryCurrency)
                           }
                         />
                         <Legend />
@@ -655,8 +619,7 @@ export function CardsView() {
       {cardSummaries.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            Create your first credit card to start tracking its limit and
-            statement.
+            Create your first credit card to start tracking its limit and statement.
           </CardContent>
         </Card>
       ) : null}

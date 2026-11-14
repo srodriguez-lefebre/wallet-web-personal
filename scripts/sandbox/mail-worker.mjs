@@ -27,8 +27,7 @@ const result = runMailAutomation(workerData, (url, options) => {
       windowsHide: true,
     },
   );
-  if (child.status !== 0)
-    throw new Error("Local ingestion request failed or timed out");
+  if (child.status !== 0) throw new Error("Local ingestion request failed or timed out");
   return JSON.parse(child.stdout);
 });
 parentPort.postMessage(result);

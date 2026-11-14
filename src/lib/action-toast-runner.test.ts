@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+
 import { createActionToastRunner } from "./action-toast-runner";
+
 import type { ActionToastState } from "@/components/ui/action-toast";
 
 function deferred<T>() {
@@ -54,7 +56,7 @@ describe("createActionToastRunner", () => {
     first.resolve("first");
     await firstAction;
 
-    expect(states[states.length - 1]).toEqual({
+    expect(states[states.length - 1]!).toEqual({
       status: "processing",
       message: "Deleting record...",
     });
@@ -62,7 +64,7 @@ describe("createActionToastRunner", () => {
     second.resolve("second");
     await secondAction;
 
-    expect(states[states.length - 1]).toEqual({
+    expect(states[states.length - 1]!).toEqual({
       status: "success",
       message: "Record deleted",
     });

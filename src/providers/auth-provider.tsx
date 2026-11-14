@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { createSession } from "@/services/auth-service";
 import { readStorage, removeStorage, writeStorage } from "@/lib/storage";
 
@@ -16,12 +17,7 @@ const expiresAtKey = "wallet-session-expires-at";
 const legacyTokenKey = "wallet-api-token";
 
 function clearStoredSession() {
-  for (const key of [
-    tokenKey,
-    expiresAtKey,
-    legacyTokenKey,
-    "wallet-dataset-cache",
-  ])
+  for (const key of [tokenKey, expiresAtKey, legacyTokenKey, "wallet-dataset-cache"])
     removeStorage(key);
   try {
     window.sessionStorage.removeItem(tokenKey);
@@ -32,16 +28,14 @@ function clearStoredSession() {
 
 function getTokenExpiration(token: string) {
   try {
-    const [payload] = token.split(".");
+    const [payload = ""] = token.split(".");
     const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
     const paddedPayload = normalizedPayload.padEnd(
       Math.ceil(normalizedPayload.length / 4) * 4,
       "=",
     );
     const parsed = JSON.parse(window.atob(paddedPayload)) as { exp?: number };
-    return typeof parsed.exp === "number"
-      ? new Date(parsed.exp * 1000).toISOString()
-      : null;
+    return typeof parsed.exp === "number" ? new Date(parsed.exp * 1000).toISOString() : null;
   } catch {
     return null;
   }
@@ -51,14 +45,9 @@ function effectiveExpiration(token: string, expiresAt: string | null) {
   const signed = getTokenExpiration(token);
   const provided = expiresAt ? Date.parse(expiresAt) : Number.NaN;
   const expiration = signed
-    ? Math.min(
-        Date.parse(signed),
-        Number.isFinite(provided) ? provided : Infinity,
-      )
+    ? Math.min(Date.parse(signed), Number.isFinite(provided) ? provided : Infinity)
     : provided;
-  return Number.isFinite(expiration)
-    ? new Date(expiration).toISOString()
-    : null;
+  return Number.isFinite(expiration) ? new Date(expiration).toISOString() : null;
 }
 
 function readStoredSession() {
@@ -71,17 +60,10 @@ function readStoredSession() {
     /* Storage is optional. */
   }
   const token = readStorage(tokenKey) ?? legacySession;
-  const expiresAt = token
-    ? effectiveExpiration(token, readStorage(expiresAtKey))
-    : null;
+  const expiresAt = token ? effectiveExpiration(token, readStorage(expiresAtKey)) : null;
   const expiresAtTime = expiresAt ? Date.parse(expiresAt) : Number.NaN;
 
-  if (
-    !token ||
-    !expiresAt ||
-    !Number.isFinite(expiresAtTime) ||
-    expiresAtTime <= Date.now()
-  ) {
+  if (!token || !expiresAt || !Number.isFinite(expiresAtTime) || expiresAtTime <= Date.now()) {
     clearStoredSession();
     return null;
   }
@@ -147,11 +129,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     removeStorage("wallet-auto-lock-minutes");
     const handleUnauthorized = () => lock();
     const handleStorage = (event: StorageEvent) => {
-      if (
-        event.key === tokenKey ||
-        event.key === expiresAtKey ||
-        event.key === null
-      ) {
+      if (event.key === tokenKey || event.key === expiresAtKey || event.key === null) {
         attempt.current += 1;
         setSession(readStoredSession());
       }
@@ -175,10 +153,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         lock();
         return;
       }
-      timeout = window.setTimeout(
-        check,
-        Math.min(expiry - now, 24 * 60 * 60_000),
-      );
+      timeout = window.setTimeout(check, Math.min(expiry - now, 24 * 60 * 60_000));
     };
     check();
     window.addEventListener("focus", check);

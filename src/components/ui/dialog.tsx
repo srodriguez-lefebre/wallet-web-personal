@@ -1,7 +1,9 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import type { ComponentPropsWithoutRef, ElementRef } from "react";
 import { forwardRef } from "react";
+
+import type { ComponentPropsWithoutRef, ElementRef } from "react";
+
 import { cn } from "@/lib/utils";
 
 export const Dialog = DialogPrimitive.Root;
@@ -51,10 +53,7 @@ export const DialogContent = forwardRef<
 ));
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
-export function DialogHeader({
-  className,
-  ...props
-}: ComponentPropsWithoutRef<"div">) {
+export function DialogHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) {
   return <div className={cn("space-y-1.5 pr-8", className)} {...props} />;
 }
 

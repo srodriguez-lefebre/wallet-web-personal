@@ -1,7 +1,8 @@
-import { PGlite } from "@electric-sql/pglite";
-import { createServer as createViteServer } from "vite";
 import { stat } from "node:fs/promises";
-import type { Server } from "node:http";
+
+import { createServer as createViteServer } from "vite";
+import { PGlite } from "@electric-sql/pglite";
+
 import { applyMigrations, installLocalTransport } from "./database.js";
 import { createSandboxServer } from "./server.js";
 import {
@@ -11,22 +12,18 @@ import {
   mailboxFile,
 } from "./workspace.js";
 
+import type { Server } from "node:http";
+
 const port = 4173;
 const origin = `http://127.0.0.1:${port}`;
 let release = async () => {};
 const originalFetch = globalThis.fetch;
 const localFetch: typeof fetch = (input, init) => {
   const url = new URL(
-    typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.href
-        : input.url,
+    typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
   );
   if (url.origin !== origin)
-    return Promise.reject(
-      new Error("External network is disabled in the wallet sandbox"),
-    );
+    return Promise.reject(new Error("External network is disabled in the wallet sandbox"));
   return originalFetch(input, init);
 };
 let pg: PGlite | undefined;
@@ -68,14 +65,17 @@ function stop() {
       () => release(),
     ]) {
       try {
-        await cleanup();
+        await Promise.resolve(cleanup());
       } catch (error) {
         failure ??= error;
       }
     }
     process.removeListener("SIGINT", onSignal);
     process.removeListener("SIGTERM", onSignal);
-    if (failure) throw failure;
+    if (failure)
+      throw failure instanceof Error
+        ? failure
+        : new Error("Sandbox cleanup failed", { cause: failure });
   })());
 }
 function onSignal() {
@@ -88,9 +88,7 @@ process.once("SIGINT", onSignal);
 process.once("SIGTERM", onSignal);
 try {
   await stat(dbDirectory).catch(() => {
-    throw new Error(
-      "Run npm run sandbox:setup -- --backup <snapshot.json> first",
-    );
+    throw new Error("Run npm run sandbox:setup -- --backup <snapshot.json> first");
   });
   checkRunning();
   release = await acquireWorkspaceLock();

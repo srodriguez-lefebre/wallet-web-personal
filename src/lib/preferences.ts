@@ -1,5 +1,5 @@
-import type { SettingsPatch } from "../../shared/schemas";
-import type { WalletDataset, WalletSettings } from "../../shared/types";
+import type { SettingsPatch } from "@shared/schemas";
+import type { WalletDataset, WalletSettings } from "@shared/types";
 
 export function resolveTheme(
   theme: WalletSettings["theme"],
@@ -18,12 +18,8 @@ export function paymentDefaults(method: string): SettingsPatch {
 }
 
 /** An explicit account selection overrides the general hidden-account preference. */
-export function reportDataset(
-  dataset: WalletDataset,
-  selectedAccountId?: string,
-): WalletDataset {
-  if (!selectedAccountId && dataset.settings.includeHiddenAccountsInReports)
-    return dataset;
+export function reportDataset(dataset: WalletDataset, selectedAccountId?: string): WalletDataset {
+  if (!selectedAccountId && dataset.settings.includeHiddenAccountsInReports) return dataset;
   const accounts = dataset.accounts.filter((a) =>
     selectedAccountId ? a.id === selectedAccountId : a.isVisible,
   );
@@ -37,8 +33,6 @@ export function reportDataset(
         (r.accountId && ids.has(r.accountId)) ||
         (r.destinationAccountId && ids.has(r.destinationAccountId)),
     ),
-    budgets: dataset.budgets.filter(
-      (b) => !b.accountId || ids.has(b.accountId),
-    ),
+    budgets: dataset.budgets.filter((b) => !b.accountId || ids.has(b.accountId)),
   };
 }

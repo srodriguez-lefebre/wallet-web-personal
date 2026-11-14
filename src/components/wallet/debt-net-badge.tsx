@@ -1,6 +1,8 @@
-import { Badge } from "@/components/ui/badge";
 import { formatMoney, calculateVisibleDebtSummary } from "@shared/calculations";
+
 import type { CurrencyCode } from "@shared/types";
+
+import { Badge } from "@/components/ui/badge";
 export function DebtNetBadge({
   summary,
   currency,
@@ -8,8 +10,7 @@ export function DebtNetBadge({
   summary: ReturnType<typeof calculateVisibleDebtSummary>;
   currency: CurrencyCode;
 }) {
-  const unknown =
-    summary.openCount > 0 && summary.amountPendingCount === summary.openCount;
+  const unknown = summary.openCount > 0 && summary.amountPendingCount === summary.openCount;
   return (
     <Badge
       variant={

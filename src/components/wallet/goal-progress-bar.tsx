@@ -3,10 +3,7 @@ import type { GoalProgress } from "@shared/types";
 export function GoalProgressBar({ progress }: { progress: GoalProgress }) {
   const completed = progress.goal.status === "completed";
   if (progress.hasMissingExchangeRate && !completed) return null;
-  const spent = Math.min(
-    100,
-    Math.max(0, (progress.spent / progress.goal.targetAmount) * 100),
-  );
+  const spent = Math.min(100, Math.max(0, (progress.spent / progress.goal.targetAmount) * 100));
   const reserved = Math.min(
     100 - spent,
     Math.max(0, (progress.reserved / progress.goal.targetAmount) * 100),
@@ -19,9 +16,7 @@ export function GoalProgressBar({ progress }: { progress: GoalProgress }) {
       aria-label={completed ? "Completed goal" : "Goal progress"}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={
-        completed ? 100 : Math.min(100, Math.max(0, progress.percentage))
-      }
+      aria-valuenow={completed ? 100 : Math.min(100, Math.max(0, progress.percentage))}
     >
       <span
         style={{
@@ -29,9 +24,7 @@ export function GoalProgressBar({ progress }: { progress: GoalProgress }) {
           backgroundColor: progress.goal.color,
         }}
       />
-      {!completed && (
-        <span className="bg-emerald-400" style={{ width: `${reserved}%` }} />
-      )}
+      {!completed && <span className="bg-emerald-400" style={{ width: `${reserved}%` }} />}
     </div>
   );
 }

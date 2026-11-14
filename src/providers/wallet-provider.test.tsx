@@ -1,10 +1,12 @@
-import { act, create, type ReactTestRenderer } from "react-test-renderer";
+// @vitest-environment jsdom
+import { act, render, type RenderResult } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "../../shared/mock-data";
+import { mockWalletData } from "@shared/mock-data";
+import { dateKey, recordsForDateRange } from "@shared/calculations";
+
 import { WalletProvider, useWallet } from "./wallet-provider";
 import * as api from "../services/wallet-api";
-import { dateKey, recordsForDateRange } from "../../shared/calculations";
 
 const auth = vi.hoisted(() => ({ token: "test-session", lock: vi.fn() }));
 const theme = vi.hoisted(() => ({ setTheme: vi.fn() }));
@@ -12,13 +14,29 @@ vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
 vi.mock("@/providers/theme-provider", () => ({ useTheme: () => theme }));
 vi.mock("@/services/wallet-api");
 let context: ReturnType<typeof useWallet>;
-let tree: ReactTestRenderer | undefined;
+let tree: RenderResult | undefined;
 
 test("a manual Needs review filter remains distinct from the global queue", async () => {
-  await act(async () => { tree = create(<WalletProvider><Consumer /></WalletProvider>); });
+  await act(async () => {
+    tree = render(
+      <WalletProvider>
+        <Consumer />
+      </WalletProvider>,
+    );
+  });
   await act(async () => {
     context.setCustomDateRange({ from: "2020-06-03", to: "2020-06-20" });
-    context.setRecordFilters({ accountId: "bank", creditCardId: "card", paymentStatus: "needs_review", categoryId: "category", tagId: "tag", goalId: "goal", note: "manual note", search: "merchant", type: "expense" });
+    context.setRecordFilters({
+      accountId: "bank",
+      creditCardId: "card",
+      paymentStatus: "needs_review",
+      categoryId: "category",
+      tagId: "tag",
+      goalId: "goal",
+      note: "manual note",
+      search: "merchant",
+      type: "expense",
+    });
   });
   const previous = { filters: context.recordFilters, range: context.selectedDateRange };
   expect(context.isReviewQueueOpen).toBe(false);
@@ -42,7 +60,7 @@ test.each(["month", "custom", "all"] as const)(
   "review queue restores the %s context across reentry and dismiss",
   async (mode) => {
     await act(async () => {
-      tree = create(
+      tree = render(
         <WalletProvider>
           <Consumer />
         </WalletProvider>,
@@ -50,8 +68,7 @@ test.each(["month", "custom", "all"] as const)(
     });
     await act(async () => {
       if (mode === "all") context.setAllPeriod();
-      if (mode === "custom")
-        context.setCustomDateRange({ from: "2020-01-02", to: "2020-06-30" });
+      if (mode === "custom") context.setCustomDateRange({ from: "2020-01-02", to: "2020-06-30" });
       context.setRecordFilters({
         accountId: "bank",
         creditCardId: "card",
@@ -90,7 +107,7 @@ test.each(["month", "custom", "all"] as const)(
 
 test("explicit search/reset navigation discards an obsolete review return context", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -127,18 +144,14 @@ const bootstrap = {
 
 test("template quick-use request preserves its identifier until consumed without writing", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
     );
   });
-  await act(async () =>
-    context.requestNewRecord("00000000-0000-4000-8000-000000000001"),
-  );
-  expect(context.newRecordTemplateId).toBe(
-    "00000000-0000-4000-8000-000000000001",
-  );
+  await act(async () => context.requestNewRecord("00000000-0000-4000-8000-000000000001"));
+  expect(context.newRecordTemplateId).toBe("00000000-0000-4000-8000-000000000001");
   expect(context.newRecordRequestId).not.toBe(0);
   expect(api.createRecord).not.toHaveBeenCalled();
   await act(async () => context.consumeNewRecordRequest());
@@ -150,7 +163,7 @@ test("template quick-use request preserves its identifier until consumed without
 
 test("old server snapshots normalize the template library to empty", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -161,7 +174,7 @@ test("old server snapshots normalize the template library to empty", async () =>
 
 test("template actions publish only the canonical reloaded library and retain records", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -210,15 +223,13 @@ test("template actions publish only the canonical reloaded library and retain re
 
 test("failed template writes preserve the library and expose the failure", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
     );
   });
-  vi.mocked(api.createRecordTemplate).mockRejectedValue(
-    new Error("Template limit"),
-  );
+  vi.mocked(api.createRecordTemplate).mockRejectedValue(new Error("Template limit"));
   await act(async () => {
     await expect(
       context.addRecordTemplate({
@@ -231,14 +242,14 @@ test("failed template writes preserve the library and expose the failure", async
     ).rejects.toThrow("Template limit");
   });
   expect(context.dataset.recordTemplates).toEqual([]);
-  expect(JSON.stringify(tree?.toJSON())).toContain("Template limit");
+  expect(tree?.container.textContent).toContain("Template limit");
 });
 
 test("all history includes the oldest review draft on its local calendar date", async () => {
   const data = structuredClone(mockWalletData);
   data.records = [
     {
-      ...data.records[0],
+      ...data.records[0]!,
       occurredAt: "2020-01-01T00:30:00Z",
       paymentStatus: "needs_review",
     },
@@ -249,7 +260,7 @@ test("all history includes the oldest review draft on its local calendar date", 
   });
   vi.mocked(api.getWallet).mockResolvedValue(data);
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -258,26 +269,21 @@ test("all history includes the oldest review draft on its local calendar date", 
   await act(async () => {
     context.setAllPeriod();
   });
-  expect(context.selectedDateRange.from).toBe(
-    dateKey(data.records[0].occurredAt),
-  );
-  expect(
-    recordsForDateRange(context.dataset.records, context.selectedDateRange),
-  ).toHaveLength(1);
+  expect(context.selectedDateRange.from).toBe(dateKey(data.records[0]!.occurredAt));
+  expect(recordsForDateRange(context.dataset.records, context.selectedDateRange)).toHaveLength(1);
 });
 
 test("investment valuation sends a partial patch and reloads canonical cost and start date", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
     );
   });
-  const investment = context.dataset.investments[0];
+  const investment = context.dataset.investments[0]!;
   const reloaded = structuredClone(mockWalletData);
-  reloaded.investments.find((item) => item.id === investment.id)!.currentValue =
-    0;
+  reloaded.investments.find((item) => item.id === investment.id)!.currentValue = 0;
   vi.mocked(api.updateInvestment).mockResolvedValue({
     ...investment,
     currentValue: 0,
@@ -286,14 +292,10 @@ test("investment valuation sends a partial patch and reloads canonical cost and 
   await act(async () => {
     await context.updateInvestment(investment.id, { currentValue: 0 });
   });
-  expect(api.updateInvestment).toHaveBeenCalledExactlyOnceWith(
-    "test-session",
-    investment.id,
-    { currentValue: 0 },
-  );
-  expect(
-    context.dataset.investments.find((item) => item.id === investment.id),
-  ).toMatchObject({
+  expect(api.updateInvestment).toHaveBeenCalledExactlyOnceWith("test-session", investment.id, {
+    currentValue: 0,
+  });
+  expect(context.dataset.investments.find((item) => item.id === investment.id)!).toMatchObject({
     currentValue: 0,
     amountInvested: investment.amountInvested,
     startedAt: investment.startedAt,
@@ -311,11 +313,13 @@ afterEach(async () => {
   if (tree) await act(async () => tree?.unmount());
   tree = undefined;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 test("account archive refresh retains durable records returned by server", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -324,19 +328,19 @@ test("account archive refresh retains durable records returned by server", async
   const before = context.dataset.records.length;
   vi.mocked(api.deleteAccount).mockResolvedValue({ deleted: true });
   const canonical = structuredClone(mockWalletData);
-  canonical.accounts[0].isActive = false;
+  canonical.accounts[0]!.isActive = false;
   vi.mocked(api.getWallet).mockResolvedValue(canonical);
   await act(async () => {
-    await context.deleteAccount(canonical.accounts[0].id);
+    await context.deleteAccount(canonical.accounts[0]!.id);
   });
   expect(context.dataset.records).toHaveLength(before);
-  expect(context.dataset.accounts[0].isActive).toBe(false);
+  expect(context.dataset.accounts[0]!.isActive).toBe(false);
   expect(theme.setTheme).toHaveBeenCalledWith(canonical.settings.theme);
 });
 
 test("successful write plus failed reload rejects and preserves visible error feedback", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -345,12 +349,10 @@ test("successful write plus failed reload rejects and preserves visible error fe
   vi.mocked(api.deleteRecord).mockResolvedValue({ deleted: true });
   vi.mocked(api.getWallet).mockRejectedValue(new Error("offline"));
   await act(async () => {
-    await expect(context.deleteRecord("record")).rejects.toThrow(
-      /saved.*refresh/i,
-    );
+    await expect(context.deleteRecord("record")).rejects.toThrow(/saved.*refresh/i);
   });
   expect(context.isAllHistoryComplete).toBe(false);
-  expect(JSON.stringify(tree?.toJSON())).toContain("offline");
+  expect(tree?.container.textContent).toContain("offline");
   vi.mocked(api.getWallet).mockResolvedValue({
     ...mockWalletData,
     records: [],
@@ -376,9 +378,12 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
       }),
     setItem: vi.fn(),
   };
-  vi.stubGlobal("window", {
-    location: { origin: "http://test.local" },
-    localStorage: storage,
+  vi.spyOn(window, "localStorage", "get").mockReturnValue({
+    ...storage,
+    length: 0,
+    key: () => null,
+    clear: () => {},
+    removeItem: () => {},
   });
   let resolve!: (value: typeof bootstrap) => void;
   vi.mocked(api.bootstrapWallet).mockReturnValue(
@@ -387,7 +392,7 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
     }),
   );
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -410,9 +415,8 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
 
 test("cached bootstrap failure remains visible and storage quota does not break a later refresh", async () => {
   auth.token = `${btoa(JSON.stringify({ sub: "test-owner" }))}.signature`;
-  vi.stubGlobal("window", {
-    location: { origin: "http://test.local" },
-    localStorage: {
+  vi.spyOn(window, "localStorage", "get").mockReturnValue({
+    ...{
       getItem: () =>
         JSON.stringify({
           schemaVersion: 2,
@@ -426,18 +430,20 @@ test("cached bootstrap failure remains visible and storage quota does not break 
         throw new Error("quota");
       },
     },
+    length: 0,
+    key: () => null,
+    clear: () => {},
+    removeItem: () => {},
   });
-  vi.mocked(api.bootstrapWallet).mockRejectedValue(
-    new Error("offline cached refresh"),
-  );
+  vi.mocked(api.bootstrapWallet).mockRejectedValue(new Error("offline cached refresh"));
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
     );
   });
-  expect(JSON.stringify(tree?.toJSON())).toContain("offline cached refresh");
+  expect(tree?.container.textContent).toContain("offline cached refresh");
   expect(context.dataset.records.length).toBeGreaterThan(0);
   await act(async () => {
     await context.getCompleteDataset();
@@ -447,7 +453,7 @@ test("cached bootstrap failure remains visible and storage quota does not break 
 
 test("a complete backup can include archived history without publishing it into the active wallet", async () => {
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,
@@ -455,7 +461,7 @@ test("a complete backup can include archived history without publishing it into 
   });
   const activeCount = context.dataset.records.length;
   const backup = structuredClone(mockWalletData);
-  backup.records.push({ ...backup.records[0], id: "archived-history" });
+  backup.records.push({ ...backup.records[0]!, id: "archived-history" });
   vi.mocked(api.getWalletBackup).mockResolvedValue(backup);
   let exported: typeof backup | undefined;
   await act(async () => {
@@ -468,15 +474,18 @@ test("a complete backup can include archived history without publishing it into 
 test("a pending write cannot recreate private cached data after the wallet is closed", async () => {
   auth.token = `${btoa(JSON.stringify({ sub: "test-owner" }))}.signature`;
   const storage = new Map<string, string>();
-  vi.stubGlobal("window", {
-    location: { origin: "http://test.local" },
-    localStorage: {
+  vi.spyOn(window, "localStorage", "get").mockReturnValue({
+    ...{
       getItem: (key: string) => storage.get(key) ?? null,
       setItem: (key: string, value: string) => storage.set(key, value),
     },
+    length: 0,
+    key: () => null,
+    clear: () => {},
+    removeItem: () => {},
   });
   await act(async () => {
-    tree = create(
+    tree = render(
       <WalletProvider>
         <Consumer />
       </WalletProvider>,

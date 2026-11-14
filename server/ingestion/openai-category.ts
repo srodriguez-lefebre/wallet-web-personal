@@ -72,9 +72,7 @@ export async function inferCategoryWithOpenAi(
       body: JSON.stringify({
         model,
         store: false,
-        ...(/^gpt-5(?:[.-]|$)/.test(model)
-          ? { reasoning: { effort: "low" } }
-          : {}),
+        ...(/^gpt-5(?:[.-]|$)/.test(model) ? { reasoning: { effort: "low" } } : {}),
         input: [
           {
             role: "system",
@@ -117,11 +115,7 @@ export async function inferCategoryWithOpenAi(
       );
     if (body.status && body.status !== "completed")
       return finish("failed", "response_not_completed");
-    if (
-      body.output?.some((item) =>
-        item.content?.some((content) => content.type === "refusal"),
-      )
-    )
+    if (body.output?.some((item) => item.content?.some((content) => content.type === "refusal")))
       return finish("failed", "refused");
     const output = extractOutputText(body);
     if (!output) return finish("failed", "empty_output");
@@ -141,8 +135,7 @@ export async function inferCategoryWithOpenAi(
   } catch (error) {
     return finish(
       "failed",
-      error instanceof Error &&
-        (error.name === "TimeoutError" || error.name === "AbortError")
+      error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
         ? "timeout"
         : "network_or_response_error",
     );

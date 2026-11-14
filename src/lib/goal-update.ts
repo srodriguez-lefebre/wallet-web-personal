@@ -17,10 +17,7 @@ export interface GoalUpdateDraft {
   autoReservationAccountId: string;
 }
 
-export function buildGoalUpdatePayload(
-  draft: GoalUpdateDraft,
-  icon: string,
-): GoalPatch {
+export function buildGoalUpdatePayload(draft: GoalUpdateDraft, icon: string): GoalPatch {
   return {
     name: draft.name.trim(),
     targetAmount: Number(draft.targetAmount),
@@ -32,9 +29,7 @@ export function buildGoalUpdatePayload(
     status: draft.status,
     accountId: draft.accountId || null,
     autoCaptureEnabled: draft.autoCaptureEnabled,
-    autoCaptureStart: draft.autoCaptureEnabled
-      ? draft.autoCaptureStart
-      : null,
+    autoCaptureStart: draft.autoCaptureEnabled ? draft.autoCaptureStart : null,
     autoCaptureEnd: draft.autoCaptureEnabled ? draft.autoCaptureEnd : null,
     autoReservationAccountId: draft.autoReservationAccountId || null,
     note: draft.note.trim() || null,
