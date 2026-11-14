@@ -1,25 +1,4 @@
-import type {
-  Account,
-  Category,
-  CreditCard,
-  CreditCardPayment,
-  CreditCardRecord,
-  Debt,
-  Goal,
-  GoalReservation,
-  GoalReservationMovement,
-  Budget,
-  Investment,
-  InstallmentPlan,
-  Tag,
-  RecurringDebt,
-  WalletDataset,
-  WalletBootstrap,
-  RecordPage,
-  WalletRecord,
-  RecordTemplate,
-  WalletSettings,
-} from "@shared/types";
+import type { ApiOperationId } from "@shared/api-contract";
 import type {
   AccountPatch,
   BudgetPatch,
@@ -36,7 +15,28 @@ import type {
   SettingsPatch,
   TagPatch,
 } from "@shared/schemas";
-import type { ApiOperationId } from "@shared/api-contract";
+import type {
+  Account,
+  Budget,
+  Category,
+  CreditCard,
+  CreditCardPayment,
+  CreditCardRecord,
+  Debt,
+  Goal,
+  GoalReservation,
+  GoalReservationMovement,
+  InstallmentPlan,
+  Investment,
+  RecordPage,
+  RecordTemplate,
+  RecurringDebt,
+  Tag,
+  WalletBootstrap,
+  WalletDataset,
+  WalletRecord,
+  WalletSettings,
+} from "@shared/types";
 
 interface ApiResponse<T> {
   data: T | null;
@@ -202,6 +202,15 @@ export function deleteCategory(token: string, categoryId: string) {
   );
 }
 
+export function refreshCardStatements(token: string) {
+  return requestApi<{ refreshed: true }>(
+    token,
+    "cards.refreshStatements",
+    "/api/cards/refresh-statements",
+    { method: "POST" },
+  );
+}
+
 export function createCreditCard(token: string, card: Omit<CreditCard, "id">) {
   return requestApi<CreditCard>(token, "cards.create", "/api/cards", {
     method: "POST",
@@ -217,7 +226,7 @@ export function updateCreditCard(token: string, cardId: string, card: CreditCard
 }
 
 export function deleteCreditCard(token: string, cardId: string) {
-  return requestApi<{ deleted: true }>(token, "cards.delete", `/api/cards/${cardId}`, {
+  return requestApi<{ archived: true }>(token, "cards.delete", `/api/cards/${cardId}`, {
     method: "DELETE",
   });
 }

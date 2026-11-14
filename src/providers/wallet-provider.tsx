@@ -1,11 +1,12 @@
 import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
 import {
   createContext,
-  type PropsWithChildren,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
   useState,
+  type PropsWithChildren,
 } from "react";
 
 import type {
@@ -80,6 +81,7 @@ interface WalletContextValue {
   updateCategory: (categoryId: string, category: Omit<Category, "id">) => Promise<void>;
   deleteCategory: (categoryId: string) => Promise<void>;
   addCreditCard: (card: Omit<CreditCard, "id">) => Promise<string>;
+  refreshCardStatements: () => Promise<void>;
   updateCreditCard: (cardId: string, card: Omit<CreditCard, "id">) => Promise<void>;
   deleteCreditCard: (cardId: string) => Promise<void>;
   addCreditCardPayment: (
@@ -412,19 +414,27 @@ export function WalletProvider({ children }: PropsWithChildren) {
     }
   }
 
-  async function mutate<T>(write: () => Promise<T>): Promise<T> {
-    setPendingMutations((count) => count + 1);
-    try {
-      const result = await sync.mutate(write, () => walletApi.getWallet(requireToken()));
-      setHasLoaded(true);
-      return result;
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not save wallet");
-      throw error;
-    } finally {
-      setPendingMutations((count) => Math.max(0, count - 1));
-    }
-  }
+  const mutate = useCallback(
+    async <T,>(write: () => Promise<T>): Promise<T> => {
+      if (!token) throw new Error("Missing API token");
+      setPendingMutations((count) => count + 1);
+      try {
+        const result = await sync.mutate(write, () => walletApi.getWallet(token));
+        setHasLoaded(true);
+        return result;
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : "Could not save wallet");
+        throw error;
+      } finally {
+        setPendingMutations((count) => Math.max(0, count - 1));
+      }
+    },
+    [sync, token],
+  );
+  const refreshCardStatements = useCallback(async () => {
+    if (!token) throw new Error("Missing API token");
+    await mutate(() => walletApi.refreshCardStatements(token));
+  }, [mutate, token]);
 
   useEffect(() => {
     const months = availableMonthKeys(dataset.records);
@@ -725,6 +735,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         updateCategory,
         deleteCategory,
         addCreditCard,
+        refreshCardStatements,
         updateCreditCard,
         deleteCreditCard,
         addCreditCardPayment,

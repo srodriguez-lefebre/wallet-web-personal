@@ -1,7 +1,6 @@
 import { desc, isNull, sql } from "drizzle-orm";
 
 import { namedBatch } from "./batch.js";
-import { ensureCreditCardStatements } from "./cards/cycles.js";
 import { generateDueRecurringDebts } from "./debts.js";
 import { goalReservationBalancesQuery, mapGoalReservationBalance } from "./goals/ledger.js";
 import {
@@ -70,7 +69,6 @@ export async function getWalletDataset(
     includeArchived?: boolean;
   } = {},
 ): Promise<WalletDataset> {
-  if (!options.includeArchived) await ensureCreditCardStatements(db);
   const {
     settingsRows,
     accountRows,

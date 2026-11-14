@@ -1334,6 +1334,50 @@ paths:
       tags:
         - cards
       x-stability: stable
+  /api/cards/refresh-statements:
+    post:
+      operationId: cards.refreshStatements
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      refreshed:
+                        const: true
+                        type: boolean
+                    required:
+                      - refreshed
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Refresh derived card statement cycles and status
+      tags:
+        - cards
+      x-stability: stable
   /api/cards/{id}:
     delete:
       operationId: cards.delete
@@ -1355,11 +1399,11 @@ paths:
                     $schema: https://json-schema.org/draft/2020-12/schema
                     additionalProperties: false
                     properties:
-                      deleted:
+                      archived:
                         const: true
                         type: boolean
                     required:
-                      - deleted
+                      - archived
                     type: object
                   error:
                     type: "null"
@@ -3847,7 +3891,7 @@ paths:
     post:
       operationId: debts.generateRecurring
       responses:
-        "201":
+        "200": &a2
           content:
             application/json:
               schema:
@@ -3947,6 +3991,7 @@ paths:
                   - error
                 type: object
           description: Success
+        "201": *a2
         "401":
           content:
             application/json:
@@ -5832,7 +5877,7 @@ paths:
               type: object
         required: true
       responses:
-        "201":
+        "200": &a1
           content:
             application/json:
               schema:
@@ -5875,6 +5920,7 @@ paths:
                   - error
                 type: object
           description: Success
+        "201": *a1
         "400":
           content:
             application/json:

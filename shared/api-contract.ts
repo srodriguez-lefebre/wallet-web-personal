@@ -3,6 +3,11 @@ import { z, type ZodType } from "zod";
 import {
   accountPatchSchema,
   accountSchema,
+  budgetPatchSchema,
+  budgetSchema,
+  cardPaymentResponseSchema,
+  cardRecordResponseSchema,
+  cardStatementResponseSchema,
   categoryPatchSchema,
   categorySchema,
   creditCardPatchSchema,
@@ -13,40 +18,35 @@ import {
   debtPatchSchema,
   debtPaymentSchema,
   debtSchema,
+  goalPatchSchema,
+  goalReservationReleaseSchema,
+  goalReservationSchema,
+  goalResponseSchema,
+  goalSchema,
+  installmentPlanPatchSchema,
+  installmentPlanSchema,
+  investmentPatchSchema,
+  investmentSchema,
   mailIngestionSchema,
-  recordFiltersSchema,
-  recordPatchSchema,
   recordCreateSchema,
+  recordFiltersSchema,
+  recordImportSchema,
+  recordPatchSchema,
+  recordTemplatePatchSchema,
+  recordTemplateSchema,
   recurringDebtPatchSchema,
   recurringDebtSchema,
+  reservationMovementResponseSchema,
   settingsPatchSchema,
   settingsSchema,
+  tagPatchSchema,
+  tagSchema,
   unlockSchema,
   uuidSchema,
-  walletBootstrapSchema,
-  tagSchema,
-  tagPatchSchema,
-  goalSchema,
-  goalPatchSchema,
-  goalReservationSchema,
-  goalReservationReleaseSchema,
-  budgetSchema,
-  budgetPatchSchema,
-  investmentSchema,
-  investmentPatchSchema,
-  installmentPlanSchema,
-  installmentPlanPatchSchema,
-  recordImportSchema,
   walletBackupSchema,
+  walletBootstrapSchema,
   walletDatasetSchema,
   walletRecordResponseSchema,
-  cardStatementResponseSchema,
-  recordTemplateSchema,
-  recordTemplatePatchSchema,
-  cardPaymentResponseSchema,
-  cardRecordResponseSchema,
-  reservationMovementResponseSchema,
-  goalResponseSchema,
 } from "./schemas.js";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -63,6 +63,7 @@ export interface ApiOperation {
   body?: ZodType;
   response: ZodType;
   successStatus: number;
+  additionalSuccessStatuses?: readonly number[];
   errors: number[];
   summary: string;
 }
@@ -92,6 +93,8 @@ const entities = {
 };
 const pagination = z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() });
 function operationResponse(operationId: string): ZodType {
+  if (operationId === "cards.refreshStatements") return z.object({ refreshed: z.literal(true) });
+  if (operationId === "cards.delete") return z.object({ archived: z.literal(true) });
   if (operationId === "auth.unlock")
     return z.object({ token: z.string(), expiresAt: z.string().datetime() });
   if (operationId === "health.get")
@@ -155,12 +158,22 @@ function operationResponse(operationId: string): ZodType {
   const response = entities[entity as keyof typeof entities];
   return action === "list" ? z.array(response) : response;
 }
-const op = <T extends Omit<ApiOperation, "response">>(definition: T) => ({
+const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
   ...definition,
   response: operationResponse(definition.operationId),
 });
 
 export const apiOperations = [
+  op({
+    operationId: "cards.refreshStatements",
+    method: "POST",
+    path: "/api/cards/refresh-statements",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Refresh derived card statement cycles and status",
+  }),
   op({
     operationId: "recordTemplates.list",
     method: "GET",
@@ -308,6 +321,7 @@ export const apiOperations = [
     stability: "stable",
     body: mailIngestionSchema,
     successStatus: 201,
+    additionalSuccessStatuses: [200],
     errors: [400, 401, 409, 422, 500, 503],
     summary: "Ingest a parsed Gmail transaction",
   }),
@@ -681,7 +695,8 @@ export const apiOperations = [
     path: "/api/debts/generate-recurring",
     auth: "session",
     stability: "stable",
-    successStatus: 201,
+    successStatus: 200,
+    additionalSuccessStatuses: [201],
     errors: [401, 500],
     summary: "Generate due recurring-debt instances idempotently",
   }),

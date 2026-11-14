@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
+import { cardStatementSyncQueries } from "../cards/cycles.js";
 import { isReviewCategory, splitImportNote } from "../../../shared/record-review.js";
 import { isFinancialRecord } from "../../../shared/record-status.js";
 import { type RecordPatch, recordSchema } from "../../../shared/schemas.js";
@@ -145,6 +146,10 @@ export async function createRecordsBulk(db: Db, inputs: NewRecord[], importIds?:
     queries.push(...recordGoalWriteQueries(db, id, input, associations));
   });
   queries.push(...recordReservationWriteQueries(db, movementsByInput.flat()));
+  const cardIds = [
+    ...new Set(inputs.map((input) => input.creditCardId).filter((id): id is string => Boolean(id))),
+  ];
+  queries.push(...cardIds.flatMap((id) => cardStatementSyncQueries(db, id)));
   try {
     await db.batch([
       ...recordCardLockQueries(
@@ -500,6 +505,13 @@ export async function updateRecord(db: Db, id: string, input: RecordPatch) {
       ...guards,
       recordUpdate,
       ...sideQueries,
+      ...[
+        ...new Set(
+          [current.creditCardId, linked?.creditCardId, merged.creditCardId].filter(
+            (id): id is string => Boolean(id),
+          ),
+        ),
+      ].flatMap((id) => cardStatementSyncQueries(db, id)),
     ] as unknown as Parameters<Db["batch"]>[0]);
   } catch (error) {
     recordCardMutationError(error);
@@ -550,6 +562,13 @@ export async function deleteRecord(db: Db, id: string) {
         .set({ deletedAt: now, updatedAt: now })
         .where(eq(creditCardRecords.walletRecordId, id)),
       ...compensations.queries,
+      ...[
+        ...new Set(
+          [...recordRows, ...linkedRows]
+            .map((row) => row.creditCardId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ].flatMap((id) => cardStatementSyncQueries(db, id)),
     ] as unknown as Parameters<Db["batch"]>[0]);
   } catch (error) {
     recordCardMutationError(error);

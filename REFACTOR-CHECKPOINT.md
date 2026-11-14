@@ -173,3 +173,37 @@ Sandbox exit 0: 10 archivos / 103 tests. Logs locales en /tmp/wallet-package2-\*
 
 Pendiente: un único PR borrador contra main, CI/preview del head exacto,
 merge con guard de SHA, CI main y Vercel READY/alias. Registrar evidencia aquí.
+
+## Paquete 3 · avance vigente (local, aún sin PR)
+
+- Base `098cb9d6e7f34b31d2378451d88a5b791786aaf2`, merge del PR10.
+  CI PR43552756497 y main43553041267 success. Producción READY en
+  dpl_2RxVjScoifHo73AqkRsb4LbvP85s y alias wallet-web-personal.vercel.app.
+  Smoke GET sin sesión completado: raíz200; health y summary anidado401 JSON;
+  URL concreta wallet-web-personal-f0utbalq2.vercel.app raíz302 por protección.
+- Rama `refactor/03-contract-router`, creada tras verificar árbol limpio y ausencia
+  de rama/PR3. PRs consumidos **2 de 5**. No repetir publicación de #9/#10.
+- Router compilado desde contrato, IDs literales, módulos y tabla exhaustiva;
+  autenticación antes de validar params/body/mismatch. Contexto lazy DB y un log
+  JSON por request, requestId compartido, errores PG sin SQL/params. API sin switch.
+- Lecturas de wallet/statements sin escrituras; ciclos/status se derivan dentro
+  del batch financiero bajo locks ordenados. Refresh explícito al abrir Tarjetas.
+  Summary de una tarjeta agregado en SQL con equivalencia de refunds/allocations,
+  FIFO, fechas, monedas y legado. Snapshot completo sigue por compatibilidad del
+  cliente hasta paquete4. `cards.delete` responde archived; recurrentes200/201 y
+  estatus dinámicos declarados en OpenAPI.
+- Revisión independiente sin hallazgos verificables en este núcleo. Check local
+  completo exit0: 92 archivos / 699 tests, formato/lint/build/spec aprobados.
+  Sandbox explícito10/103 exit0. Targets router6/18; card/catalog/concurrency4/68; UI/provider/read-only5/35;
+  summary/card/router3/48. Falta sandbox/QA final del paquete y resto del alcance.
+- Metadatos Vercel del proyecto correcto: SESSION_SECRET no está configurado.
+  No activar revocación/secreto independiente por cuenta propia; requiere paso
+  explícito del dueño y transición comprobada. DATABASE_URL es sensible y el
+  conector no devuelve su valor. Conexiones locales apuntan al mismo endpoint
+  Neon por fingerprint, pero falta contrastarlo con un origen productivo
+  independiente antes de aplicar migraciones. Se solicitó sólo hostname/ID,
+  nunca credenciales. No se cambió configuración ni se consultaron filas reales.
+- Pendientes antes del tercer PR: analytics SQL aditivo; esquema2.3, preflight
+  destino/journal/compatibilidad/recuperación y ensayo sintético; preparación
+  optativa de sesión revocable sin activación; full check y sandbox finales, QA y
+  revisión del alcance restante. Apps Script sigue intacto.

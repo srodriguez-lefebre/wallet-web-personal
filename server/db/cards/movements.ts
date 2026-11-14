@@ -21,7 +21,7 @@ import {
   recordTemplates,
   settings,
 } from "../schema.js";
-import { creditCardCycleQueries, refreshCreditCardStatements } from "./cycles.js";
+import { cardStatementSyncQueries, creditCardCycleQueries } from "./cycles.js";
 import {
   cardMutationError,
   creditCardBankRefundAmount,
@@ -69,13 +69,19 @@ export async function updateCreditCard(db: Db, id: string, input: CreditCardPatc
   if (hasOwn(input, "creditLimit")) values.creditLimit = toNumeric(merged.creditLimit);
   if (hasOwn(input, "note")) values.note = merged.note ?? null;
   if (hasOwn(input, "isActive")) values.deletedAt = merged.isActive ? null : new Date();
-  const [row] = await db.update(creditCards).set(values).where(eq(creditCards.id, id)).returning();
+  const result = await db.batch([
+    lockCreditCard(db, id),
+    db.update(creditCards).set(values).where(eq(creditCards.id, id)).returning(),
+    ...cardStatementSyncQueries(db, id),
+  ] as unknown as Parameters<Db["batch"]>[0]);
+  const row = (result[1] as (typeof creditCards.$inferSelect)[])[0];
   return row ? mapCreditCard(row) : null;
 }
 
 export async function archiveCreditCard(db: Db, id: string) {
   const now = new Date();
-  const [rows] = await db.batch([
+  const result = await db.batch([
+    lockCreditCard(db, id),
     db
       .update(creditCards)
       .set({ isActive: false, deletedAt: now, updatedAt: now })
@@ -89,8 +95,9 @@ export async function archiveCreditCard(db: Db, id: string) {
       .update(recordTemplates)
       .set({ creditCardId: null, paymentType: "debit" })
       .where(eq(recordTemplates.creditCardId, id)),
-  ]);
-  return rows.length > 0;
+    ...cardStatementSyncQueries(db, id),
+  ] as unknown as Parameters<Db["batch"]>[0]);
+  return (result[1] as unknown[]).length > 0;
 }
 
 export async function listCreditCardRecords(db: Db, creditCardId: string) {
@@ -253,7 +260,7 @@ export async function createCreditCardRecord(
       ...(walletRefundInsert ? [walletRefundInsert] : []),
       db.insert(creditCardRecords).values({ ...movementValues, ...authoritativeRefund }),
       ...cycleQueries,
-      refreshCreditCardStatements(db, creditCardId),
+      ...cardStatementSyncQueries(db, creditCardId),
     ]);
   } catch (error) {
     if (refundBankRateMissing && isPgError(error, "22012"))
@@ -341,7 +348,7 @@ export async function updateCreditCardRecord(
           ),
         ),
       ...cycleQueries,
-      refreshCreditCardStatements(db, creditCardId),
+      ...cardStatementSyncQueries(db, creditCardId),
     ]);
   } catch (error) {
     cardMutationError(error);
@@ -371,7 +378,7 @@ export async function deleteCreditCardRecord(db: Db, creditCardId: string, id: s
           ),
         )
         .returning({ id: creditCardRecords.id }),
-      refreshCreditCardStatements(db, creditCardId),
+      ...cardStatementSyncQueries(db, creditCardId),
     ]);
     return deleted.length > 0;
   } catch (error) {

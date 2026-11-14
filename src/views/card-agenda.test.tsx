@@ -1,20 +1,22 @@
+import { mockWalletData } from "@shared/mock-data";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { mockWalletData } from "@shared/mock-data";
 
+import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
 import { CardDetailView } from "./card-detail-view";
 import { CardsView } from "./cards-view";
-import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
 
 import type { ReactNode } from "react";
 
 let dataset = structuredClone(mockWalletData);
+const refreshStatements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const payment = vi.hoisted(() => vi.fn());
 const updateMovement = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({
     dataset,
+    refreshCardStatements: refreshStatements,
     isAllHistoryComplete: true,
     payCreditCardStatement: payment,
     updateCreditCardRecord: updateMovement,
@@ -294,4 +296,23 @@ test("a settled statement link remains inspectable without a payment form", asyn
   expect(tree!.root.findByProps({ "aria-label": "Select statement" }).props.value).toBe("later");
   expect(tree!.root.findAllByType("form")).toHaveLength(0);
   expect(JSON.stringify(tree!.toJSON())).toContain("Settled");
+});
+
+test("opening Cards refreshes statements once without repeating after a render", async () => {
+  await act(async () => {
+    tree = create(
+      <MemoryRouter>
+        <CardsView />
+      </MemoryRouter>,
+    );
+  });
+  expect(refreshStatements).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    tree!.update(
+      <MemoryRouter>
+        <CardsView />
+      </MemoryRouter>,
+    );
+  });
+  expect(refreshStatements).toHaveBeenCalledTimes(1);
 });

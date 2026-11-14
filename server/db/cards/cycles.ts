@@ -91,41 +91,58 @@ export function cardCycle(card: CreditCard, occurredAt: Date) {
 }
 
 export async function ensureCreditCardStatements(db: Db) {
-  const [cardRows, movementRows] = await db.batch([
-    db.select().from(creditCards),
-    db
-      .select()
-      .from(creditCardRecords)
-      .where(and(isNull(creditCardRecords.deletedAt), isNull(creditCardRecords.statementId))),
-  ]);
-  for (const movement of movementRows) {
-    const card = cardRows.find((card) => card.id === movement.creditCardId);
-    if (!card || cardCycle(mapCreditCard(card), movement.occurredAt).cycleEnd > new Date())
-      continue;
-    const queries = await creditCardCycleQueries(
-      db,
-      movement.creditCardId,
-      movement.id,
-      movement.occurredAt.toISOString(),
-    );
-    await db.batch([
-      lockCreditCard(db, movement.creditCardId),
-      ...queries,
-      refreshCreditCardStatements(db, movement.creditCardId),
-    ]);
-  }
-  // Status is derived from current balances, including retroactive wallet activity.
-  // Serialize this refresh with every card payment and refund.
-  for (const card of cardRows)
-    await db.batch([lockCreditCard(db, card.id), refreshCreditCardStatements(db, card.id)]);
+  const cardRows = await db
+    .select({ id: creditCards.id })
+    .from(creditCards)
+    .orderBy(creditCards.id);
+  if (!cardRows.length) return;
+  await db.batch([
+    ...cardRows.map((card) => lockCreditCard(db, card.id)),
+    ...cardRows.flatMap((card) => cardStatementSyncQueries(db, card.id)),
+  ] as unknown as Parameters<Db["batch"]>[0]);
 }
 
 export async function listCreditCardStatements(db: Db, creditCardId: string) {
-  await ensureCreditCardStatements(db);
   const rows = await db
     .select()
     .from(creditCardStatements)
     .where(eq(creditCardStatements.creditCardId, creditCardId))
     .orderBy(desc(creditCardStatements.cycleEnd));
   return rows.map(mapCreditCardStatement);
+}
+
+/** Derived statement writes run after the financial write, inside its locked batch. */
+export function cardStatementSyncQueries(db: Db, creditCardId: string, now = new Date()) {
+  const monthEnd = (month: ReturnType<typeof sql>, day: ReturnType<typeof sql>) => sql`(
+    ${month} + (least(${day}::int, extract(day from ${month} + interval '1 month' - interval '1 day')::int)-1)*interval '1 day'
+    + interval '1 day' - interval '1 millisecond')`;
+  const previousEnd = monthEnd(sql`closing_month - interval '1 month'`, sql`closing_day`);
+  const cycleEnd = monthEnd(sql`closing_month`, sql`closing_day`);
+  const due = monthEnd(
+    sql`closing_month + CASE WHEN due_day > closing_day THEN interval '0 months' ELSE interval '1 month' END`,
+    sql`due_day`,
+  );
+  const candidates = sql`WITH base AS (
+    SELECT r.id,r.credit_card_id,c.closing_day,c.due_day,
+      r.occurred_at AT TIME ZONE 'UTC' AS occurred_utc,
+      date_trunc('month',r.occurred_at AT TIME ZONE 'UTC') AS month_start
+    FROM credit_card_records r JOIN credit_cards c ON c.id=r.credit_card_id
+    WHERE r.credit_card_id=${creditCardId}::uuid AND r.statement_id IS NULL AND r.deleted_at IS NULL
+  ), closing AS (
+    SELECT *,CASE WHEN occurred_utc > ${monthEnd(sql`month_start`, sql`closing_day`)}
+      THEN month_start+interval '1 month' ELSE month_start END AS closing_month FROM base
+  ), cycles AS (
+    SELECT id,credit_card_id,(${previousEnd}+interval '1 millisecond') AT TIME ZONE 'UTC' AS cycle_start,
+      ${cycleEnd} AT TIME ZONE 'UTC' AS cycle_end,${due} AT TIME ZONE 'UTC' AS due_at FROM closing
+  ), closed AS (SELECT * FROM cycles WHERE cycle_end <= ${now.toISOString()}::timestamptz)`;
+  return [
+    db.execute(sql`${candidates}
+      INSERT INTO credit_card_statements(credit_card_id,cycle_start,cycle_end,due_at,closed_at)
+      SELECT DISTINCT credit_card_id,cycle_start,cycle_end,due_at,cycle_end FROM closed ON CONFLICT DO NOTHING`),
+    db.execute(sql`${candidates}
+      UPDATE credit_card_records r SET statement_id=s.id FROM closed c
+      JOIN credit_card_statements s ON s.credit_card_id=c.credit_card_id AND s.cycle_start=c.cycle_start AND s.cycle_end=c.cycle_end
+      WHERE r.id=c.id AND r.deleted_at IS NULL AND r.statement_id IS NULL`),
+    refreshCreditCardStatements(db, creditCardId),
+  ];
 }

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { ZodError, type ZodSchema } from "zod";
 
 import { uuidSchema } from "../../shared/schemas.js";
+import { publicErrorMetadata } from "./context.js";
 import { HttpError, translateDatabaseError } from "./errors.js";
 import { sendError } from "./response.js";
 
@@ -25,28 +26,34 @@ export function validateQuery<T>(req: VercelRequest, schema: ZodSchema<T>) {
   return schema.parse(req.query);
 }
 
-export function routeError(res: VercelResponse, error: unknown) {
+export function routeError(
+  res: VercelResponse,
+  error: unknown,
+  options: { requestId?: string; log?: boolean } = {},
+) {
   if (error instanceof HttpError) {
     sendError(res, error.status, error.code, error.publicMessage);
-    return;
+    return error.status;
   }
   if (error instanceof SyntaxError) {
     sendError(res, 400, "VALIDATION_ERROR", "Invalid JSON body");
-    return;
+    return 400;
   }
   if (error instanceof ZodError) {
     const issue = error.issues[0];
     const path = issue?.path.length ? `${issue.path.join(".")}: ` : "";
     sendError(res, 400, "VALIDATION_ERROR", `${path}${issue?.message ?? "Invalid request"}`);
-    return;
+    return 400;
   }
   const databaseError = translateDatabaseError(error);
   if (databaseError) {
     sendError(res, databaseError.status, databaseError.code, databaseError.publicMessage);
-    return;
+    return databaseError.status;
   }
-  const requestId = randomUUID();
-  console.error("Unexpected API error", { requestId, error });
+  const requestId = options.requestId ?? randomUUID();
+  if (options.log !== false)
+    console.error(JSON.stringify({ requestId, ...publicErrorMetadata(error) }));
   res.setHeader("X-Request-Id", requestId);
   sendError(res, 500, "INTERNAL_ERROR", "Unexpected server error");
+  return 500;
 }
