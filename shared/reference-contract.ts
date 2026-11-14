@@ -3,6 +3,7 @@ import { z } from "zod";
 import { analyticsQuerySchema } from "./analytics-contract.js";
 import {
   debtSchema,
+  recordReviewBaselineSchema,
   uuidSchema,
   walletDatasetSchema,
   walletRecordResponseSchema,
@@ -27,6 +28,8 @@ export const walletReferenceSchema = walletDatasetSchema
     installmentPlans: true,
   })
   .extend({
+    merchantCorrections: z.array(recordReviewBaselineSchema).default([]),
+    debtRecordCounts: z.record(uuidSchema, z.number().int().nonnegative()).default({}),
     recordSummary: z.object({
       from: z.iso.date().nullable(),
       to: z.iso.date().nullable(),
@@ -53,5 +56,6 @@ export const referenceBootstrapSchema = z.object({
   serverDate: z.iso.date(),
 });
 export type WalletReference = z.infer<typeof walletReferenceSchema>;
+export type RecordReviewBaseline = z.infer<typeof recordReviewBaselineSchema>;
 export type ReferenceQuery = z.infer<typeof referenceQuerySchema>;
 export type ReferenceBootstrap = z.infer<typeof referenceBootstrapSchema>;

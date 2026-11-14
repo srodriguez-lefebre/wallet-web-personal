@@ -214,3 +214,75 @@ test("card mutations refresh their active ledger while settings leave card histo
   await mutations["cards.patch"]({ params: { id }, body: { name: "Synthetic updated card" } });
   expect(reads).toBe(2);
 });
+
+test("empty UI filters share the seeded first page and active search keys retain their modes", async () => {
+  server.use(http.post("http://test.local/api/wallet/bootstrap-reference", () => response(boot)));
+  const value = cache();
+  await ensureWalletBootstrap(value, client);
+  const loaded = await value.fetchInfiniteQuery(
+    recordsQueryOptions(client, {
+      type: "all",
+      paymentStatus: "all",
+      search: "  ",
+      note: "",
+      timeZone: "America/Montevideo",
+      categoryMode: "descendants",
+      searchMode: "wallet",
+    }),
+  );
+  expect(loaded.pages[0]?.items[0]?.id).toBe(id);
+  const key = recordsQueryOptions(client, {
+    search: "  café  ",
+    searchMode: "wallet",
+    categoryId: id,
+    categoryMode: "descendants",
+    from: "2026-11-01",
+    timeZone: "America/Montevideo",
+  }).queryKey;
+  expect(key).toEqual([
+    "records",
+    {
+      search: "café",
+      searchMode: "wallet",
+      categoryId: id,
+      categoryMode: "descendants",
+      from: "2026-11-01",
+      timeZone: "America/Montevideo",
+      limit: 100,
+    },
+  ]);
+});
+
+test("renaming a category or tag refreshes active record search results", async () => {
+  let reads = 0;
+  server.use(
+    http.get("http://test.local/api/records", () => {
+      reads++;
+      return response(page);
+    }),
+    http.patch(`http://test.local/api/categories/${id}`, () =>
+      response({ id, name: "Synthetic renamed category", color: "blue", icon: "tag" }),
+    ),
+    http.patch(`http://test.local/api/tags/${id}`, () =>
+      response({ id, name: "Synthetic renamed tag", color: "blue", isActive: true }),
+    ),
+  );
+  const value = cache();
+  unsubscribers.push(
+    new InfiniteQueryObserver(
+      value,
+      recordsQueryOptions(client, { search: "café", searchMode: "wallet" }),
+    ).subscribe(() => {}),
+  );
+  await value.fetchInfiniteQuery(
+    recordsQueryOptions(client, { search: "café", searchMode: "wallet" }),
+  );
+  const actions = createWalletMutations(client, value);
+  await actions["categories.patch"]({
+    params: { id },
+    body: { name: "Synthetic renamed category" },
+  });
+  expect(reads).toBe(2);
+  await actions["tags.patch"]({ params: { id }, body: { name: "Synthetic renamed tag" } });
+  expect(reads).toBe(3);
+});

@@ -20,7 +20,20 @@ export function createWalletQueryClient() {
   });
 }
 export function recordsKey(filters: RecordQueryFilters = {}) {
-  return ["records", { ...filters, limit: filters.limit ?? defaultPageSize }] as const;
+  return ["records", normalizeRecordFilters(filters)] as const;
+}
+function normalizeRecordFilters(filters: RecordQueryFilters): RecordQueryFilters {
+  const normalized = { ...filters, limit: filters.limit ?? defaultPageSize };
+  if (normalized.type === "all") delete normalized.type;
+  if (normalized.paymentStatus === "all") delete normalized.paymentStatus;
+  normalized.search = normalized.search?.trim() || undefined;
+  normalized.note = normalized.note?.trim() || undefined;
+  if (!normalized.search || normalized.searchMode === "legacy") delete normalized.searchMode;
+  if (!normalized.categoryId || normalized.categoryMode === "exact") delete normalized.categoryMode;
+  if (!normalized.from && !normalized.to) delete normalized.timeZone;
+  if (!normalized.search) delete normalized.search;
+  if (!normalized.note) delete normalized.note;
+  return normalized;
 }
 export function referenceQueryOptions(client: WalletClient, zone = timeZone()) {
   return queryOptions({
@@ -29,14 +42,14 @@ export function referenceQueryOptions(client: WalletClient, zone = timeZone()) {
   });
 }
 export function recordsQueryOptions(client: WalletClient, filters: RecordQueryFilters = {}) {
+  const normalized = normalizeRecordFilters(filters);
   return infiniteQueryOptions({
     queryKey: recordsKey(filters),
     initialPageParam: null as string | null,
     queryFn: ({ pageParam, signal }) =>
       client["records.list"]({
         query: {
-          ...filters,
-          limit: filters.limit ?? defaultPageSize,
+          ...normalized,
           cursor: pageParam ?? undefined,
         },
         signal,

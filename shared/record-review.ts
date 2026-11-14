@@ -52,6 +52,7 @@ export function currentReviewIssues(record: WalletRecord, dataset: WalletDataset
   const card = dataset.creditCards.find((item) => item.id === record.creditCardId);
   const issues: string[] = [];
   if (
+    record.linkedCardRecordKind === "refund" ||
     dataset.creditCardRecords.some(
       (item) => item.walletRecordId === record.id && item.kind === "refund",
     )
@@ -85,8 +86,25 @@ export function normalizeBankMerchant(value: string) {
 }
 
 export function getMerchantCorrections(dataset: WalletDataset) {
-  const corrections = new Map<string, { record: WalletRecord; category: Category }>();
-  for (const record of dataset.records) {
+  return selectMerchantCorrections(dataset.records, dataset.categories);
+}
+
+type MerchantCorrectionRecord = Pick<
+  WalletRecord,
+  | "id"
+  | "type"
+  | "paymentType"
+  | "paymentStatus"
+  | "categoryId"
+  | "importMerchant"
+  | "merchantCorrection"
+>;
+export function selectMerchantCorrections<R extends MerchantCorrectionRecord>(
+  records: R[],
+  categories: Category[],
+) {
+  const corrections = new Map<string, { record: R; category: Category }>();
+  for (const record of records) {
     if (
       !record.importMerchant ||
       !record.merchantCorrection ||
@@ -95,7 +113,7 @@ export function getMerchantCorrections(dataset: WalletDataset) {
       record.paymentStatus === "cancelled"
     )
       continue;
-    const category = dataset.categories.find((item) => item.id === record.categoryId);
+    const category = categories.find((item) => item.id === record.categoryId);
     if (!isReviewCategory(category)) continue;
     const merchant = normalizeBankMerchant(record.importMerchant);
     const previous = corrections.get(merchant)?.record;

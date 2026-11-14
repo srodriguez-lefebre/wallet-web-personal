@@ -99,3 +99,62 @@ test("reference bootstrap preserves its first page while the legacy snapshot/boo
   expect(oldBootstrap.dataset.records).toHaveLength(1);
   expect(oldBootstrap.recordsPage.hasMore).toBe(true);
 });
+
+test("compact reference metadata keeps global merchant rules and debt counts beyond the first records page", async () => {
+  const debt = randomUUID();
+  const ids = Array.from(
+    { length: 8 },
+    (_, index) => `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+  );
+  await fixture.pool.query(
+    "INSERT INTO debts(id,name,direction,original_amount,pending_amount,currency,counterparty_name,started_at,category_id) VALUES($1,'Synthetic metadata debt','payable',100,50,'UYU','Synthetic party','2020-01-01',$2)",
+    [debt, category],
+  );
+  try {
+    for (const [index, id] of ids.entries()) {
+      const savedAt =
+        index === 1
+          ? "2026-11-10T12:00:00.000Z"
+          : index < 3
+            ? "2026-11-12T12:00:00.000Z"
+            : `2026-11-${String(20 + index).padStart(2, "0")}T12:00:00.000Z`;
+      await fixture.pool.query(
+        "INSERT INTO records(id,type,amount,currency,account_id,category_id,debt_id,payment_type,payment_status,exchange_rate_to_primary,occurred_at,import_merchant,merchant_correction,note,deleted_at) VALUES($1,$2,10,'UYU',$3,$4,$5,$6,$7,1,$8,$9,$10::jsonb,'Synthetic private note',$11)",
+        [
+          id,
+          index === 5 ? "income" : "expense",
+          account,
+          index === 4 ? null : category,
+          debt,
+          index === 6 ? "transfer" : "debit",
+          index === 3 ? "cancelled" : "cleared",
+          index === 1 ? "2027-01-01T12:00:00Z" : "2000-01-01T12:00:00Z",
+          index % 2 ? "  Synthetic  Café " : "Ｓｙｎｔｈｅｔｉｃ Ｃａｆé",
+          JSON.stringify({ savedAt, autoApply: index === 0 }),
+          index === 7 ? new Date() : null,
+        ],
+      );
+    }
+    const data = await bootstrapWalletReference(
+      createDb(),
+      { recordsLimit: 1, timeZone: "America/Montevideo" },
+      new Date("2026-11-14T12:00:00Z"),
+    );
+    expect(data.recordsPage.items.map((row) => row.id)).toEqual([ids[1]]);
+    expect(data.reference.merchantCorrections.map((row) => row.id)).toEqual([ids[2]]);
+    expect(data.reference.debtRecordCounts[debt]).toBe(7);
+    for (const rule of data.reference.merchantCorrections) {
+      expect(rule).not.toHaveProperty("amount");
+      expect(rule).not.toHaveProperty("currency");
+      expect(rule).not.toHaveProperty("note");
+      expect(rule).not.toHaveProperty("occurredAt");
+      expect(rule.merchantCorrection).toEqual({
+        savedAt: "2026-11-12T12:00:00.000Z",
+        autoApply: false,
+      });
+    }
+  } finally {
+    await fixture.pool.query("DELETE FROM records WHERE id=ANY($1::uuid[])", [ids]);
+    await fixture.pool.query("DELETE FROM debts WHERE id=$1", [debt]);
+  }
+});

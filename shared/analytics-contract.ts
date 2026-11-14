@@ -1,24 +1,13 @@
 import { z } from "zod";
 
 import { budgetSchema, currencySchema, uuidSchema } from "./schemas.js";
+import { timeZoneSchema } from "./time-zone.js";
 export const analyticsQuerySchema = z
   .object({
     from: z.iso.date(),
     to: z.iso.date(),
     accountId: uuidSchema.optional(),
-    timeZone: z
-      .string()
-      .max(100)
-      .default("America/Montevideo")
-      .refine((value) => {
-        if (/^[+-]/.test(value)) return false;
-        try {
-          new Intl.DateTimeFormat("en", { timeZone: value });
-          return true;
-        } catch {
-          return false;
-        }
-      }, "Invalid IANA time zone"),
+    timeZone: timeZoneSchema.default("America/Montevideo"),
   })
   .refine((value) => value.from <= value.to, {
     message: "from must not be after to",

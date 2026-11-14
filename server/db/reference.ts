@@ -1,6 +1,8 @@
-import { desc, isNull, sql } from "drizzle-orm";
+import { and, desc, isNotNull, isNull, sql } from "drizzle-orm";
 
+import { selectMerchantCorrections } from "../../shared/record-review.js";
 import { walletReferenceSchema } from "../../shared/reference-contract.js";
+import { recordReviewBaselineSchema } from "../../shared/schemas.js";
 import { namedBatch } from "./batch.js";
 import { generateDueRecurringDebts } from "./debts.js";
 import { goalReservationBalancesQuery, mapGoalReservationBalance } from "./goals/ledger.js";
@@ -20,6 +22,7 @@ import {
   mapRecurringDebt,
   mapSettings,
   mapTag,
+  nullToUndefined,
 } from "./mappers.js";
 import { listRecords } from "./records/list.js";
 import {
@@ -33,6 +36,7 @@ import {
   goalTags,
   installmentPlans,
   investments,
+  records,
   recordTemplates,
   recurringDebts,
   settings,
@@ -72,6 +76,30 @@ export async function getWalletReference(
       .orderBy(desc(recurringDebts.startedAt)),
     plans: db.select().from(installmentPlans).where(isNull(installmentPlans.deletedAt)),
     templates: db.select().from(recordTemplates).orderBy(recordTemplates.name, recordTemplates.id),
+    corrections: db
+      .select({
+        id: records.id,
+        type: records.type,
+        paymentType: records.paymentType,
+        paymentStatus: records.paymentStatus,
+        categoryId: records.categoryId,
+        importMerchant: records.importMerchant,
+        merchantCorrection: records.merchantCorrection,
+        updatedAt: records.updatedAt,
+        counterpartyName: records.counterpartyName,
+      })
+      .from(records)
+      .where(
+        and(
+          isNull(records.deletedAt),
+          isNotNull(records.importMerchant),
+          isNotNull(records.merchantCorrection),
+        ),
+      )
+      .orderBy(desc(records.occurredAt), desc(records.id)),
+    debtCounts: db.execute<{ debtId: string; count: string }>(
+      sql`SELECT debt_id AS "debtId", count(*)::text AS count FROM records WHERE deleted_at IS NULL AND debt_id IS NOT NULL GROUP BY debt_id`,
+    ),
     metadata:
       db.execute(sql`WITH local_records AS (SELECT *, (occurred_at AT TIME ZONE ${query.timeZone})::date AS local_date FROM records WHERE deleted_at IS NULL)
       SELECT min(local_date)::text AS "from", max(local_date)::text AS "to",
@@ -90,10 +118,28 @@ export async function getWalletReference(
     newReviews: number | string;
     latestReviewAt: string | null;
   };
+  const categoryModels = rows.categories.map(mapCategory);
+  const correctionBaselines = rows.corrections.map((row) =>
+    recordReviewBaselineSchema.parse({
+      ...row,
+      categoryId: nullToUndefined(row.categoryId),
+      importMerchant: nullToUndefined(row.importMerchant),
+      merchantCorrection: nullToUndefined(row.merchantCorrection),
+      counterpartyName: nullToUndefined(row.counterpartyName),
+      updatedAt: asIso(row.updatedAt),
+    }),
+  );
   return walletReferenceSchema.parse({
     settings: mapSettings(rows.settings[0]),
     accounts: rows.accounts.map(mapAccount),
-    categories: rows.categories.map(mapCategory),
+    categories: categoryModels,
+    merchantCorrections: Array.from(
+      selectMerchantCorrections(correctionBaselines, categoryModels).values(),
+      ({ record }) => record,
+    ),
+    debtRecordCounts: Object.fromEntries(
+      rows.debtCounts.rows.map((row) => [row.debtId, asNumber(row.count)]),
+    ),
     tags: rows.tags.map(mapTag),
     creditCards: rows.cards.map(mapCreditCard),
     goals: rows.goals.map((goal) =>

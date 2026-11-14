@@ -351,3 +351,71 @@ Check final Cards exit 0: 114 archivos / 814 pruebas, formato/lint/build/OpenAPI
 verdes, registrado en
 `/tmp/wallet-package4-card-read-check.log` y `.status`. Continuar con metadata de
 referencia y filtros completos de Records antes de conectar las pantallas a Query.
+
+## Task 2b/3 · prerrequisitos de Records paginado
+
+Se preservó `46fc5b9` y se verificó la terminal en server-miapto. Referencia ahora
+incluye sólo las últimas correcciones por comercio normalizado y recuentos por
+deuda, sin importes, moneda, notas o fechas de movimiento. La selección conserva
+NFKC, savedAt y desempate por id de la lógica anterior; no depende de la página
+visible. Una deuda sintética del test necesitó su categoría obligatoria: corregido
+el fixture antes de confirmar RED por metadata inexistente, luego GREEN 3/3.
+
+Filtros aditivos de Records: búsqueda wallet por categoría/parent, contraparte,
+comercio, tags y nota con NFD/Mark; filtro de nota independiente y literal;
+categorías descendientes con guard de ciclos; fechas por IANA opt-in, incluido
+un día DST de 25 horas. Sin parámetros nuevos se conserva UTC, categoría exacta
+y búsqueda anterior; se corrige el escape de backslash junto a %/\_. No requiere
+extensiones ni migraciones. Cada página incluye el tipo de movimiento de tarjeta
+vinculado, sin descargar todo el ledger. El tipo se valida con el schema común.
+Las claves Query normalizan filtros vacíos para reutilizar la página sembrada;
+renombrar categoría/tag invalida búsquedas activas. Settings sigue sin recargar
+Records ni ledger. RED filtros/kind y Query → GREEN.
+
+Se reprodujo con Testing Library que un editor abierto perdía el original cuando
+el filtro/página lo retiraba del dataset. Ahora mantiene su snapshot de apertura:
+fecha con segundos, FX congelado y restricciones de reembolso sobreviven a cambios
+de página, y duplicar usa el snapshot. Duplicar conserva la política anterior de
+pedir conversiones nuevas, en vez de copiar el importe bancario histórico.
+
+Target de estas piezas: 6 archivos / 65 pruebas verdes en
+`/tmp/wallet-package4-record-prerequisites-target.log` (estado `.status` 0).
+Lint de los archivos modificados exit 0. TypeScript detectó kind como string del
+schema SQL: se valida con Zod antes de exponerlo. El check anterior de metadata
+se solapó por error con tests RED nuevos y terminó 5 fallos / 815 pass; no es
+validación del árbol final. Repetir check completo sobre árbol estable antes de
+commit. App todavía usa WalletSync: no afirmar integración Query terminada.
+
+Validación completa del árbol estable: `WALLET_TEST_WORKERS=1 npm run check`,
+exit 0, 115 archivos / 824 pruebas; formato, lint, build y OpenAPI verdes.
+Log `/tmp/wallet-package4-record-prerequisites-check.log`, estado `.status` 0.
+GitHub confirmó main `6701646`, rama `46fc5b9` y ningún PR 4 existente. Preview
+anterior `46fc5b9` READY `dpl_Ewf2Bo6urKZYGmcsRRMw4tXoDtru`.
+No se tocó producción, sesiones, migraciones o Apps Script.
+
+Sandbox de estos prerrequisitos: exit 0, 11 archivos / 109 pruebas, en
+`/tmp/wallet-package4-record-prerequisites-sandbox.log` y `.status`.
+Antes del commit una comprobación adicional reprodujo una diferencia real de
+casing: PostgreSQL devolvía οσ para ΟΣ, frente a ος del navegador. Se agregó
+regresión SQL contra normalizeGlobalSearch y las reglas Unicode de casing por
+defecto, incluida sigma contextual, I con punto, marcas, caracteres astrales y
+todos los lowercase mappings del runtime. Sin cambiar la normalización del UI.
+
+El servidor usa tablas Unicode estáticas, sin extensión ni configuración nueva;
+ASCII usa el lower de la collation C incorporada. El resto conserva las reglas
+Unicode del cliente sin depender del locale del cluster. El filtro de notas
+conserva sus acentos. Regenerador reproducible:
+`node scripts/generate-record-search-unicode.mjs`, seguido de Prettier para el
+archivo generado; revisar cambios de versión y correr las regresiones antes de
+publicarlo. Target final: 2 archivos / 22 pruebas verdes en
+`/tmp/wallet-package4-unicode-final-target.log`, estado `.status` 0.
+Esta corrección requiere repetir el check completo antes de commit/push.
+
+Check final posterior a Unicode: exit 0, 116 archivos / 826 pruebas, formato,
+lint, build y OpenAPI verdes en
+`/tmp/wallet-package4-record-prerequisites-final-check.log` y `.status`.
+Sandbox final exit 0: 11 archivos / 109 pruebas, en
+`/tmp/wallet-package4-record-prerequisites-final-sandbox.log` y `.status`.
+El árbol funcional quedó estable durante ambas validaciones. Continuar la
+integración de Query conforme al plan local; no hay PR 4 todavía y siguen dos
+PRs disponibles. App/WalletSync aún conservan el snapshot hasta esa integración.

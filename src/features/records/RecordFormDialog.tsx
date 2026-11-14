@@ -287,11 +287,7 @@ export function RecordFormDialog({ model }: { model: ReturnType<typeof useRecord
                 onChange={changeSourceAccount}
                 className={fieldClassName}
               >
-                {!(
-                  type === "expense" &&
-                  creditCardId &&
-                  dataset.records.find((record) => record.id === editingId)?.accountId
-                ) && (
+                {!(type === "expense" && creditCardId && editingRecord?.accountId) && (
                   <option value="">
                     {type === "expense" && creditCardId ? "Card only" : "Choose account"}
                   </option>

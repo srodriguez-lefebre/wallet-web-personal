@@ -5971,6 +5971,11 @@ paths:
                             type: string
                           isFixed:
                             type: boolean
+                          linkedCardRecordKind:
+                            enum:
+                              - purchase
+                              - refund
+                            type: string
                           merchantCorrection:
                             additionalProperties: false
                             properties:
@@ -8955,6 +8960,35 @@ paths:
             minLength: 1
             type: string
         - in: query
+          name: searchMode
+          required: false
+          schema:
+            enum:
+              - legacy
+              - wallet
+            type: string
+        - in: query
+          name: note
+          required: false
+          schema:
+            maxLength: 1000
+            minLength: 1
+            type: string
+        - in: query
+          name: categoryMode
+          required: false
+          schema:
+            enum:
+              - exact
+              - descendants
+            type: string
+        - in: query
+          name: timeZone
+          required: false
+          schema:
+            maxLength: 100
+            type: string
+        - in: query
           name: paymentStatus
           required: false
           schema:
@@ -9111,6 +9145,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -9476,6 +9515,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -9855,6 +9899,11 @@ paths:
                           type: string
                         isFixed:
                           type: boolean
+                        linkedCardRecordKind:
+                          enum:
+                            - purchase
+                            - refund
+                          type: string
                         merchantCorrection:
                           additionalProperties: false
                           properties:
@@ -10313,6 +10362,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -12802,6 +12856,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -14493,6 +14552,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -15877,6 +15941,11 @@ paths:
                                   type: string
                                 isFixed:
                                   type: boolean
+                                linkedCardRecordKind:
+                                  enum:
+                                    - purchase
+                                    - refund
+                                  type: string
                                 merchantCorrection:
                                   additionalProperties: false
                                   properties:
@@ -16504,6 +16573,11 @@ paths:
                                   type: string
                                 isFixed:
                                   type: boolean
+                                linkedCardRecordKind:
+                                  enum:
+                                    - purchase
+                                    - refund
+                                  type: string
                                 merchantCorrection:
                                   additionalProperties: false
                                   properties:
@@ -16784,6 +16858,17 @@ paths:
                                 - id
                               type: object
                             type: array
+                          debtRecordCounts:
+                            additionalProperties:
+                              maximum: 9007199254740991
+                              minimum: 0
+                              type: integer
+                            default: {}
+                            propertyNames:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type: object
                           debts:
                             items:
                               additionalProperties: false
@@ -17148,6 +17233,68 @@ paths:
                                 - id
                               type: object
                             type: array
+                          merchantCorrections:
+                            default: []
+                            items:
+                              additionalProperties: false
+                              properties:
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                importMerchant:
+                                  type: string
+                                merchantCorrection:
+                                  additionalProperties: false
+                                  properties:
+                                    autoApply:
+                                      type: boolean
+                                    savedAt:
+                                      format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                  required:
+                                    - savedAt
+                                    - autoApply
+                                  type: object
+                                paymentStatus:
+                                  enum:
+                                    - cleared
+                                    - pending
+                                    - needs_review
+                                    - cancelled
+                                  type: string
+                                paymentType:
+                                  enum:
+                                    - cash
+                                    - debit
+                                    - credit
+                                    - transfer
+                                    - other
+                                  type: string
+                                type:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - transfer
+                                  type: string
+                                updatedAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                              required:
+                                - id
+                                - type
+                                - paymentType
+                                - paymentStatus
+                              type: object
+                            type: array
                           recordSummary:
                             additionalProperties: false
                             properties:
@@ -17444,6 +17591,8 @@ paths:
                           - debts
                           - recurringDebts
                           - installmentPlans
+                          - merchantCorrections
+                          - debtRecordCounts
                           - recordSummary
                         type: object
                       serverDate:
@@ -17710,6 +17859,17 @@ paths:
                             - id
                           type: object
                         type: array
+                      debtRecordCounts:
+                        additionalProperties:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        default: {}
+                        propertyNames:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        type: object
                       debts:
                         items:
                           additionalProperties: false
@@ -18074,6 +18234,68 @@ paths:
                             - id
                           type: object
                         type: array
+                      merchantCorrections:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            importMerchant:
+                              type: string
+                            merchantCorrection:
+                              additionalProperties: false
+                              properties:
+                                autoApply:
+                                  type: boolean
+                                savedAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                              required:
+                                - savedAt
+                                - autoApply
+                              type: object
+                            paymentStatus:
+                              enum:
+                                - cleared
+                                - pending
+                                - needs_review
+                                - cancelled
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                            updatedAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                          required:
+                            - id
+                            - type
+                            - paymentType
+                            - paymentStatus
+                          type: object
+                        type: array
                       recordSummary:
                         additionalProperties: false
                         properties:
@@ -18370,6 +18592,8 @@ paths:
                       - debts
                       - recurringDebts
                       - installmentPlans
+                      - merchantCorrections
+                      - debtRecordCounts
                       - recordSummary
                     type: object
                   error:
@@ -19817,6 +20041,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -21147,6 +21376,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:

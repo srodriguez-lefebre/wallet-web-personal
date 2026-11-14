@@ -188,3 +188,25 @@ describe("new credit-card record contracts", () => {
     expect(recordSchema.safeParse({ ...cardRecord, creditCardId: null }).success).toBe(false);
   });
 });
+
+describe("record query compatibility", () => {
+  it("accepts opt-in wallet search and local date filters without changing UTC legacy defaults", () => {
+    const legacy = recordFiltersSchema.parse({ search: " Synthetic " });
+    expect(legacy).toEqual({ search: "Synthetic", limit: 100 });
+    expect(
+      recordFiltersSchema.parse({
+        timeZone: "America/New_York",
+        note: " receipt ",
+        categoryMode: "descendants",
+        searchMode: "wallet",
+      }),
+    ).toMatchObject({
+      timeZone: "America/New_York",
+      note: "receipt",
+      categoryMode: "descendants",
+      searchMode: "wallet",
+    });
+    for (const timeZone of ["Not/A_Zone", "+03:00", ""])
+      expect(recordFiltersSchema.safeParse({ timeZone }).success).toBe(false);
+  });
+});

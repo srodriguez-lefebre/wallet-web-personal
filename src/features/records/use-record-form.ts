@@ -38,7 +38,8 @@ export function useRecordForm() {
     consumeNewRecordRequest,
   } = useWallet();
   const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<WalletRecord | null>(null);
+  const editingId = editingRecord?.id ?? null;
   const [templateNotice, setTemplateNotice] = useState("");
   const recordDraftRevision = useRef(0);
   const {
@@ -112,11 +113,16 @@ export function useRecordForm() {
   );
   const numericAmount = Number(amount);
   const hasInvalidGoalAllocation = draftHasInvalidGoalAllocation(draft);
-  const editingLinkedRefund = dataset.creditCardRecords.find(
-    (record) => record.walletRecordId === editingId && record.kind === "refund",
+  const editingLinkedRefund =
+    editingRecord?.linkedCardRecordKind === "refund" ||
+    dataset.creditCardRecords.some(
+      (record) => record.walletRecordId === editingId && record.kind === "refund",
+    );
+  const submitMode = recordSubmitMode(
+    draft,
+    editingRecord ?? undefined,
+    Boolean(editingLinkedRefund),
   );
-  const editingRecord = dataset.records.find((record) => record.id === editingId);
-  const submitMode = recordSubmitMode(draft, editingRecord, Boolean(editingLinkedRefund));
   const statusOnlyCancellation = submitMode === "cancel";
   const reviewMetadataOnly = submitMode === "review";
   const canSubmit =
@@ -160,7 +166,7 @@ export function useRecordForm() {
           notice = prepared.notice;
         } else notice = "The template is no longer available. Complete a new record.";
       }
-      setEditingId(null);
+      setEditingRecord(null);
       setTemplateNotice(notice);
       setDraft(next);
       conversionBasis.current = {};
@@ -179,7 +185,7 @@ export function useRecordForm() {
     recordDraftRevision.current += 1;
     conversionBasis.current = {};
     setTemplateNotice("");
-    setEditingId(null);
+    setEditingRecord(null);
     setDraft(emptyDraft(dataset, new Date(), nextType));
   }
   function openNewRecordDialog() {
@@ -189,7 +195,7 @@ export function useRecordForm() {
   function loadRecord(record: WalletRecord) {
     recordDraftRevision.current += 1;
     setTemplateNotice("");
-    setEditingId(record.id);
+    setEditingRecord(structuredClone(record));
     setDraft(draftFromRecord(record));
     conversionBasis.current = {
       source:
@@ -204,7 +210,7 @@ export function useRecordForm() {
     setIsRecordDialogOpen(true);
   }
   function duplicateEditingRecord() {
-    const record = dataset.records.find((item) => item.id === editingId);
+    const record = editingRecord;
     if (!record) return;
     resetForm(record.type);
     setDraft(duplicateDraft(record, dataset, new Date()));
@@ -237,7 +243,7 @@ export function useRecordForm() {
     }
     const now = new Date();
     const patch = editingId
-      ? buildRecordPatch(draft, editingRecord, dataset, now, {
+      ? buildRecordPatch(draft, editingRecord ?? undefined, dataset, now, {
           linkedRefund: Boolean(editingLinkedRefund),
         })
       : null;

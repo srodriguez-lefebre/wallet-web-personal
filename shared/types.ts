@@ -73,6 +73,7 @@ export interface RecordGoalAssociation {
 }
 
 export interface WalletRecord {
+  linkedCardRecordKind?: "purchase" | "refund";
   id: string;
   type: RecordType;
   amount: number;

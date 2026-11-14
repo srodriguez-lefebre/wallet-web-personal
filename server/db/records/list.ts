@@ -1,8 +1,10 @@
-import { and, desc, eq, gte, ilike, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
 
+import { creditCardRecordSchema } from "../../../shared/schemas.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../../api/record-cursor.js";
 import { groupGoalAssociations, groupIds, mapRecord } from "../mappers.js";
-import { recordGoals, records, recordTags } from "../schema.js";
+import { creditCardRecords, recordGoals, records, recordTags } from "../schema.js";
+import { lowercaseSql, normalizedSearchSql } from "./search.js";
 
 import type { WalletRecord } from "../../../shared/types.js";
 import type { Db } from "../input-types.js";
@@ -17,6 +19,10 @@ export async function listRecords(
     tagId?: string;
     goalId?: string;
     search?: string;
+    searchMode?: "legacy" | "wallet";
+    note?: string;
+    categoryMode?: "exact" | "descendants";
+    timeZone?: string;
     paymentStatus?: string;
     from?: string;
     to?: string;
@@ -36,7 +42,19 @@ export async function listRecords(
       )!,
     );
   if (filters.creditCardId) clauses.push(eq(records.creditCardId, filters.creditCardId));
-  if (filters.categoryId) clauses.push(eq(records.categoryId, filters.categoryId));
+  if (filters.categoryId) {
+    clauses.push(
+      filters.categoryMode === "descendants"
+        ? sql`${records.categoryId} IN (
+      WITH RECURSIVE descendants AS (
+        SELECT id, ARRAY[id] AS visited FROM categories WHERE id=${filters.categoryId}::uuid AND deleted_at IS NULL
+        UNION ALL SELECT c.id, d.visited || c.id FROM categories c JOIN descendants d ON c.parent_id=d.id
+          WHERE c.deleted_at IS NULL AND NOT c.id=ANY(d.visited)
+      ) SELECT id FROM descendants
+    )`
+        : eq(records.categoryId, filters.categoryId),
+    );
+  }
   if (filters.tagId)
     clauses.push(
       inArray(
@@ -60,15 +78,41 @@ export async function listRecords(
   if (filters.paymentStatus && filters.paymentStatus !== "all")
     clauses.push(eq(records.paymentStatus, filters.paymentStatus as WalletRecord["paymentStatus"]));
   if (filters.search) {
-    const pattern = `%${filters.search.replace(/[%_]/g, "\\$&")}%`;
-    clauses.push(or(ilike(records.counterpartyName, pattern), ilike(records.note, pattern))!);
+    if (filters.searchMode === "wallet") {
+      const haystack = sql`concat(
+        (SELECT concat(CASE WHEN parent.id IS NOT NULL THEN parent.name || ' / ' ELSE '' END, c.name)
+          FROM categories c LEFT JOIN categories parent ON parent.id=c.parent_id AND parent.deleted_at IS NULL
+          WHERE c.id=${records.categoryId} AND c.deleted_at IS NULL), ' ',
+        ${records.counterpartyName}, ' ', ${records.importMerchant}, ' ',
+        (SELECT string_agg(t.name,' ' ORDER BY t.id) FROM tags t JOIN record_tags rt ON rt.tag_id=t.id WHERE rt.record_id=${records.id} AND t.deleted_at IS NULL), ' ',
+        ${records.note})`;
+      const term = filters.search.normalize("NFD").replace(/\p{M}/gu, "").trim().toLowerCase();
+      clauses.push(sql`strpos(${normalizedSearchSql(haystack)}, ${term}) > 0`);
+    } else {
+      const pattern = `%${filters.search.replace(/[\\%_]/g, "\\$&")}%`;
+      clauses.push(or(ilike(records.counterpartyName, pattern), ilike(records.note, pattern))!);
+    }
   }
+  if (filters.note)
+    clauses.push(
+      sql`strpos(${lowercaseSql(sql`coalesce(${records.note},'')`)}, ${filters.note.trim().toLowerCase()}) > 0`,
+    );
   if (filters.from)
-    clauses.push(gte(records.occurredAt, new Date(`${filters.from}T00:00:00.000Z`)));
+    clauses.push(
+      filters.timeZone
+        ? sql`${records.occurredAt} >= (${filters.from}::date::timestamp AT TIME ZONE ${filters.timeZone})`
+        : gte(records.occurredAt, new Date(`${filters.from}T00:00:00.000Z`)),
+    );
   if (filters.to) {
-    const exclusiveEnd = new Date(`${filters.to}T00:00:00.000Z`);
-    exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
-    clauses.push(lt(records.occurredAt, exclusiveEnd));
+    if (filters.timeZone)
+      clauses.push(
+        sql`${records.occurredAt} < ((${filters.to}::date + 1)::timestamp AT TIME ZONE ${filters.timeZone})`,
+      );
+    else {
+      const exclusiveEnd = new Date(`${filters.to}T00:00:00.000Z`);
+      exclusiveEnd.setUTCDate(exclusiveEnd.getUTCDate() + 1);
+      clauses.push(lt(records.occurredAt, exclusiveEnd));
+    }
   }
   if (filters.cursor) {
     const cursor = decodeRecordCursor(filters.cursor);
@@ -115,9 +159,36 @@ export async function listRecords(
       : [];
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
   const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
+  const linkedRows =
+    pageRows.length > 0
+      ? await db
+          .select({
+            walletRecordId: creditCardRecords.walletRecordId,
+            kind: creditCardRecords.kind,
+          })
+          .from(creditCardRecords)
+          .where(
+            and(
+              isNull(creditCardRecords.deletedAt),
+              inArray(
+                creditCardRecords.walletRecordId,
+                pageRows.map((row) => row.id),
+              ),
+            ),
+          )
+      : [];
+  const linkedKinds = new Map(
+    linkedRows.map((row) => [
+      row.walletRecordId,
+      creditCardRecordSchema.shape.kind.parse(row.kind),
+    ]),
+  );
   const last = pageRows.length ? pageRows[pageRows.length - 1] : undefined;
   return {
-    items: pageRows.map((record) => mapRecord(record, tagIdsByRecord, goalAssociationsByRecord)),
+    items: pageRows.map((record) => ({
+      ...mapRecord(record, tagIdsByRecord, goalAssociationsByRecord),
+      linkedCardRecordKind: linkedKinds.get(record.id),
+    })),
     hasMore,
     nextCursor:
       hasMore && last
