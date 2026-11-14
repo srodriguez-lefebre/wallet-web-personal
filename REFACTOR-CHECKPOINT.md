@@ -364,7 +364,7 @@ Aplicación transaccional normal deDrizzle verificada el2026-11-14; punto previo
 baselineAlreadyApplied:true, pending:[], previousJournalUnchanged:true,
 oneExpectedRowAppended:true, legacyReservationTablePresent:true,
 unknownMigrationHashes:false. Journal0–21 intacto, incluidoCRLF; sólo0022 añadida.
-/tmp/wallet-apply-baseline0022-final.log y operador.mts en/tmp contienen la evidencia
+/tmp/wallet-apply-baseline0022-final.log y /tmp/wallet-apply-baseline0022.mts contienen la evidencia
 sanitizada; no se consultaron importes, ids o contenido financiero.
 
 No TimeTravelAssist: la documentación confirma que crea rama y compute efímeros

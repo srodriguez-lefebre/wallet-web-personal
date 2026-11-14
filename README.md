@@ -78,7 +78,7 @@ request y rechaza cuerpos de unlock inválidos antes de consultar la base. El
 límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
 ventana de quince minutos. Un desbloqueo válido no borra el contador global.
 El perfil por defecto conserva el formato y las sesiones existentes. La baseline
-aditiva0022 prepara el esquema; la revocación y nuevos soft deletes siguen sin
+aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
 activar según `REFACTOR-CHECKPOINT.md`.
 
 ## Funcionalidades nuevas
@@ -109,8 +109,8 @@ verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
 a partir de intenciones de movimientos en revisión: se conserva el libro de
 reservas registrado y cualquier discrepancia histórica requiere revisión.
 El estado real de las migraciones en producción debe comprobarse en el destino;
-la comprobación de2026-11-14 confirmó0000–0022 aplicadas, con hashesCRLF
-históricos verificados para0015–0020. No repetirlas ni modificar el journal;
+la comprobación de 2026-11-14 confirmó 0000–0022 aplicadas, con hashes CRLF
+históricos verificados para 0015–0020. No repetirlas ni modificar el journal;
 volver a ejecutar el preflight antes de cualquier ampliación futura.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
 
