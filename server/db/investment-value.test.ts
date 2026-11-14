@@ -2,13 +2,13 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import {
+  applyMigrations,
   installLocalTransport,
   LOCAL_DATABASE_URL,
-  applyMigrations,
 } from "../../scripts/sandbox/database.js";
 import { investmentPatchSchema, investmentSchema } from "../../shared/schemas.js";
-import { getWalletDataset, updateInvestment } from "./wallet-repository.js";
-
+import { createDb } from "./client.js";
+import { getWalletDataset, updateInvestment } from "./index.js";
 let pg: PGlite;
 let restore: () => void;
 const id = "00000000-0000-4000-8000-000000000001";
@@ -21,14 +21,16 @@ beforeAll(async () => {
     "insert into investments(id,name,type,amount_invested,current_value,currency,is_visible,started_at,note) values ($1,'Fund','fund',100,120,'USD',true,'2026-01-02T12:00:00Z','Original note')",
     [id],
   );
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   restore?.();
   await pg?.close();
 });
 test("a zero valuation persists through the real SQL repository and reload without changing cost or date", async () => {
-  await updateInvestment(id, { currentValue: 0 });
-  expect((await getWalletDataset()).investments.find((item) => item.id === id)!).toMatchObject({
+  await updateInvestment(createDb(), id, { currentValue: 0 });
+  expect(
+    (await getWalletDataset(createDb())).investments.find((item) => item.id === id)!,
+  ).toMatchObject({
     currentValue: 0,
     amountInvested: 100,
     currency: "USD",
@@ -40,9 +42,10 @@ test.each([-1, Number.NaN, Number.POSITIVE_INFINITY])(
   "invalid valuation %s cannot change persisted history",
   async (currentValue) => {
     expect(investmentPatchSchema.safeParse({ currentValue }).success).toBe(false);
-    await expect(updateInvestment(id, { currentValue })).rejects.toThrow();
+    await expect(updateInvestment(createDb(), id, { currentValue })).rejects.toThrow();
     expect(
-      (await getWalletDataset()).investments.find((item) => item.id === id)?.amountInvested,
+      (await getWalletDataset(createDb())).investments.find((item) => item.id === id)
+        ?.amountInvested,
     ).toBe(100);
   },
 );

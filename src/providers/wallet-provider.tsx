@@ -1,3 +1,4 @@
+import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
 import {
   createContext,
   type PropsWithChildren,
@@ -6,7 +7,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { availableMonthKeys, dateKey, dateRangeForMonth, monthKey } from "@shared/calculations";
 
 import type {
   GoalPatch,
@@ -26,24 +26,24 @@ import type {
   Debt,
   Goal,
   GoalReservation,
-  Investment,
   InstallmentPlan,
+  Investment,
   RecordFilters,
+  RecordPage,
+  RecordTemplate,
   RecurringDebt,
   Tag,
   WalletDataset,
-  RecordPage,
   WalletRecord,
-  RecordTemplate,
 } from "@shared/types";
 
 import { Button } from "@/components/ui/button";
-import { readStorage, writeStorage } from "@/lib/storage";
-import { useAuth } from "@/providers/auth-provider";
-import * as walletApi from "@/services/wallet-api";
-import { WalletSync } from "@/lib/wallet-sync";
 import { importRecordBatches } from "@/lib/record-import";
+import { readReferenceCache, writeReferenceCache } from "@/lib/wallet-reference-cache";
+import { WalletSync } from "@/lib/wallet-sync";
+import { useAuth } from "@/providers/auth-provider";
 import { useTheme } from "@/providers/theme-provider";
+import * as walletApi from "@/services/wallet-api";
 
 type PeriodMode = "month" | "custom" | "all";
 
@@ -164,10 +164,6 @@ interface WalletContextValue {
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
-const datasetCacheKey = "wallet-dataset-cache";
-const cacheSchemaVersion = 2;
-const cacheMaxAgeMs = 24 * 60 * 60 * 1000;
-
 const emptyDataset: WalletDataset = {
   recordTemplates: [],
   settings: {
@@ -197,67 +193,6 @@ const emptyDataset: WalletDataset = {
   recurringDebts: [],
   installmentPlans: [],
 };
-
-function sessionOwnerKey(token: string | null) {
-  if (!token) return null;
-  try {
-    const encoded = token.split(".")[0] ?? "";
-    const base64 = encoded.replace(/-/g, "+").replace(/_/g, "/");
-    const normalized = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    return (JSON.parse(atob(normalized)) as { sub?: string }).sub ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function readCachedDataset(token: string | null) {
-  const cached = readStorage(datasetCacheKey);
-  if (!cached) return null;
-
-  try {
-    const parsed = JSON.parse(cached) as {
-      schemaVersion: number;
-      cachedAt: string;
-      environment: string;
-      ownerKey: string;
-      dataset: WalletDataset;
-      recordsPage: Omit<RecordPage, "items">;
-    };
-    const ownerKey = sessionOwnerKey(token);
-    const environment = window.location.origin;
-    if (
-      parsed.schemaVersion !== cacheSchemaVersion ||
-      !ownerKey ||
-      parsed.ownerKey !== ownerKey ||
-      parsed.environment !== environment
-    )
-      return null;
-    if (Date.now() - new Date(parsed.cachedAt).getTime() > cacheMaxAgeMs) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function cacheDataset(
-  dataset: WalletDataset,
-  recordsPage: Omit<RecordPage, "items">,
-  token: string,
-) {
-  const ownerKey = sessionOwnerKey(token);
-  if (!ownerKey) return;
-  writeStorage(
-    datasetCacheKey,
-    JSON.stringify({
-      schemaVersion: cacheSchemaVersion,
-      cachedAt: new Date().toISOString(),
-      environment: window.location.origin,
-      ownerKey,
-      dataset,
-      recordsPage,
-    }),
-  );
-}
 
 function defaultCustomDateRange(): DateRange {
   const to = new Date();
@@ -304,15 +239,16 @@ function defaultRecordAccountId(dataset: WalletDataset) {
 export function WalletProvider({ children }: PropsWithChildren) {
   const { token, lock } = useAuth();
   const { setTheme } = useTheme();
-  const [initialCache] = useState(() => readCachedDataset(token));
+  const [initialCache] = useState(() => readReferenceCache(token));
   const [hasCachedDataset] = useState(() => Boolean(initialCache));
   const [dataset, setDataset] = useState<WalletDataset>(() => ({
-    ...(initialCache?.dataset ?? emptyDataset),
-    recordTemplates: initialCache?.dataset.recordTemplates ?? [],
+    ...emptyDataset,
+    ...(initialCache ?? {}),
   }));
-  const [recordsPage, setRecordsPage] = useState<Omit<RecordPage, "items">>(
-    () => initialCache?.recordsPage ?? { nextCursor: null, hasMore: false },
-  );
+  const [recordsPage, setRecordsPage] = useState<Omit<RecordPage, "items">>(() => ({
+    nextCursor: null,
+    hasMore: Boolean(initialCache),
+  }));
   const [isLoadingMoreRecords, setIsLoadingMoreRecords] = useState(false);
   const [isLoading, setIsLoading] = useState(() => !hasCachedDataset);
   const [pendingReads, setPendingReads] = useState(1);
@@ -398,7 +334,7 @@ export function WalletProvider({ children }: PropsWithChildren) {
         setDataset({ ...next, recordTemplates: next.recordTemplates ?? [] });
         setRecordsPage({ nextCursor: null, hasMore: false });
         setLoadError("");
-        if (token) cacheDataset(next, { nextCursor: null, hasMore: false }, token);
+        if (token) writeReferenceCache(next, token);
       }),
   );
   const [hasLoaded, setHasLoaded] = useState(hasCachedDataset);

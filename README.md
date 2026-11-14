@@ -66,6 +66,21 @@ comportamiento desplegado.
 Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
 en producción son pasos operativos separados.
 
+El navegador persiste sólo una caché de referencia validada (hasta 128 KiB):
+ajustes, cuentas, categorías, tags, tarjetas, metas, presupuestos, tasas y
+plantillas. No persiste records, consumos, pagos ni deudas. Las cachés antiguas se
+eliminan y el historial se obtiene nuevamente de la API; bloquear limpia también
+la caché de referencia. Una caché no representa un historial completo.
+
+El repositorio está organizado por agregado bajo `server/db/`; las operaciones
+reciben la DB como primer argumento. El router crea como máximo un cliente por
+request y rechaza cuerpos de unlock inválidos antes de consultar la base. El
+límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
+ventana de quince minutos. Un desbloqueo válido no borra el contador global.
+El refactor compatible no cambia el formato de sesión ni requiere migraciones
+nuevas; revocación versionada y cambios de esquema siguen pendientes según
+`REFACTOR-CHECKPOINT.md`.
+
 ## Funcionalidades nuevas
 
 - Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,
@@ -93,7 +108,8 @@ No se corrigen automáticamente cotizaciones antiguas ambiguas de correos: deben
 verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
 a partir de intenciones de movimientos en revisión: se conserva el libro de
 reservas registrado y cualquier discrepancia histórica requiere revisión.
-Ninguna migración se ha ejecutado en producción.
+El estado real de las migraciones en producción debe comprobarse en el destino;
+este texto no confirma cuáles se aplicaron.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
 
 ## Verificación del refactor

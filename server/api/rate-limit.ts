@@ -1,15 +1,17 @@
 import { createHmac } from "node:crypto";
 
-import { eq } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
-import { createDb } from "../db/client.js";
 import { authAttempts } from "../db/schema.js";
 import { sessionSigningSecret } from "./auth.js";
 
 import type { VercelRequest } from "@vercel/node";
+import type { DbClient } from "../db/client.js";
 
 const WINDOW_MS = 15 * 60_000;
 const MAX_FAILURES = 5;
+const GLOBAL_MAX_FAILURES = 20;
+const GLOBAL_KEY = "unlock:global";
 
 function clientKey(req: VercelRequest) {
   const forwarded = req.headers["x-forwarded-for"];
@@ -20,47 +22,53 @@ function clientKey(req: VercelRequest) {
   return createHmac("sha256", sessionSigningSecret()).update(ip).digest("hex");
 }
 
-export async function assertUnlockAllowed(req: VercelRequest) {
-  const db = createDb();
+export async function assertUnlockAllowed(db: DbClient, req: VercelRequest) {
   const key = clientKey(req);
-  const [row] = await db.select().from(authAttempts).where(eq(authAttempts.key, key)).limit(1);
-  const now = new Date();
-  if (row?.blockedUntil && row.blockedUntil > now) {
+  const rows = await db
+    .select()
+    .from(authAttempts)
+    .where(inArray(authAttempts.key, [key, GLOBAL_KEY]));
+  const now = Date.now();
+  const blockedUntil = Math.max(0, ...rows.map((row) => row.blockedUntil?.getTime() ?? 0));
+  if (blockedUntil > now)
     return {
       allowed: false,
-      retryAfter: Math.max(1, Math.ceil((row.blockedUntil.getTime() - now.getTime()) / 1000)),
+      retryAfter: Math.max(1, Math.ceil((blockedUntil - now) / 1000)),
     } as const;
-  }
   return { allowed: true, key } as const;
 }
 
-export async function registerUnlockFailure(key: string) {
-  const db = createDb();
-  const [row] = await db.select().from(authAttempts).where(eq(authAttempts.key, key)).limit(1);
-  const now = new Date();
-  const expired = !row || now.getTime() - row.windowStartedAt.getTime() >= WINDOW_MS;
-  const failedCount = expired ? 1 : row.failedCount + 1;
-  const blockedUntil = failedCount >= MAX_FAILURES ? new Date(now.getTime() + WINDOW_MS) : null;
-  await db
+function failureQuery(db: DbClient, key: string, threshold: number) {
+  const expired = sql`${authAttempts.windowStartedAt} <= now() - (${WINDOW_MS} * interval '1 millisecond')`;
+  const count = sql`CASE WHEN ${expired} THEN 1 ELSE ${authAttempts.failedCount} + 1 END`;
+  return db
     .insert(authAttempts)
     .values({
       key,
-      failedCount,
-      windowStartedAt: expired ? now : row.windowStartedAt,
-      blockedUntil,
-      updatedAt: now,
+      failedCount: 1,
+      windowStartedAt: sql`now()`,
+      blockedUntil: null,
+      updatedAt: sql`now()`,
     })
     .onConflictDoUpdate({
       target: authAttempts.key,
       set: {
-        failedCount,
-        windowStartedAt: expired ? now : row.windowStartedAt,
-        blockedUntil,
-        updatedAt: now,
+        failedCount: count,
+        windowStartedAt: sql`CASE WHEN ${expired} THEN now() ELSE ${authAttempts.windowStartedAt} END`,
+        blockedUntil: sql`CASE WHEN ${count} >= ${threshold} THEN now() + (${WINDOW_MS} * interval '1 millisecond') ELSE NULL END`,
+        updatedAt: sql`now()`,
       },
     });
 }
 
-export async function clearUnlockFailures(key: string) {
-  await createDb().delete(authAttempts).where(eq(authAttempts.key, key));
+export async function registerUnlockFailure(db: DbClient, key: string) {
+  await db.batch([
+    failureQuery(db, key, MAX_FAILURES),
+    failureQuery(db, GLOBAL_KEY, GLOBAL_MAX_FAILURES),
+  ]);
+}
+
+export async function clearUnlockFailures(db: DbClient, key: string) {
+  // A successful unlock clears this IP only; distributed attacks retain their window.
+  if (key !== GLOBAL_KEY) await db.delete(authAttempts).where(eq(authAttempts.key, key));
 }

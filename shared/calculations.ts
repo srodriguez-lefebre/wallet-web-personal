@@ -30,7 +30,6 @@ import type {
   DateRange,
   Debt,
   GoalProgress,
-  RecurringDebt,
   VisibleDebtSummary,
   WalletDataset,
   WalletRecord,
@@ -798,65 +797,6 @@ export function creditCardStatementStatusAfterPaymentChange(
   if (remaining <= 0.005) return "paid" as const;
   if (new Date(dueAt) < now) return "overdue" as const;
   return paid > 0.005 ? ("partial" as const) : ("pending" as const);
-}
-
-function recurringDebtDueDate(rule: RecurringDebt, month: string) {
-  const monthStart = parseISO(`${month}-01T12:00:00.000Z`);
-  const lastDay = endOfMonth(monthStart).getDate();
-  return parseISO(
-    `${month}-${String(Math.min(rule.dayOfMonth, lastDay)).padStart(2, "0")}T12:00:00.000Z`,
-  );
-}
-
-export function buildDueRecurringDebtInstances(
-  dataset: WalletDataset,
-  currentDate = new Date(),
-): Array<Omit<Debt, "id">> {
-  const currentMonth = monthKey(currentDate);
-  const generatedKeys = new Set(
-    dataset.debts
-      .filter((debt) => debt.recurringDebtId && debt.recurringMonth)
-      .map((debt) => `${debt.recurringDebtId}:${debt.recurringMonth}`),
-  );
-
-  return dataset.recurringDebts.flatMap((rule) => {
-    if (!rule.isActive) return [];
-
-    const startMonth = monthKey(rule.startedAt);
-    const instances: Array<Omit<Debt, "id">> = [];
-    let cursor = parseISO(`${startMonth}-15T12:00:00.000Z`);
-    const end = parseISO(`${currentMonth}-15T12:00:00.000Z`);
-
-    while (!isAfter(cursor, end)) {
-      const recurringMonth = format(cursor, "yyyy-MM");
-      const dueDate = recurringDebtDueDate(rule, recurringMonth);
-      const key = `${rule.id}:${recurringMonth}`;
-
-      if (!isAfter(dueDate, currentDate) && !generatedKeys.has(key)) {
-        instances.push({
-          name: `${rule.name} - ${recurringMonth}`,
-          direction: rule.direction,
-          originalAmount: rule.amount,
-          pendingAmount: rule.amount,
-          currency: rule.currency,
-          counterpartyName: rule.counterpartyName,
-          accountId: rule.accountId,
-          categoryId: rule.categoryId,
-          status: "active",
-          isVisible: true,
-          startedAt: dueDate.toISOString(),
-          dueAt: dueDate.toISOString(),
-          note: rule.note,
-          recurringDebtId: rule.id,
-          recurringMonth,
-        });
-      }
-
-      cursor = addMonths(cursor, 1);
-    }
-
-    return instances;
-  });
 }
 
 export function calculateSummary(

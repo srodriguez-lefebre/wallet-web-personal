@@ -7,6 +7,8 @@ import {
   LOCAL_DATABASE_URL,
 } from "../../scripts/sandbox/database.js";
 import { importSnapshot } from "../../scripts/sandbox/snapshot.js";
+import { recordSchema, walletBackupSchema } from "../../shared/schemas.js";
+import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
 import { createDb } from "./client.js";
 import {
   createGoalReservation,
@@ -15,11 +17,8 @@ import {
   deleteRecord,
   getWalletBackup,
   getWalletDataset,
-} from "./wallet-repository.js";
-import { recordSchema, walletBackupSchema } from "../../shared/schemas.js";
+} from "./index.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
-import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
-
 const pg = new PGlite();
 const accountId = "00000000-0000-4000-8000-000000000001";
 const categoryId = "00000000-0000-4000-8000-000000000002";
@@ -30,7 +29,7 @@ beforeAll(async () => {
   process.env.DATABASE_URL = LOCAL_DATABASE_URL;
   restore = installLocalTransport(pg);
   await applyMigrations(pg);
-}, 30_000);
+}, 30000);
 afterAll(async () => {
   restore();
   await pg.close();
@@ -65,7 +64,7 @@ beforeEach(async () => {
   });
 });
 async function archiveHistory() {
-  await createGoalReservation({
+  await createGoalReservation(createDb(), {
     goalId,
     accountId,
     amount: 100,
@@ -73,6 +72,7 @@ async function archiveHistory() {
     createdAt: date,
   });
   const record = await createRecord(
+    createDb(),
     recordSchema.parse({
       type: "expense",
       amount: 40,
@@ -85,12 +85,12 @@ async function archiveHistory() {
       goalIds: [goalId],
     }),
   );
-  await deleteGoal(goalId);
+  await deleteGoal(createDb(), goalId);
   return record;
 }
-
 test("complete backups preserve mail retry identities and duplicate lineage after restoration", async () => {
   const record = await createRecord(
+    createDb(),
     recordSchema.parse({
       type: "expense",
       amount: 40,
@@ -112,10 +112,10 @@ test("complete backups preserve mail retry identities and duplicate lineage afte
     "INSERT INTO ingestion_events(id,idempotency_key,source,status,action,duplicate_of_id) VALUES($1,'backup-duplicate','test','completed','duplicate',$2)",
     [duplicateId, eventId],
   );
-  const backup = walletBackupSchema.parse(await getWalletBackup());
+  const backup = walletBackupSchema.parse(await getWalletBackup(createDb()));
   expect(backup.ingestionEvents).toHaveLength(2);
   await pg.exec("DELETE FROM ingestion_events");
-  await restoreWalletBackup(backup);
+  await restoreWalletBackup(createDb(), backup);
   const input = {
     idempotencyKey: "backup-mail",
     integration: { name: "gmail_apps_script" as const, version: "test" },
@@ -141,21 +141,20 @@ test("complete backups preserve mail retry identities and duplicate lineage afte
     },
     destination: {},
   };
-  expect((await processMailIngestion(input)).status).toBe("already_processed");
-  expect((await getWalletDataset()).records).toHaveLength(1);
+  expect((await processMailIngestion(createDb(), input)).status).toBe("already_processed");
+  expect((await getWalletDataset(createDb())).records).toHaveLength(1);
   expect(
-    (await getWalletBackup()).ingestionEvents?.find((event) => event.id === duplicateId)
+    (await getWalletBackup(createDb())).ingestionEvents?.find((event) => event.id === duplicateId)
       ?.duplicateOfId,
   ).toBe(eventId);
   const legacy = { ...backup };
   delete legacy.ingestionEvents;
-  await restoreWalletBackup(legacy);
-  expect((await processMailIngestion(input)).status).toBe("already_processed");
+  await restoreWalletBackup(createDb(), legacy);
+  expect((await processMailIngestion(createDb(), input)).status).toBe("already_processed");
 });
-
 test("backup retains archived goals and every ledger reference without exposing them in normal wallet state", async () => {
   const record = await archiveHistory();
-  const normal = await getWalletDataset();
+  const normal = await getWalletDataset(createDb());
   expect(normal.goals).toEqual([]);
   expect(normal.records[0]!.goalIds).toEqual([goalId]);
   const backup = await getWalletBackup(createDb());
@@ -170,12 +169,11 @@ test("backup retains archived goals and every ledger reference without exposing 
     backup.goalReservationMovements?.find((movement) => movement.type === "consume"),
   ).toMatchObject({ recordId: record.id, idempotencyKey: expect.any(String) });
 });
-
 test("backup retains soft-deleted records and accounts referenced by durable financial history", async () => {
   const record = await archiveHistory();
-  await deleteRecord(record.id);
+  await deleteRecord(createDb(), record.id);
   await pg.query("update accounts set deleted_at=now() where id=$1", [accountId]);
-  const normal = await getWalletDataset();
+  const normal = await getWalletDataset(createDb());
   expect(normal.accounts).toEqual([]);
   expect(normal.records).toEqual([]);
   const backup = await getWalletBackup(createDb());
@@ -188,33 +186,35 @@ test("backup retains soft-deleted records and accounts referenced by durable fin
     deletedAt: expect.any(String),
   });
 });
-
 test("JSON export and atomic restore preserve archived goals and reservation ledger without reviving UI entities", async () => {
   await archiveHistory();
-  const before = await getWalletDataset();
-  const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
+  const before = await getWalletDataset(createDb());
+  const backup = walletBackupSchema.parse(
+    JSON.parse(JSON.stringify(await getWalletBackup(createDb()))),
+  );
   expect(backup.goals[0]!.deletedAt).toEqual(expect.any(String));
-  await restoreWalletBackup(backup);
-  expect(await getWalletDataset()).toEqual(before);
-  expect(JSON.parse(JSON.stringify(await getWalletBackup()))).toEqual(
+  await restoreWalletBackup(createDb(), backup);
+  expect(await getWalletDataset(createDb())).toEqual(before);
+  expect(JSON.parse(JSON.stringify(await getWalletBackup(createDb())))).toEqual(
     JSON.parse(JSON.stringify(backup)),
   );
 });
-
 test("export and restore retain deleted records and archived accounts needed by reservation references", async () => {
   const record = await archiveHistory();
-  await deleteRecord(record.id);
+  await deleteRecord(createDb(), record.id);
   await pg.query("update accounts set deleted_at=now() where id=$1", [accountId]);
-  const backup = walletBackupSchema.parse(JSON.parse(JSON.stringify(await getWalletBackup())));
+  const backup = walletBackupSchema.parse(
+    JSON.parse(JSON.stringify(await getWalletBackup(createDb()))),
+  );
   expect(backup.accounts[0]!.deletedAt).toEqual(expect.any(String));
   expect(backup.records[0]!.deletedAt).toEqual(expect.any(String));
-  await restoreWalletBackup(backup);
-  const reloaded = await getWalletDataset();
+  await restoreWalletBackup(createDb(), backup);
+  const reloaded = await getWalletDataset(createDb());
   expect(reloaded.accounts).toEqual([]);
   expect(reloaded.records).toEqual([]);
   expect(reloaded.goals).toEqual([]);
   expect(reloaded.goalReservationMovements).toHaveLength(3);
-  expect(JSON.parse(JSON.stringify(await getWalletBackup()))).toEqual(
+  expect(JSON.parse(JSON.stringify(await getWalletBackup(createDb())))).toEqual(
     JSON.parse(JSON.stringify(backup)),
   );
 });

@@ -3,22 +3,21 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
-import * as classification from "../ingestion/openai-category.js";
 import { calculateCreditCardSummary } from "../../shared/calculations.js";
-import { createGoal, createGoalReservation, getWalletDataset } from "./wallet-repository.js";
+import * as classification from "../ingestion/openai-category.js";
+import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
+import { createDb } from "./client.js";
+import { createGoal, createGoalReservation, getWalletDataset } from "./index.js";
 
 import type { MailIngestionInput } from "../../shared/schemas.js";
-
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   vi.restoreAllMocks();
   await fixture?.close();
 });
-
 test("unresolved automatic goal conversion preserves a known card purchase and its review history", async () => {
   const accountId = randomUUID(),
     fallbackId = randomUUID(),
@@ -32,7 +31,7 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     [cardId],
   );
   await fixture.pool.query("insert into settings(primary_currency) values ('UYU')");
-  const goal = await createGoal({
+  const goal = await createGoal(createDb(), {
     name: "Automatic goal",
     targetAmount: 1000,
     currency: "EUR",
@@ -45,7 +44,7 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     autoCaptureEnd: "2026-02-28",
     autoReservationAccountId: fallbackId,
   });
-  await createGoalReservation({
+  await createGoalReservation(createDb(), {
     goalId: goal.id,
     accountId: fallbackId,
     amount: 100,
@@ -80,11 +79,11 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     },
     destination: { accountId, creditCardId: cardId },
   };
-  const result = await processMailIngestion(event);
+  const result = await processMailIngestion(createDb(), event);
   expect(result.status).toBe("needs_review");
   expect(result.warnings?.some((warning) => warning.includes("Automatic goal"))).toBe(true);
-  await processMailIngestion(event);
-  const data = await getWalletDataset();
+  await processMailIngestion(createDb(), event);
+  const data = await getWalletDataset(createDb());
   expect(data.records).toHaveLength(1);
   expect(data.records[0]!).toMatchObject({
     paymentStatus: "needs_review",

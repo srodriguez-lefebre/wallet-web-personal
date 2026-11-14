@@ -1,15 +1,15 @@
-import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
 
 import { afterAll, beforeAll, expect, test } from "vitest";
 
-import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { serveWalletApi } from "../../scripts/sandbox/http.js";
+import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { findApiOperation } from "../../shared/api-contract.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
+import { createDb } from "../db/client.js";
+import { getWalletDataset } from "../db/index.js";
 import { restoreWalletBackup } from "../db/wallet-restore.js";
-import { getWalletDataset } from "../db/wallet-repository.js";
-
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>,
   server: Server,
   url: string,
@@ -40,10 +40,14 @@ beforeAll(async () => {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token: "local-contract-test" }),
   });
-  const payload = (await response.json()) as { data: { token: string } };
+  const payload = (await response.json()) as {
+    data: {
+      token: string;
+    };
+  };
   expect(response.status).toBe(200);
   token = payload.data.token;
-}, 60_000);
+}, 60000);
 afterAll(async () => {
   await new Promise<void>((resolve) => server?.close(() => resolve()));
   await fixture?.close();
@@ -56,7 +60,10 @@ async function request(path: string, method = "GET", input?: unknown) {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
     body: input === undefined ? undefined : JSON.stringify(input),
   });
-  const payload = (await response.json()) as { data: Record<string, unknown>; error: unknown };
+  const payload = (await response.json()) as {
+    data: Record<string, unknown>;
+    error: unknown;
+  };
   if (response.ok) {
     const operation = findApiOperation(method, path.split("?")[0]!);
     expect(operation).toBeDefined();
@@ -66,9 +73,8 @@ async function request(path: string, method = "GET", input?: unknown) {
   }
   return { response, payload };
 }
-
 test("authenticated template CRUD persists through HTTP reload and never creates financial records", async () => {
-  const before = (await getWalletDataset()).records.length;
+  const before = (await getWalletDataset(createDb())).records.length;
   const template = {
     name: "Template groceries",
     type: "expense",
@@ -91,7 +97,7 @@ test("authenticated template CRUD persists through HTTP reload and never creates
   expect((await request("/api/wallet")).payload.data.recordTemplates).toContainEqual(
     expect.objectContaining({ id, note: "Test" }),
   );
-  expect((await getWalletDataset()).records).toHaveLength(before);
+  expect((await getWalletDataset(createDb())).records).toHaveLength(before);
   const duplicate = await request("/api/record-templates", "POST", {
     ...template,
     name: " template GROCERIES ",
@@ -152,7 +158,6 @@ test("bad credentials and nested invalid IDs return envelopes instead of routing
   expect(nested.response.status).toBe(400);
   expect(nested.payload.data).toBeNull();
 });
-
 test("account activity includes transfers received as well as transfers sent", async () => {
   const destinationId = randomUUID();
   await fixture.pool.query(
@@ -182,18 +187,17 @@ test("account activity includes transfers received as well as transfers sent", a
   );
 });
 test("confirmed backup restore persists associations and rolls back every write on failure", async () => {
-  const before = await getWalletDataset();
+  const before = await getWalletDataset(createDb());
   expect(walletBackupSchema.safeParse(before).success).toBe(true);
   const restored = await request("/api/wallet/restore", "POST", before);
   expect(restored.response.status).toBe(200);
-  expect((await getWalletDataset()).records).toEqual(before.records);
+  expect((await getWalletDataset(createDb())).records).toEqual(before.records);
   const broken = structuredClone(before);
   broken.categories[0]!.parentId = randomUUID();
-  await expect(restoreWalletBackup(broken)).rejects.toThrow();
-  expect((await getWalletDataset()).records).toEqual(before.records);
-  expect((await getWalletDataset()).accounts).toEqual(before.accounts);
+  await expect(restoreWalletBackup(createDb(), broken)).rejects.toThrow();
+  expect((await getWalletDataset(createDb())).records).toEqual(before.records);
+  expect((await getWalletDataset(createDb())).accounts).toEqual(before.accounts);
 });
-
 test("nested card summary uses the real authenticated router and matches persisted movements after reload", async () => {
   const created = await request("/api/cards", "POST", {
     name: "Synthetic summary card",

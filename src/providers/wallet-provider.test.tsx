@@ -1,13 +1,29 @@
 // @vitest-environment jsdom
+import { dateKey, recordsForDateRange } from "@shared/calculations";
+import { mockWalletData } from "@shared/mock-data";
 import { act, render, type RenderResult } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { mockWalletData } from "@shared/mock-data";
-import { dateKey, recordsForDateRange } from "@shared/calculations";
 
-import { WalletProvider, useWallet } from "./wallet-provider";
 import * as api from "../services/wallet-api";
+import { WalletProvider, useWallet } from "./wallet-provider";
 
+const cacheReferenceFixture = () => ({
+  settings: {
+    ...mockWalletData.settings,
+    primaryAccountId: undefined,
+    defaultAccountId: undefined,
+    defaultCreditCardId: undefined,
+  },
+  accounts: [],
+  categories: [],
+  tags: [],
+  creditCards: [],
+  goals: [],
+  budgets: [],
+  exchangeRates: [],
+  recordTemplates: [],
+});
 const auth = vi.hoisted(() => ({ token: "test-session", lock: vi.fn() }));
 const theme = vi.hoisted(() => ({ setTheme: vi.fn() }));
 vi.mock("@/providers/auth-provider", () => ({ useAuth: () => auth }));
@@ -369,12 +385,11 @@ test("background boot snapshot cannot undo an edit made while cached data is vis
   const storage = {
     getItem: () =>
       JSON.stringify({
-        schemaVersion: 2,
+        schemaVersion: 3,
         cachedAt: new Date().toISOString(),
         environment: "http://test.local",
         ownerKey: "test-owner",
-        dataset: mockWalletData,
-        recordsPage: { hasMore: false, nextCursor: null },
+        reference: cacheReferenceFixture(),
       }),
     setItem: vi.fn(),
   };
@@ -419,12 +434,11 @@ test("cached bootstrap failure remains visible and storage quota does not break 
     ...{
       getItem: () =>
         JSON.stringify({
-          schemaVersion: 2,
+          schemaVersion: 3,
           cachedAt: new Date().toISOString(),
           environment: "http://test.local",
           ownerKey: "test-owner",
-          dataset: mockWalletData,
-          recordsPage: { hasMore: false, nextCursor: null },
+          reference: cacheReferenceFixture(),
         }),
       setItem() {
         throw new Error("quota");
@@ -444,7 +458,8 @@ test("cached bootstrap failure remains visible and storage quota does not break 
     );
   });
   expect(tree?.container.textContent).toContain("offline cached refresh");
-  expect(context.dataset.records.length).toBeGreaterThan(0);
+  expect(context.dataset.records).toEqual([]);
+  expect(context.isAllHistoryComplete).toBe(false);
   await act(async () => {
     await context.getCompleteDataset();
   });

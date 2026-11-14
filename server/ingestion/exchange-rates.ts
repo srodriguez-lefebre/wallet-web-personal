@@ -1,7 +1,5 @@
-import { lte } from "drizzle-orm";
-
+import { getExchangeRate } from "../db/fx.js";
 import { exchangeRates } from "../db/schema.js";
-import { findExchangeRate } from "../../shared/money.js";
 
 import type { CurrencyCode } from "../../shared/types.js";
 import type { DbClient } from "../db/client.js";
@@ -41,23 +39,7 @@ export async function resolveFrozenRate(
 ): Promise<FrozenRate | null> {
   if (from === to) return { rate: 1, date: utcDay(occurredAt), source: "same_currency" };
 
-  const storedRows = await db
-    .select()
-    .from(exchangeRates)
-    .where(lte(exchangeRates.date, occurredAt));
-  const storedRate = findExchangeRate(
-    storedRows.map((row) => ({
-      ...row,
-      fromCurrency: row.fromCurrency as CurrencyCode,
-      toCurrency: row.toCurrency as CurrencyCode,
-      rate: Number(row.rate),
-      date: row.date.toISOString(),
-      source: row.source ?? undefined,
-    })),
-    from,
-    to,
-    occurredAt,
-  );
+  const storedRate = await getExchangeRate(db, from, to, occurredAt);
   if (storedRate !== null)
     return { rate: storedRate, date: utcDay(occurredAt), source: "stored_fallback" };
 

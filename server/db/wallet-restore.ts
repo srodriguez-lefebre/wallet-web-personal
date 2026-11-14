@@ -1,11 +1,10 @@
 import { getTableColumns, getTableName, sql, type Table } from "drizzle-orm";
 
-import { createDb, type DbClient } from "./client.js";
-import * as schema from "./schema.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
-import { getWalletDataset } from "./wallet-repository.js";
 import { validationError } from "../api/errors.js";
-
+import { type DbClient } from "./client.js";
+import { getWalletDataset } from "./index.js";
+import * as schema from "./schema.js";
 const collections: Array<[string, Table, string?]> = [
   ["accounts", schema.accounts],
   ["categories", schema.categories, "parentId"],
@@ -29,9 +28,8 @@ const collections: Array<[string, Table, string?]> = [
   ["installmentPlans", schema.installmentPlans],
   ["ingestionEvents", schema.ingestionEvents, "duplicateOfId"],
 ];
-
 /** Explicitly replaces a complete backup in one Neon transaction. No individual write can escape rollback. */
-export async function restoreWalletBackup(input: unknown, db: DbClient = createDb()) {
+export async function restoreWalletBackup(db: DbClient, input: unknown) {
   const dataset = walletBackupSchema.parse(input);
   const snapshot = dataset as unknown as Record<string, unknown>;
   if (dataset.merchants === undefined) {
