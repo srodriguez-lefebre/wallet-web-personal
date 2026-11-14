@@ -88,3 +88,25 @@ verificados. CLI GitHub no sustituye autorización Neon; Vercel/Neon CLI no tien
 configuración disponible y la integración Vercel dio403. No introducir bypass.
 
 Commits: títulos descriptivos, sin Co-authored-by; no reescribir historia ni publicar este head bajo la excepción0022.
+
+## Integración con main publicado (actualiza bloqueos anteriores)
+
+PR11 fusionado en670164637a44b60a641c76a563bf5e186343b765, CIhead43611856122
+success y CImain43612282124success. Vercelproduction READY
+dpl_ANvFnKmCHVtdQYFvHWTDg4ynDyNY y aliaswallet-web-personal.vercel.app mismoSHA.
+Migración0022yaaplicada, postflight pending[], journal0–21intacto/única22añadida;
+no FK/droplegacy/revocación/secreto nuevo. Rama diagnóstica targetverification no
+se integra. 3/5PRusados. Se levantó la excepcióndepush4, despuésdeintegrarmain y
+validarheadexacto. Todavía noPR4: unpaquetecompleto, máximo5total.
+
+Merge normal deorigin/main sobre300db45 sinreescribirhistoria ni perder708. El
+fullcheck de integración se inició sin cambios adicionales en código productivo.
+Ruling: callback401recibeeltokenusado yAuthProvidercompara la sesiónvigente:
+unarespuestaantiguaA no debe cerrarnuevaB. Clienteestable congetteractual y
+unlockpúblico usa el mismotransporte; retener listenerlegacy hasta migrarwrappers.
+Coste: coexistenciatemporal documentada, sin wire incompatible ni bloqueo de tabs.
+
+Integración verificada: npmruncheck exit0,100archivos/749tests; formato/lint/build/
+OpenAPIgreen. Log /tmp/wallet-package4-main-integration-check.log. El código del
+cliente300 permanece intacto. SiguienteTDD: authclient4regresiones de sesión; todavía
+noafirmarintegraciónQuery ni retiroWalletSync. NoCo-authored-by en commitsnuevos.

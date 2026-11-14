@@ -291,3 +291,87 @@ script viejo/API nueva y estabilidad de idempotencia; avisar antes de editar Hea
 en Google Chrome. Guardar puede activar processPendingEmails; no ejecutar lotes
 reales ni cambiar triggers. Restan paquetes4 (cliente/vistas y activaciones de
 archivo compatibles) y5 (ingesta/shared). El refactor íntegro no está terminado.
+
+### Verificación Neon y compatibilidad de journal histórico (2026-11-14)
+
+Sesión de Neon abierta por Santiago. Lectura únicamente de metadata del proyecto
+Wallet, rama default `production`, un único compute y una única base. Los IDs y
+hostname se conservan en el registro local ignorado, sin credenciales. Coincide
+con el destino local por huella0704d3b…b3beb.
+PITR visible: 6 horas, earliest observado2026-11-14 05:39GMT-3; sin snapshots ni
+schedule. No se creó copia/rama, ejecutó restore, cambió plan/settings o leyó
+contenido financiero. La recuperación por código con columnas nuevas conservadas
+se ensayó antes con main098 y backups exclusivamente sintéticos.
+
+Primer preflight READ ONLY detuvo la publicación por6 hashes unknown. Diagnóstico
+SHA256 contra SQL versionado confirmó exactamente CRLF sinBOM de0015–0020,
+texto normalizado idéntico y timestamps originales iguales. No son migraciones
+para reejecutar; particularmente0019 ajusta saldos y NO debe repetirse. Se añade
+whitelist de sólo esas6 variantes verificadas, sin tocar journal ni SQL. Nuevas
+regresiones rechazan canonical+alias duplicadas, BOM, fechas alteradas y CRLF de
+0022/noautorizadas; prueba financiera de0019 enLF/CRLF confirma iguales cambios y
+rollback con fixtures sintéticos. Revisión independiente sin hallazgos bloqueantes.
+Check nuevo99archivos/733tests exit0; target2/16pass. Logs
+/tmp/wallet-preflight-crlf-{red,green}.log y wallet-package3-crlf-check.log.
+
+Preflight real actualizado exit0: unknownMigrationHashes:false, pendiente sólo0022,
+baselineReadyToApply:true, singleton-ready:true, legacy-presente:true, database-path
+correcto. Hay referencias de deuda huérfanas (sólo EXISTS, sin ids/importes); no se
+reparan ni borra historia y laFK continúa diferida fuera de0022. Columnas/índices
+nuevos todavía ausentes; no se ha aplicado0022. Evidencia
+/tmp/wallet-package3-neon-preflight2.log y journal-encoding.log (sólo metadata).
+
+Vercel autenticado por Santiago: DATABASE_URL es Secret/write-only, única variable
+con targetsPreview+Production; createdAt=updatedAt Jun17 y sin
+override de rama diagnóstica ni valoresProduction ocultos. UIStorage no vincula
+Neon; métricasExternalAPIs muestran sólo endpoint regional api.c-2.us-east-1.aws.neon.tech,
+insuficiente por sí solo para afirmar la rama. No se reveló, copió ni rotó el valor.
+Siguiente comprobación segura: build de una rama diagnóstica sobre40compatible,
+emitiendo exclusivamente SHA256 del hostname y de la base desde el proceso normal
+de build, con guard preview+ref exacta y pruebas sintéticas de no exposición.
+Sin DB, endpoint nuevo, bypass, cambio de permisos/configuración del proveedor,
+CI skip, producción o PR extra. Después comparar ambas huellas y volver a preflight
+antes de aplicar la ampliación compatible autorizada. Mientras eso esté pendiente,
+NO ejecutar0022 ni subir el candidato completo. Rama4 limpia en300db45 se conserva.
+
+Ensayo del migrador Drizzle real (mismo PgDialect transaccional) en PGlite sintético:
+rechaza dos settings sin DDL/journal parcial; corregida sólo esa fixture aplica
+únicamente0022, conserva los6hashesCRLF, deuda de prueba80sinreplay0019, y repetir
+es no-op. /tmp/wallet-drizzle-upgrade-verify.{mts,log}. La recuperación por código
+no elimina columnas. Sandbox10/104exit0; no hay servidores propios pendientes.
+
+### Puerta de publicación3 cerrada: 0022 aplicada y verificada
+
+Build diagnóstico compatible e1643a81b77cd0bee0844ba36077b4fee3daced4 en rama
+`refactor/03-target-verification`, sin PR ni merge: check93/703exit0 y revisión sin
+hallazgos; preview READY dpl_82qnAEVUNxKu8oQKPC5FKUCiC1fd. Logs emitieron sólo
+huellas: host0704d3b001f3e06657a66f6be65715e751a2b693a4e997584419280d819b3beb y
+base693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8, idénticas
+al destinoNeon. MetadataSecret compartidaPreview/Production sin overrides, valor
+sin cambios desdeJun17 anterior al deploy098, cierra el vínculo de producción.
+No conexiónDB desde el diagnóstico, credenciales en logs, nuevo endpoint, bypass,
+config de proveedor ni cambio de auth. Rama diagnóstica no se integra a main.
+
+La revisión automática rechazó el primer intento antes de ejecutarlo por no
+reconocer autorización. Se verificó el mensaje directo de Santiago de2026-11-14
+01:46UTC («Sisi, aplica migraciones nomas»), y el único reintento de esa denegación
+fue aceptado. La conexiónPG se detuvo después con08P01 antesdeDDL: el pooler
+rechaza startupoptions. Se diagnosticó sólo conSELECT y se usó conexiónnormal,
+sin cambiar TLS, credenciales ni configuración del proveedor.
+
+Aplicación transaccional normal deDrizzle verificada el2026-11-14; punto previo
+`2026-11-14T15:37:21.913Z`, ventanaPITR6h revalidada. Postflight exit0:
+baselineAlreadyApplied:true, pending:[], previousJournalUnchanged:true,
+oneExpectedRowAppended:true, legacyReservationTablePresent:true,
+unknownMigrationHashes:false. Journal0–21 intacto, incluidoCRLF; sólo0022 añadida.
+/tmp/wallet-apply-baseline0022-final.log y /tmp/wallet-apply-baseline0022.mts contienen la evidencia
+sanitizada; no se consultaron importes, ids o contenido financiero.
+
+No TimeTravelAssist: la documentación confirma que crea rama y compute efímeros
+con estado histórico real, excluidos por la restricción de copias. Se verificó
+la disponibilidadPITR por metadata y la recuperación/rollback en fixtures
+sintéticos; no se ejecutó restore real ni se creó snapshot/ramaNeon.
+No FK, drop legacy, reparación de referencias huérfanas, secreto nuevo ni
+revocación activada. Main098 sigue compatible con la ampliación durante rollout.
+Siguiente: pushFF del candidato completo, único draftPR3/CI+previewSHA exacto,
+merge normal y CI main/READY+alias/smokeGET sin sesión. Bloque4 permanece300db45.

@@ -77,9 +77,9 @@ reciben la DB como primer argumento. El router crea como máximo un cliente por
 request y rechaza cuerpos de unlock inválidos antes de consultar la base. El
 límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
 ventana de quince minutos. Un desbloqueo válido no borra el contador global.
-El refactor compatible no cambia el formato de sesión ni requiere migraciones
-nuevas; revocación versionada y cambios de esquema siguen pendientes según
-`REFACTOR-CHECKPOINT.md`.
+El perfil por defecto conserva el formato y las sesiones existentes. La baseline
+aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
+activar según `REFACTOR-CHECKPOINT.md`.
 
 ## Funcionalidades nuevas
 
@@ -109,7 +109,9 @@ verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
 a partir de intenciones de movimientos en revisión: se conserva el libro de
 reservas registrado y cualquier discrepancia histórica requiere revisión.
 El estado real de las migraciones en producción debe comprobarse en el destino;
-este texto no confirma cuáles se aplicaron.
+la comprobación de 2026-11-14 confirmó 0000–0022 aplicadas, con hashes CRLF
+históricos verificados para 0015–0020. No repetirlas ni modificar el journal;
+volver a ejecutar el preflight antes de cualquier ampliación futura.
 El sandbox aplica las migraciones sólo a su base local al iniciar.
 
 ## Verificación del refactor
@@ -458,7 +460,11 @@ El preflight sólo lee metadata y guards agregados; no aplica migraciones ni
 imprime credenciales o filas financieras. La huella SHA-256 corresponde al
 hostname normalizado sin `-pooler`, cotejado con un origen independiente del
 archivo local. Detenerse si faltan migraciones anteriores, hay hashes desconocidos,
-DDL parcial o más de una fila de settings. No marcar migraciones como aplicadas
+DDL parcial o más de una fila de settings. El journal histórico conserva hashes CRLF de
+0015–0020: el preflight acepta sólo sus variantes byte a byte verificadas y fechas
+originales, las informa en `legacyCrlfMigrations` y no modifica el journal ni
+repite SQL. BOM, otros hashes, fechas alteradas o identidades duplicadas siguen
+bloqueando la operación. No marcar migraciones como aplicadas
 por suposición ni crear una copia de datos reales para ensayar. Migración antes
 del deploy del código que lee sus columnas; rollback de código conservando las
 columnas. Los tests restauran un backup sintético antiguo y comprueban rollback

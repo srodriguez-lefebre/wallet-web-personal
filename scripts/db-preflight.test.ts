@@ -1,3 +1,6 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { createDb } from "../server/db/client.js";
@@ -126,3 +129,90 @@ test("preflight stops if the legacy reservation table required by restore is abs
     );
   }
 });
+
+const legacyCrlfTags = [
+  "0015_financial_integrity",
+  "0016_credit_card_payment_idempotency",
+  "0017_review_financial_guards",
+  "0018_amusing_union_jack",
+  "0019_review_activity_accounting",
+  "0020_merchant_match_mode",
+];
+async function crlfHash(tag: string, bom = false) {
+  const text = await readFile(new URL(`../drizzle/migrations/${tag}.sql`, import.meta.url), "utf8");
+  return createHash("sha256")
+    .update((bom ? "\uFEFF" : "") + text.replace(/\r\n/g, "\n").replace(/\n/g, "\r\n"))
+    .digest("hex");
+}
+test("preflight recognizes the six byte-exact historical CRLF migrations without replaying or rewriting journal", async () => {
+  const manifest = await migrationManifest();
+  try {
+    for (const tag of legacyCrlfTags) {
+      const entry = manifest.find((e) => e.tag === tag)!;
+      await fixture.pool.query("UPDATE drizzle.__drizzle_migrations SET hash=$1 WHERE hash=$2", [
+        await crlfHash(tag),
+        entry.hash,
+      ]);
+    }
+    const state = await inspectMigrationState(createDb());
+    expect(state.unknownMigrationHashes).toBe(false);
+    expect(state.pendingMigrations).toEqual([]);
+    expect(state.baselineAlreadyApplied).toBe(true);
+    expect((state as unknown as { legacyCrlfMigrations: string[] }).legacyCrlfMigrations).toEqual(
+      legacyCrlfTags,
+    );
+    const rows = await fixture.pool.query<{ hash: string }>(
+      "SELECT hash FROM drizzle.__drizzle_migrations",
+    );
+    for (const tag of legacyCrlfTags) {
+      const legacy = await crlfHash(tag);
+      expect(rows.rows.some((row) => row.hash === legacy)).toBe(true);
+    }
+  } finally {
+    for (const tag of legacyCrlfTags) {
+      const entry = manifest.find((e) => e.tag === tag)!;
+      await fixture.pool.query("UPDATE drizzle.__drizzle_migrations SET hash=$1 WHERE hash=$2", [
+        entry.hash,
+        await crlfHash(tag),
+      ]);
+    }
+  }
+});
+test("preflight rejects a duplicate canonical and CRLF migration identity", async () => {
+  const entry = (await migrationManifest()).find((e) => e.tag === legacyCrlfTags[0])!;
+  const legacy = await crlfHash(entry.tag);
+  await fixture.pool.query(
+    "INSERT INTO drizzle.__drizzle_migrations(hash,created_at) VALUES($1,$2)",
+    [legacy, entry.when],
+  );
+  try {
+    const state = await inspectMigrationState(createDb());
+    expect(state.unknownMigrationHashes).toBe(true);
+    expect(state.baselineAlreadyApplied).toBe(false);
+  } finally {
+    await fixture.pool.query("DELETE FROM drizzle.__drizzle_migrations WHERE hash=$1", [legacy]);
+  }
+});
+test.each(["timestamp", "bom", "new-migration"])(
+  "preflight does not generalize legacy encoding acceptance to %s",
+  async (kind) => {
+    const entry = (await migrationManifest()).find(
+      (e) => e.tag === (kind === "new-migration" ? "0022_repository_baseline" : legacyCrlfTags[0]),
+    )!;
+    const legacy = await crlfHash(entry.tag, kind === "bom");
+    await fixture.pool.query(
+      "UPDATE drizzle.__drizzle_migrations SET hash=$1,created_at=$2 WHERE hash=$3",
+      [legacy, entry.when + (kind === "timestamp" ? 1 : 0), entry.hash],
+    );
+    try {
+      const state = await inspectMigrationState(createDb());
+      expect(state.unknownMigrationHashes).toBe(true);
+      expect(state.baselineAlreadyApplied).toBe(false);
+    } finally {
+      await fixture.pool.query(
+        "UPDATE drizzle.__drizzle_migrations SET hash=$1,created_at=$2 WHERE hash=$3",
+        [entry.hash, entry.when, legacy],
+      );
+    }
+  },
+);
