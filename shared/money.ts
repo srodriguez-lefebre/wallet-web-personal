@@ -34,3 +34,20 @@ export function findExchangeRate(
   }
   return null;
 }
+
+/** Round a nonnegative fraction of persisted two-decimal money to integer cents.
+ * Integer arithmetic matches PostgreSQL numeric rounding at half-cent ties. */
+export function proportionalMoneyCents(amount: number, part: number, total: number): number {
+  if (![amount, part, total].every(Number.isFinite) || amount < 0 || part < 0 || total <= 0)
+    return Number.NaN;
+  const minor = (value: number) => {
+    const fixed = value.toFixed(2);
+    return /^\d+\.\d{2}$/.test(fixed) ? BigInt(fixed.replace(".", "")) : undefined;
+  };
+  const money = minor(amount),
+    fraction = minor(Math.min(part, total)),
+    whole = minor(total);
+  if (money === undefined || fraction === undefined || whole === undefined || whole === 0n)
+    return Number.NaN;
+  return Number((2n * money * fraction + whole) / (2n * whole));
+}

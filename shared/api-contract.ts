@@ -2,6 +2,11 @@ import { z, type ZodType } from "zod";
 
 import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
+  accountBalanceMetricsSchema,
+  accountBalanceQuerySchema,
+  goalProgressMetricsSchema,
+} from "./read-model-contract.js";
+import {
   referenceBootstrapInputSchema,
   referenceBootstrapSchema,
   referenceQuerySchema,
@@ -104,6 +109,8 @@ const currencyAmounts = z.array(
   z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
 );
 const specialResponses = {
+  "analytics.accountBalances": accountBalanceMetricsSchema,
+  "analytics.goalProgress": goalProgressMetricsSchema,
   "wallet.reference": walletReferenceSchema,
   "wallet.bootstrapReference": referenceBootstrapSchema,
   "analytics.summary": analyticsSummarySchema,
@@ -194,6 +201,27 @@ const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
 });
 
 export const apiOperations = [
+  op({
+    operationId: "analytics.accountBalances",
+    method: "GET",
+    path: "/api/analytics/accounts",
+    auth: "session",
+    stability: "stable",
+    query: accountBalanceQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read account balances without downloading financial history",
+  }),
+  op({
+    operationId: "analytics.goalProgress",
+    method: "GET",
+    path: "/api/analytics/goals",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Read allocated goal progress and unresolved conversions",
+  }),
   op({
     operationId: "auth.session",
     method: "GET",

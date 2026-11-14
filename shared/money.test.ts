@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { findExchangeRate } from "./money.js";
+import { findExchangeRate, proportionalMoneyCents } from "./money.js";
 
 import type { ExchangeRate } from "./types.js";
 const rates: ExchangeRate[] = [
@@ -17,4 +17,13 @@ test("missing or future quotes cannot silently become one-to-one", () => {
   expect(findExchangeRate(rates, "USD", "UYU", "2025-01-01")).toBeNull();
   expect(findExchangeRate(rates, "BRL", "UYU")).toBeNull();
   expect(findExchangeRate(rates, "UYU", "UYU")).toBe(1);
+});
+
+test("proportional reserve cents round exactly at half cents and preserve the last cent", () => {
+  expect(proportionalMoneyCents(2.01, 1, 2)).toBe(101);
+  expect(proportionalMoneyCents(1, 1, 3)).toBe(33);
+  expect(proportionalMoneyCents(1, 2, 3)).toBe(67);
+  expect(proportionalMoneyCents(1, 3, 3)).toBe(100);
+  expect(proportionalMoneyCents(2.01, 3, 2)).toBe(201);
+  expect(Number.isNaN(proportionalMoneyCents(Number.NaN, 1, 2))).toBe(true);
 });

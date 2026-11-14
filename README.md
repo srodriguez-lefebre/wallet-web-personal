@@ -521,3 +521,8 @@ página separada para sembrar la caché. Las rutas anteriores conservan su paylo
 para pestañas existentes. Las opciones de Query y las políticas de invalidación
 están en `src/services/wallet-queries.ts` y `src/services/mutations.ts`; la app
 continúa con WalletSync hasta completar sus consumidores y agregados.
+
+`GET /api/analytics/accounts` devuelve saldos y reservas agregados, con corte local
+opcional; `GET /api/analytics/goals` devuelve el progreso de las metas. Ambas
+lecturas calculan importes en SQL sin enviar historial. Una conversión faltante
+se devuelve como `null`, sin asumir una equivalencia entre monedas.

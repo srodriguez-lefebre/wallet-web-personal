@@ -102,3 +102,20 @@ export function cardRecordsQueryOptions(client: WalletClient, id: string) {
     queryFn: ({ signal }) => client["cardRecords.list"]({ params: { id }, signal }),
   });
 }
+
+export function accountBalancesQueryOptions(
+  client: WalletClient,
+  query: NonNullable<ClientInput<"analytics.accountBalances">["query"]> = {},
+) {
+  const normalized = { ...query, timeZone: query.timeZone ?? timeZone() };
+  return queryOptions({
+    queryKey: ["account-balances", normalized] as const,
+    queryFn: ({ signal }) => client["analytics.accountBalances"]({ query: normalized, signal }),
+  });
+}
+export function goalProgressQueryOptions(client: WalletClient) {
+  return queryOptions({
+    queryKey: ["goal-progress"] as const,
+    queryFn: ({ signal }) => client["analytics.goalProgress"]({ signal }),
+  });
+}

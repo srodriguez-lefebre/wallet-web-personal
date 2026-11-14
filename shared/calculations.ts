@@ -11,7 +11,7 @@ import {
   startOfDay,
 } from "date-fns";
 
-import { findExchangeRate } from "./money.js";
+import { findExchangeRate, proportionalMoneyCents } from "./money.js";
 import { isFinancialRecord, isPrimaryReportingRecord } from "./record-status.js";
 
 import type {
@@ -463,10 +463,10 @@ function creditCardBankReservationRelease(
       )
         continue;
       const bankCents = (limitAmount: number) =>
-        Math.round(
-          ((original.accountAmount! * Math.min(original.amountInLimitCurrency, limitAmount)) /
-            original.amountInLimitCurrency) *
-            100,
+        proportionalMoneyCents(
+          original.accountAmount!,
+          limitAmount,
+          original.amountInLimitCurrency,
         );
       // Difference of rounded totals preserves the last cent of a partial reserve.
       released +=

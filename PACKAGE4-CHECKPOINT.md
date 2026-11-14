@@ -141,3 +141,30 @@ se retiró WalletSync o que ya no se descarga historial. Siguiente: agregados SQ
 para balances y metas (fixture diseñado en /tmp/wallet-aggregates-test.txt), luego
 lecturas de presentación/agenda y consumidores. Preservar el crédito de reembolso
 FIFO, reservas históricas y FX congelado; no usar páginas parciales para totales.
+
+## Task 2b · agregados SQL de cuentas y metas en curso
+
+Nuevas lecturas `analytics.accountBalances` y `analytics.goalProgress`, sin cambios
+de esquema. Cuentas: SQL numeric, transferencias congeladas, crédito FIFO de
+reembolsos, pagos, reservas al corte local y FX actual explícito. Metas: porciones
+asignadas, FX congelado de cuenta/primary, cotizaciones históricas y puentes; las
+conversiones faltantes salen null y no como cero. Ningún historial sale por HTTP.
+Se extendió exchangeRateSql para aceptar columnas/fechas SQL conservando su política.
+
+Regresiones sintéticas comparan las fórmulas anteriores contra SQL, incluyendo un
+corte de 25 horas en America/New_York. DTOs atravesaron el router real. Rounding:
+el fixture de una reserva bancaria 2.01 liberada a la mitad mostró una diferencia
+real de 0.01 (JS 1.00 frente a numeric 1.01), 2 fallos / 1 pass. Helper nuevo con
+BigInt sobre centavos persistidos: RED función inexistente, luego GREEN; también
+conserva el último centavo en tercios. Ruling: usar redondeo decimal exacto coherente
+con PostgreSQL y corregir la lectura JS, en vez de reproducir un error binario.
+Coste: un saldo derivado en ese borde puede corregirse un centavo; no cambia
+registros, asignaciones ni importes persistidos. Compartido y SQL ahora coinciden.
+
+Target con money/FX/SQL/HTTP: 4 archivos / 11 pruebas verdes. Target con DST:
+2 / 7 verdes. Lint limpio y build previo verde; código final se valida completo
+antes del siguiente commit. Los consumidores de UI todavía usan WalletSync.
+
+Validación completa de estos agregados: 105 archivos / 769 pruebas, formato,
+lint, build y OpenAPI verdes. Log: `/tmp/wallet-package4-aggregates-check.log`.
+Sin nuevas migraciones ni cambios en producción. La integración de UI continúa.

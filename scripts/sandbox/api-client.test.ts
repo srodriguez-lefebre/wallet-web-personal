@@ -165,3 +165,26 @@ test("reference operations validate real HTTP responses without changing legacy 
   expect(boot.recordsPage.items.length).toBeLessThanOrEqual(1);
   expect((await client["wallet.get"]()).records).toEqual(expect.any(Array));
 });
+
+test("balance and goal aggregate contracts cross real HTTP without sending history", async () => {
+  token = (await client["auth.unlock"]({ body: { token: LOCAL_ACCESS_CODE } })).token;
+  await client["goals.create"]({
+    body: {
+      name: "Synthetic aggregate goal",
+      targetAmount: 100,
+      currency: "UYU",
+      color: "#123456",
+      icon: "flag",
+    },
+  });
+  const balances = await client["analytics.accountBalances"]({
+    query: { timeZone: "America/Montevideo" },
+  });
+  expect(Array.isArray(balances)).toBe(true);
+  for (const row of balances) {
+    expect(row).not.toHaveProperty("records");
+    expect(typeof row.balance).toBe("number");
+  }
+  const goals = await client["analytics.goalProgress"]();
+  expect(goals.some((row) => row.spent === 0 && row.reserved === 0)).toBe(true);
+});
