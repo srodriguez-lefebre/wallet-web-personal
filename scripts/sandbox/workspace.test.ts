@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { expect, test, vi } from "vitest";
 
-import { acquireWorkspaceLock } from "./workspace.js";
+import { acquireWorkspaceLock, configureLocalEnvironment } from "./workspace.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
@@ -72,5 +72,19 @@ test("lock release does not remove a replacement owner's lock", async () => {
     expect(await readFile(file, "utf8")).toBe('{"pid":1,"owner":"different"}');
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("synthetic sandbox does not inherit a production session transition", () => {
+  const previous = { ...process.env };
+  try {
+    process.env.WALLET_REVOCABLE_SESSIONS = "true";
+    process.env.LEGACY_SESSION_ACCEPT_UNTIL = "2030-01-01T00:00:00Z";
+    configureLocalEnvironment();
+    expect(process.env.WALLET_REVOCABLE_SESSIONS).toBeUndefined();
+    expect(process.env.LEGACY_SESSION_ACCEPT_UNTIL).toBeUndefined();
+    expect(process.env.SESSION_SECRET).toBe("wallet-local-session-signing-only");
+  } finally {
+    process.env = previous;
   }
 });

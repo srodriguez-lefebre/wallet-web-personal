@@ -1,4 +1,3 @@
-import { FormEvent, useState } from "react";
 import {
   ArrowRight,
   Banknote,
@@ -14,19 +13,16 @@ import {
   Upload,
   WalletCards,
 } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import type { Category, CurrencyCode, Tag } from "@shared/types";
 
-import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CategoryIcon } from "@/components/wallet/category-icon";
-import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
-import { categoryIconOptions } from "@/components/wallet/category-icons";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -35,10 +31,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useAuth } from "@/providers/auth-provider";
-import { useActionToast } from "@/lib/use-action-toast";
+import { CategoryIcon } from "@/components/wallet/category-icon";
+import { categoryIconOptions } from "@/components/wallet/category-icons";
+import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
+import { finishAction } from "@/lib/async-event";
 import { paymentDefaults } from "@/lib/preferences";
+import { useActionToast } from "@/lib/use-action-toast";
+import { useAuth } from "@/providers/auth-provider";
 import { useWallet } from "@/providers/wallet-provider";
+import { getSessionCapabilities, lockAllSessions } from "@/services/wallet-api";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -65,8 +66,34 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { lock, expiresAt } = useAuth();
+  const { lock, expiresAt, token } = useAuth();
+  const [sessionControl, setSessionControl] = useState<"disabled" | "ready" | "busy">("disabled");
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    void getSessionCapabilities(token)
+      .then((result) => {
+        if (!cancelled) setSessionControl(result.revocable ? "ready" : "disabled");
+      })
+      .catch(() => {
+        if (!cancelled) setSessionControl("disabled");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
   const { toast, runAction } = useActionToast();
+  async function closeAllSessions() {
+    if (!token || sessionControl !== "ready") return;
+    setSessionControl("busy");
+    const ok = await runSettingAction(() => lockAllSessions(token), {
+      processing: "Locking all sessions...",
+      success: "All sessions locked",
+      error: "Could not lock all sessions",
+    });
+    if (ok) lock();
+    else setSessionControl("ready");
+  }
   async function runSettingAction(work: () => Promise<unknown>, options: ActionToastOptions) {
     try {
       await runAction(work, options);
@@ -655,9 +682,20 @@ export function SettingsView() {
                   Locking clears the session and private cache in this browser.
                 </p>
               </div>
-              <Button variant="outline" onClick={lock}>
-                Lock
-              </Button>
+              <div className="flex gap-2">
+                {sessionControl !== "disabled" ? (
+                  <Button
+                    variant="outline"
+                    disabled={sessionControl === "busy"}
+                    onClick={() => finishAction(closeAllSessions())}
+                  >
+                    Lock all sessions
+                  </Button>
+                ) : null}
+                <Button variant="outline" onClick={lock}>
+                  Lock
+                </Button>
+              </div>
             </div>
             {expiresAt && (
               <p className="text-sm text-muted-foreground">

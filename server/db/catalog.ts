@@ -363,7 +363,7 @@ export async function deleteCategory(db: Db, id: string) {
 }
 
 export async function listTags(db: Db) {
-  const rows = await db.select().from(tags);
+  const rows = await db.select().from(tags).where(isNull(tags.deletedAt));
   return rows.map(mapTag);
 }
 
@@ -373,23 +373,40 @@ export async function createTag(db: Db, input: NewTag) {
 }
 
 export async function updateTag(db: Db, id: string, input: TagPatch) {
-  const [current] = await db.select().from(tags).where(eq(tags.id, id)).limit(1);
+  const [current] = await db
+    .select()
+    .from(tags)
+    .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+    .limit(1);
   if (!current) return null;
   const merged = mergePatch(tagSchema, mapTag(current), input, []);
   const values: Partial<typeof tags.$inferInsert> = { updatedAt: new Date() };
   if (hasOwn(input, "name")) values.name = merged.name;
   if (hasOwn(input, "color")) values.color = merged.color;
   if (hasOwn(input, "isActive")) values.isActive = merged.isActive;
-  const [row] = await db.update(tags).set(values).where(eq(tags.id, id)).returning();
+  const [row] = await db
+    .update(tags)
+    .set(values)
+    .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+    .returning();
   return row ? mapTag(row) : null;
 }
 
 export async function deleteTag(db: Db, id: string) {
+  const [current] = await db
+    .select({ id: tags.id })
+    .from(tags)
+    .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+    .limit(1);
+  if (!current) return false;
   const results = await db.batch([
     db.delete(recordTags).where(eq(recordTags.tagId, id)),
     db.delete(goalTags).where(eq(goalTags.tagId, id)),
     db.update(budgets).set({ tagId: null, updatedAt: new Date() }).where(eq(budgets.tagId, id)),
-    db.delete(tags).where(eq(tags.id, id)).returning(),
+    db
+      .delete(tags)
+      .where(and(eq(tags.id, id), isNull(tags.deletedAt)))
+      .returning(),
   ]);
   const rows = results[3];
   return rows.length > 0;

@@ -18,7 +18,7 @@ export function refreshCreditCardStatements(db: Db, creditCardId?: string) {
           WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL
         ), 0)) FROM credit_card_records p
           WHERE p.statement_id = s.id AND p.kind = 'purchase' AND p.deleted_at IS NULL), 0) AS total,
-        coalesce((SELECT sum(amount_in_limit_currency) FROM credit_card_payments WHERE statement_id = s.id), 0) AS paid
+        coalesce((SELECT sum(amount_in_limit_currency) FROM credit_card_payments WHERE statement_id = s.id AND deleted_at IS NULL), 0) AS paid
       FROM credit_card_statements s ${creditCardId ? sql`WHERE s.credit_card_id = ${creditCardId}` : sql``}
     ) UPDATE credit_card_statements s SET
       status = CASE WHEN b.total - b.paid <= 0 THEN 'paid' WHEN b.due_at < now() THEN 'overdue'

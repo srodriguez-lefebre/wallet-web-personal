@@ -74,6 +74,10 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
       )} IN ACCESS EXCLUSIVE MODE`,
     ),
   ];
+  queries.push(
+    db.execute(sql`CREATE TEMP TABLE wallet_restore_session_state ON COMMIT DROP AS
+    SELECT session_version,auth_attempts_pruned_at FROM settings`),
+  );
   if (preserveIngestion) {
     // Capture after acquiring the lock: preparation must not discard a concurrent
     // ingestion's retry identity. The transaction owns and drops this staging table.
@@ -133,6 +137,11 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
       db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`),
     );
   insert(schema.settings, dataset.settings);
+  queries.push(
+    db.execute(sql`UPDATE settings SET
+    session_version=greatest(session_version,coalesce((SELECT max(session_version) FROM wallet_restore_session_state),1)),
+    auth_attempts_pruned_at=(SELECT max(auth_attempts_pruned_at) FROM wallet_restore_session_state)`),
+  );
   for (const record of dataset.records) {
     for (const tagId of record.tagIds) insert(schema.recordTags, { recordId: record.id, tagId });
     const links = record.goalAssociations.length

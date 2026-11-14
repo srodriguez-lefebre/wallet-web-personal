@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 import { type SettingsPatch, settingsSchema } from "../../shared/schemas.js";
 import { validationError } from "../api/errors.js";
@@ -14,16 +14,8 @@ export async function getSettings(db: Db) {
   return mapSettings(rows[0]);
 }
 
-export async function upsertSettings(db: Db, input: WalletSettings) {
-  const existing = await db.select().from(settings).limit(1);
-  if (existing[0] && input.primaryCurrency !== existing[0].primaryCurrency) {
-    const [history] = await db.select({ id: records.id }).from(records).limit(1);
-    if (history)
-      throw validationError(
-        "La moneda principal no puede cambiar mientras exista historial financiero. Exportá tus datos antes de crear una billetera con otra moneda.",
-      );
-  }
-  const values = {
+function settingsValues(input: WalletSettings) {
+  return {
     primaryCurrency: input.primaryCurrency,
     primaryAccountId: input.primaryAccountId ?? null,
     theme: input.theme,
@@ -39,26 +31,48 @@ export async function upsertSettings(db: Db, input: WalletSettings) {
       : undefined,
     updatedAt: new Date(),
   };
-  const [row] =
-    existing.length > 0
-      ? await db.update(settings).set(values).where(eq(settings.id, existing[0]!.id)).returning()
-      : await db.insert(settings).values(values).returning();
+}
+function currencyGuard(currency: string | undefined) {
+  return currency === undefined
+    ? undefined
+    : sql`${settings.primaryCurrency}=${currency} OR NOT EXISTS (SELECT 1 FROM ${records})`;
+}
+function requireSettingsRow(row: typeof settings.$inferSelect | undefined) {
+  if (!row)
+    throw validationError(
+      "La moneda principal no puede cambiar mientras exista historial financiero. Exportá tus datos antes de crear una billetera con otra moneda.",
+    );
   return mapSettings(row);
+}
+export async function upsertSettings(db: Db, input: WalletSettings) {
+  const values = settingsValues(input);
+  const [row] = await db
+    .insert(settings)
+    .values(values)
+    .onConflictDoUpdate({
+      target: settings.singleton,
+      set: values,
+      setWhere: currencyGuard(input.primaryCurrency),
+    })
+    .returning();
+  return requireSettingsRow(row);
 }
 
 export async function patchSettings(db: Db, input: SettingsPatch) {
   const [current] = await db.select().from(settings).limit(1);
-  if (!current) {
-    const merged = settingsSchema.parse({
-      ...mapSettings(undefined),
-      ...input,
-      primaryAccountId: input.primaryAccountId === null ? undefined : input.primaryAccountId,
-      defaultAccountId: input.defaultAccountId === null ? undefined : input.defaultAccountId,
-      defaultCreditCardId:
-        input.defaultCreditCardId === null ? undefined : input.defaultCreditCardId,
-    });
-    return upsertSettings(db, merged);
-  }
+  const merged = settingsSchema.parse({
+    ...mapSettings(current),
+    ...input,
+    primaryAccountId: hasOwn(input, "primaryAccountId")
+      ? (input.primaryAccountId ?? undefined)
+      : (current?.primaryAccountId ?? undefined),
+    defaultAccountId: hasOwn(input, "defaultAccountId")
+      ? (input.defaultAccountId ?? undefined)
+      : (current?.defaultAccountId ?? undefined),
+    defaultCreditCardId: hasOwn(input, "defaultCreditCardId")
+      ? (input.defaultCreditCardId ?? undefined)
+      : (current?.defaultCreditCardId ?? undefined),
+  });
   const values: Partial<typeof settings.$inferInsert> = { updatedAt: new Date() };
   if (input.reviewSeenThrough) {
     values.reviewSeenThrough =
@@ -81,9 +95,13 @@ export async function patchSettings(db: Db, input: SettingsPatch) {
     values.defaultCreditCardId = input.defaultCreditCardId ?? null;
   }
   const [row] = await db
-    .update(settings)
-    .set(values)
-    .where(eq(settings.id, current.id))
+    .insert(settings)
+    .values(settingsValues(merged))
+    .onConflictDoUpdate({
+      target: settings.singleton,
+      set: values,
+      setWhere: currencyGuard(input.primaryCurrency),
+    })
     .returning();
-  return mapSettings(row);
+  return requireSettingsRow(row);
 }

@@ -30,7 +30,7 @@ export function creditCardRecordGuard(
       AND NOT EXISTS (
         SELECT 1 FROM credit_card_records p WHERE p.id = ${recordId ?? null}::uuid
           AND (EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL)
-            OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id))
+            OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a JOIN credit_card_payments pay ON pay.id=a.payment_id AND pay.deleted_at IS NULL WHERE a.credit_card_record_id = p.id))
           AND (p.account_id IS DISTINCT FROM ${input.accountId ?? null}::uuid
             OR p.account_amount IS DISTINCT FROM ${input.accountAmount === undefined ? null : toNumeric(input.accountAmount)}::numeric
             OR p.account_impact_at_creation IS DISTINCT FROM ${input.accountImpactAtCreation})
@@ -70,7 +70,7 @@ export function creditCardBankRefundAmount(
         / nullif(p.amount_in_limit_currency, 0), 2)) END
     FROM credit_card_records p
     CROSS JOIN LATERAL (
-      SELECT coalesce((SELECT sum(a.amount_in_limit_currency) FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id), 0) AS paid,
+      SELECT coalesce((SELECT sum(a.amount_in_limit_currency) FROM credit_card_payment_allocations a JOIN credit_card_payments pay ON pay.id=a.payment_id AND pay.deleted_at IS NULL WHERE a.credit_card_record_id = p.id), 0) AS paid,
         coalesce((SELECT sum(r.amount_in_limit_currency) FROM credit_card_records r WHERE r.original_record_id = p.id AND r.kind = 'refund' AND r.deleted_at IS NULL AND r.id <> coalesce(${editedRefundId ?? null}::uuid, '00000000-0000-0000-0000-000000000000'::uuid)), 0) AS refunded,
         coalesce((SELECT sum(coalesce(w.account_amount, w.amount, r.account_amount, 0)) FROM credit_card_records r
           LEFT JOIN records w ON w.id = r.wallet_record_id
@@ -106,7 +106,7 @@ export function recordCardDependencyGuard(db: Db, walletRecordId: string) {
     sql`NOT EXISTS (
     SELECT 1 FROM credit_card_records p WHERE p.wallet_record_id = ${walletRecordId}::uuid AND p.kind = 'purchase'
       AND (EXISTS (SELECT 1 FROM credit_card_records r WHERE r.original_record_id = p.id AND r.deleted_at IS NULL)
-        OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a WHERE a.credit_card_record_id = p.id))
+        OR EXISTS (SELECT 1 FROM credit_card_payment_allocations a JOIN credit_card_payments pay ON pay.id=a.payment_id AND pay.deleted_at IS NULL WHERE a.credit_card_record_id = p.id))
   )`,
     "valid",
   );

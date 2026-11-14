@@ -364,7 +364,7 @@ export async function deleteCreditCardRecord(db: Db, creditCardId: string, id: s
       db.execute(sql`SELECT 1 / CASE WHEN NOT EXISTS (
         SELECT 1 FROM credit_card_records WHERE original_record_id = ${id}::uuid AND deleted_at IS NULL
       ) AND NOT EXISTS (
-        SELECT 1 FROM credit_card_payment_allocations WHERE credit_card_record_id = ${id}::uuid
+        SELECT 1 FROM credit_card_payment_allocations a JOIN credit_card_payments pay ON pay.id=a.payment_id AND pay.deleted_at IS NULL WHERE a.credit_card_record_id = ${id}::uuid
       ) THEN 1 ELSE 0 END AS valid`),
       db
         .update(creditCardRecords)

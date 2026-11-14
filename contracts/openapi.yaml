@@ -516,6 +516,356 @@ paths:
       tags:
         - accounts
       x-stability: stable
+  /api/analytics/summary:
+    get:
+      operationId: analytics.summary
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: accountId
+          required: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      budgets:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            budget:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                color:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                goalId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isActive:
+                                  default: true
+                                  type: boolean
+                                limitAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                name:
+                                  minLength: 1
+                                  type: string
+                                period:
+                                  const: monthly
+                                  type: string
+                                tagId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                              required:
+                                - name
+                                - limitAmount
+                                - currency
+                                - period
+                                - color
+                                - isActive
+                                - id
+                              type: object
+                            percentage:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            remaining:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            spent:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            status:
+                              enum:
+                                - ok
+                                - warning
+                                - exceeded
+                              type: string
+                            unresolvedRecords:
+                              maximum: 9007199254740991
+                              minimum: 0
+                              type: integer
+                          required:
+                            - budget
+                            - spent
+                            - remaining
+                            - percentage
+                            - status
+                            - unresolvedRecords
+                          type: object
+                        type: array
+                      cashFlow:
+                        type: number
+                      categories:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            color:
+                              type: string
+                            expenses:
+                              type: number
+                            icon:
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            income:
+                              type: number
+                            name:
+                              type: string
+                            parentId:
+                              anyOf:
+                                - format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                - type: "null"
+                          required:
+                            - id
+                            - name
+                            - color
+                            - icon
+                            - parentId
+                            - income
+                            - expenses
+                          type: object
+                        type: array
+                      expenses:
+                        type: number
+                      from:
+                        format: date
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                        type: string
+                      income:
+                        type: number
+                      monthlySeries:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            cashFlow:
+                              type: number
+                            expenses:
+                              type: number
+                            income:
+                              type: number
+                            month:
+                              type: string
+                          required:
+                            - month
+                            - income
+                            - expenses
+                            - cashFlow
+                          type: object
+                        type: array
+                      primaryCurrency:
+                        enum:
+                          - UYU
+                          - USD
+                          - EUR
+                          - BRL
+                          - ARS
+                        type: string
+                      timeZone:
+                        type: string
+                      to:
+                        format: date
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                        type: string
+                      unresolvedRecords:
+                        maximum: 9007199254740991
+                        minimum: 0
+                        type: integer
+                    required:
+                      - from
+                      - to
+                      - timeZone
+                      - primaryCurrency
+                      - income
+                      - expenses
+                      - cashFlow
+                      - unresolvedRecords
+                      - categories
+                      - monthlySeries
+                      - budgets
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Aggregate frozen record values, categories, monthly totals and budget usage
+      tags:
+        - analytics
+      x-stability: stable
+  /api/auth/lock-all:
+    post:
+      operationId: auth.lockAll
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      locked:
+                        const: true
+                        type: boolean
+                    required:
+                      - locked
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 503
+      security:
+        - sessionBearer: []
+      summary: Revoke all sessions when the optional profile is activated
+      tags:
+        - auth
+      x-stability: stable
+  /api/auth/session:
+    get:
+      operationId: auth.session
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      revocable:
+                        type: boolean
+                    required:
+                      - revocable
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read optional session revocation capability
+      tags:
+        - auth
+      x-stability: stable
   /api/auth/unlock:
     post:
       operationId: auth.unlock

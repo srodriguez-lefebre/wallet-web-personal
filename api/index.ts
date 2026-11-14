@@ -1,14 +1,15 @@
-import { requireApiToken, requireIngestToken } from "../server/api/auth.js";
+import { requireIngestToken } from "../server/api/auth.js";
 import { createRequestContext } from "../server/api/context.js";
 import { handlers } from "../server/api/handlers.js";
 import { requireMethod } from "../server/api/method.js";
 import { parseBody, routeError } from "../server/api/request.js";
 import { sendData, sendError } from "../server/api/response.js";
 import { matchOperation, matchPath, requestPath } from "../server/api/router.js";
+import { requireRequestSession } from "../server/api/session-guard.js";
 
-import type { Handler, OperationInput } from "../server/api/handler-types.js";
-import type { RequestContext } from "../server/api/context.js";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import type { RequestContext } from "../server/api/context.js";
+import type { Handler, OperationInput } from "../server/api/handler-types.js";
 import type { ApiOperation, ApiOperationId } from "../shared/api-contract.js";
 
 function execute<K extends ApiOperationId>(
@@ -42,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const operation = match?.operation ?? known.operation;
     ctx.operationId = match?.operation.operationId;
     if (
-      (operation.auth === "session" && !requireApiToken(req, res)) ||
+      (operation.auth === "session" && !(await requireRequestSession(ctx, res))) ||
       (operation.auth === "ingest" && !requireIngestToken(req, res))
     ) {
       status = 401;

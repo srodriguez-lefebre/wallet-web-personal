@@ -476,3 +476,12 @@ export const deleteInstallmentPlan = (token: string, id: string) =>
   requestApi<{ deleted: true }>(token, "installmentPlans.delete", `/api/installment-plans/${id}`, {
     method: "DELETE",
   });
+
+export function getSessionCapabilities(token: string) {
+  return requestApi<{ revocable: boolean }>(token, "auth.session", "/api/auth/session");
+}
+export function lockAllSessions(token: string) {
+  return requestApi<{ locked: true }>(token, "auth.lockAll", "/api/auth/lock-all", {
+    method: "POST",
+  });
+}

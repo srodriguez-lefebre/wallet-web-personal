@@ -62,7 +62,20 @@ export function createSessionToken(now = new Date()) {
 export function isValidSessionToken(token: string | null, now = new Date()) {
   if (!token) return false;
   const [payload, signature, extra] = token.split(".");
-  if (!payload || !signature || extra || !safeEqual(signature, sign(payload))) return false;
+  if (!payload || !signature || extra) return false;
+  const deadline = Date.parse(process.env.LEGACY_SESSION_ACCEPT_UNTIL ?? "");
+  const secrets = [
+    authSecret(),
+    ...(Number.isFinite(deadline) && now.getTime() < deadline
+      ? [process.env.API_TOKEN, process.env.API_TOKEN_PREVIOUS]
+      : []),
+  ].filter((value): value is string => Boolean(value));
+  if (
+    !secrets.some((secret) =>
+      safeEqual(signature, createHmac("sha256", secret).update(payload).digest("base64url")),
+    )
+  )
+    return false;
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as {
       exp?: number;

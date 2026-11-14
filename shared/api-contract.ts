@@ -1,5 +1,6 @@
 import { z, type ZodType } from "zod";
 
+import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
   accountPatchSchema,
   accountSchema,
@@ -93,8 +94,11 @@ const entities = {
 };
 const pagination = z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() });
 function operationResponse(operationId: string): ZodType {
+  if (operationId === "analytics.summary") return analyticsSummarySchema;
   if (operationId === "cards.refreshStatements") return z.object({ refreshed: z.literal(true) });
   if (operationId === "cards.delete") return z.object({ archived: z.literal(true) });
+  if (operationId === "auth.session") return z.object({ revocable: z.boolean() });
+  if (operationId === "auth.lockAll") return z.object({ locked: z.literal(true) });
   if (operationId === "auth.unlock")
     return z.object({ token: z.string(), expiresAt: z.string().datetime() });
   if (operationId === "health.get")
@@ -164,6 +168,37 @@ const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
 });
 
 export const apiOperations = [
+  op({
+    operationId: "auth.session",
+    method: "GET",
+    path: "/api/auth/session",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Read optional session revocation capability",
+  }),
+  op({
+    operationId: "auth.lockAll",
+    method: "POST",
+    path: "/api/auth/lock-all",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 503, 500],
+    summary: "Revoke all sessions when the optional profile is activated",
+  }),
+  op({
+    operationId: "analytics.summary",
+    method: "GET",
+    path: "/api/analytics/summary",
+    auth: "session",
+    stability: "stable",
+    query: analyticsQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate frozen record values, categories, monthly totals and budget usage",
+  }),
   op({
     operationId: "cards.refreshStatements",
     method: "POST",

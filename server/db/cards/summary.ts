@@ -28,7 +28,7 @@ export async function getCreditCardSummary(
      AND NOT EXISTS (SELECT 1 FROM credit_card_records linked WHERE linked.wallet_record_id=r.id AND linked.credit_card_id=${id}::uuid AND linked.deleted_at IS NULL)
  ), payments AS (
    SELECT p.*,coalesce((SELECT sum(a.amount_in_limit_currency) FROM credit_card_payment_allocations a WHERE a.payment_id=p.id),p.amount_in_limit_currency) AS allocated
-   FROM credit_card_payments p WHERE p.credit_card_id=${id}::uuid AND p.occurred_at<=${asOf.toISOString()}::timestamptz
+   FROM credit_card_payments p WHERE p.credit_card_id=${id}::uuid AND p.deleted_at IS NULL AND p.occurred_at<=${asOf.toISOString()}::timestamptz
  ), pools AS (SELECT statement_id,sum(allocated) AS amount FROM payments GROUP BY statement_id),
  net AS (
    SELECT p.*,greatest(0,p.amount_in_limit_currency-coalesce((SELECT sum(r.amount_in_limit_currency) FROM movements r WHERE r.kind='refund' AND r.original_record_id=p.id),0)) AS net

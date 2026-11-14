@@ -218,3 +218,24 @@ test("export and restore retain deleted records and archived accounts needed by 
     JSON.parse(JSON.stringify(backup)),
   );
 });
+
+test("financial restores preserve session version and cleanup state instead of importing security counters", async () => {
+  await pg.query(
+    "UPDATE settings SET session_version=7,auth_attempts_pruned_at='2026-01-01T00:00:00Z'",
+  );
+  const backup = await getWalletBackup(createDb());
+  expect(backup.settings).not.toHaveProperty("sessionVersion");
+  await restoreWalletBackup(createDb(), {
+    ...backup,
+    settings: {
+      ...backup.settings,
+      sessionVersion: 1,
+      authAttemptsPrunedAt: "2000-01-01T00:00:00Z",
+    },
+  });
+  const state = await pg.query<{ session_version: number; auth_attempts_pruned_at: string }>(
+    "SELECT session_version,(auth_attempts_pruned_at AT TIME ZONE 'UTC')::text AS auth_attempts_pruned_at FROM settings",
+  );
+  expect(state.rows[0]!.session_version).toBe(7);
+  expect(state.rows[0]!.auth_attempts_pruned_at).toContain("2026-01-01");
+});

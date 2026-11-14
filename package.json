@@ -20,6 +20,7 @@
     "api:spec:check": "tsx scripts/generate-openapi.ts --check",
     "test:api-contract": "vitest run shared/api-contract.test.ts",
     "check": "npm run format:check && npm run lint && npm test && npm run build && npm run api:spec:check",
+    "db:preflight": "tsx scripts/db-preflight.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",

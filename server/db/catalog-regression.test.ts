@@ -580,3 +580,24 @@ test("recurring generation keeps UTC noon, clamps month ends and is retry safe",
     await repository.generateDueRecurringDebts(createDb(), new Date("2024-04-30T12:00:00Z")),
   ).toEqual([]);
 });
+
+test("concurrent first settings writes create one row and disjoint first patches keep both fields", async () => {
+  const initial = await repository.getSettings(createDb());
+  await fixture.pool.query("TRUNCATE settings");
+  const writes = await Promise.all([
+    repository.upsertSettings(createDb(), { ...initial, theme: "dark" }),
+    repository.upsertSettings(createDb(), { ...initial, theme: "system" }),
+  ]);
+  expect((await fixture.pool.query("SELECT id FROM settings")).rows).toHaveLength(1);
+  expect(writes.map((row) => row.primaryCurrency)).toEqual(["UYU", "UYU"]);
+  await fixture.pool.query("TRUNCATE settings");
+  await Promise.all([
+    repository.patchSettings(createDb(), { theme: "dark" }),
+    repository.patchSettings(createDb(), { defaultPaymentStatus: "needs_review" }),
+  ]);
+  expect((await fixture.pool.query("SELECT id FROM settings")).rows).toHaveLength(1);
+  expect(await repository.getSettings(createDb())).toMatchObject({
+    theme: "dark",
+    defaultPaymentStatus: "needs_review",
+  });
+});

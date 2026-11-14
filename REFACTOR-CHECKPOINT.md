@@ -207,3 +207,87 @@ merge con guard de SHA, CI main y Vercel READY/alias. Registrar evidencia aquí.
   destino/journal/compatibilidad/recuperación y ensayo sintético; preparación
   optativa de sesión revocable sin activación; full check y sandbox finales, QA y
   revisión del alcance restante. Apps Script sigue intacto.
+
+### Paquete 3 · candidato preparado, publicación bloqueada por verificación del destino
+
+Continúa en `refactor/03-contract-router`, sobre el núcleo local `40c2cda` y
+main `098cb9d6e7f34b31d2378451d88a5b791786aaf2`. `git fetch origin main` confirmó
+esa base; `gh pr list` para esta rama devuelve vacío. Hay **2 PRs usados de 5**:
+[#9](https://github.com/srodriguez-lefebre/wallet-web-personal/pull/9) y
+[#10](https://github.com/srodriguez-lefebre/wallet-web-personal/pull/10), ambos ya
+fusionados. No repetirlos ni publicar directamente en main.
+
+El candidato agrega analytics SQL con zonas IANA (offsets numéricos rechazados),
+baseline aditiva 0022, settings singleton con upsert concurrente, poda horaria de
+intentos, lectores compatibles con archivos y backups que conservan sus metadatos.
+No activa soft deletes nuevos ni FK: se habilitarán después de que este lector sea
+un rollback publicado. Conserva `goal_reservations` y todos los datos históricos.
+La revocación versionada, botón y transición legacy están preparados bajo opt-in
+**desactivado**. El perfil por defecto conserva sesiones existentes; no se creó ni
+rotó ningún secreto. El sandbox elimina flags heredados y usa claves sintéticas.
+
+`db:preflight` verifica la huella del endpoint antes de conectar y sólo ejecuta
+batches READ ONLY. Comprueba journal/hash/fechas/huecos, singleton, tabla legacy,
+tipo/null/default de columnas y definición exacta/tabla/validez de índices. Drift,
+DDL parcial, singleton duplicado, índice parcial inesperado o tabla legacy ausente
+bloquean readiness. No marca migraciones como aplicadas ni modifica DB.
+
+Verificación final del candidato (2026-11-14):
+
+- `WALLET_TEST_WORKERS=1 npm run check`: exit 0; formato, lint, **99 archivos /
+  727 tests**, build y spec. `/tmp/wallet-package3-check4.log`.
+- `WALLET_TEST_WORKERS=1 npm run sandbox:check`: exit 0; **10 / 104**.
+  `/tmp/wallet-package3-sandbox.log`.
+- Smoke API real sobre PGlite sintético: record create/edit/reload, perfil revocable
+  off/lock-all503, analytics y refresh, deuda/retry idempotente, tarjeta/summary,
+  backup/restore/reload. Todo PASS; servidor detenido200.
+  `/tmp/wallet-package3-qa-smoke.log` y `qa-server.log`.
+- Ensayo cruzado con código exacto main098cb9d extraído en
+  `/tmp/wallet-package3-previous-main`: preflight acepta sólo0022 pendiente y luego
+  schema/journal exactos; backup antiguo preservado; main anterior lee/escribe sobre
+  0022; restore candidato→lector anterior y restore anterior→lector candidato sin
+  pérdida, comparando colecciones por identidad. Se conserva esquema al rollback.
+  `/tmp/wallet-package3-rollback.mts` y `.log`; sólo fixtures sintéticos.
+- Revisiones independientes del núcleo y resto completadas. Regresiones RED→GREEN
+  cubren offsets, tags archivados, drift de tipo/null/default, índices en otra
+  tabla/hash/parciales y ausencia de tabla legacy. Sesión default validada sin DB;
+  restore no reduce versión ni importa contadores desde JSON. Sin hallazgos abiertos.
+- GitHub CLI autenticado con cuenta existente. No cambió credenciales ni permisos.
+  El navegador sigue desconectado: inventario devuelve
+  `Browsers: Error: transport closed before response`; terminal/hostname responden.
+  No se repitió navegación incierta ni se reinició la HP.
+
+**Puerta pendiente y orden exacto:**
+
+1. Confirmar hostname/ID de Neon productivo con un origen independiente de `.env`;
+   se solicitó sólo hostname/ID, nunca URL con credenciales. Las dos env locales
+   coinciden entre sí, pero eso no demuestra destino productivo. Vercel no permite
+   readback de DATABASE_URL sensible. No se conectó a Neon ni se consultaron filas.
+2. Ejecutar `npm run db:preflight -- --env-file .env.local
+--expected-endpoint-sha256 <huella-independientemente-verificada>`. Confirmar
+   database path, journal real y únicamente0022 pendiente; si hay versiones
+   históricas pendientes/drift/duplicados, detenerse y preparar secuencia concreta.
+3. Verificar recuperación disponible del destino sin copiar datos reales (metadata
+   de recuperación/backup del proveedor y ensayo sintético ya realizado). Usar
+   staging sólo si ya existe, está autorizado y no contiene datos reales. No crear
+   ramas con copia real ni cambiar planes/settings/costos. No aplicar aún0022.
+4. Tras cerrar esos guards, aplicar exclusivamente migración compatible autorizada,
+   volver a preflight y confirmar baselineAlreadyApplied. Main anterior es compatible
+   con esta ampliación. No ejecutar drops ni activar secretos/revocación.
+5. Abrir **un único tercer PR borrador** de esta rama contra main, verificar CI y
+   preview del SHA exacto, revisión, ready y merge normal con guard del head.
+   Confirmar CI main, SHA, READY y alias; smoke GET sin sesión. Avisar cada merge.
+   No publicar código dependiente de0022 mientras siga pendiente de aplicar/verificar.
+
+Producción sigue sin cambios en `098cb9d`: Vercel
+`dpl_2RxVjScoifHo73AqkRsb4LbvP85s`, READY; alias
+`wallet-web-personal.vercel.app` y URL concreta
+`wallet-web-personal-f0utbalq2.vercel.app`, metadata revalidada. Smoke sin sesión:
+raíz200, health401 UNAUTHORIZED, summary anidado401 UNAUTHORIZED. No unlock ni
+bootstrap productivos. Sin nuevo PR, push, migración, despliegue o cambio de env.
+
+Apps Script sigue intacto. Paquete5 entregará código/bundle, SHA, compatibilidad
+script viejo/API nueva y estabilidad de idempotencia; avisar antes de editar Head
+en Google Chrome. Guardar puede activar processPendingEmails; no ejecutar lotes
+reales ni cambiar triggers. Restan paquetes4 (cliente/vistas y activaciones de
+archivo compatibles) y5 (ingesta/shared). El refactor íntegro no está terminado.
