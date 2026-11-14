@@ -23,6 +23,7 @@ const financial = [
   "card-statements",
   "card-records",
   "card-payments",
+  "card-ledger",
   "attention",
 ] as const;
 const catalog = ["reference", "analytics", "account-balances", "goal-progress"] as const;
@@ -34,6 +35,7 @@ const card = [
   "card-statements",
   "card-records",
   "card-payments",
+  "card-ledger",
   "attention",
 ] as const;
 /** Adding a contract mutation requires an explicit cache policy at compile time. */

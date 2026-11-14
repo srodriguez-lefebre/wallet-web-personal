@@ -531,3 +531,10 @@ Las lecturas `GET /api/analytics/details` y `GET /api/analytics/balance-trend`
 devuelven series de comparación por calendario y comercios agregados. Aceptan la
 zona horaria del navegador y mantienen separadas las conversiones congeladas de
 los gastos y las cotizaciones históricas usadas por presupuestos en otra moneda.
+
+Cards dispone de `GET /api/cards/agenda` (deuda por resumen y urgencia en la zona
+horaria indicada), `GET /api/cards/:id/category-usage` (uso agregado por categoría)
+y `GET /api/cards/:id/ledger` (movimientos, resúmenes, pagos y asignaciones de una
+tarjeta). Son lecturas sin actualización implícita de estados. El ledger usa un
+batch de sólo lectura y no devuelve movimientos globales de Wallet. Las rutas
+anteriores siguen disponibles para los consumidores existentes.

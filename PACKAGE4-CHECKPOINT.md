@@ -324,3 +324,30 @@ formato/lint/build/OpenAPI verdes. Log
 excepciones nuevas de lint. Próximo bloque independiente: lecturas agregadas de
 agenda/uso de tarjetas y ledger por tarjeta, y metadata suficiente de referencia
 para conectar Query sin convertir una página parcial en saldos o totales.
+
+Commit de presentación `398010fdc634316aea86dd0a8aebc7b6f3fc2146` confirmado en GitHub.
+
+## Task 2b · lecturas Cards preparadas
+
+Rutas aditivas cards.agenda, cards.categoryUsage y cards.ledger, sin migraciones.
+Agenda y uso por categoría se agregan en SQL, conservando reembolsos FIFO,
+conversiones congeladas, compras legacy no duplicadas y categorías descendientes.
+Agenda ignora pagos futuros, calcula días con la zona horaria del viewer, incluye
+tarjetas archivadas y no confía en flags de estado desactualizados. Ledger carga
+sólo una tarjeta en un batch REPEATABLE READ / READ ONLY; no envía records de Wallet
+y sólo incluye asignaciones de pagos activos. Todos los handlers comparten ctx.db.
+
+RED por módulo faltante → GREEN repositorio 4/4 comparando con las fórmulas
+anteriores. HTTP real sintético y MSW/Query: 3 archivos / 15 pruebas verdes en
+`/tmp/wallet-package4-card-read-http-query.log`. Comprueba que editar Cards refresca
+el ledger activo y que editar settings no refetchea esa historia. TypeScript y
+lint exit 0. OpenAPI regenerado. El check completo está en
+`/tmp/wallet-package4-card-read-check.log` y `.status`.
+Los consumidores de estas rutas aún deben integrarse en la app; WalletSync sigue
+activo. No se modificaron datos reales, sesiones, secretos, producción o Apps Script.
+
+El preview de `398010f` quedó READY `dpl_9xTnAsp7kuv3z3X4suaUVhPFw5Z7`.
+Check final Cards exit 0: 114 archivos / 814 pruebas, formato/lint/build/OpenAPI
+verdes, registrado en
+`/tmp/wallet-package4-card-read-check.log` y `.status`. Continuar con metadata de
+referencia y filtros completos de Records antes de conectar las pantallas a Query.

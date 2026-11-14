@@ -343,3 +343,50 @@ test("editing and undoing a goal expense refreshes balances and progress across 
     reload.clear();
   }
 });
+
+test("card agenda, category usage and ledger cross real HTTP without loading the wallet snapshot", async () => {
+  token = (await client["auth.unlock"]({ body: { token: LOCAL_ACCESS_CODE } })).token;
+  const category = await client["categories.create"]({
+    body: { name: "Synthetic card read category", color: "#123456", icon: "tag" },
+  });
+  const card = await client["cards.create"]({
+    body: {
+      name: "Synthetic card read models",
+      issuer: "Synthetic bank",
+      lastFour: "2468",
+      creditLimit: 1000,
+      limitCurrency: "USD",
+      closingDay: 20,
+      dueDay: 5,
+      color: "#123456",
+      icon: "credit-card",
+      isActive: true,
+    },
+  });
+  const movement = await client["cardRecords.create"]({
+    params: { id: card.id },
+    body: {
+      amount: 30,
+      currency: "USD",
+      amountInLimitCurrency: 30,
+      exchangeRateToLimitCurrency: 1,
+      categoryId: category.id,
+      occurredAt: "2020-01-10T12:00:00.000Z",
+    },
+  });
+  const ledger = await client["cards.ledger"]({ params: { id: card.id } });
+  expect(ledger).not.toHaveProperty("records");
+  expect(ledger.creditCardRecords.map((row) => row.id)).toEqual([movement.id]);
+  expect(ledger.creditCardStatements).toHaveLength(1);
+  expect(ledger.creditCardPayments).toEqual([]);
+  expect(ledger.creditCardPaymentAllocations).toEqual([]);
+  expect(await client["cards.categoryUsage"]({ params: { id: card.id } })).toEqual([
+    { id: category.id, name: category.name, color: category.color, amount: 30 },
+  ]);
+  const agenda = await client["cards.agenda"]({ query: { timeZone: "America/Montevideo" } });
+  expect(agenda.find((row) => row.card.id === card.id)).toMatchObject({
+    dueAmountInLimitCurrency: 30,
+    currencyBreakdown: [{ currency: "USD", amount: 30 }],
+    urgency: "overdue",
+  });
+});

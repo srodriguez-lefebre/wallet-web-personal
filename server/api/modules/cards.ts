@@ -1,5 +1,10 @@
 import { getCreditCardSummary } from "../../db/cards/summary.js";
 import {
+  getCardCategoryUsage,
+  getCardLedger,
+  getCardStatementAgenda,
+} from "../../db/cards/read-models.js";
+import {
   archiveCreditCard,
   createCreditCard,
   createCreditCardPayment,
@@ -18,6 +23,9 @@ import { deleted, found } from "./helpers.js";
 
 import type { HandlerMap } from "../handler-types.js";
 export const cardsHandlers = {
+  "cards.agenda": (ctx, { query }) => getCardStatementAgenda(ctx.db, query, ctx.now),
+  "cards.categoryUsage": (ctx, { params }) => getCardCategoryUsage(ctx.db, params.id, ctx.now),
+  "cards.ledger": (ctx, { params }) => getCardLedger(ctx.db, params.id),
   "cards.refreshStatements": async (ctx) => {
     await ensureCreditCardStatements(ctx.db);
     return { refreshed: true };
@@ -50,6 +58,9 @@ export const cardsHandlers = {
 } satisfies Pick<
   HandlerMap,
   | "cards.refreshStatements"
+  | "cards.agenda"
+  | "cards.categoryUsage"
+  | "cards.ledger"
   | "cards.list"
   | "cards.create"
   | "cards.patch"

@@ -8,6 +8,7 @@ import { createWalletClient } from "./api-client";
 import { createWalletMutations } from "./mutations";
 import {
   createWalletQueryClient,
+  cardLedgerQueryOptions,
   ensureWalletBootstrap,
   recordsQueryOptions,
   referenceQueryOptions,
@@ -168,4 +169,48 @@ test("an initial stale read cannot overwrite canonical reference after a mutatio
   } finally {
     release();
   }
+});
+
+test("card mutations refresh their active ledger while settings leave card history cached", async () => {
+  let reads = 0;
+  const ledger = {
+    creditCardRecords: [],
+    creditCardStatements: [],
+    creditCardPayments: [],
+    creditCardPaymentAllocations: [],
+  };
+  const card = {
+    id,
+    name: "Synthetic card",
+    issuer: "Synthetic bank",
+    lastFour: "1234",
+    creditLimit: 1000,
+    limitCurrency: "UYU",
+    closingDay: 20,
+    dueDay: 5,
+    color: "#123456",
+    icon: "credit-card",
+    isActive: true,
+  };
+  server.use(
+    http.get(`http://test.local/api/cards/${id}/ledger`, () => {
+      reads++;
+      return response(ledger);
+    }),
+    http.patch("http://test.local/api/settings", () =>
+      response({ ...reference.settings, theme: "dark" }),
+    ),
+    http.patch(`http://test.local/api/cards/${id}`, () =>
+      response({ ...card, name: "Synthetic updated card" }),
+    ),
+  );
+  const value = cache(),
+    options = cardLedgerQueryOptions(client, id);
+  await value.fetchQuery(options);
+  unsubscribers.push(new QueryObserver(value, options).subscribe(() => {}));
+  const mutations = createWalletMutations(client, value);
+  await mutations["settings.patch"]({ body: { theme: "dark" } });
+  expect(reads).toBe(1);
+  await mutations["cards.patch"]({ params: { id }, body: { name: "Synthetic updated card" } });
+  expect(reads).toBe(2);
 });

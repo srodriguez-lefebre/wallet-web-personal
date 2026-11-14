@@ -97,6 +97,24 @@ export function cardSummaryQueryOptions(client: WalletClient, id: string) {
     queryFn: ({ signal }) => client["cards.summary"]({ params: { id }, signal }),
   });
 }
+export function cardAgendaQueryOptions(client: WalletClient, zone = timeZone()) {
+  return queryOptions({
+    queryKey: ["attention", "cards", zone] as const,
+    queryFn: ({ signal }) => client["cards.agenda"]({ query: { timeZone: zone }, signal }),
+  });
+}
+export function cardCategoryUsageQueryOptions(client: WalletClient, id: string) {
+  return queryOptions({
+    queryKey: ["card-summary", id, "categories"] as const,
+    queryFn: ({ signal }) => client["cards.categoryUsage"]({ params: { id }, signal }),
+  });
+}
+export function cardLedgerQueryOptions(client: WalletClient, id: string) {
+  return queryOptions({
+    queryKey: ["card-ledger", id] as const,
+    queryFn: ({ signal }) => client["cards.ledger"]({ params: { id }, signal }),
+  });
+}
 export function reportDetailsQueryOptions(
   client: WalletClient,
   query: NonNullable<ClientInput<"analytics.details">["query"]>,

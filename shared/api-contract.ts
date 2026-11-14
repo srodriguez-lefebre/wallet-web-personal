@@ -2,6 +2,12 @@ import { z, type ZodType } from "zod";
 
 import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
+  cardAgendaQuerySchema,
+  cardAgendaSchema,
+  cardCategoryUsageSchema,
+  cardLedgerSchema,
+} from "./card-read-contract.js";
+import {
   balanceTrendQuerySchema,
   balanceTrendSchema,
   reportDetailsSchema,
@@ -115,6 +121,9 @@ const currencyAmounts = z.array(
   z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
 );
 const specialResponses = {
+  "cards.agenda": cardAgendaSchema,
+  "cards.categoryUsage": cardCategoryUsageSchema,
+  "cards.ledger": cardLedgerSchema,
   "analytics.accountBalances": accountBalanceMetricsSchema,
   "analytics.goalProgress": goalProgressMetricsSchema,
   "wallet.reference": walletReferenceSchema,
@@ -614,6 +623,39 @@ export const apiOperations = [
     summary: "Atomically import up to 200 validated records",
   }),
 
+  op({
+    operationId: "cards.agenda",
+    method: "GET",
+    path: "/api/cards/agenda",
+    auth: "session",
+    stability: "stable",
+    query: cardAgendaQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read outstanding statement balances and calendar urgency without history",
+  }),
+  op({
+    operationId: "cards.categoryUsage",
+    method: "GET",
+    path: "/api/cards/{id}/category-usage",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate frozen card purchases by root category",
+  }),
+  op({
+    operationId: "cards.ledger",
+    method: "GET",
+    path: "/api/cards/{id}/ledger",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read one card's movements, statements, payments and allocations",
+  }),
   op({
     operationId: "cards.list",
     method: "GET",
