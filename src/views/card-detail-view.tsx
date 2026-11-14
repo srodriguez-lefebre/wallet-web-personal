@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
 import { useActionToast } from "@/lib/use-action-toast";
+import { localDateInput } from "@/lib/date-input";
 import { useWallet } from "@/providers/wallet-provider";
 import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
 import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
@@ -143,7 +144,7 @@ export function CardDetailView() {
     setCategoryId(movement.categoryId);
     setCounterparty(movement.counterpartyName ?? "");
     setNote(movement.note ?? "");
-    setDate(movement.occurredAt.slice(0, 10));
+    setDate(localDateInput(movement.occurredAt));
     setImpactAccount(movement.accountImpactAtCreation);
     setAccountId(movement.accountId ?? "");
     setAccountAmount(
@@ -181,7 +182,9 @@ export function CardDetailView() {
       accountId: impactAccount ? accountId : undefined,
       accountAmount: impactAccount ? Number(accountAmount) : undefined,
       accountImpactAtCreation: impactAccount,
-      occurredAt: new Date(`${date}T12:00:00`).toISOString(),
+      occurredAt: original && date === localDateInput(original.occurredAt)
+        ? original.occurredAt
+        : new Date(`${date}T12:00:00`).toISOString(),
     };
     await runAction(
       () =>
@@ -689,7 +692,7 @@ export function CardDetailView() {
                         "Card movement"}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {movement.occurredAt.slice(0, 10)} ·{" "}
+                      {format(parseISO(movement.occurredAt), "dd/MM/yyyy")} ·{" "}
                       {movement.walletRecordId
                         ? "Linked to Records"
                         : "Card only"}
@@ -762,7 +765,7 @@ export function CardDetailView() {
                     {formatMoney(payment.amount, payment.currency)}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {payment.occurredAt.slice(0, 10)} ·{" "}
+                    {format(parseISO(payment.occurredAt), "dd/MM/yyyy")} ·{" "}
                     {payment.accountId ? "Account" : "External"}
                   </p>
                 </div>

@@ -23,6 +23,7 @@ export function GlobalSearch() {
     clearRecordFilters,
     setRecordFilters,
     setAllPeriod,
+    openReviewQueue,
     requestNewRecord,
     isAllHistoryComplete,
   } = useWallet();
@@ -67,9 +68,12 @@ export function GlobalSearch() {
       requestNewRecord();
       navigate("/records");
     } else if (action.type === "records") {
-      clearRecordFilters();
-      setAllPeriod();
-      setRecordFilters(action.filters);
+      if (action.filters.paymentStatus === "needs_review") openReviewQueue();
+      else {
+        clearRecordFilters();
+        setAllPeriod();
+        setRecordFilters(action.filters);
+      }
       navigate("/records");
     } else {
       navigate(action.href);

@@ -66,6 +66,9 @@ interface WalletContextValue {
   recordFilters: RecordFilters;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
+  isReviewQueueOpen: boolean;
+  openReviewQueue: () => void;
+  closeReviewQueue: () => void;
   addAccount: (account: Omit<Account, "id">) => Promise<string>;
   updateAccount: (
     accountId: string,
@@ -383,6 +386,39 @@ export function WalletProvider({ children }: PropsWithChildren) {
       accountId: defaultRecordAccountId(dataset),
     }),
   );
+  // Provider scope keeps the return context when Records unmounts on navigation.
+  const [reviewReturnContext, setReviewReturnContext] = useState<{
+    filters: RecordFilters;
+    month: string;
+    mode: PeriodMode;
+    range: DateRange;
+  } | null>(null);
+
+  function openReviewQueue() {
+    // Manual Needs review is still a normal filter. Only an existing return
+    // context identifies the global queue and protects its original snapshot.
+    setReviewReturnContext((previous) => previous ?? {
+      filters: { ...recordFilters },
+      month: selectedMonth,
+      mode: selectedPeriodMode,
+      range: { ...customDateRange },
+    });
+    setRecordFiltersState({ type: "all", paymentStatus: "needs_review" });
+    setSelectedPeriodMode("all");
+  }
+
+  function closeReviewQueue() {
+    const previous = reviewReturnContext;
+    setReviewReturnContext(null);
+    if (previous) {
+      setRecordFiltersState(previous.filters);
+      setSelectedMonthState(previous.month);
+      setSelectedPeriodMode(previous.mode);
+      setCustomDateRangeState(previous.range);
+    } else {
+      setRecordFiltersState((current) => ({ ...current, paymentStatus: "all" }));
+    }
+  }
 
   function setSelectedMonth(month: string) {
     setSelectedMonthState(month);
@@ -534,6 +570,8 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }, [dataset.records, selectedMonth, selectedPeriodMode]);
 
   function setRecordFilters(filters: RecordFilters) {
+    if ("paymentStatus" in filters && filters.paymentStatus !== "needs_review")
+      setReviewReturnContext(null);
     setRecordFiltersState((current) => ({
       ...current,
       ...filters,
@@ -541,10 +579,12 @@ export function WalletProvider({ children }: PropsWithChildren) {
   }
 
   function clearRecordFilters() {
+    setReviewReturnContext(null);
     setRecordFiltersState({ type: "all" });
   }
 
   function requestNewRecord(templateId?: string) {
+    setReviewReturnContext(null);
     setRecordFiltersState({
       type: "all",
       accountId: defaultRecordAccountId(dataset),
@@ -864,6 +904,9 @@ export function WalletProvider({ children }: PropsWithChildren) {
         recordFilters,
         setRecordFilters,
         clearRecordFilters,
+        isReviewQueueOpen: reviewReturnContext !== null,
+        openReviewQueue,
+        closeReviewQueue,
         addAccount,
         updateAccount,
         deleteAccount,

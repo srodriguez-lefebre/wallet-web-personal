@@ -38,8 +38,11 @@ comportamiento desplegado.
   guardado de cambios con protección frente a doble clic y reintentos parciales.
 - Tarjetas: apertura del estado exacto desde las notificaciones y advertencias
   al 80%/100% del límite.
-- Movimientos: cola de revisión independiente del período; un segundo clic
-  desactiva el filtro de revisión. Duplicación como
+- Movimientos: cola de revisión global, independiente del período y los filtros;
+  un segundo clic, quitar su filtro de estado o elegir Status > All recupera el
+  período y los filtros anteriores, incluso Needs review manual y después de
+  navegar a otra vista. Clear all y Reset siguen
+  limpiando los filtros de forma explícita. Duplicación como
   borrador nuevo, con fecha y cotizaciones actuales, sin copiar pagos de deuda.
 - Análisis: Top merchants después de los cuatro bloques originales; diez
   comercios principales, frecuencia e importe medio según el período
@@ -105,6 +108,24 @@ El sandbox aplica las migraciones sólo a su base local al iniciar.
 - Vitest
 
 ## Setup Local
+
+Para reproducir el QA con datos completamente sintéticos, sin respaldo personal:
+
+```powershell
+npx tsx scripts/sandbox/qa.ts
+```
+
+Abrir http://127.0.0.1:4175 y usar `wallet-local-test`. Este entorno aplica las
+migraciones a PostgreSQL en memoria y usa la API real. No carga `.env`, no toca
+`.local-wallet/` y bloquea conexiones externas. Incluye cuentas, categorías con
+scroll, pendientes nuevos/anteriores y tarjetas con/sin estado pendiente. Sus
+cambios sobreviven a una recarga del navegador y desaparecen al detenerlo:
+
+```powershell
+curl.exe -X POST http://127.0.0.1:4175/__qa/stop
+```
+
+El recorrido y los resultados del QA están en [QA-REVIEW.md](QA-REVIEW.md).
 
 Para pruebas aisladas con un respaldo personal, usar el sandbox:
 
@@ -205,6 +226,12 @@ El CLI puede pedir login la primera vez. Una vez levantado, entrar a
 `http://localhost:3001` y desbloquear con `API_TOKEN`.
 
 ## Tarjetas de credito
+
+Las fechas de compras y pagos se presentan en la zona local del navegador,
+igual que en Movimientos. Las fechas sin hora conservan su día de calendario.
+Tarjetas separa el ciclo abierto de los estados cerrados con saldo pendiente;
+cada vencimiento pendiente abre su estado exacto. El saldo total se identifica
+como Outstanding y no se confunde con un vencimiento del ciclo abierto.
 
 La vista `/cards` administra tarjetas con un unico limite y moneda de limite,
 dias fijos de cierre y vencimiento. Sus consumos se registran sin afectar una

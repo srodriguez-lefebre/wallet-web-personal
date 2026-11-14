@@ -4,15 +4,21 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { mockWalletData } from "../../shared/mock-data";
 import { CardDetailView } from "./card-detail-view";
+import { CardsView } from "./cards-view";
 import { LimitUsageAlert } from "../components/wallet/limit-usage-alert";
 
 let dataset = structuredClone(mockWalletData);
 const payment = vi.hoisted(() => vi.fn());
+const updateMovement = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () => ({
     dataset,
     isAllHistoryComplete: true,
     payCreditCardStatement: payment,
+    updateCreditCardRecord: updateMovement,
+    selectedMonth: "2026-11",
+    selectedPeriodMode: "month",
+    selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
   }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
@@ -83,6 +89,8 @@ afterEach(async () => {
   if (tree) await act(async () => tree?.unmount());
   tree = undefined;
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 async function detail(query = "") {
   await act(async () => {
@@ -95,6 +103,113 @@ async function detail(query = "") {
     );
   });
 }
+
+test("purchase and payment history use Uruguay's local day and preserve calendar dates", async () => {
+  vi.stubEnv("TZ", "America/Montevideo");
+  dataset.creditCardRecords[0].occurredAt = "2026-11-13T02:38:00Z";
+  dataset.creditCardRecords[1].occurredAt = "2026-11-13";
+  dataset.creditCardPayments = [
+    {
+      id: "night-payment",
+      creditCardId: "card",
+      amount: 1,
+      currency: "USD",
+      amountInLimitCurrency: 1,
+      occurredAt: "2026-11-13T02:38:00Z",
+    },
+  ];
+  await detail();
+  const dates = tree!.root
+    .findAllByType("p")
+    .map((p) => p.children.filter((c) => typeof c === "string").join(""));
+  expect(dates.filter((text) => text.startsWith("12/11/2026"))).toHaveLength(2);
+  expect(dates.filter((text) => text.startsWith("13/11/2026"))).toHaveLength(1);
+});
+
+test("Cards distinguishes the open cycle from actual closed statement debt", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-11-13T15:00:00Z"));
+  dataset.creditCards[0].closingDay = 3;
+  dataset.creditCards[0].dueDay = 12;
+  dataset.creditCardStatements = [];
+  dataset.creditCardRecords = [];
+  await act(async () => {
+    tree = create(
+      <MemoryRouter>
+        <CardsView />
+      </MemoryRouter>,
+    );
+  });
+  let output = JSON.stringify(tree!.toJSON());
+  expect(output).toContain("Current cycle");
+  expect(output).toContain("3 December 2026");
+  expect(output).toContain("No closed statement pending");
+  expect(output).not.toContain("12 November 2026");
+  dataset = {
+    ...dataset,
+    creditCardStatements: [
+      {
+        id: "unpaid",
+        creditCardId: "card",
+        cycleStart: "2026-10-04",
+        cycleEnd: "2026-11-03",
+        closedAt: "2026-11-03",
+        dueAt: "2026-11-12",
+        status: "paid",
+      },
+    ],
+    creditCardRecords: [
+      {
+        id: "unpaid-purchase",
+        creditCardId: "card",
+        statementId: "unpaid",
+        kind: "purchase",
+        amount: 100,
+        currency: "USD",
+        amountInLimitCurrency: 100,
+        exchangeRateToLimitCurrency: 1,
+        categoryId: dataset.categories[0].id,
+        accountImpactAtCreation: false,
+        occurredAt: "2026-10-20",
+      },
+    ],
+  };
+  await act(async () =>
+    tree!.update(
+      <MemoryRouter>
+        <CardsView />
+      </MemoryRouter>,
+    ),
+  );
+  output = JSON.stringify(tree!.toJSON());
+  expect(output).toContain("Statement closed");
+  expect(output).toContain("3 November 2026");
+  expect(output).toContain("12 November 2026");
+  expect(output).toContain("Overdue");
+  expect(output).not.toContain("No closed statement pending");
+});
+
+test.each(["2026-11-13T02:38:00.123Z", "2026-11-13"])(
+  "editing a movement preserves an unchanged original date: %s",
+  async (occurredAt) => {
+    vi.stubEnv("TZ", "America/Montevideo");
+    dataset.creditCardRecords = [
+      { ...dataset.creditCardRecords[0], occurredAt },
+    ];
+    dataset.creditCardStatements = [];
+    await detail();
+    await act(async () =>
+      tree!.root.findByProps({ title: "Edit" }).props.onClick(),
+    );
+    expect(tree!.root.findByProps({ type: "date" }).props.value).toBe(
+      occurredAt.includes("T") ? "2026-11-12" : "2026-11-13",
+    );
+    await act(async () =>
+      tree!.root.findByType("form").props.onSubmit({ preventDefault() {} }),
+    );
+    expect(updateMovement.mock.calls[0][2].occurredAt).toBe(occurredAt);
+  },
+);
 test("detail defaults to the oldest actual debt and honors the exact statement query", async () => {
   await detail();
   expect(

@@ -164,7 +164,7 @@ function CategoryFilterSelect({
           align="start"
           sideOffset={4}
           collisionPadding={12}
-          className="z-50 max-h-[min(18rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          className="z-50 max-h-[min(18rem,var(--radix-popover-content-available-height))] w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] overflow-y-auto overscroll-contain rounded-md border bg-card p-1 text-card-foreground shadow-md"
         >
           <button
             type="button"
@@ -271,7 +271,9 @@ export function RecordsView() {
     recordFilters,
     setRecordFilters,
     clearRecordFilters,
-    setAllPeriod,
+    isReviewQueueOpen,
+    openReviewQueue,
+    closeReviewQueue,
     addRecord,
     updateRecord,
     deleteRecord,
@@ -290,6 +292,7 @@ export function RecordsView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [templateNotice, setTemplateNotice] = useState("");
   const [showNoteFilter, setShowNoteFilter] = useState(false);
+  const focusNoteOnOpen = useRef(false);
   const [reviewUndo, setReviewUndo] = useState<{
     before: WalletRecord;
     saved: WalletRecord;
@@ -852,14 +855,12 @@ export function RecordsView() {
     setOccurredAtLocal(toDateTimeLocal(now));
   }
 
-  function openReviewQueue() {
-    if (recordFilters.paymentStatus === "needs_review") {
-      setRecordFilters({ paymentStatus: "all" });
+  function toggleReviewQueue() {
+    if (isReviewQueueOpen) {
+      closeReviewQueue();
       return;
     }
-    clearRecordFilters();
-    setAllPeriod();
-    setRecordFilters({ paymentStatus: "needs_review" });
+    openReviewQueue();
   }
 
   async function saveReview(record: WalletRecord, patch: RecordPatch) {
@@ -1185,9 +1186,9 @@ export function RecordsView() {
       >
         <Button
           variant="outline"
-          onClick={openReviewQueue}
+          onClick={toggleReviewQueue}
           aria-label="Open review queue"
-          aria-pressed={recordFilters.paymentStatus === "needs_review"}
+          aria-pressed={isReviewQueueOpen}
         >
           Needs review{" "}
           {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
@@ -1201,8 +1202,7 @@ export function RecordsView() {
         </Button>
       </PageHeader>
 
-      {selectedPeriodMode === "all" &&
-        recordFilters.paymentStatus === "needs_review" && (
+      {selectedPeriodMode === "all" && isReviewQueueOpen && (
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <p className="text-sm text-muted-foreground" role="status">
               Review queue · All dates
@@ -1926,11 +1926,13 @@ export function RecordsView() {
             </select>
             <select
               value={recordFilters.paymentStatus ?? "all"}
-              onChange={(event) =>
-                setRecordFilters({
+              onChange={(event) => {
+                if (isReviewQueueOpen && event.target.value === "all")
+                  closeReviewQueue();
+                else setRecordFilters({
                   paymentStatus: event.target.value as PaymentStatus | "all",
-                })
-              }
+                });
+              }}
               className={fieldClassName}
             >
               <option value="all">All statuses</option>
@@ -1981,6 +1983,12 @@ export function RecordsView() {
               <label className="block space-y-1 text-sm">
                 <span>Note contains</span>
                 <textarea
+                  ref={(element) => {
+                    if (element && focusNoteOnOpen.current) {
+                      element.focus();
+                      focusNoteOnOpen.current = false;
+                    }
+                  }}
                   rows={4}
                   value={recordFilters.note ?? ""}
                   onChange={(event) =>
@@ -1994,7 +2002,10 @@ export function RecordsView() {
               <Button
                 className="w-full"
                 variant="outline"
-                onClick={() => setShowNoteFilter(true)}
+                onClick={() => {
+                  focusNoteOnOpen.current = true;
+                  setShowNoteFilter(true);
+                }}
               >
                 <Plus className="h-4 w-4" /> Add filter · Note
               </Button>
@@ -2046,7 +2057,9 @@ export function RecordsView() {
                     aria-label={`Remove ${label} filter`}
                     title={value}
                     onClick={() => {
-                      setRecordFilters({ [key]: undefined });
+                      if (key === "paymentStatus" && isReviewQueueOpen)
+                        closeReviewQueue();
+                      else setRecordFilters({ [key]: undefined });
                       if (key === "note") setShowNoteFilter(false);
                     }}
                   >
