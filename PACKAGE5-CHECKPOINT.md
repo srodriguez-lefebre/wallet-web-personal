@@ -1,7 +1,7 @@
-# Paquete 5 - revisión corregida, release pendiente
+# Paquete 5 - revisión y migración verificadas; checkpoint previo al merge
 
 Base: `2b393e60a57cb79b77e7713d2b023eef01dd0fb4` (PR #12 ya desplegado).
-Rama única: `refactor/05-ingestion-shared`. Queda un solo PR autorizado.
+Rama única: `refactor/05-ingestion-shared`. PR final único: [#13](https://github.com/srodriguez-lefebre/wallet-web-personal/pull/13), abierto en borrador.
 El checkout original de la G14 se conserva; el trabajo vive en su worktree aislado.
 
 ## Implementación y evidencia
@@ -18,7 +18,7 @@ El checkout original de la G14 se conserva; el trabajo vive en su worktree aisla
 - Migrador específico de 0023 con DDL y journal atómicos, guard del predecesor,
   comprobación posterior y recuperación de una respuesta perdida sin reproducir DDL.
 
-Checks locales completos: 135 archivos, 914 pruebas aprobadas, una omisión de
+Checks locales completos posteriores a la revisión: 136 archivos, 929 pruebas aprobadas, una omisión de
 plataforma Windows; formato, lint, `mail:check`, tipos, build y OpenAPI aprobados.
 Sandbox: 11 archivos, 108 aprobadas y la misma omisión. Se usaron datos sintéticos.
 La revisión independiente de toda la rama y sus correcciones preceden al merge.
@@ -35,8 +35,13 @@ posteriores se registran en la evidencia de release. No quedaron menores diferid
 El destino Neon fue cotejado con su consola autenticada y la configuración local.
 El preflight de sólo lectura confirmó 23 entradas anteriores, hashes históricos
 reconocidos y únicamente 0023 pendiente; columnas e índices de baseline sin deriva.
-Hasta este checkpoint no se aplicó DDL real ni se hizo bootstrap productivo.
-La migración, CI, preview, merge y alias productivo requieren sus evidencias posteriores.
+0023 se aplicó con el migrador atómico revisado y se verificó de nuevo por metadatos:
+24 filas de journal, prefijo anterior intacto, ninguna migración pendiente,
+columnas e índices sin deriva y cuerpos de ambas funciones coincidentes.
+Hash: `49ba968f005baa6866699ba7cf0450e5ead6da63f1cd6db5d386f42cab0cfd8c`.
+No se hizo bootstrap ni se ejecutaron pruebas o importadores sobre datos productivos.
+En este checkpoint quedan CI, preview del SHA final, merge y alias productivo;
+su evidencia posterior se registra en el PR y en el informe de cierre.
 
 ## Decisiones y costos
 
