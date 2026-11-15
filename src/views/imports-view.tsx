@@ -1,3 +1,4 @@
+import { selectableCategory } from "@shared/categories";
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +8,7 @@ import { walletBackupSchema } from "@shared/schemas";
 
 import type { WalletBackup } from "@shared/types";
 
+import { CategoryField } from "@/components/ui/form/wallet-fields";
 import { useDraftFields } from "@/hooks/use-draft-fields";
 import { Input } from "@/components/ui/form/controls";
 import { finishAction } from "@/lib/async-event";
@@ -62,10 +64,11 @@ export function ImportsView() {
   const [backup, setBackup] = useState<WalletBackup | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const activeAccountId = accountId || dataset.accounts.find((a) => a.isActive)?.id || "";
-  const expenseCategoryId = expenseId || dataset.categories[0]?.id || "";
+  const expenseCategoryId = expenseId || dataset.categories.find(selectableCategory)?.id || "";
   const incomeCategoryId =
     incomeId ||
-    dataset.categories.find((c) => c.name.toLowerCase() === "income")?.id ||
+    dataset.categories.find((c) => selectableCategory(c) && c.name.toLowerCase() === "income")
+      ?.id ||
     expenseCategoryId;
   const preview = useMemo(() => {
     try {
@@ -261,36 +264,20 @@ export function ImportsView() {
                     ))}
                 </select>
               </label>
-              <label className="block">
-                Default expense category
-                <select
-                  disabled={busy}
-                  className="block w-full rounded border bg-background p-2"
-                  value={expenseCategoryId}
-                  onChange={(event) => setExpenseId(event.target.value)}
-                >
-                  {dataset.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                Default income category
-                <select
-                  disabled={busy}
-                  className="block w-full rounded border bg-background p-2"
-                  value={incomeCategoryId}
-                  onChange={(event) => setIncomeId(event.target.value)}
-                >
-                  {dataset.categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <CategoryField
+                label="Default expense category"
+                disabled={busy}
+                categories={dataset.categories}
+                value={expenseCategoryId}
+                onChange={setExpenseId}
+              />
+              <CategoryField
+                label="Default income category"
+                disabled={busy}
+                categories={dataset.categories}
+                value={incomeCategoryId}
+                onChange={setIncomeId}
+              />
               <p className="text-sm text-muted-foreground">
                 CSV currency, exchangeRateToPrimary and accountAmount are preserved. Supply missing
                 conversion values when no historical rate is available. Exported account/category

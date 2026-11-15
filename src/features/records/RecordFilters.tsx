@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/form/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CategoryFilterSelect } from "@/components/wallet/category-filter-select";
+import { CategoryCombobox } from "@/components/ui/form/category-combobox";
 
 export function RecordFilters({
   model,
@@ -116,10 +116,13 @@ export function RecordFilters({
             </option>
           ))}
         </select>
-        <CategoryFilterSelect
+        <CategoryCombobox
           categories={categories}
           value={recordFilters.categoryId}
-          onChange={(categoryId) => setRecordFilters({ categoryId })}
+          allowEmpty
+          emptyLabel="All categories"
+          filter={() => true}
+          onChange={(categoryId) => setRecordFilters({ categoryId: categoryId || undefined })}
         />
         {showNoteFilter || recordFilters.note ? (
           <label className="block space-y-1 text-sm">

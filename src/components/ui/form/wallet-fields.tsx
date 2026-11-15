@@ -1,12 +1,11 @@
 import { useId } from "react";
 import { currencySchema } from "@shared/schemas";
 
-import { Field, Select, controlClassName } from "./controls";
+import { Field, Select } from "./controls";
+import { CategoryCombobox, type CategoryComboboxProps } from "./category-combobox";
 
 import type { Account, CurrencyCode } from "@shared/types";
 import type { ComponentProps } from "react";
-
-import { CategoryPicker, type CategoryPickerItem } from "@/components/wallet/category-picker";
 
 export function CurrencySelect({
   value,
@@ -53,33 +52,17 @@ export function AccountSelect({
     />
   );
 }
-export function CategoryField<T extends CategoryPickerItem>({
+export function CategoryField({
   label = "Category",
   id,
-  categories,
-  value,
-  onChange,
-  getLabel,
-}: {
-  label?: string;
-  id?: string;
-  categories: T[];
-  value: string;
-  onChange: (value: string) => void;
-  getLabel?: (category: T) => string;
-}) {
-  const generated = useId(),
-    inputId = id ?? generated;
+  className,
+  ...props
+}: CategoryComboboxProps & { className?: string }) {
+  const generated = useId();
+  const inputId = id ?? generated;
   return (
-    <Field label={label} htmlFor={inputId}>
-      <CategoryPicker
-        id={inputId}
-        categories={categories}
-        value={value}
-        onChange={onChange}
-        getLabel={getLabel}
-        inputClassName={controlClassName}
-      />
+    <Field label={label} htmlFor={inputId} className={className}>
+      <CategoryCombobox {...props} id={inputId} label={label} />
     </Field>
   );
 }

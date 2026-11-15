@@ -1,3 +1,4 @@
+import { selectableCategory } from "@shared/categories";
 import { findExchangeRate } from "@shared/money";
 
 import type { RecordTemplate, WalletDataset, WalletRecord } from "@shared/types";
@@ -55,7 +56,8 @@ export function prepareTemplateDraft(
       ? template.destinationAccountId
       : undefined;
   const categoryId =
-    template.categoryId && dataset.categories.some((c) => c.id === template.categoryId)
+    template.categoryId &&
+    dataset.categories.some((c) => c.id === template.categoryId && selectableCategory(c))
       ? template.categoryId
       : undefined;
   const tagId =

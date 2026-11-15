@@ -249,3 +249,10 @@ test("new and duplicated drafts select only today's automatic goal windows", () 
   expect(duplicateDraft(record({ goalIds: [bank] }), data, now).goalAssociations).toEqual(expected);
   expect(emptyDraft(data, new Date("2026-12-01T12:00:00Z")).goalAssociations).toEqual([]);
 });
+
+test("duplicating a historical record requires choosing a new category when its category is protected", () => {
+  const data = dataset();
+  data.categories[0]!.systemKey = "category_eliminated";
+  expect(duplicateDraft(record(), data, now).categoryId).toBe("");
+  expect(draftFromRecord(record()).categoryId).toBe(category);
+});

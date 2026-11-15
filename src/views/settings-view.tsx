@@ -20,6 +20,7 @@ import { useNavigate } from "react-router-dom";
 import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import type { Category, CurrencyCode, Tag } from "@shared/types";
 
+import { CategoryCombobox } from "@/components/ui/form/category-combobox";
 import {
   controlClassName as fieldClassName,
   inlineControlClassName as inlineFieldClassName,
@@ -1034,18 +1035,14 @@ export function SettingsView() {
                   step="0.01"
                   placeholder="Limit"
                 />
-                <select
+                <CategoryCombobox
+                  label="Budget category"
+                  categories={dataset.categories}
                   value={newBudgetCategoryId}
-                  onChange={(event) => setNewBudgetCategoryId(event.target.value)}
-                  className={fieldClassName}
-                >
-                  <option value="">All categories</option>
-                  {dataset.categories.map((category) => (
-                    <option key={category.id} value={category.id}>
-                      {category.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setNewBudgetCategoryId}
+                  allowEmpty
+                  emptyLabel="All categories"
+                />
                 <Button type="submit">
                   <Plus className="h-4 w-4" />
                   Add

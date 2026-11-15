@@ -5,6 +5,7 @@ import { formatMoney } from "@shared/money";
 
 import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
 
+import { CategoryField } from "@/components/ui/form/wallet-fields";
 import { Input } from "@/components/ui/form/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -395,22 +396,14 @@ export function RecordTemplateManager() {
                     </select>
                   </label>
                 ) : (
-                  <label className="space-y-1 text-sm">
-                    Categoría
-                    <select
-                      aria-label="Categoría de plantilla"
-                      className={field}
-                      value={draft.categoryId ?? ""}
-                      onChange={(event) => change("categoryId", event.target.value)}
-                    >
-                      <option value="">Elegir al usarla</option>
-                      {dataset.categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <CategoryField
+                    label="Categoría de plantilla"
+                    categories={dataset.categories}
+                    value={draft.categoryId}
+                    onChange={(value) => change("categoryId", value)}
+                    allowEmpty
+                    emptyLabel="Elegir al usarla"
+                  />
                 )}
                 <label className="space-y-1 text-sm">
                   Medio de pago

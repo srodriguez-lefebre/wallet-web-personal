@@ -5,7 +5,7 @@ import type { RecordPatch } from "@shared/schemas";
 import type { Category, WalletDataset, WalletRecord } from "@shared/types";
 
 import { Button } from "@/components/ui/button";
-import { CategoryFilterSelect } from "@/components/wallet/category-filter-select";
+import { CategoryCombobox } from "@/components/ui/form/category-combobox";
 
 export function ReviewRecordActions({
   record,
@@ -55,15 +55,15 @@ export function ReviewRecordActions({
       <p className="text-sm font-medium">{reason}</p>
       {record.type !== "transfer" && (
         <div className="max-w-sm">
-          <CategoryFilterSelect
+          <CategoryCombobox
             categories={categories}
             value={selectedCategory}
             onChange={(id) => {
-              setSelectedCategory(id);
+              setSelectedCategory(id || undefined);
               setRuleChoice(undefined);
             }}
             label="Review category"
-            emptyLabel="Choose category"
+            disabled={busy}
           />
         </div>
       )}

@@ -37,8 +37,8 @@ vi.mock("@/lib/use-action-toast", () => ({
     runAction: createActionToastRunner(() => {}),
   }),
 }));
-vi.mock("@/components/wallet/category-picker", () => ({
-  CategoryPicker: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
+vi.mock("@/components/ui/form/category-combobox", () => ({
+  CategoryCombobox: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
     <input aria-label="Category" value={value} onChange={(event) => onChange(event.target.value)} />
   ),
 }));
