@@ -362,6 +362,13 @@ OpenAI con las categorías actuales. Las reglas que apuntan a `Unknown expense`
 también permiten consultar OpenAI. Uber, Cabify y Taxi corrigen el antiguo mapeo
 a transporte público; Uber Eats mantiene la categoría de comida.
 
+Archivar un árbol de categorías reasigna sus referencias financieras a
+`Category eliminated` y deriva sus reglas de comercio a `Unknown expense`.
+Así, la ingesta puede volver a clasificar el comercio y conserva la identidad
+que usa para deduplicar correos. Fusionar traslada las reglas al destino.
+El uso por categoría cuenta referencias guardadas, incluidas las archivadas,
+para anticipar el alcance de la operación.
+
 El fallback usa 2048 tokens de salida, razonamiento `low` para modelos GPT-5 y
 un timeout de 30 segundos. Respuestas incompletas, refusals, errores HTTP y
 categorías inválidas mantienen el gasto bajo revisión. Una categoría desconocida

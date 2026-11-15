@@ -1,5 +1,6 @@
 import { and, desc, eq, isNull } from "drizzle-orm";
 
+import { writeCategoryReferences } from "./category-references.js";
 import {
   type BudgetPatch,
   budgetSchema,
@@ -24,17 +25,21 @@ export async function listBudgets(db: Db) {
 }
 
 export async function createBudget(db: Db, input: NewBudget) {
-  const [row] = await db
-    .insert(budgets)
-    .values({
-      ...input,
-      limitAmount: toNumeric(input.limitAmount),
-      categoryId: input.categoryId ?? null,
-      tagId: input.tagId ?? null,
-      accountId: input.accountId ?? null,
-      goalId: input.goalId ?? null,
-    })
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .insert(budgets)
+      .values({
+        ...input,
+        limitAmount: toNumeric(input.limitAmount),
+        categoryId: input.categoryId ?? null,
+        tagId: input.tagId ?? null,
+        accountId: input.accountId ?? null,
+        goalId: input.goalId ?? null,
+      })
+      .returning(),
+  );
   return mapBudget(row);
 }
 
@@ -52,25 +57,29 @@ export async function updateBudget(db: Db, id: string, input: BudgetPatch) {
     "accountId",
     "goalId",
   ]);
-  const [row] = await db
-    .update(budgets)
-    .set({
-      ...changedColumns(input, merged, {
-        name: (row) => row.name,
-        limitAmount: (row) => toNumeric(row.limitAmount),
-        currency: (row) => row.currency,
-        period: (row) => row.period,
-        categoryId: (row) => row.categoryId ?? null,
-        tagId: (row) => row.tagId ?? null,
-        accountId: (row) => row.accountId ?? null,
-        goalId: (row) => row.goalId ?? null,
-        color: (row) => row.color,
-        isActive: (row) => row.isActive,
-      }),
-      updatedAt: new Date(),
-    })
-    .where(and(eq(budgets.id, id), isNull(budgets.deletedAt)))
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .update(budgets)
+      .set({
+        ...changedColumns(input, merged, {
+          name: (row) => row.name,
+          limitAmount: (row) => toNumeric(row.limitAmount),
+          currency: (row) => row.currency,
+          period: (row) => row.period,
+          categoryId: (row) => row.categoryId ?? null,
+          tagId: (row) => row.tagId ?? null,
+          accountId: (row) => row.accountId ?? null,
+          goalId: (row) => row.goalId ?? null,
+          color: (row) => row.color,
+          isActive: (row) => row.isActive,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(budgets.id, id), isNull(budgets.deletedAt)))
+      .returning(),
+  );
   return row ? mapBudget(row) : null;
 }
 
@@ -92,17 +101,21 @@ export async function listInstallmentPlans(db: Db) {
 }
 
 export async function createInstallmentPlan(db: Db, input: NewInstallmentPlan) {
-  const [row] = await db
-    .insert(installmentPlans)
-    .values({
-      ...input,
-      totalAmount: toNumeric(input.totalAmount),
-      installmentsTotal: toNumeric(input.installmentsTotal),
-      installmentsPaid: toNumeric(input.installmentsPaid),
-      nextPaymentAt: toDate(input.nextPaymentAt),
-      note: input.note ?? null,
-    })
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .insert(installmentPlans)
+      .values({
+        ...input,
+        totalAmount: toNumeric(input.totalAmount),
+        installmentsTotal: toNumeric(input.installmentsTotal),
+        installmentsPaid: toNumeric(input.installmentsPaid),
+        nextPaymentAt: toDate(input.nextPaymentAt),
+        note: input.note ?? null,
+      })
+      .returning(),
+  );
   return mapInstallmentPlan(row);
 }
 
@@ -115,24 +128,28 @@ export async function updateInstallmentPlan(db: Db, id: string, input: Installme
   if (!current) return null;
   const mapped = mapInstallmentPlan(current);
   const merged = mergePatch(installmentPlanSchema, mapped, input, ["nextPaymentAt", "note"]);
-  const [row] = await db
-    .update(installmentPlans)
-    .set({
-      updatedAt: new Date(),
-      ...changedColumns(input, merged, {
-        name: (row) => row.name,
-        totalAmount: (row) => toNumeric(row.totalAmount),
-        currency: (row) => row.currency,
-        installmentsTotal: (row) => toNumeric(row.installmentsTotal),
-        installmentsPaid: (row) => toNumeric(row.installmentsPaid),
-        accountId: (row) => row.accountId,
-        categoryId: (row) => row.categoryId,
-        nextPaymentAt: (row) => toDate(row.nextPaymentAt),
-        note: (row) => row.note ?? null,
-      }),
-    })
-    .where(and(eq(installmentPlans.id, id), isNull(installmentPlans.deletedAt)))
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .update(installmentPlans)
+      .set({
+        updatedAt: new Date(),
+        ...changedColumns(input, merged, {
+          name: (row) => row.name,
+          totalAmount: (row) => toNumeric(row.totalAmount),
+          currency: (row) => row.currency,
+          installmentsTotal: (row) => toNumeric(row.installmentsTotal),
+          installmentsPaid: (row) => toNumeric(row.installmentsPaid),
+          accountId: (row) => row.accountId,
+          categoryId: (row) => row.categoryId,
+          nextPaymentAt: (row) => toDate(row.nextPaymentAt),
+          note: (row) => row.note ?? null,
+        }),
+      })
+      .where(and(eq(installmentPlans.id, id), isNull(installmentPlans.deletedAt)))
+      .returning(),
+  );
   return row ? mapInstallmentPlan(row) : null;
 }
 

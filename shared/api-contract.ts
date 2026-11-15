@@ -8,6 +8,13 @@ import {
   cardLedgerSchema,
 } from "./card-read-contract.js";
 import {
+  categoryDetailsSchema,
+  categoryMergeInputSchema,
+  categoryMergeResultSchema,
+  categoryUsageQuerySchema,
+  categoryUsageSchema,
+} from "./schemas/categories.js";
+import {
   balanceTrendQuerySchema,
   balanceTrendSchema,
   reportDetailsSchema,
@@ -100,7 +107,7 @@ const cardStatementParams = z.object({ id: uuidSchema, statementId: uuidSchema }
 const entities = {
   recordTemplates: recordTemplateSchema.extend({ id: uuidSchema }),
   accounts: accountSchema.extend({ id: uuidSchema }),
-  categories: categorySchema.extend({ id: uuidSchema }),
+  categories: categoryDetailsSchema,
   records: walletRecordResponseSchema,
   cards: creditCardSchema.extend({ id: uuidSchema }),
   cardRecords: cardRecordResponseSchema,
@@ -169,6 +176,8 @@ const specialResponses = {
     archivedCategoryIds: z.array(uuidSchema),
     reassigned: z.record(z.string(), z.number().int().nonnegative()),
   }),
+  "categories.usage": z.record(uuidSchema, categoryUsageSchema),
+  "categories.merge": categoryMergeResultSchema,
   "cards.summary": z.object({
     card: entities.cards,
     usedLimit: z.number(),
@@ -564,6 +573,29 @@ export const apiOperations = [
     successStatus: 200,
     errors: [400, 401, 404, 409, 500],
     summary: "Archive a category tree and reassign references",
+  }),
+  op({
+    operationId: "categories.usage",
+    method: "GET",
+    path: "/api/categories/usage",
+    auth: "session",
+    stability: "stable",
+    query: categoryUsageQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Count references and find the latest transaction for each category",
+  }),
+  op({
+    operationId: "categories.merge",
+    method: "POST",
+    path: "/api/categories/{id}/merge",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    body: categoryMergeInputSchema,
+    successStatus: 200,
+    errors: [400, 401, 404, 409, 500],
+    summary: "Move references to another category and archive the source tree",
   }),
 
   op({

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 
+import { categoryReferenceQueries, rejectUnavailableCategories } from "../category-references.js";
 import { cardStatementSyncQueries } from "../cards/cycles.js";
 import { isReviewCategory, splitImportNote } from "../../../shared/record-review.js";
 import { isFinancialRecord } from "../../../shared/record-status.js";
@@ -152,6 +153,10 @@ export async function createRecordsBulk(db: Db, inputs: NewRecord[], importIds?:
   queries.push(...cardIds.flatMap((id) => cardStatementSyncQueries(db, id)));
   try {
     await db.batch([
+      ...categoryReferenceQueries(
+        db,
+        inputs.map((input) => input.categoryId),
+      ),
       ...recordCardLockQueries(
         db,
         inputs.map((input) => input.creditCardId),
@@ -163,6 +168,11 @@ export async function createRecordsBulk(db: Db, inputs: NewRecord[], importIds?:
       ...queries,
     ] as unknown as Parameters<Db["batch"]>[0]);
   } catch (error) {
+    await rejectUnavailableCategories(
+      db,
+      inputs.map((input) => input.categoryId),
+      error,
+    );
     cardMutationError(error);
   }
   const [rows, tagRows, goalRows] = await db.batch([
@@ -498,9 +508,13 @@ export async function updateRecord(db: Db, id: string, input: RecordPatch) {
         ]
       : []),
   ];
+  const categoryLocks = categoryReferenceQueries(db, [
+    hasOwn(input, "categoryId") || merged.creditCardId ? merged.categoryId : undefined,
+  ]);
   let results;
   try {
     results = await db.batch([
+      ...categoryLocks,
       ...locks,
       ...guards,
       recordUpdate,
@@ -516,7 +530,9 @@ export async function updateRecord(db: Db, id: string, input: RecordPatch) {
   } catch (error) {
     recordCardMutationError(error);
   }
-  const rows = results[locks.length + guards.length] as (typeof records.$inferSelect)[];
+  const rows = results[
+    categoryLocks.length + locks.length + guards.length
+  ] as (typeof records.$inferSelect)[];
   const row = rows[0];
   if (!row) throw new Error("Database mutation returned no record");
   const goalRows = await db.select().from(recordGoals).where(eq(recordGoals.recordId, id));

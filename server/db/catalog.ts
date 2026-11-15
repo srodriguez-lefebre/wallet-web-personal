@@ -1,38 +1,27 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 
+import { lockCategoryReferences } from "./category-references.js";
 import {
   type AccountPatch,
   accountSchema,
-  type CategoryPatch,
-  categorySchema,
   type RecordTemplatePatch,
   recordTemplatePatchSchema,
   recordTemplateSchema,
   type TagPatch,
   tagSchema,
 } from "../../shared/schemas.js";
-import {
-  conflictError,
-  referenceNotFoundError,
-  translateDatabaseError,
-  validationError,
-} from "../api/errors.js";
-import { mapAccount, mapCategory, mapRecordTemplate, mapTag, toNumeric } from "./mappers.js";
+import { conflictError, referenceNotFoundError, translateDatabaseError } from "../api/errors.js";
+import { mapAccount, mapRecordTemplate, mapTag, toNumeric } from "./mappers.js";
 import { hasOwn, mergePatch } from "./patch.js";
 import {
   accounts,
   budgets,
   categories,
-  creditCardRecords,
   creditCards,
-  debts,
   goals,
   goalTags,
-  installmentPlans,
-  merchants,
-  records,
   recordTags,
   recordTemplates,
   recurringDebts,
@@ -41,7 +30,7 @@ import {
 } from "./schema.js";
 
 import type { RecordTemplate } from "../../shared/types.js";
-import type { Db, NewAccount, NewCategory, NewTag } from "./input-types.js";
+import type { Db, NewAccount, NewTag } from "./input-types.js";
 
 /** Validate the prospective row inside its mutation statement, including untouched references on patches. */
 export function templateReferenceConditions(
@@ -86,8 +75,9 @@ export async function saveRecordTemplate<T>(write: PromiseLike<T>): Promise<T> {
 export async function createRecordTemplate(db: Db, value: Omit<RecordTemplate, "id">) {
   const input = recordTemplateSchema.parse(value);
   const id = randomUUID();
-  const [, result] = await saveRecordTemplate(
+  const [, , result] = await saveRecordTemplate(
     db.batch([
+      lockCategoryReferences(db),
       // A separate statement obtains the lock before the insertion's READ COMMITTED snapshot.
       db.execute(sql`SELECT pg_advisory_xact_lock(1791000018)`),
       db.execute(sql`INSERT INTO ${recordTemplates} (id,name,type,amount,currency,account_id,credit_card_id,destination_account_id,category_id,tag_id,counterparty_name,note,payment_type)
@@ -108,12 +98,15 @@ export async function createRecordTemplate(db: Db, value: Omit<RecordTemplate, "
 export async function updateRecordTemplate(db: Db, id: string, value: RecordTemplatePatch) {
   const input = recordTemplatePatchSchema.parse(value);
   const { amount, ...fields } = input;
-  const [row] = await saveRecordTemplate(
-    db
-      .update(recordTemplates)
-      .set({ ...fields, ...(amount === undefined ? {} : { amount: toNumeric(amount) }) })
-      .where(and(eq(recordTemplates.id, id), templateReferenceConditions(input, true)))
-      .returning(),
+  const [, [row]] = await saveRecordTemplate(
+    db.batch([
+      lockCategoryReferences(db),
+      db
+        .update(recordTemplates)
+        .set({ ...fields, ...(amount === undefined ? {} : { amount: toNumeric(amount) }) })
+        .where(and(eq(recordTemplates.id, id), templateReferenceConditions(input, true)))
+        .returning(),
+    ]),
   );
   if (row) return mapRecordTemplate(row);
   const [existing] = await db
@@ -217,155 +210,6 @@ export async function deleteAccount(db: Db, id: string) {
       .where(eq(settings.defaultAccountId, id)),
   ]);
   return true;
-}
-
-export async function listCategories(db: Db) {
-  const rows = await db.select().from(categories).where(isNull(categories.deletedAt));
-  return rows.map(mapCategory);
-}
-
-export async function createCategory(db: Db, input: NewCategory) {
-  const [row] = await db
-    .insert(categories)
-    .values({
-      ...input,
-      parentId: input.parentId ?? null,
-    })
-    .returning();
-  return mapCategory(row);
-}
-
-export async function updateCategory(db: Db, id: string, input: CategoryPatch) {
-  const [current] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
-  if (!current) return null;
-  if (input.parentId === id) throw validationError("A category cannot be its own parent");
-  if (
-    current.systemKey &&
-    ["unknown_expense", "others", "category_eliminated"].includes(current.systemKey) &&
-    hasOwn(input, "parentId") &&
-    (input.parentId ?? null) !== current.parentId
-  ) {
-    throw conflictError("System categories cannot be moved");
-  }
-  if (input.parentId) {
-    const [parent] = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(and(eq(categories.id, input.parentId), isNull(categories.deletedAt)))
-      .limit(1);
-    if (!parent) throw validationError("Parent category does not exist");
-    const descendants = await categoryTreeIds(db, id);
-    if (descendants.includes(input.parentId)) {
-      throw validationError("A category cannot be moved below one of its descendants");
-    }
-  }
-  const merged = mergePatch(categorySchema, mapCategory(current), input, ["parentId"]);
-  const values: Partial<typeof categories.$inferInsert> = { updatedAt: new Date() };
-  for (const key of ["name", "color", "icon"] as const) {
-    if (hasOwn(input, key)) values[key] = merged[key];
-  }
-  if (hasOwn(input, "parentId")) values.parentId = merged.parentId ?? null;
-  const [row] = await db.update(categories).set(values).where(eq(categories.id, id)).returning();
-  return row ? mapCategory(row) : null;
-}
-
-export async function categoryTreeIds(db: Db, id: string) {
-  const rows = await db.select().from(categories).where(isNull(categories.deletedAt));
-  if (!rows.some((row) => row.id === id)) return [];
-  const ids = new Set([id]);
-  let didAdd = true;
-  while (didAdd) {
-    didAdd = false;
-    rows.forEach((row) => {
-      if (row.parentId && ids.has(row.parentId) && !ids.has(row.id)) {
-        ids.add(row.id);
-        didAdd = true;
-      }
-    });
-  }
-  return [...ids];
-}
-
-export async function deleteCategory(db: Db, id: string) {
-  const ids = await categoryTreeIds(db, id);
-  if (ids.length === 0) return { deleted: false as const, reason: "not_found" as const };
-  const protectedRows = await db
-    .select({ id: categories.id })
-    .from(categories)
-    .where(
-      and(
-        inArray(categories.id, ids),
-        inArray(categories.systemKey, ["unknown_expense", "others", "category_eliminated"]),
-      ),
-    );
-  if (protectedRows.length > 0) return { deleted: false as const, reason: "protected" as const };
-  const [fallback] = await db
-    .select()
-    .from(categories)
-    .where(and(eq(categories.systemKey, "category_eliminated"), isNull(categories.deletedAt)))
-    .limit(1);
-  if (!fallback) throw new Error("Category eliminated fallback is not configured");
-  const now = new Date();
-  const results = await db.batch([
-    db
-      .update(records)
-      .set({ categoryId: fallback.id, updatedAt: now })
-      .where(inArray(records.categoryId, ids))
-      .returning({ id: records.id }),
-    db
-      .update(creditCardRecords)
-      .set({ categoryId: fallback.id, updatedAt: now })
-      .where(inArray(creditCardRecords.categoryId, ids))
-      .returning({ id: creditCardRecords.id }),
-    db
-      .update(budgets)
-      .set({ categoryId: fallback.id, updatedAt: now })
-      .where(inArray(budgets.categoryId, ids))
-      .returning({ id: budgets.id }),
-    db
-      .update(debts)
-      .set({ categoryId: fallback.id })
-      .where(inArray(debts.categoryId, ids))
-      .returning({ id: debts.id }),
-    db
-      .update(recurringDebts)
-      .set({ categoryId: fallback.id, updatedAt: now })
-      .where(inArray(recurringDebts.categoryId, ids))
-      .returning({ id: recurringDebts.id }),
-    db
-      .update(installmentPlans)
-      .set({ categoryId: fallback.id })
-      .where(inArray(installmentPlans.categoryId, ids))
-      .returning({ id: installmentPlans.id }),
-    db
-      .update(merchants)
-      .set({ categoryId: fallback.id, updatedAt: now })
-      .where(inArray(merchants.categoryId, ids))
-      .returning({ id: merchants.id }),
-    db
-      .update(categories)
-      .set({ deletedAt: now, updatedAt: now })
-      .where(inArray(categories.id, ids))
-      .returning({ id: categories.id }),
-    db
-      .update(recordTemplates)
-      .set({ categoryId: fallback.id })
-      .where(inArray(recordTemplates.categoryId, ids)),
-  ]);
-  return {
-    deleted: true as const,
-    fallbackCategoryId: fallback.id,
-    archivedCategoryIds: ids,
-    reassigned: {
-      records: results[0].length,
-      creditCardRecords: results[1].length,
-      budgets: results[2].length,
-      debts: results[3].length,
-      recurringDebts: results[4].length,
-      installmentPlans: results[5].length,
-      merchants: results[6].length,
-    },
-  };
 }
 
 export async function listTags(db: Db) {

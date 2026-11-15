@@ -35,6 +35,12 @@ function normalizeRecordFilters(filters: RecordQueryFilters): RecordQueryFilters
   if (!normalized.note) delete normalized.note;
   return normalized;
 }
+export function categoryUsageQueryOptions(client: WalletClient, ids?: string) {
+  return queryOptions({
+    queryKey: ["category-usage", ids] as const,
+    queryFn: ({ signal }) => client["categories.usage"]({ query: { ids }, signal }),
+  });
+}
 export function referenceQueryOptions(client: WalletClient, zone = timeZone()) {
   return queryOptions({
     queryKey: referenceKey,

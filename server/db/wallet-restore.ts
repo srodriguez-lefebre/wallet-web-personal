@@ -1,5 +1,6 @@
 import { getTableColumns, getTableName, sql, type Table } from "drizzle-orm";
 
+import { lockCategoryWrites } from "./category-references.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
 import { validationError } from "../api/errors.js";
 import { type DbClient } from "./client.js";
@@ -197,7 +198,9 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   for (const goal of dataset.goals)
     for (const tagId of goal.tagIds) insert(schema.goalTags, { goalId: goal.id, tagId });
   try {
-    await db.batch(queries as unknown as Parameters<DbClient["batch"]>[0]);
+    await db.batch([lockCategoryWrites(db), ...queries] as unknown as Parameters<
+      DbClient["batch"]
+    >[0]);
   } catch (error) {
     if (pgErrorDetails(error).constraint === "wallet_restore_category_key_ambiguous")
       throw validationError(
