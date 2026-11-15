@@ -13,6 +13,7 @@ const collections: Array<[string, Table, string?]> = [
   ["recordTemplates", schema.recordTemplates],
   ["merchants", schema.merchants],
   ["merchantAliases", schema.merchantAliases],
+  ["merchantCategoryRules", schema.merchantCategoryRules],
   ["goals", schema.goals],
   ["recurringDebts", schema.recurringDebts],
   ["debts", schema.debts],
@@ -58,6 +59,7 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     snapshot.merchantAliases = currentAliases;
   }
   const preserveIngestion = dataset.ingestionEvents === undefined;
+  const preservePolicies = dataset.merchantCategoryRules === undefined;
   const tables = [
     schema.recordTags,
     schema.recordGoals,
@@ -77,6 +79,17 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   queries.push(
     db.execute(sql`CREATE TEMP TABLE wallet_restore_session_state ON COMMIT DROP AS
     SELECT session_version,auth_attempts_pruned_at FROM settings`),
+  );
+  if (preservePolicies)
+    queries.push(
+      db.execute(
+        sql`CREATE TEMP TABLE wallet_restore_policies ON COMMIT DROP AS SELECT * FROM merchant_category_rules`,
+      ),
+    );
+  queries.push(
+    db.execute(
+      sql`CREATE TEMP TABLE wallet_restore_category_keys ON COMMIT DROP AS SELECT id,system_key FROM categories WHERE system_key IS NOT NULL`,
+    ),
   );
   if (preserveIngestion) {
     // Capture after acquiring the lock: preparation must not discard a concurrent
@@ -136,6 +149,16 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     queries.push(
       db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`),
     );
+  if (preservePolicies)
+    queries.push(
+      db.execute(sql`INSERT INTO merchant_category_rules SELECT * FROM wallet_restore_policies`),
+    );
+  queries.push(
+    db.execute(sql`UPDATE categories c SET system_key=previous.system_key
+    FROM wallet_restore_category_keys previous
+    WHERE c.id=previous.id AND c.system_key IS NULL
+    AND NOT EXISTS(SELECT 1 FROM categories existing WHERE existing.system_key=previous.system_key)`),
+  );
   insert(schema.settings, dataset.settings);
   queries.push(
     db.execute(sql`UPDATE settings SET

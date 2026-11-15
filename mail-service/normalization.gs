@@ -48,6 +48,7 @@ var WalletMail = (() => {
     "itau_transfer",
     "itau_payment",
     "automation_wallet",
+    "google_wallet",
     "generic"
   ];
   var bankCurrencies = {

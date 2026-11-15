@@ -7272,9 +7272,19 @@ paths:
                         - transfer
                       type: string
                     source:
-                      maxLength: 100
-                      minLength: 1
-                      type: string
+                      anyOf:
+                        - enum:
+                            - itau_credit_card
+                            - itau_debit_card
+                            - itau_transfer
+                            - itau_payment
+                            - automation_wallet
+                            - google_wallet
+                            - generic
+                          type: string
+                        - maxLength: 100
+                          minLength: 1
+                          type: string
                     sourceLabel:
                       default: ""
                       maxLength: 100
@@ -14306,6 +14316,44 @@ paths:
                             - normalizedAlias
                           type: object
                         type: array
+                      merchantCategoryRules:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            categorySystemKey:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            normalizedAlias:
+                              minLength: 1
+                              type: string
+                            overrideFromCategoryKey:
+                              anyOf:
+                                - type: string
+                                - type: "null"
+                            overrideMerchant:
+                              anyOf:
+                                - type: string
+                                - type: "null"
+                            priority:
+                              maximum: 9007199254740991
+                              minimum: -9007199254740991
+                              type: integer
+                            reviewWhenMissing:
+                              type: boolean
+                          required:
+                            - id
+                            - normalizedAlias
+                            - categorySystemKey
+                            - priority
+                            - overrideMerchant
+                            - overrideFromCategoryKey
+                            - reviewWhenMissing
+                          type: object
+                        type: array
                       merchants:
                         items:
                           additionalProperties: false
@@ -19793,6 +19841,44 @@ paths:
                       - merchantId
                       - alias
                       - normalizedAlias
+                    type: object
+                  type: array
+                merchantCategoryRules:
+                  items:
+                    additionalProperties: false
+                    properties:
+                      categorySystemKey:
+                        minLength: 1
+                        type: string
+                      id:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      normalizedAlias:
+                        minLength: 1
+                        type: string
+                      overrideFromCategoryKey:
+                        anyOf:
+                          - type: string
+                          - type: "null"
+                      overrideMerchant:
+                        anyOf:
+                          - type: string
+                          - type: "null"
+                      priority:
+                        maximum: 9007199254740991
+                        minimum: -9007199254740991
+                        type: integer
+                      reviewWhenMissing:
+                        type: boolean
+                    required:
+                      - id
+                      - normalizedAlias
+                      - categorySystemKey
+                      - priority
+                      - overrideMerchant
+                      - overrideFromCategoryKey
+                      - reviewWhenMissing
                     type: object
                   type: array
                 merchants:

@@ -378,6 +378,9 @@ export interface WalletSettings {
 }
 
 export interface WalletDataset {
+  merchantCategoryRules?: import("zod").infer<
+    typeof import("./schemas.js").merchantCategoryRuleSchema
+  >[];
   recordTemplates?: RecordTemplate[];
   ingestionEvents?: Array<{
     id: string;

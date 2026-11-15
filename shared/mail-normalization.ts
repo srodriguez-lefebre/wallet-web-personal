@@ -5,6 +5,7 @@ export const mailSources = [
   "itau_transfer",
   "itau_payment",
   "automation_wallet",
+  "google_wallet",
   "generic",
 ] as const;
 export type MailSource = (typeof mailSources)[number];

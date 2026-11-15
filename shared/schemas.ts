@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { timeZoneSchema } from "./time-zone.js";
+import { compatibleMailSourceSchema } from "./mail-source.js";
 
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
 export const uuidSchema = z.string().uuid("Invalid UUID");
@@ -741,7 +742,7 @@ export const mailIngestionSchema = z
       date: z.string().datetime(),
     }),
     transaction: z.object({
-      source: z.string().min(1).max(100),
+      source: compatibleMailSourceSchema,
       sourceLabel: z.string().max(100).default(""),
       occurredAt: z.string().datetime(),
       amount: z.number().nonnegative(),
@@ -860,6 +861,16 @@ export const goalResponseSchema = goalSchema.safeExtend({
   ...id,
   tagIds: z.array(uuidSchema).default([]),
 });
+export const merchantCategoryRuleSchema = z.object({
+  id: uuidSchema,
+  normalizedAlias: z.string().min(1),
+  categorySystemKey: z.string().min(1),
+  priority: z.number().int(),
+  overrideMerchant: z.string().nullable(),
+  overrideFromCategoryKey: z.string().nullable(),
+  reviewWhenMissing: z.boolean(),
+});
+
 export const walletDatasetSchema = z.object({
   recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
   settings: settingsSchema,
@@ -893,6 +904,7 @@ const backupRetryMetadata = {
 };
 export const walletBackupSchema = walletDatasetSchema
   .extend({
+    merchantCategoryRules: z.array(merchantCategoryRuleSchema).optional(),
     recordTemplates: z
       .array(recordTemplateSchema.extend({ ...id, ...backupMetadata }))
       .max(100)

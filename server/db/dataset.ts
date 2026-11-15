@@ -49,6 +49,7 @@ import {
   installmentPlans,
   investments,
   merchantAliases,
+  merchantCategoryRules,
   merchants,
   recordGoals,
   records,
@@ -94,6 +95,7 @@ export async function getWalletDataset(
     installmentPlanRows,
     merchantRows,
     merchantAliasRows,
+    merchantCategoryRuleRows,
     ingestionRows,
     templateRows,
   } = await namedBatch(db, {
@@ -195,6 +197,10 @@ export async function getWalletDataset(
       .select()
       .from(merchantAliases)
       .where(options.includeArchived ? undefined : sql`false`),
+    merchantCategoryRuleRows: db
+      .select()
+      .from(merchantCategoryRules)
+      .where(options.includeArchived ? undefined : sql`false`),
     ingestionRows: db
       .select()
       .from(ingestionEvents)
@@ -220,6 +226,7 @@ export async function getWalletDataset(
     recordTemplates: templateRows.map(mapRecordTemplate),
     ...(options.includeArchived
       ? {
+          merchantCategoryRules: merchantCategoryRuleRows,
           merchants: merchantRows.map((row) =>
             withMetadata(
               {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 
 import {
   type AccountPatch,
@@ -241,6 +241,7 @@ export async function updateCategory(db: Db, id: string, input: CategoryPatch) {
   if (input.parentId === id) throw validationError("A category cannot be its own parent");
   if (
     current.systemKey &&
+    ["unknown_expense", "others", "category_eliminated"].includes(current.systemKey) &&
     hasOwn(input, "parentId") &&
     (input.parentId ?? null) !== current.parentId
   ) {
@@ -291,7 +292,12 @@ export async function deleteCategory(db: Db, id: string) {
   const protectedRows = await db
     .select({ id: categories.id })
     .from(categories)
-    .where(and(inArray(categories.id, ids), isNotNull(categories.systemKey)));
+    .where(
+      and(
+        inArray(categories.id, ids),
+        inArray(categories.systemKey, ["unknown_expense", "others", "category_eliminated"]),
+      ),
+    );
   if (protectedRows.length > 0) return { deleted: false as const, reason: "protected" as const };
   const [fallback] = await db
     .select()

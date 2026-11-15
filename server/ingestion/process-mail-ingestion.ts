@@ -1,34 +1,24 @@
 import { randomUUID } from "node:crypto";
 
-import { and, eq, gte, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
-import {
-  categoryImportWarning,
-  isReviewCategory,
-  normalizeBankMerchant,
-} from "../../shared/record-review.js";
+import { categoryImportWarning } from "../../shared/record-review.js";
 import { type DbClient } from "../db/client.js";
 import { prepareRecordGoalWrites } from "../db/index.js";
 import {
   accounts,
-  categories,
   creditCardRecords,
   creditCards,
   ingestionEvents,
-  merchantAliases,
-  merchants,
   records,
   settings,
 } from "../db/schema.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
-import { prepareMerchantLearning, type MerchantRuleLearning } from "./learned-merchant.js";
-import {
-  cardLastFour,
-  merchantTokenSequenceMatch,
-  normalizeMerchantTerm,
-  pickLongestMerchantMatch,
-} from "./normalization.js";
-import { inferCategoryWithOpenAi, type CategoryInferenceDiagnostic } from "./openai-category.js";
+import { prepareMerchantLearning } from "./learned-merchant.js";
+import { cardLastFour, normalizeMerchantTerm } from "./normalization.js";
+import { resolveCategory } from "./category-resolution.js";
+import { pruneExpiredMetadata } from "./metadata.js";
+export { resolveCategory } from "./category-resolution.js";
 
 import type { MailIngestionInput } from "../../shared/schemas.js";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
@@ -42,77 +32,6 @@ function rate(value: number) {
 function addDays(date: Date, days: number) {
   return new Date(date.getTime() + days * 86400000);
 }
-const genericMerchantCategoryRules = [
-  {
-    aliases: ["PANALERA", "PANALERIA"],
-    categoryNames: ["Shopping"],
-  },
-  {
-    aliases: ["BANCO DE SEGUROS", "ASEGURADORA"],
-    categoryNames: ["Insurance", "Seguros"],
-  },
-  {
-    aliases: ["UBER EATS", "UBEREATS"],
-    categoryNames: ["Restaurant, fast-food", "Restaurants"],
-  },
-  {
-    aliases: ["UBER", "CABIFY", "TAXI"],
-    categoryNames: ["Taxi"],
-  },
-  {
-    aliases: ["HBOMAX", "HBO MAX", "HELPHBOMAX"],
-    categoryNames: ["TV, Streaming", "Subscriptions"],
-  },
-  {
-    aliases: ["FRUTERIA", "VERDULERIA", "VERDULERIA Y FRUTERIA"],
-    categoryNames: ["Fruits, vegetables and healthy", "Greengrocer"],
-  },
-  {
-    aliases: ["PANADERIA", "CROISSANTERIA", "PANES 1"],
-    categoryNames: ["Bakery"],
-  },
-  {
-    aliases: ["CARNICERIA"],
-    categoryNames: ["Meat, fish and eggs", "Butcher"],
-  },
-  {
-    aliases: ["FARMACIA"],
-    categoryNames: ["Drug-store, chemist", "Medical services"],
-  },
-  {
-    aliases: ["SUPERMERCADO", "MINIMARKET"],
-    categoryNames: ["Supermarket"],
-  },
-  {
-    aliases: ["PIZZERIA", "CAFETERIA", "RESTAURANTE"],
-    categoryNames: ["Restaurant, fast-food", "Restaurants"],
-  },
-  {
-    aliases: ["ESTACION DE SERVICIO"],
-    categoryNames: ["Service station"],
-  },
-] as const;
-function pickGenericMerchantCategory(
-  merchantRaw: string,
-  categoryRows: Array<typeof categories.$inferSelect>,
-) {
-  const categoryByName = new Map(
-    categoryRows.map((category) => [category.name.toLowerCase(), category]),
-  );
-  const candidates = genericMerchantCategoryRules.flatMap((rule, ruleIndex) => {
-    const category = rule.categoryNames
-      .map((name) => categoryByName.get(name.toLowerCase()))
-      .find(Boolean);
-    if (!category) return [];
-    return rule.aliases.map((alias) => ({
-      normalizedAlias: normalizeMerchantTerm(alias),
-      priority: genericMerchantCategoryRules.length - ruleIndex,
-      categoryId: category.id,
-      merchantName: merchantRaw,
-    }));
-  });
-  return pickLongestMerchantMatch(merchantRaw, candidates);
-}
 function sanitizedPayload(input: MailIngestionInput) {
   const mask = (value: string | undefined) =>
     value ? `****${value.replace(/\D/g, "").slice(-4)}` : undefined;
@@ -125,234 +44,6 @@ function sanitizedPayload(input: MailIngestionInput) {
       destinationAccountNumber: mask(input.transaction.destinationAccountNumber),
     },
     destination: { ...input.destination },
-  };
-}
-async function pruneExpiredMetadata(db: DbClient) {
-  const now = new Date();
-  await db
-    .update(ingestionEvents)
-    .set({
-      emailThreadId: null,
-      emailSubject: null,
-      emailFrom: null,
-      sanitizedPayload: null,
-      updatedAt: now,
-    })
-    .where(
-      and(lt(ingestionEvents.metadataExpiresAt, now), isNotNull(ingestionEvents.sanitizedPayload)),
-    );
-}
-interface CategoryResolution {
-  categoryId: string | undefined;
-  merchantName: string;
-  source:
-    | "merchant_rule"
-    | "corrected_rule"
-    | "generic_rule"
-    | "openai"
-    | "fallback"
-    | "transfer"
-    | "user_rule"
-    | "user_suggestion";
-  needsReview: boolean;
-  reason?: string;
-  modelAttempt?: CategoryInferenceDiagnostic;
-  learning?: MerchantRuleLearning;
-}
-export async function resolveCategory(
-  db: DbClient,
-  merchantRaw: string,
-  useCorrections = true,
-): Promise<CategoryResolution> {
-  const aliasRows = await db
-    .select({
-      normalizedAlias: merchantAliases.normalizedAlias,
-      merchantId: merchants.id,
-      merchantName: merchants.name,
-      categoryId: merchants.categoryId,
-      priority: merchants.priority,
-      matchMode: merchants.matchMode,
-    })
-    .from(merchantAliases)
-    .innerJoin(
-      merchants,
-      and(eq(merchantAliases.merchantId, merchants.id), eq(merchants.isActive, true)),
-    );
-  const explicit = pickLongestMerchantMatch(
-    merchantRaw,
-    aliasRows.filter((alias) => alias.matchMode === "alias"),
-  );
-  const learned = aliasRows.find(
-    (alias) =>
-      alias.matchMode === "exact" &&
-      normalizeMerchantTerm(alias.normalizedAlias) === normalizeMerchantTerm(merchantRaw),
-  );
-  const local = explicit ?? learned;
-  // Classification may change, but the identity used to deduplicate must stay stable.
-  const merchantName = local?.merchantName ?? merchantRaw;
-  const allCategories = await db.select().from(categories).where(isNull(categories.deletedAt));
-  const fallback =
-    allCategories.find((item) => item.systemKey === "unknown_expense") ??
-    allCategories.find((item) => item.name.toLowerCase() === "unknown expense") ??
-    allCategories.find((item) => item.name.toLowerCase() === "others");
-  const isUnknown = (id: string) => {
-    const category = allCategories.find((item) => item.id === id);
-    return (
-      !category ||
-      category.systemKey === "unknown_expense" ||
-      ["unknown expense", "others"].includes(category.name.toLowerCase())
-    );
-  };
-  if (useCorrections) {
-    const correctedRecords = await db
-      .select({
-        categoryId: categories.id,
-        merchant: records.importMerchant,
-        correction: records.merchantCorrection,
-      })
-      .from(records)
-      .innerJoin(categories, eq(records.categoryId, categories.id))
-      .where(
-        and(
-          isNull(records.deletedAt),
-          isNull(categories.deletedAt),
-          isNotNull(records.merchantCorrection),
-          eq(records.type, "expense"),
-          ne(records.paymentType, "transfer"),
-          ne(records.paymentStatus, "cancelled"),
-        ),
-      )
-      .orderBy(sql`${records.merchantCorrection}->>'savedAt' DESC`, sql`${records.id} DESC`);
-    const merchantKey = normalizeBankMerchant(merchantRaw);
-    const match = correctedRecords.find(
-      ({ merchant, categoryId }) =>
-        merchant &&
-        normalizeBankMerchant(merchant) === merchantKey &&
-        isReviewCategory(allCategories.find((category) => category.id === categoryId)),
-    );
-    if (match?.correction) {
-      if (match.correction.autoApply) {
-        return {
-          categoryId: match.categoryId,
-          merchantName,
-          source: "user_rule",
-          needsReview: false,
-        };
-      }
-      if (fallback)
-        return {
-          categoryId: fallback.id,
-          merchantName,
-          source: "user_suggestion",
-          needsReview: true,
-        };
-    }
-  }
-  const generic = pickGenericMerchantCategory(merchantRaw, allCategories);
-  // A broad Uber alias must not consume the more specific food-delivery notice.
-  if (
-    generic &&
-    local &&
-    normalizeMerchantTerm(local.merchantName) === "UBER" &&
-    ["UBER EATS", "UBEREATS"].includes(generic.normalizedAlias)
-  ) {
-    return {
-      categoryId: generic.categoryId,
-      merchantName: merchantRaw,
-      source: "generic_rule",
-      needsReview: false,
-    };
-  }
-  const taxi = allCategories.find((item) => item.name.toLowerCase() === "taxi");
-  if (
-    local &&
-    taxi &&
-    ["UBER", "CABIFY", "TAXI"].includes(normalizeMerchantTerm(local.merchantName)) &&
-    allCategories.find((item) => item.id === local.categoryId)?.name.toLowerCase() ===
-      "public transport"
-  ) {
-    return {
-      categoryId: taxi.id,
-      merchantName: local.merchantName,
-      source: "corrected_rule",
-      needsReview: false,
-    };
-  }
-  if (local && !isUnknown(local.categoryId))
-    return {
-      categoryId: local.categoryId,
-      merchantName: local.merchantName,
-      source: "merchant_rule",
-      needsReview: false,
-    };
-  const missingInsuranceCategory = genericMerchantCategoryRules.find(
-    (rule) =>
-      rule.categoryNames[0] === "Insurance" &&
-      rule.aliases.some((alias) => merchantTokenSequenceMatch(merchantRaw, alias)) &&
-      !allCategories.some((category) =>
-        rule.categoryNames.some((name) => name.toLowerCase() === category.name.toLowerCase()),
-      ),
-  );
-  if (missingInsuranceCategory && fallback)
-    return {
-      categoryId: fallback.id,
-      merchantName,
-      source: "fallback",
-      needsReview: true,
-      reason: "missing_insurance_category",
-    };
-  if (generic)
-    return {
-      categoryId: generic.categoryId,
-      merchantName,
-      source: "generic_rule",
-      needsReview: false,
-    };
-  const parentIds = new Set(allCategories.map((item) => item.parentId).filter(Boolean));
-  const byId = new Map(allCategories.map((item) => [item.id, item]));
-  const leaves = allCategories.filter((item) => !parentIds.has(item.id));
-  const options = leaves.map((item) => ({
-    id: item.id,
-    path: item.parentId ? `${byId.get(item.parentId)?.name ?? ""} > ${item.name}` : item.name,
-  }));
-  let modelAttempt: CategoryInferenceDiagnostic | undefined;
-  try {
-    const inferred = await inferCategoryWithOpenAi(merchantRaw, options, (diagnostic) => {
-      modelAttempt = diagnostic;
-    });
-    if (inferred && options.some((item) => item.id === inferred))
-      return {
-        categoryId: inferred,
-        merchantName,
-        source: "openai",
-        needsReview: isUnknown(inferred),
-        modelAttempt,
-        learning: isUnknown(inferred)
-          ? undefined
-          : {
-              merchantName,
-              merchantRaw,
-              categoryId: inferred,
-              existingMerchant: local
-                ? { id: local.merchantId, previousCategoryId: local.categoryId }
-                : undefined,
-            },
-      };
-  } catch {
-    modelAttempt = {
-      outcome: "failed",
-      model: process.env.OPENAI_MODEL?.trim() || "gpt-5-nano",
-      reason: "unexpected_classifier_error",
-      elapsedMs: 0,
-    };
-  }
-  if (!fallback) throw new Error("Protected Unknown expense category is not configured");
-  return {
-    categoryId: fallback.id,
-    merchantName,
-    source: "fallback",
-    needsReview: true,
-    modelAttempt,
   };
 }
 async function convert(
@@ -393,7 +84,7 @@ export async function processMailIngestion(
     .values({
       id: eventId,
       idempotencyKey: input.idempotencyKey,
-      source: input.transaction.source,
+      source: sql`${input.transaction.source}`,
       status: "processing",
       merchantNormalized,
       amount: money(input.transaction.amount),
@@ -532,7 +223,7 @@ export async function processMailIngestion(
     const duplicateWindowEnd = new Date(occurredAt.getTime() + 10 * 60000);
     const duplicateWhere = and(
       eq(ingestionEvents.fingerprint, fingerprint),
-      ne(ingestionEvents.source, input.transaction.source),
+      ne(ingestionEvents.source, sql`${input.transaction.source}`),
       eq(ingestionEvents.status, "completed"),
       gte(ingestionEvents.occurredAt, duplicateWindowStart),
       lte(ingestionEvents.occurredAt, duplicateWindowEnd),
