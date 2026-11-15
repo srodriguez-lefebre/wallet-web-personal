@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" font-family="Segoe UI, Inter, system-ui, sans-serif" role="img" aria-label="Arquitectura de Wallet Web Personal">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrow-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#d97706"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="700" rx="18" fill="#f8fafc"/>
+
+  <!-- shared contract bar -->
+  <rect x="40" y="28" width="1120" height="64" rx="12" fill="#eef2ff" stroke="#6366f1" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="60" y="54" font-size="16" font-weight="700" fill="#312e81">shared/ · contrato y dominio compartidos</text>
+  <text x="60" y="76" font-size="13" fill="#3730a3">api-contract.ts (tabla de rutas) · schemas Zod por entidad · money, balances, cards, goals, budgets · mail-normalization.ts</text>
+  <text x="1140" y="76" font-size="12" fill="#4338ca" text-anchor="end">→ contracts/openapi.yaml generado</text>
+
+  <!-- Browser -->
+  <rect x="40" y="130" width="300" height="400" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="40" y="130" width="300" height="42" rx="14" fill="#0f172a"/>
+  <rect x="40" y="158" width="300" height="14" fill="#0f172a"/>
+  <text x="60" y="157" font-size="15" font-weight="700" fill="#f8fafc">Navegador · React 19 + Vite</text>
+
+  <rect x="58" y="188" width="264" height="54" rx="8" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="70" y="210" font-size="13" font-weight="600" fill="#0f172a">Vistas y features</text>
+  <text x="70" y="230" font-size="12" fill="#475569">features/records · features/cards · views/*</text>
+
+  <rect x="58" y="254" width="264" height="54" rx="8" fill="#f1f5f9" stroke="#e2e8f0"/>
+  <text x="70" y="276" font-size="13" font-weight="600" fill="#0f172a">Kit de formulario y hooks</text>
+  <text x="70" y="296" font-size="12" fill="#475569">ui/form · useDraftFields · useConfirmDialog</text>
+
+  <rect x="58" y="320" width="264" height="70" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="70" y="342" font-size="13" font-weight="600" fill="#1e3a8a">TanStack Query</text>
+  <text x="70" y="361" font-size="12" fill="#1e40af">wallet-queries.ts: claves por entidad</text>
+  <text x="70" y="378" font-size="12" fill="#1e40af">mutations.ts: política de invalidación</text>
+
+  <rect x="58" y="402" width="264" height="54" rx="8" fill="#dbeafe" stroke="#93c5fd"/>
+  <text x="70" y="424" font-size="13" font-weight="600" fill="#1e3a8a">api-client.ts (generado del contrato)</text>
+  <text x="70" y="444" font-size="12" fill="#1e40af">un método por operación · AbortSignal · retry</text>
+
+  <rect x="58" y="468" width="264" height="44" rx="8" fill="#fef3c7" stroke="#fcd34d"/>
+  <text x="70" y="488" font-size="12" font-weight="600" fill="#78350f">Sesión firmada en el navegador</text>
+  <text x="70" y="504" font-size="11" fill="#92400e">sin datos financieros en localStorage</text>
+
+  <!-- Vercel function -->
+  <rect x="400" y="130" width="500" height="400" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="400" y="130" width="500" height="42" rx="14" fill="#2563eb"/>
+  <rect x="400" y="158" width="500" height="14" fill="#2563eb"/>
+  <text x="420" y="157" font-size="15" font-weight="700" fill="#ffffff">Vercel · una sola función · api/index.ts</text>
+  <text x="882" y="157" font-size="11" fill="#bfdbfe" text-anchor="end">rewrite /api/* → /api?path=$1</text>
+
+  <!-- pipeline -->
+  <g font-size="12" fill="#0f172a">
+    <rect x="418" y="190" width="132" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="428" y="209" font-weight="600">RequestContext</text>
+    <text x="428" y="226" fill="#475569">db lazy · requestId · log</text>
+
+    <rect x="568" y="190" width="150" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="578" y="209" font-weight="600">router.ts</text>
+    <text x="578" y="226" fill="#475569">match por contrato</text>
+
+    <rect x="736" y="190" width="146" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="746" y="209" font-weight="600">auth</text>
+    <text x="746" y="226" fill="#475569">session · ingest · rate limit</text>
+
+    <rect x="418" y="258" width="132" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="428" y="277" font-weight="600">validación Zod</text>
+    <text x="428" y="294" fill="#475569">params · query · body</text>
+
+    <rect x="568" y="258" width="150" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="578" y="277" font-weight="600">handlers.ts</text>
+    <text x="578" y="294" fill="#475569">satisfies HandlerMap</text>
+
+    <rect x="736" y="258" width="146" height="46" rx="8" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="746" y="277" font-weight="600">modules/*.ts</text>
+    <text x="746" y="294" fill="#475569">records, cards, goals, …</text>
+
+    <path d="M550 213H566" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+    <path d="M718 213H734" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+    <path d="M809 236V247H484V256" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arrow-blue)"/>
+    <path d="M550 281H566" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+    <path d="M718 281H734" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrow-blue)"/>
+  </g>
+
+  <!-- repository -->
+  <rect x="418" y="326" width="464" height="86" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/>
+  <text x="430" y="347" font-size="13" font-weight="600" fill="#064e3b">server/db · repositorio por agregado, db como primer argumento</text>
+  <text x="430" y="367" font-size="12" fill="#065f46">catalog · records/ · cards/ · goals/ · debts · settings · analytics · balances · restore</text>
+  <text x="430" y="386" font-size="12" fill="#065f46">helpers: mappers · patch · batch (lotes con locks FOR UPDATE) · fx (tasas en SQL)</text>
+  <text x="430" y="404" font-size="12" fill="#065f46">sin transacciones interactivas: db.batch o una sentencia con CTEs · pagos idempotentes</text>
+
+  <!-- ingestion inside the function -->
+  <rect x="418" y="426" width="464" height="86" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="430" y="447" font-size="13" font-weight="600" fill="#78350f">server/ingestion · avisos bancarios → movimientos</text>
+  <text x="430" y="467" font-size="12" fill="#92400e">parsers por aviso · comercios y aliases · reglas por categoría · duplicados</text>
+  <text x="430" y="486" font-size="12" fill="#92400e">OpenAI (10 s) y Frankfurter (4 s) con circuit breaker persistido en provider_state</text>
+  <text x="430" y="504" font-size="12" fill="#92400e">fallo externo → el movimiento queda en needs_review, nunca se inventa una tasa</text>
+
+  <!-- Neon -->
+  <rect x="960" y="130" width="200" height="400" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <rect x="960" y="130" width="200" height="42" rx="14" fill="#0d9488"/>
+  <rect x="960" y="158" width="200" height="14" fill="#0d9488"/>
+  <text x="980" y="157" font-size="15" font-weight="700" fill="#ffffff">Neon PostgreSQL</text>
+  <g font-size="12" fill="#134e4a">
+    <text x="978" y="200" font-weight="600">Drizzle ORM + Neon HTTP</text>
+    <text x="978" y="222">migraciones 0000 → 0023</text>
+    <text x="978" y="252" font-weight="600">Dinero en numeric</text>
+    <text x="978" y="270">sumas y conversiones en SQL</text>
+    <text x="978" y="300" font-weight="600">Historial durable</text>
+    <text x="978" y="318">soft delete (deleted_at)</text>
+    <text x="978" y="336">tasas congeladas por registro</text>
+    <text x="978" y="366" font-weight="600">Agregados para reportes</text>
+    <text x="978" y="384">analytics.* · cards.*</text>
+    <text x="978" y="414" font-weight="600">Estado operativo</text>
+    <text x="978" y="432">provider_state · settings</text>
+    <text x="978" y="450">intentos de unlock</text>
+    <text x="978" y="480" font-weight="600">Backup y restore</text>
+    <text x="978" y="498">un lote con lock de tablas</text>
+  </g>
+
+  <!-- arrows browser <-> function <-> db -->
+  <path d="M340 330H398" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="369" y="318" font-size="10" fill="#475569" text-anchor="middle">HTTPS</text>
+  <text x="369" y="348" font-size="10" fill="#475569" text-anchor="middle">{ data, error }</text>
+  <path d="M900 360H958" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+  <text x="929" y="350" font-size="10" fill="#475569" text-anchor="middle">SQL / HTTP</text>
+
+  <!-- Mail path -->
+  <rect x="40" y="570" width="300" height="96" rx="14" fill="#ffffff" stroke="#fcd34d" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="60" y="598" font-size="15" font-weight="700" fill="#78350f">Gmail + Google Apps Script</text>
+  <text x="60" y="620" font-size="12" fill="#92400e">mail-service/ · normalization.gs generado</text>
+  <text x="60" y="638" font-size="12" fill="#92400e">desde shared/mail-normalization.ts</text>
+  <text x="60" y="656" font-size="12" fill="#92400e">lee avisos del banco, nunca credenciales</text>
+
+  <path d="M340 618H410V512" stroke="#d97706" stroke-width="2" fill="none" marker-end="url(#arrow-amber)"/>
+  <text x="420" y="600" font-size="12" fill="#92400e">POST /api/ingest/mail/transactions</text>
+  <text x="420" y="618" font-size="11" fill="#b45309">token propio, nunca la sesión del usuario</text>
+
+  <!-- External providers -->
+  <rect x="640" y="570" width="260" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="660" y="598" font-size="15" font-weight="700" fill="#0f172a">Proveedores externos</text>
+  <text x="660" y="620" font-size="12" fill="#475569">OpenAI · categoría de comercios nuevos</text>
+  <text x="660" y="638" font-size="12" fill="#475569">Frankfurter · cotizaciones faltantes</text>
+  <text x="660" y="656" font-size="12" fill="#475569">opcionales, con presupuesto y circuito</text>
+  <path d="M770 568V514" stroke="#64748b" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
+
+  <!-- Tests -->
+  <rect x="960" y="570" width="200" height="96" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="980" y="598" font-size="15" font-weight="700" fill="#0f172a">Pruebas locales</text>
+  <text x="980" y="620" font-size="12" fill="#475569">Vitest + PostgreSQL embebido</text>
+  <text x="980" y="638" font-size="12" fill="#475569">sandbox y QA sobre PGlite</text>
+  <text x="980" y="656" font-size="12" fill="#475569">nunca tocan Neon</text>
+</svg>

@@ -1,641 +1,364 @@
-# Wallet Web Personal
+﻿<p align="center">
+  <img src="public/favicon.svg" width="72" alt="Wallet Web Personal" />
+</p>
 
-Wallet web personal para controlar gastos, ingresos, cuentas, tarjetas de credito, goals, presupuestos y analiticas.
+<h1 align="center">Wallet Web Personal</h1>
 
-## Estado actual
+<p align="center">
+  Tu plata, en tu base de datos, con la app que vos controlás.<br />
+  Finanzas personales para una sola persona: cuentas, tarjetas, metas, deudas, inversiones y
+  los avisos del banco entrando solos.
+</p>
 
-La API persiste cuentas, records, categorías, settings, deudas y reglas
-recurrentes, tarjetas y sus consumos/pagos, tags, goals y reservas, presupuestos,
-inversiones y planes de cuotas. El cliente recarga el estado canónico después de
-cada mutación; una falla de recarga se informa sin presentar datos viejos como
-una operación completamente actualizada.
+<p align="center">
+  <a href="https://github.com/srodriguez-lefebre/wallet-web-personal/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/srodriguez-lefebre/wallet-web-personal/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178c6" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-149eca" />
+  <img alt="Vercel" src="https://img.shields.io/badge/Vercel-Serverless-000000" />
+  <img alt="Neon" src="https://img.shields.io/badge/Neon-PostgreSQL-0d9488" />
+</p>
 
-Las plantillas reutilizables de movimientos también se guardan en PostgreSQL,
-se incluyen en el respaldo y se administran desde Configuración → Gestión de
-plantillas. Guardar una
-plantilla conserva importe, moneda, destinos, categoría, una etiqueta y notas.
-Usarla abre un borrador en Movimientos con fecha y conversiones actuales; el movimiento requiere
-confirmación. Los destinos archivados exigen elegir un reemplazo. Un guardado
-fallido conserva el formulario para corregirlo o reintentar; los envíos pendientes
-siguen protegidos frente a doble clic.
+<p align="center">
+  <img src="assets/readme/dashboard.webp" width="920" alt="Dashboard con balance, ingresos, gastos, flujo de caja, evolución del saldo y gastos por categoría" />
+</p>
 
-Needs review marca movimientos para verificar y conserva una etiqueta amarilla;
-no excluye actividad financiera válida de saldos e informes. Cancelled sí la
-excluye. Si falta una conversión, no se supone una relación 1:1: una cotización
-primaria congelada de cero indica conversión pendiente y no suma al reporte
-en esa moneda. Los importes conocidos de cuenta o tarjeta conservan su impacto.
+---
 
-El contrato vigente y generado está en [`contracts/openapi.yaml`](contracts/openapi.yaml).
-`docs/` contiene roadmap y decisiones de producto; no describe por sí solo el
-comportamiento desplegado.
+## ¿Por qué otra wallet?
 
-## Mejoras de uso
+Las apps de finanzas personales te piden la clave del banco, viven de tus datos o desaparecen
+con un cambio de modelo de negocio. Esta no:
 
-- Inicio: vista principal sin bloques de avisos. La campanita junto a agregar
-  reúne movimientos por revisar, deudas próximas/vencidas y estados de tarjeta
-  cerrados con saldo pendiente, incluidas tarjetas archivadas.
-- Cuentas: tarjetas de cuenta con sus importes disponibles y reservados;
-  guardado de cambios con protección frente a doble clic y reintentos parciales.
-- Tarjetas: apertura del estado exacto desde las notificaciones y advertencias
-  al 80%/100% del límite.
-- Movimientos: cola de revisión global, independiente del período y los filtros;
-  un segundo clic, quitar su filtro de estado o elegir Status > All recupera el
-  período y los filtros anteriores, incluso Needs review manual y después de
-  navegar a otra vista. Clear all y Reset siguen
-  limpiando los filtros de forma explícita. Duplicación como
-  borrador nuevo, con fecha y cotizaciones actuales, sin copiar pagos de deuda.
-- Análisis: Top merchants después de los cuatro bloques originales; diez
-  comercios principales, frecuencia e importe medio según el período
-  y las preferencias del reporte. Usa gastos WalletRecord con cotizaciones congeladas;
-  muestra compras brutas, sin restar devoluciones ni volver a sumar consumos vinculados.
-- Metas: importe restante y aportes orientativos diarios/semanales hasta la fecha
-  objetivo; distingue metas vencidas, completas y conversiones pendientes. Edición
-  y cierre desde el detalle: completar libera las reservas restantes en sus
-  cuentas originales, conserva gastos e historial y detiene la captura automática.
-  La operación es atómica y se puede cerrar antes de alcanzar el importe objetivo.
-- Deudas: filtros por vencidas, próximos 7/30 días y avisos de vencimiento;
-  una deuda sin importe definido conserva esa indicación.
-- Inversiones: cartera por moneda y actualización persistida de valoración,
-  incluido valor cero, preservando coste, moneda y fecha originales.
-- Datos: diagnóstico de referencias/conversiones/revisión/categorías desde el
-  respaldo completo; vista previa CSV por moneda y respaldos JSON fechados.
-  El recibo indica cuándo se solicitó la descarga; comprobar el archivo descargado.
-- Ajustes: caducidad automática de sesión y bloqueo manual.
-  Bloquear elimina la sesión y la caché financiera del navegador.
+- **Es tuya y de nadie más.** Un solo usuario, un token, tu propia base PostgreSQL. No hay
+  registro, no hay terceros mirando tus movimientos.
+- **Entra sola.** Los avisos que el banco manda por correo se convierten en movimientos sin que
+  escribas nada. Lo que no se puede resolver con certeza queda marcado para revisar; nunca se
+  inventa una categoría ni una cotización.
+- **Entiende varias monedas.** Pesos, dólares, euros, reales y pesos argentinos. Cada movimiento
+  congela la cotización del día para que el historial no cambie cuando cambia el dólar.
+- **Entra en los planes gratis.** Una Serverless Function en Vercel y una base en Neon alcanzan
+  de sobra para el uso de una persona.
+- **No pierde historial.** Nada se borra de verdad: cuentas, tarjetas, categorías y movimientos
+  se archivan y siguen contando donde corresponde.
 
-Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
-en producción son pasos operativos separados.
+## Probala en dos minutos
 
-Query mantiene las lecturas por entidad en memoria y dentro de la sesión actual.
-No se guarda información financiera en localStorage. El arranque siembra la
-referencia y la primera página de Records; saldos, metas, reportes y tarjetas
-consumen agregados completos del servidor. Una página nunca representa todo el
-historial. Bloquear aborta solicitudes y elimina las cachés; una respuesta de la
-sesión anterior no puede repoblarlas.
-
-El repositorio está organizado por agregado bajo `server/db/`; las operaciones
-reciben la DB como primer argumento. El router crea como máximo un cliente por
-request y rechaza cuerpos de unlock inválidos antes de consultar la base. El
-límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
-ventana de quince minutos. Un desbloqueo válido no borra el contador global.
-El perfil por defecto conserva el formato y las sesiones existentes. La baseline
-aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
-activar según `REFACTOR-CHECKPOINT.md`.
-
-## Funcionalidades nuevas
-
-- Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,
-  tarjetas, categorías, metas, deudas, inversiones y movimientos, o abrir acciones
-  rápidas. Buscar movimientos limpia filtros anteriores y abre todo el historial.
-  La búsqueda ignora mayúsculas y acentos; los movimientos se buscan en Records
-  mediante filtros paginados del servidor.
-- Plantillas: gestión en Configuración para guardar, editar, reutilizar y quitar
-  configuraciones sin modificar el historial financiero. Los nombres son únicos
-  sin distinguir mayúsculas ni espacios exteriores y se admiten hasta 100 plantillas.
-- Asistente de presupuestos: en Análisis propone límites mensuales a partir de
-  tres meses completos anteriores, incluyendo meses sin gastos, con margen e
-  importes editables. Los nuevos presupuestos se aplican todos los meses; el mes
-  elegido sólo determina el período de cálculo y no puede ser futuro. Usa los
-  gastos WalletRecord y sus cotizaciones congeladas, según las preferencias del
-  reporte; excluye compras directas de Tarjetas sin WalletRecord. Agrupa
-  subcategorías y bloquea categorías que se superponen con presupuestos activos.
-  Guarda cada selección por separado; ante fallos muestra lo confirmado y
-  concilia el estado actual antes de reintentar. El lote completo no es atómico.
-
-La tabla de plantillas requiere la migración `0018`. La regla de revisión
-informativa y la conciliación de datos existentes requieren `0019` antes de
-desplegar esta versión. La migración conserva cancelaciones y eliminaciones;
-un saldo de deuda inconsistente se rechaza en vez de ocultarlo con un ajuste.
-No se corrigen automáticamente cotizaciones antiguas ambiguas de correos: deben
-verificarse manualmente. Tampoco se reconstruyen consumos de reservas antiguos
-a partir de intenciones de movimientos en revisión: se conserva el libro de
-reservas registrado y cualquier discrepancia histórica requiere revisión.
-El estado real de las migraciones en producción debe comprobarse en el destino;
-la comprobación de 2026-11-14 confirmó 0000–0022 aplicadas, con hashes CRLF
-históricos verificados para 0015–0020. No repetirlas ni modificar el journal;
-volver a ejecutar el preflight antes de cualquier ampliación futura.
-El sandbox aplica las migraciones sólo a su base local al iniciar.
-
-## Verificación del refactor
-
-`npm run check` incluye formato versionado, lint con tipos, pruebas locales,
-build y verificación del contrato generado. `npm run format` aplica Prettier;
-`npm run format:check` sólo verifica. El índice usa LF.
-
-Las pruebas usan hasta dos workers aislados. Un clúster `embedded-postgres`
-por ejecución corre en un proceso hijo y contiene una plantilla migrada; cada archivo recibe una base
-sintética independiente. PGlite sigue cubriendo el sandbox. No se conecta Neon
-ni se leen credenciales productivas. Las pruebas de providers usan Testing
-Library con jsdom; otras pruebas de vistas conservan temporalmente el renderer.
-
-El alcance, compatibilidad y avance de los cinco paquetes están en
-[REFACTOR-CHECKPOINT.md](REFACTOR-CHECKPOINT.md).
-
-## Stack
-
-- React + Vite + TypeScript
-- Tailwind CSS + componentes estilo shadcn/ui
-- Recharts
-- Vercel Functions
-- Neon/PostgreSQL
-- Drizzle ORM + Drizzle Kit
-- Zod
-- Vitest
-
-## Setup Local
-
-Para reproducir el QA con datos completamente sintéticos, sin respaldo personal:
+Sin cuenta, sin base externa, sin credenciales. El entorno de demostración aplica las migraciones
+reales sobre un PostgreSQL en memoria y levanta la API y la interfaz reales con datos sintéticos.
 
 ```powershell
+npm install
 npx tsx scripts/sandbox/qa.ts
 ```
 
-Abrir http://127.0.0.1:4175 y usar `wallet-local-test`. Este entorno aplica las
-migraciones a PostgreSQL en memoria y usa la API real. No carga `.env`, no toca
-`.local-wallet/` y bloquea conexiones externas. Incluye cuentas, categorías con
-scroll, pendientes nuevos/anteriores, tarjetas con/sin estado pendiente y una
-meta con gastos fuera de la primera página de Records. Sus
-cambios sobreviven a una recarga del navegador y desaparecen al detenerlo:
+Abrí <http://127.0.0.1:4175> y entrá con el código `wallet-local-test`. Lo que cambies sobrevive a
+una recarga y desaparece cuando detenés el servidor (`Ctrl+C` o `POST /__qa/stop`). Las
+conexiones externas están bloqueadas.
 
-```powershell
-curl.exe -X POST http://127.0.0.1:4175/__qa/stop
+<p align="center">
+  <img src="assets/readme/unlock.webp" width="620" alt="Pantalla de desbloqueo con el token personal" />
+</p>
+
+### Instalá la tuya
+
+Necesitás una cuenta gratuita en [Vercel](https://vercel.com) y otra en [Neon](https://neon.tech).
+
+1. Creá un proyecto en Neon y copiá la cadena de conexión.
+2. Importá este repositorio en Vercel.
+3. Configurá las variables de entorno del proyecto:
+
+   | Variable           | Para qué                                                                  |
+   | ------------------ | ------------------------------------------------------------------------- |
+   | `DATABASE_URL`     | Conexión a Neon.                                                          |
+   | `API_TOKEN`        | Tu token personal; es lo que escribís para desbloquear la app.            |
+   | `SESSION_SECRET`   | Secreto independiente para firmar las sesiones del navegador.             |
+   | `INGEST_API_TOKEN` | Opcional. Token exclusivo para la ingesta de correos.                     |
+   | `OPENAI_API_KEY`   | Opcional. Clasifica comercios desconocidos; sin ella quedan para revisar. |
+
+4. Aplicá las migraciones contra tu base (`npm run db:migrate`) y deployá.
+
+Las sesiones duran 45 días y el navegador guarda sólo la sesión firmada, nunca el token.
+Cinco intentos fallidos por IP en quince minutos bloquean el desbloqueo. El resto de los
+procedimientos (sandbox con tu respaldo, importación de datos, migraciones delicadas, rotación de
+secretos, Apps Script) está en [OPERATIONS.md](OPERATIONS.md).
+
+## Qué tiene
+
+### Movimientos con cola de revisión
+
+Todo pasa por acá: gastos, ingresos y transferencias entre cuentas, con categoría, comercio,
+etiqueta, notas y medio de pago. Los filtros combinan período, cuenta, tarjeta, categoría y
+estado, y la búsqueda global (`Ctrl/Cmd+K`) encuentra cualquier cosa ignorando mayúsculas y
+acentos. Los movimientos que llegaron por correo sin categoría o sin cotización quedan en una cola
+de revisión propia, independiente del período, que avisa cuántos hay nuevos. Las plantillas guardan
+configuraciones repetidas (la nafta quincenal, el alquiler) y las abren como borrador con la fecha
+y las cotizaciones de hoy.
+
+<p align="center">
+  <img src="assets/readme/records.webp" width="920" alt="Lista de movimientos agrupada por día con filtros y cola de revisión" />
+</p>
+
+### Cuentas en varias monedas
+
+Cada cuenta tiene su moneda, su saldo disponible y lo que está reservado para metas. El saldo
+total y el disponible se calculan en el servidor con las cotizaciones congeladas de cada
+movimiento. Las cuentas se pueden ocultar de los reportes o archivar sin perder su historial.
+
+<p align="center">
+  <img src="assets/readme/accounts.webp" width="920" alt="Cuentas con saldo, total y reservado, en pesos y dólares" />
+</p>
+
+### Tarjetas de crédito con ciclos reales
+
+Las compras con tarjeta no tocan el saldo del banco hasta que pagás el resumen. Cada tarjeta
+tiene su límite, su día de cierre y su día de vencimiento; la app arma los ciclos, cierra los
+resúmenes, distingue el ciclo abierto de los resúmenes pendientes y avisa al 80 % y al 100 % del
+límite. Las compras en otra moneda guardan la conversión usada para consumir el límite, y los
+pagos se aplican contra un resumen concreto, descontando de una cuenta o como pago externo.
+
+<p align="center">
+  <img src="assets/readme/cards.webp" width="920" alt="Tarjeta con uso del límite por categoría, ciclo actual y resúmenes" />
+</p>
+
+<p align="center">
+  <img src="assets/readme/card-detail.webp" width="920" alt="Detalle de tarjeta con límite, ciclo actual, resumen seleccionado, pago y movimientos" />
+</p>
+
+### Análisis que responde preguntas
+
+Tasa de ahorro, meses de colchón, promedio diario, tendencia de gastos comparada con los dos
+períodos anteriores, comparación mensual, gastos por categoría y por cuenta, comercios principales
+y evolución del saldo. Todo sale de agregados SQL, así que no hace falta descargar el historial
+para ver un reporte. El asistente de presupuestos propone límites mensuales a partir de los tres
+meses anteriores y deja editar cada importe antes de guardarlo.
+
+<p align="center">
+  <img src="assets/readme/analytics.webp" width="920" alt="Análisis con tasa de ahorro, colchón de emergencia, tendencia y comparación mensual" />
+</p>
+
+### Metas, deudas, inversiones y cuotas
+
+- **Metas:** reservás plata de una cuenta para una meta y la app te dice cuánto falta y cuánto
+  aportar por día o por semana hasta la fecha. Completar una meta libera lo que sobró a las
+  cuentas originales.
+- **Deudas:** lo que debés y lo que te deben, con pagos parciales que crean movimientos, deudas
+  recurrentes mensuales y filtros por vencidas, próximos 7 y 30 días.
+- **Inversiones:** cartera por moneda con costo, valor actual y resultado.
+- **Cuotas:** planes de pago en cuotas con avance y próxima fecha.
+
+<table>
+  <tr>
+    <td><img src="assets/readme/goals.webp" alt="Metas con reservas, faltante y aportes sugeridos" /></td>
+    <td><img src="assets/readme/debts.webp" alt="Deudas a cobrar y a pagar con pagos parciales" /></td>
+  </tr>
+  <tr>
+    <td><img src="assets/readme/investments.webp" alt="Inversiones por moneda y planes de cuotas" /></td>
+    <td><img src="assets/readme/data.webp" alt="Importación CSV, respaldo JSON y verificación de datos" /></td>
+  </tr>
+</table>
+
+### Tus datos entran y salen
+
+Importás un CSV con vista previa, detección de duplicados y lotes atómicos de hasta 200 filas.
+Exportás un respaldo JSON completo (incluye archivados, reservas, reglas de comercios y claves de
+procesamiento) y lo restaurás de forma atómica: si algo no valida, la base queda como estaba. La
+verificación de datos revisa referencias, conversiones y categorías de todo el historial sin
+modificar nada.
+
+### Los avisos del banco entran solos
+
+Un Google Apps Script lee en tu Gmail los avisos de compra, débito, transferencia y pago, los
+normaliza con el mismo código que usa el servidor y los envía a la API con un token exclusivo. El
+servidor reconoce el comercio, elige la categoría (reglas aprendidas primero, OpenAI sólo para
+comercios nuevos), resuelve la cuenta o tarjeta destino, descarta duplicados y guarda el
+movimiento. Si falta un dato o un proveedor externo no responde a tiempo, el movimiento queda
+para revisar con su importe intacto.
+
+### Claro, oscuro y en el teléfono
+
+<table>
+  <tr>
+    <td colspan="2"><img src="assets/readme/dashboard-dark.webp" alt="Dashboard en modo oscuro" /></td>
+    <td><img src="assets/readme/mobile-dashboard.webp" alt="Dashboard en un teléfono" /></td>
+  </tr>
+</table>
+
+### Seguridad pensada para una sola persona
+
+- Un token maestro que nunca viaja al navegador: el desbloqueo devuelve una sesión firmada con
+  vencimiento.
+- Bloquear la app aborta las solicitudes en curso y borra las cachés; no queda información
+  financiera en `localStorage`.
+- Límite de intentos de desbloqueo por IP y global, con poda automática.
+- La ingesta de correos usa su propio token y no acepta la sesión del usuario.
+- Los logs del servidor registran operación, estado y duración; nunca cuerpos, parámetros SQL ni
+  importes.
+- Sesiones revocables (cerrar todas las sesiones desde Ajustes) ya implementadas, a activar con
+  una variable de entorno.
+
+## Cómo está hecho
+
+### Stack
+
+| Capa          | Tecnología                                                                           |
+| ------------- | ------------------------------------------------------------------------------------ |
+| Interfaz      | React 19, Vite 7, TypeScript 5.9, Tailwind CSS, Radix UI, Recharts, React Router 7   |
+| Estado remoto | TanStack Query 5 con claves por entidad y políticas de invalidación por mutación     |
+| Contratos     | Zod 4 en `shared/`, contrato de rutas tipado, OpenAPI generado                       |
+| Backend       | Una Serverless Function en Vercel (`api/index.ts`), Node 22                          |
+| Base de datos | Neon PostgreSQL, Drizzle ORM, driver Neon HTTP, 24 migraciones versionadas           |
+| Ingesta       | Google Apps Script + parsers TypeScript compartidos, OpenAI y Frankfurter opcionales |
+| Pruebas       | Vitest, PostgreSQL embebido para integración, PGlite para sandbox y QA, jsdom        |
+| Calidad       | Prettier, ESLint con reglas tipadas e `import/order`, `npm run check` en CI          |
+
+### Arquitectura
+
+![Arquitectura: navegador, una Serverless Function con pipeline por contrato, repositorio por agregado, Neon PostgreSQL, ingesta de correos y proveedores externos](assets/readme/architecture.svg)
+
+Tres decisiones explican casi todo lo demás:
+
+1. **El contrato es la fuente de verdad.** `shared/api-contract.ts` declara las 90 operaciones:
+   método, ruta, nivel de autenticación, esquemas de entrada y salida y código de éxito. De ahí se
+   deriva el router del servidor, el cliente del navegador y `contracts/openapi.yaml`. Agregar una
+   operación sin su handler o sin su política de caché no compila.
+2. **Una sola función, un pipeline fijo.** Cada request construye un contexto (una conexión lazy,
+   `requestId`, una línea de log), encuentra la operación, autentica antes de leer nada privado,
+   valida con Zod, ejecuta el handler y responde `{ data, error }`.
+3. **El dinero vive en SQL.** Importes en `numeric`, sumas y conversiones en consultas, reportes
+   como agregados. Neon HTTP no tiene transacciones interactivas, así que cada mutación de varios
+   pasos es un lote o una sola sentencia con CTEs, y los pagos llevan clave de idempotencia.
+
+### Ciclo de una request
+
+```mermaid
+flowchart LR
+    B["Navegador<br/>api-client.ts"] -->|HTTPS + Bearer| V["vercel.json<br/>/api/* → /api?path=$1"]
+    V --> C["RequestContext<br/>db lazy · requestId"]
+    C --> R["router.ts<br/>match por contrato"]
+    R --> A{operation.auth}
+    A -->|session| S["Sesión firmada<br/>+ versión opcional"]
+    A -->|ingest| I["INGEST_API_TOKEN"]
+    A -->|none| U["unlock + rate limit"]
+    S --> Z["Zod: params · query · body"]
+    I --> Z
+    U --> Z
+    Z --> H["handlers.ts → modules/*.ts"]
+    H --> D["server/db/*<br/>db como primer argumento"]
+    D --> N[(Neon PostgreSQL)]
+    H --> O["{ data, error }<br/>X-Request-Id · no-store"]
 ```
 
-El recorrido y los resultados del QA están en [QA-REVIEW.md](QA-REVIEW.md).
+### Datos en el navegador
 
-Para pruebas aisladas con un respaldo personal, usar el sandbox:
-
-```powershell
-npm install
-npm run sandbox:setup -- --backup "$env:USERPROFILE/Downloads/wallet-backup.json"
-npm run sandbox
+```mermaid
+flowchart TB
+    subgraph Query["TanStack Query"]
+        REF["[reference]<br/>cuentas, categorías, tarjetas, metas…"]
+        REC["[records, filtros]<br/>useInfiniteQuery por cursor"]
+        AN["[analytics, …]<br/>summary · details · balances · goals"]
+        CA["[cards, …]<br/>summary · agenda · ledger"]
+    end
+    V["Vistas y features"] --> Query
+    V -->|runAction| M["wallet-actions.ts"]
+    M --> MU["mutations.ts<br/>una política por operación"]
+    MU -->|invalida sólo las claves afectadas| Query
+    Query --> API["api-client.ts generado"]
+    API --> S[(API)]
+    UI["WalletProvider<br/>sólo selección de UI: período, filtros"] --> V
 ```
 
-Abrir http://127.0.0.1:4173 y desbloquear con el código de prueba
-`wallet-local-test`. El simulador de correo está en
-http://127.0.0.1:4173/__sandbox. Permite crear avisos Itaú/Automation Wallet,
-configurar destinos, ejecutar `processPendingEmails` y volver un thread a
-pendiente para probar reintentos y duplicados. Ejecuta los archivos actuales de
-`mail-service/`, no envía correos ni accede a Gmail real.
+El arranque siembra la referencia y la primera página de movimientos. Ninguna vista trata una
+página como si fuera todo el historial; los saldos, metas, reportes y tarjetas consumen agregados
+completos del servidor. Los formularios comparten un kit (`Field`, `MoneyInput`, `CurrencySelect`,
+`AccountSelect`, `CategoryField`, `ConfirmDialog`, `FormDialog`) y los hooks `useDraftFields` y
+`useConfirmDialog`.
 
-La API usa el router y repositorio reales, PostgreSQL embebido (PGlite), las
-migraciones del proyecto y el driver Neon HTTP con transporte local. Los datos
-persisten en `.local-wallet/`, ignorado por Git. No carga `.env` ni credenciales
-de producción; bloquea conexiones externas de la API, incluida clasificación
-OpenAI. Las conversiones requieren una cotización guardada o un importe convertido explícito.
+### De un correo a un movimiento
 
-```powershell
-npm run sandbox:stop
-npm run sandbox:setup -- --reset
-npm run sandbox:check
+```mermaid
+sequenceDiagram
+    participant G as Gmail
+    participant S as Apps Script<br/>(normalization.gs generado)
+    participant A as POST /api/ingest/mail/transactions
+    participant P as server/ingestion
+    participant X as OpenAI / Frankfurter
+    participant DB as PostgreSQL
+
+    G->>S: aviso de compra, débito, transferencia o pago
+    S->>S: parser por tipo de aviso<br/>(shared/mail-normalization.ts)
+    S->>A: evento normalizado + INGEST_API_TOKEN
+    A->>P: idempotencia, duplicados, destino
+    P->>DB: comercio y alias aprendidos, merchant_category_rules
+    alt comercio o cotización desconocidos
+        P->>X: consulta con presupuesto (10 s / 4 s) y circuit breaker
+        X-->>P: categoría válida / tasa válida
+        P->>DB: aprende la regla en la misma transacción
+    end
+    P->>DB: movimiento cleared, o needs_review si algo falta
+    A-->>S: { data, error }
 ```
 
-El reset requiere detener el servidor y restaura la copia inicial del respaldo;
-conserva la base anterior en `.local-wallet/db-before-reset-*`. Para reemplazar
-el snapshot, agregar `--backup <ruta>` al reset. Nunca modifica el archivo
-original de Descargas. Si ya existe una base, el setup no la reemplaza sin
-`--reset`. Un lock impide abrir la misma base en dos procesos.
-La restauración valida e importa una base provisional antes de reemplazar la
-activa; si el snapshot falla, conserva la base, el buzón y el respaldo anteriores.
-Después de un cierre forzado, verificar que el proceso esté detenido antes de
-eliminar `.local-wallet/process.lock`; los locks viejos no se borran automáticamente.
+### Reglas del dominio que no se negocian
 
-Un snapshot reproduce únicamente los datos que exportó la wallet y nunca incluye
-secretos. Un respaldo antiguo puede carecer de reglas privadas de comercios,
-eventos de ingesta y filas archivadas; el respaldo completo actual conserva
-reglas, claves de procesamiento e historial archivado. PGlite permite probar SQL, persistencia y rollback,
-pero usa una sola conexión; las carreras entre varias conexiones deben validarse
-posteriormente contra un PostgreSQL de pruebas independiente.
+- `needs_review` conserva el impacto financiero de lo que se sabe; `cancelled` lo excluye. Nunca se
+  supone una relación 1:1 entre monedas: una cotización de cero significa "pendiente".
+- Soft delete en cuentas, categorías, etiquetas, tarjetas, movimientos, pagos, deudas,
+  presupuestos, inversiones y planes de cuotas. El historial financiero es durable.
+- La moneda principal, la de las cuentas y la del límite de las tarjetas quedan protegidas cuando
+  ya hay historial, para no reinterpretar importes congelados.
+- Las lecturas no escriben. Los ciclos de tarjeta se actualizan dentro de las mutaciones de
+  tarjetas y con un endpoint explícito que el cliente llama al abrir Tarjetas.
+- Pagos de deudas y tarjetas y movimientos de reservas llevan clave de idempotencia: un reintento
+  no descuenta dos veces.
+- Las tablas nuevas se agregan al respaldo y a la restauración; el estado operativo (circuitos,
+  contadores de autenticación) no se restaura desde un JSON.
 
-Para el entorno tradicional conectado a una base Neon:
+### Mapa del repositorio
 
-```powershell
-npm install
+```text
+api/index.ts            Pipeline de la Serverless Function
+server/api/             router, context, auth, sesiones, errors, modules/*.ts (handlers)
+server/db/              Repositorio por agregado + mappers, patch, batch, fx, pg-error
+server/ingestion/       parsers/, providers/ (category, rates, circuit), reglas de comercios
+shared/                 api-contract.ts, schemas/ (Zod), cálculos de dominio, mail-normalization
+src/features/           records/ y cards/ (vistas, hooks y formularios por dominio)
+src/views/              dashboard, accounts, analytics, goals, debts, investments, data, settings
+src/services/           api-client.ts (generado), wallet-queries.ts, mutations.ts, wallet-actions.ts
+src/components/ui/form  Kit de formulario compartido
+drizzle/migrations/     0000 → 0023, aditivas, con journal verificado
+mail-service/           Apps Script (Code.gs, EmailProcessors.gs, normalization.gs generado)
+scripts/sandbox/        Sandbox, QA sintético, PostgreSQL embebido para tests
+contracts/openapi.yaml  Generado desde el contrato, verificado en CI
 ```
 
-Crear `.env.local` con:
-
-```txt
-DATABASE_URL="postgresql://..."
-API_TOKEN="token-largo"
-SESSION_SECRET="secreto-independiente-para-firmar-sesiones"
-SESSION_TTL_SECONDS="3888000"
-INGEST_API_TOKEN="otro-token-largo"
-OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
-OPENAI_MODEL="gpt-5-nano"
-```
-
-El archivo `.env.local` esta ignorado por git.
-
-Las nuevas sesiones duran 45 días por defecto (3.888.000 segundos). Las sesiones ya emitidas
-conservan su vencimiento; volver a desbloquear la app emite un token con la nueva duración.
-
-## Comandos
+### Verificación
 
 ```powershell
-npm run dev
-npm run build
-npm run lint
-npm run test
 npm run check
-npm run api:spec
-npm run api:spec:check
-npm run benchmark:api
-npm run db:generate
-npm run db:migrate
-npm run db:import-wallet-records
-npm run db:import-merchant-rules
 ```
 
-El unlock siempre valida contra `API_TOKEN`; no existe un bypass de desarrollo.
-El token maestro se intercambia por una sesión firmada de duración limitada;
-el navegador guarda esa sesión, no el token maestro. La ingesta usa un token
-independiente y no acepta la sesión de usuario.
-
-Para probar la app completa con endpoints reales en local, usar Vercel Dev:
-
-```powershell
-npx vercel dev --listen 3001
-```
-
-El CLI puede pedir login la primera vez. Una vez levantado, entrar a
-`http://localhost:3001` y desbloquear con `API_TOKEN`.
-
-## Tarjetas de credito
-
-Las fechas de compras y pagos se presentan en la zona local del navegador,
-igual que en Movimientos. Las fechas sin hora conservan su día de calendario.
-Tarjetas separa el ciclo abierto de los estados cerrados con saldo pendiente;
-cada vencimiento pendiente abre su estado exacto. El saldo total se identifica
-como Outstanding y no se confunde con un vencimiento del ciclo abierto.
-
-La vista `/cards` administra tarjetas con un unico limite y moneda de limite,
-dias fijos de cierre y vencimiento. Sus consumos se registran sin afectar una
-cuenta bancaria, conservan la moneda original y guardan la conversion usada para
-consumir el limite. Cada consumo requiere categoria.
-
-Los pagos pueden ser externos o descontarse de una cuenta. Un pago reduce la
-deuda y el limite utilizado; cuando se elige una cuenta tambien reduce su saldo.
-Superar el limite muestra una advertencia, pero no bloquea el movimiento.
-
-Antes de usar esta funcionalidad contra una base existente, aplicar las migraciones
-con `npm run db:migrate`. Las migraciones son aditivas y no convierten
-automaticamente cuentas antiguas de tipo `credit_card`, porque no contienen el
-limite, los ultimos cuatro digitos ni las fechas necesarias.
-
-## Deploy
-
-Para Vercel:
-
-- Configurar `DATABASE_URL`.
-- Configurar `API_TOKEN`.
-- Configurar `SESSION_SECRET` con un valor distinto de `API_TOKEN`.
-- Configurar `INGEST_API_TOKEN` si se usa la automatización de correo.
-- Deployar el repo.
-
-Neon Auth no es necesario para esta version. Neon se usa como PostgreSQL.
-
-## API
-
-Todas las respuestas usan `{ data, error }`. Salvo `POST /api/auth/unlock` y la
-ingesta con token dedicado, las rutas requieren la sesión en
-`Authorization: Bearer <token>`.
-
-| Método | Ruta                    | Uso                                                              |
-| ------ | ----------------------- | ---------------------------------------------------------------- |
-| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión                        |
-| `GET`  | `/api/health`           | smoke check autenticado                                          |
-| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado                  |
-| `GET`  | `/api/records`          | pagina records por cursor y filtros                              |
-| `GET`  | `/api/wallet`           | snapshot completo para acciones explícitas y clientes anteriores |
-| `GET`  | `/api/wallet/backup`    | respaldo consistente, incluyendo historial archivado             |
-| `POST` | `/api/records/import`   | hasta 200 records por transacción                                |
-| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente              |
-
-`GET /api/records` acepta `limit`, `cursor`, `from` y `to`; devuelve
-`{ items, nextCursor, hasMore }` dentro de `data`. El bootstrap genera las
-recurrentes pendientes y devuelve una primera página. El frontend usa
-bootstrap-reference y consultas por entidad; las mutaciones invalidan sólo las
-lecturas afectadas. El snapshot completo se solicita explícitamente para CSV,
-asistente o asociación histórica, sin publicarlo en la caché activa. `PATCH`
-modifica únicamente los campos enviados;
-los campos opcionales que admiten limpieza se envían como `null`.
-
-En `/data`, CSV conserva la moneda y los importes/tasas congelados, admite
-campos entrecomillados con saltos de línea y consulta el historial completo antes
-de comprobar duplicados. Los archivos grandes se envían en lotes de hasta 200:
-cada lote es atómico, pero el archivo completo no lo es. Ante un error se muestra
-el número confirmado y se recarga antes de reintentar. Una respuesta perdida
-puede requerir reconciliar el último lote.
-
-La exportación JSON obtiene un snapshot consistente con las entidades archivadas,
-sus vínculos, el historial de reservas, las reglas de comercios y las claves de
-procesamiento de correos para conservar la protección contra reintentos. Los
-respaldos antiguos conservan las reglas actuales cuando sus categorías pueden
-remapearse sin ambigüedad; una incompatibilidad rechaza el reemplazo completo.
-La restauración JSON valida el
-archivo, muestra sus cantidades y exige confirmar el reemplazo de los datos.
-Un respaldo de la wallet no incluye credenciales ni configuración externa.
-
-Los pagos de deudas y tarjetas se aplican con transacciones e idempotencia:
-un reintento con la misma clave no vuelve a descontar dinero. Los importes de la
-cuenta, la moneda original y el importe recibido en una transferencia se guardan
-por separado. Una cotización ausente exige revisión o entrada explícita; no se
-supone equivalencia entre monedas. La moneda principal queda protegida cuando
-existe historial financiero para evitar reinterpretar importes congelados.
-La moneda de las cuentas y del límite de las tarjetas también queda protegida
-cuando hay saldo inicial o actividad. Los registros `needs_review` conservan el
-impacto financiero que permiten sus importes y conversiones conocidos; cancelar
-excluye el movimiento sin inventar datos faltantes. Los pagos de deuda se
-crean con la acción de pago; CSV no puede insertar nuevos pagos vinculados sin
-conciliar la deuda. Para restaurar ese historial se usa el respaldo JSON completo.
-
-Las pruebas de integración ejecutan las migraciones en bases temporales locales.
-Las pruebas de concurrencia usan PostgreSQL con conexiones independientes mediante
-`embedded-postgres`, sin conectarse a Neon ni leer credenciales de producción.
-
-Vercel despliega una sola Serverless Function: `vercel.json` reescribe todas las
-rutas `/api/*` al router consolidado de `api/index.ts`. La API es privada y
-pre-1.0; frontend y backend se actualizan juntos y todavía no se garantiza
-compatibilidad pública.
-
-## Ingestion de correos
-
-`POST /api/ingest/mail/transactions` recibe eventos normalizados del Apps Script
-de `mail-service/` y se autentica exclusivamente con `INGEST_API_TOKEN`. El backend
-resuelve comercios, categorias, moneda, destino, idempotencia y duplicados. Los
-destinos desconocidos se guardan como `needs_review` sin inventar IDs ni impactos.
-
-La clasificación usa reglas de comercio, reglas específicas y finalmente
-OpenAI con las categorías actuales. Las reglas que apuntan a `Unknown expense`
-también permiten consultar OpenAI. Uber, Cabify y Taxi corrigen el antiguo mapeo
-a transporte público; Uber Eats mantiene la categoría de comida.
-
-El fallback usa 2048 tokens de salida, razonamiento `low` para modelos GPT-5 y
-un timeout de 30 segundos. Respuestas incompletas, refusals, errores HTTP y
-categorías inválidas mantienen el gasto bajo revisión. Una categoría desconocida
-también queda como `needs_review`; los importes válidos conservan su efecto en
-saldos e informes.
-
-Una clasificación válida de GPT se aprende en el catálogo persistente de
-comercios y aliases. Las próximas entradas con ese descriptor usan la regla sin
-consultar al modelo. Para comercios nuevos se conserva el descriptor completo
-normalizado, sin recortarlo a términos generales; una regla existente con
-categoría desconocida se actualiza conservando su identidad. No se aprenden
-resultados desconocidos ni fallidos, y una corrección simultánea de una regla
-existente prevalece sobre la inferencia pendiente. El aprendizaje se confirma en
-la misma transacción que el movimiento: los reintentos, duplicados y fallos no
-crean reglas adicionales. Las reglas aprendidas se incluyen en el respaldo JSON
-junto con el catálogo y se recuperan al restaurarlo.
-Los comercios nuevos aprendidos usan `matchMode: "exact"` para el descriptor
-normalizado. Las reglas explícitas conservan `matchMode: "alias"` y prevalecen
-sobre esa caché, incluso si se agregan más tarde. Los respaldos anteriores sin
-ese campo mantienen el comportamiento por aliases, sin reinterpretar prioridades.
-La migración aditiva `0020_merchant_match_mode` debe aplicarse al publicar esta
-funcionalidad; no modifica registros financieros.
-
-Los logs de Vercel incluyen el evento `mail_category_classification`, el ID de
-ingesta, origen de la categoría y diagnóstico de la llamada: modelo, motivo,
-HTTP, request ID, duración y tokens. No registran claves, cuerpos de error ni
-descriptores financieros. El mismo diagnóstico queda en
-`ingestion_events.sanitized_payload.classification` durante la retención de
-metadatos existente de 90 días. Los fallos de categoría incluyen una nota visible
-en el movimiento; los clasificados por el modelo indican `Categorized by OpenAI`.
-
-Después de migrar, cargar el catálogo de 254 reglas desde el checkout WSL de
-`wallet-automation`:
-
-```powershell
-npm run db:import-merchant-rules
-```
-
-Se puede pasar una ruta JSON alternativa como argumento directo al script.
-
-## Carga de datos reales
-
-El importador usa `.env.local`, resetea las tablas principales de la wallet y carga
-`wallet_records.csv` con una unica cuenta llamada `Banco`.
-
-```powershell
-npm run db:migrate
-npm run db:import-wallet-records
-```
-
-El script crea categorias padre/hija con icono y color inferidos desde
-`categories-from-wallet-records.md`, normaliza categorias con espacios sobrantes y
-carga los records en Neon.
-
-## Refactor de contrato y baseline aditiva
-
-El router se deriva del contrato y autentica antes de validar entradas privadas.
-Cada request comparte una DB lazy y un requestId; el log JSON final contiene
-operación, status y duración, sin cuerpo, query string ni parámetros SQL. Las
-lecturas de wallet y estados de tarjeta no reparan datos. Abrir Tarjetas dispara
-`POST /api/cards/refresh-statements`; las mutaciones sincronizan sus estados
-dentro del batch financiero. `GET /api/cards/:id/summary` agrega una sola tarjeta
-en SQL. Archivar tarjeta responde `{ archived: true }`; generar recurrentes usa
-200 sin altas y 201 cuando crea instancias.
-
-`GET /api/analytics/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` devuelve totales,
-categorías (incluidos ancestros), meses y presupuestos sin descargar el historial.
-Acepta `accountId` y `timeZone` IANA (America/Montevideo por defecto). Las fechas
-son inclusivas en esa zona. Respeta cuentas ocultas y las cotizaciones congeladas;
-`needs_review` conserva su impacto y cancelados/eliminados se excluyen. Una
-conversión pendiente aparece en `unresolvedRecords`; los presupuestos sin
-conversión congelada disponible devuelven importes `null` y estado warning.
-El snapshot completo conserva su contrato para clientes anteriores y acciones
-explícitas; los reportes actuales consumen los agregados del servidor.
-
-La migración `0022_repository_baseline` agrega índices, singleton de settings,
-metadatos y columnas de archivo. No borra ni transforma importes y conserva
-`goal_reservations`. Rechaza settings duplicados antes del DDL; no los reconcilia
-automáticamente. La activación de los nuevos soft deletes, unicidad de tags
-activos y FK de deudas se prepara para el siguiente paquete, cuando esta versión
-ya sea un destino de rollback capaz de leer archivos. No aplicar FK sobre
-referencias antiguas sin diagnóstico ni ejecutar drops sobre datos reales.
-
-Antes de aplicar 0022, verificar destino, journal y recuperación sintética:
-
-```bash
-npm run db:preflight -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada>
-WALLET_TEST_WORKERS=1 npm run check
-WALLET_TEST_WORKERS=1 npm run sandbox:check
-```
-
-El preflight sólo lee metadata y guards agregados; no aplica migraciones ni
-imprime credenciales o filas financieras. La huella SHA-256 corresponde al
-hostname normalizado sin `-pooler`, cotejado con un origen independiente del
-archivo local. Detenerse si faltan migraciones anteriores, hay hashes desconocidos,
-DDL parcial o más de una fila de settings. El journal histórico conserva hashes CRLF de
-0015–0020: el preflight acepta sólo sus variantes byte a byte verificadas y fechas
-originales, las informa en `legacyCrlfMigrations` y no modifica el journal ni
-repite SQL. BOM, otros hashes, fechas alteradas o identidades duplicadas siguen
-bloqueando la operación. No marcar migraciones como aplicadas
-por suposición ni crear una copia de datos reales para ensayar. Migración antes
-del deploy del código que lee sus columnas; rollback de código conservando las
-columnas. Los tests restauran un backup sintético antiguo y comprueban rollback
-de una migración rechazada. El restore financiero conserva la versión de sesión
-y la marca de poda actuales; esos contadores no se importan desde un JSON.
-
-`WALLET_TEST_WORKERS=1` limita Vitest a un worker en la HP; CI usa dos por defecto.
-
-## Sesiones revocables preparadas, sin activar
-
-Por defecto se conserva el formato y validación de sesión actuales.
-`GET /api/auth/session` indica `revocable: false`; el botón para cerrar todas las
-sesiones no aparece y `POST /api/auth/lock-all` devuelve 503 sin modificar versiones.
-La poda de intentos se ejecuta en unlock con una marca persistente como máximo
-una vez por hora y borra ventanas con más de 24 horas.
-
-El perfil optativo requiere `SESSION_SECRET` independiente de ambos tokens
-maestros, `LEGACY_SESSION_ACCEPT_UNTIL` con una fecha ISO explícita, y
-`WALLET_REVOCABLE_SESSIONS=true`. No crear/rotar el secreto ni activar el perfil sin
-la aprobación del dueño y sin confirmar 0022, despliegue y recuperación. No
-aplicar parcialmente esta configuración. Preparar una ventana que cubra la
-caducidad de las sesiones existentes (45 días por defecto) y probar la secuencia
-con claves sintéticas. La fecha habilita transitoriamente firmas legacy de los
-tokens maestros; después caduca. La activación sin esa ventana rechaza la
-configuración en lugar de asumir un corte silencioso.
-
-Los tokens nuevos llevan `ver` y no contienen `sub`; cada request privado
-contrasta la versión persistida. El botón Lock all sessions incrementa la versión,
-revoca también la pestaña que lo solicita y limpia su sesión local. Un restore
-no reduce la versión. `API_TOKEN_PREVIOUS` mantiene el unlock al rotar el maestro;
-con firma independiente las sesiones nuevas no dependen de esa rotación. No
-rotar SESSION_SECRET como forma de probar revocación: se usa el endpoint explícito.
-
-En la transición desactivada, una fecha legacy explícita permite introducir el
-secreto independiente manteniendo las firmas anteriores hasta el plazo. No
-desplegar estados intermedios sin haber comprobado esa compatibilidad. El perfil
-está probado con dos sesiones sintéticas y queda desactivado hasta aprobación.
-La caché de referencia legacy que requiere sub deja de persistirse con tokens
-versionados; el cliente consulta la API normalmente y el paquete de caché por
-entidad retira esa persistencia.
-
-### Transporte del cliente durante el refactor
-
-`src/services/api-client.ts` crea los métodos desde `shared/api-contract.ts`.
-AuthProvider comparte una instancia estable: el callback de un 401 identifica
-la sesión que hizo la llamada y no cierra una sesión posterior. GET reintenta
-una vez ante fallos transitorios; las mutaciones no se reintentan. Los backups
-conservan su tipo y metadata propios. Las lecturas explícitas de snapshot y
-respaldo esperan las escrituras en curso y se abortan al bloquear la sesión.
-Restore espera las escrituras anteriores y ordena las posteriores detrás de la
-restauración; esa barrera y los reintentos de pagos sobreviven a la navegación.
-
-El contrato también ofrece `GET /api/wallet/reference` y
-`POST /api/wallet/bootstrap-reference`: diccionarios sin movimientos y una primera
-página separada para sembrar la caché. Las rutas anteriores conservan su payload
-para pestañas existentes. Las opciones de Query y las políticas de invalidación
-están en `src/services/wallet-queries.ts` y `src/services/mutations.ts`. AppShell
-muestra carga, refresco y errores de lectura, con reintento de lectura. Las
-escrituras devuelven un resultado explícito; ante fallo los formularios conservan
-sus drafts y los lotes reintentan sólo las filas sin confirmar. Los pagos de
-deuda comparten claves de idempotencia por contenido dentro de la sesión.
-
-`GET /api/analytics/accounts` devuelve saldos y reservas agregados, con corte local
-opcional; `GET /api/analytics/goals` devuelve el progreso de las metas. Ambas
-lecturas calculan importes en SQL sin enviar historial. Una conversión faltante
-se devuelve como `null`, sin asumir una equivalencia entre monedas.
-
-Las lecturas `GET /api/analytics/details` y `GET /api/analytics/balance-trend`
-devuelven series de comparación por calendario y comercios agregados. Aceptan la
-zona horaria del navegador y mantienen separadas las conversiones congeladas de
-los gastos y las cotizaciones históricas usadas por presupuestos en otra moneda.
-
-Cards dispone de `GET /api/cards/agenda` (deuda por resumen y urgencia en la zona
-horaria indicada), `GET /api/cards/:id/category-usage` (uso agregado por categoría)
-y `GET /api/cards/:id/ledger` (movimientos, resúmenes, pagos y asignaciones de una
-tarjeta). Son lecturas sin actualización implícita de estados. El ledger usa un
-batch de sólo lectura y no devuelve movimientos globales de Wallet. Las rutas
-anteriores siguen disponibles para los consumidores existentes.
-
-## Correo y dominio compartido (paquete 5)
-
-Los parsers TypeScript de Itaú (crédito, débito, transferencia y pago) y Automation
-Wallet comparten la normalización con Apps Script. `npm run mail:build` genera
-`mail-service/normalization.gs`; `npm run mail:check` comprueba sus bytes en CI.
-Copiar los tres archivos `.gs` versionados solamente después de verificar el backend
-desplegado y guardar un respaldo del proyecto correcto. El sandbox ejecuta esos
-archivos reales sin acceder a Gmail. No hacen falta cambios de triggers, scopes,
-propiedades ni credenciales para esta actualización.
-
-La migración aditiva `0023_ingestion_policy_state` agrega políticas de categoría y
-estado operativo de proveedores. Las políticas usan `systemKey`; los aliases y las
-correcciones se buscan en SQL. Se conservan los aliases únicos del catálogo manual y
-aprendido: las políticas de fallback tienen su propia colección en el backup.
-El backfill asigna claves sólo a categorías canónicas no ambiguas, sin cambiar sus
-nombres, padres, asignaciones manuales ni movimientos. Renombrar una categoría
-conserva la clasificación. Un procesador sin comercio identificable y una cuenta
-bancaria sin mapear quedan en Needs review.
-La identidad por clave prevalece sobre el nombre visible, incluso si una categoría
-válida se renombra como «Others»; las claves de revisión o eliminación nunca
-confirman una clasificación. Los sufijos bancarios conocidos de procesadores se
-guardan como políticas SQL y no inventan el comercio subyacente.
-
-Al restaurar un backup antiguo sin claves se conservan primero las identidades
-existentes por ID o nombre inequívoco; la misma rutina SQL del backfill completa
-las correspondencias canónicas. Las claves explícitas prevalecen. Una identidad
-ambigua rechaza toda la restauración y conserva la base anterior.
-
-OpenAI dispone de 10 segundos por llamada y Frankfurter v2 de 4, incluida la lectura
-de la respuesta. Tres fallos consecutivos abren un circuito persistente durante
-cinco minutos; sólo una llamada prueba su recuperación. Una respuesta tardía no
-puede cerrar un circuito más nuevo. Se prefieren las cotizaciones almacenadas;
-una respuesta externa debe coincidir con el par solicitado, tener una fecha válida
-no posterior a la operación y una tasa finita positiva. La disponibilidad de UYU y
-ARS está documentada en el [catálogo de Frankfurter](https://frankfurter.dev/currencies/).
-La función consolidada mantiene sus rewrites y tiene `maxDuration: 60`.
-La poda de metadatos tiene una marca persistente y se ejecuta como máximo una vez
-por hora. Los circuitos y esa marca sobreviven a la restauración financiera; no
-contienen datos financieros ni se importan desde un JSON.
-
-Antes de desplegar el código que lee 0023, cotejar la huella del endpoint con un
-origen independiente, verificar el journal 0000–0022 y los hashes históricos
-permitidos, y probar la migración y el restore con datos sintéticos. No usar
-bootstrap ni copiar registros productivos para esta verificación. Aplicar el
-DDL y su entrada de journal en una transacción. Recuperación: rollback del código
-conservando las tablas, índices y claves agregadas; no ejecutar un down destructivo.
-Una versión anterior puede tratar las nuevas claves como categorías protegidas
-hasta volver al código actual. El checkpoint del paquete registra si la migración
-real y el despliegue ya fueron verificados.
-
-El comando de este rollout verifica el destino y aplica únicamente 0023 en un batch
-Neon HTTP, con lock, comprobación del predecesor y una entrada nueva de journal.
-Sin `--apply` sólo inspecciona metadatos. Una respuesta perdida se comprueba mediante
-el esquema y el journal antes de informar éxito; el comando repetido no reproduce
-el DDL ya confirmado. Las referencias históricas de deuda se conservan sin activar FK.
-
-```powershell
-npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada>
-npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada> --apply
-```
-
-Los cálculos viven en `dates`, `money`, `balances`, `cards`, `debts`, `analytics`,
-`categories`, `goals` y `budgets`; reciben un reloj explícito cuando lo necesitan.
-`calculateAccountBalances(dataset, now, cutoff?)` comparte el cálculo corriente e
-histórico, incluido el ledger de reservas. Los esquemas están separados por entidad
-y `shared/types.ts` infiere sus tipos de Zod. Los patches conservan la semántica de
-limpiar campos mediante `null`.
-
-Los importadores se ejecutan con `tsx` mediante npm y usan `process.loadEnvFile`:
-
-```powershell
-npm run db:import-wallet-records -- ruta/al/archivo.csv
-npm run db:import-merchant-rules -- ruta/al/catalogo.json
-```
-
-También admiten `WALLET_RECORDS_PATH`, `WALLET_MERCHANT_RULES_PATH` y un archivo de
-entorno explícito en `WALLET_IMPORT_ENV_FILE`. El catálogo admite cualquier cantidad
-positiva de reglas validadas y resuelve categorías por claves estables. No hay una
-ruta personal predeterminada. Cada importación reemplaza sus colecciones en un único
-batch con locks; una falla tardía revierte todo. El CSV se valida antes de escribir,
-conserva salarios iguales en fechas distintas y exige una referencia UYU válida
-para moneda extranjera. Las transferencias requieren el importador API con cuentas
-origen y destino explícitas. Las referencias de otros módulos que impidan un reset
-provocan rollback; no se borran para forzar la importación. Respaldar antes de una
-importación solicitada expresamente; estos scripts no se ejecutan como parte del
-despliegue ni de las pruebas contra producción.
-Si se pierde la respuesta HTTP, el resultado del importador queda sin confirmar:
-inspeccionar la base antes de repetir el reemplazo. Un error de transporte no
-demuestra que la transacción haya revertido.
+Corre, en orden, formato, lint con tipos, comprobación del bundle del Apps Script, 136 archivos
+de pruebas, build y verificación del OpenAPI generado. Las pruebas levantan un clúster de
+PostgreSQL embebido por ejecución y clonan una base plantilla por archivo; nunca tocan Neon.
+`WALLET_TEST_WORKERS=1` fuerza un solo worker en máquinas chicas. CI ejecuta exactamente este
+comando en cada push y pull request.
+
+Comprobaciones seguras contra producción sin credenciales: `GET /api/health` responde `401` JSON
+con `X-Request-Id`, una ruta desconocida bajo `/api/` responde `404` JSON del router y
+`/api/records/<uuid>` responde `401` y no un 404 de Vercel.
+
+### Lo que falta
+
+- Activar las sesiones revocables en producción (requiere un `SESSION_SECRET` independiente y una
+  ventana de transición).
+- Clave foránea en `records.debt_id` y eliminación de la tabla legacy `goal_reservations`.
+- Dividir las vistas grandes (deudas, ajustes, metas, inversiones) como ya se hizo con Movimientos
+  y Tarjetas.
+- Terminar de unificar el idioma de la interfaz.
+- Una suite end-to-end en navegador; hoy la integración se prueba contra el router y el
+  repositorio.
+
+El detalle operativo (sandbox con respaldo propio, importadores, preflight de migraciones,
+activación de sesiones revocables, despliegue del Apps Script) está en
+[OPERATIONS.md](OPERATIONS.md). Los libros de ejecución del refactor de noviembre de 2026 están en
+`REFACTOR-CHECKPOINT.md`, `PACKAGE4-*.md`, `PACKAGE5-*.md` y `QA-REVIEW.md`.
