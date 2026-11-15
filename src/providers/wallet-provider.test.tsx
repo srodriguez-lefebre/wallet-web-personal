@@ -31,6 +31,7 @@ const api = vi.hoisted(() =>
       "wallet.get",
       "wallet.backup",
       "investments.patch",
+      "debts.pay",
     ].map((id) => [id, vi.fn<(...args: unknown[]) => Promise<unknown>>()]),
   ),
 );
@@ -379,7 +380,46 @@ test("confirmed write plus failed refetch exposes stale data and refresh retry n
   await screen.findByText("0 records");
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   expect(api["records.delete"]).toHaveBeenCalledTimes(1);
+  expect(api["wallet.bootstrapReference"]).toHaveBeenCalledTimes(1);
 });
+
+test.each(["partial", "full"] as const)(
+  "%s debt requests keep their identity across consumer navigation",
+  async (kind) => {
+    const view = render(
+      <TestWallet>
+        <Consumer key="dashboard" />
+      </TestWallet>,
+    );
+    await screen.findByText("1 records");
+    const debt = { ...mockWalletData.debts[0]!, accountId: "synthetic-bank", pendingAmount: 200 };
+    const body = { amount: 20, accountId: "synthetic-bank", occurredAt: "2026-11-14T15:00:00Z" };
+    const submit = () =>
+      kind === "full"
+        ? context.settleDebt(debt, body.occurredAt)
+        : context.recordDebtPayment(debt.id, body);
+    api["debts.pay"]!.mockRejectedValueOnce(new Error("Synthetic response lost after commit"));
+    await act(async () => {
+      await expect(submit()).rejects.toThrow("response lost");
+    });
+    const first = api["debts.pay"]!.mock.calls[0]![0];
+    view.rerender(
+      <TestWallet>
+        <Consumer key="debts" />
+      </TestWallet>,
+    );
+    await screen.findByText("1 records");
+    api["debts.pay"]!.mockResolvedValue({});
+    await act(async () => {
+      await submit();
+    });
+    expect(api["debts.pay"]!.mock.calls[1]![0]).toEqual(first);
+    await act(async () => {
+      await submit();
+    });
+    expect(api["debts.pay"]!.mock.calls[2]![0]).not.toEqual(first);
+  },
+);
 test("bootstrap failure stays visible and retry works even when browser storage is unavailable", async () => {
   api["wallet.bootstrapReference"]!.mockRejectedValueOnce(new Error("offline bootstrap"));
   vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {

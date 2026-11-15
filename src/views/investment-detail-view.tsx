@@ -25,6 +25,10 @@ import { useWallet } from "@/providers/wallet-provider";
 
 export function InvestmentDetailView() {
   const { investmentId } = useParams();
+  return <InvestmentDetail key={investmentId} investmentId={investmentId} />;
+}
+
+function InvestmentDetail({ investmentId }: { investmentId: string | undefined }) {
   const navigate = useNavigate();
   const { dataset, updateInvestment } = useWallet();
   const { toast, runAction } = useActionToast();

@@ -547,3 +547,36 @@ desde UI y se comprobó cerrada tras recarga. Sólo datos sintéticos en memoria
 La revisión fresca del bloque completo está en curso. Sus hallazgos importantes
 se resolverán antes del único PR; este avance validado todavía no autoriza el
 merge. Quedan correcciones de revisión, check/sandbox finales, CI y Vercel.
+
+## Revisión completa G14 y correcciones
+
+Una revisión independiente de main `6701646` hasta el árbol final encontró seis
+hallazgos importantes y un problema de contraste, elevado a importante porque
+un color blanco/negro válido ocultaba el texto del badge de pago. Se reprodujeron
+los siete hallazgos con diez aserciones fallidas en seis suites antes de corregir:
+
+- Retry refresh excluye bootstrap; no genera recurrentes ni desmonta drafts.
+- Restore espera escrituras anteriores, incluso transporte demorado, y bloquea
+  las posteriores hasta terminar. El fence pertenece a la caché de sesión.
+- Los reintentos de pagos parciales y completos comparten identidad y payload
+  entre consumidores y sobreviven a la navegación dentro de la misma sesión.
+  Una regresión adicional RED→GREEN conserva la petición parcial aunque el
+  refresco cambie el default de guardar la cuenta después de un commit incierto.
+- Goals e Investments deshabilitan el editor completo mientras guardan.
+- El detalle de inversión reinicia su draft al cambiar de entidad.
+- Cards usa un enlace de título separado de Edit/Archive/resúmenes; Enter y
+  Espacio conservan la activación nativa de los botones.
+- El badge crediticio usa fondo sólido y foreground con contraste calculado.
+
+Las correcciones pasaron 78 pruebas enfocadas más las siete de drafts tras
+corregir el cierre JSX del fieldset. No hubo segunda revisión ni cambios fuera
+de alcance. Chrome confirmó edición por Enter, cambio de tarjeta persistido tras
+recarga y apertura del resumen exacto por teclado. La descarga JSON solicitó
+backup con HTTP 200, pero el control del navegador perdió conexión al esperar el
+archivo; no se declara verificado ese archivo. Backup/restore HTTP sí pasó.
+
+Rulings finales: los gates PR/CI/deploy se comprueban después del commit; datos
+reales y smoke autenticado productivo quedan excluidos por instrucción expresa;
+se conserva UI en inglés sin un producto de localización nuevo; las pruebas de
+teclado/contraste cubren los defectos encontrados, sin afirmar una certificación
+exhaustiva de accesibilidad. No quedaron hallazgos menores diferidos.

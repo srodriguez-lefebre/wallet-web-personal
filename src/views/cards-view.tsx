@@ -1,7 +1,7 @@
 import { formatMoney } from "@shared/calculations";
 import { CreditCard as CreditCardIcon, Plus } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
   Cell,
@@ -202,18 +202,7 @@ export function CardsView() {
             return (
               <Card
                 key={summary.card.id}
-                role="link"
-                tabIndex={0}
-                onClick={() => {
-                  void navigate(`/cards/${summary.card.id}`);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    void navigate(`/cards/${summary.card.id}`);
-                  }
-                }}
-                className={`cursor-pointer transition hover:border-primary/50 hover:shadow-md ${!summary.card.isActive ? "opacity-60" : ""}`}
+                className={`transition hover:border-primary/50 hover:shadow-md ${!summary.card.isActive ? "opacity-60" : ""}`}
               >
                 <CardHeader className="flex flex-row items-start justify-between space-y-0">
                   <div className="flex items-center gap-3">
@@ -227,7 +216,14 @@ export function CardsView() {
                       <CreditCardIcon className="h-5 w-5" />
                     </div>
                     <div>
-                      <CardTitle>{summary.card.name}</CardTitle>
+                      <CardTitle>
+                        <Link
+                          className="rounded-sm hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                          to={`/cards/${summary.card.id}`}
+                        >
+                          {summary.card.name}
+                        </Link>
+                      </CardTitle>
                       <p className="text-sm text-muted-foreground">
                         {summary.card.issuer} •••• {summary.card.lastFour}
                       </p>

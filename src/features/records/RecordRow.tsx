@@ -13,6 +13,7 @@ import { CategoryIcon } from "@/components/wallet/category-icon";
 import { ImportHistory } from "@/components/wallet/record-import-history";
 import { ReviewRecordActions } from "@/components/wallet/review-record-actions";
 import { cn } from "@/lib/utils";
+import { readableForeground } from "@/lib/palette";
 
 const paymentMethodClasses: Record<PaymentType, string> = {
   cash: "bg-muted text-muted-foreground",
@@ -150,8 +151,8 @@ export function RecordRow({
                 style={
                   record.paymentType === "credit" && creditCard
                     ? {
-                        color: creditCard.color,
-                        backgroundColor: `color-mix(in srgb, ${creditCard.color} 15%, transparent)`,
+                        color: readableForeground(creditCard.color),
+                        backgroundColor: creditCard.color,
                       }
                     : undefined
                 }

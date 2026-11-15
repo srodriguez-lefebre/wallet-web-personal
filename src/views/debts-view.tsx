@@ -1,5 +1,5 @@
 import { currencySchema } from "@shared/schemas";
-import { FormEvent, useMemo, useState, useRef } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import {
   Banknote,
   CheckCircle2,
@@ -312,16 +312,6 @@ export function DebtsView() {
     saveAccountToDebt: true,
   }));
 
-  const paymentRequests = useRef(new Map<string, string>());
-  function paymentKey(fingerprint: string) {
-    let key = paymentRequests.current.get(fingerprint);
-    if (!key) {
-      key = crypto.randomUUID();
-      paymentRequests.current.set(fingerprint, key);
-    }
-    return key;
-  }
-
   const { toast, runAction } = useActionToast();
   const [dueWindow, setDueWindow] = useState<DebtDueWindow>("all");
   const openDebts = useMemo(() => selectDebtsByDueDate(dataset.debts), [dataset.debts]);
@@ -552,7 +542,6 @@ export function DebtsView() {
           occurredAt: dateToIso(paymentDate),
           note: paymentNote.trim() || undefined,
           saveAccountToDebt,
-          idempotencyKey: paymentKey(fingerprint),
         });
         return true;
       },
@@ -565,7 +554,6 @@ export function DebtsView() {
       },
     );
     if (succeeded.ok) {
-      paymentRequests.current.delete(fingerprint);
       setPaymentDialogOpen(false);
     }
   }

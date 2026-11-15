@@ -480,9 +480,11 @@ export function GoalsView() {
                           }
                           className={inputClassName}
                         >
-                          <option value="UYU">UYU</option>
-                          <option value="USD">USD</option>
-                          <option value="BRL">BRL</option>
+                          {currencySchema.options.map((currencyOption) => (
+                            <option key={currencyOption} value={currencyOption}>
+                              {currencyOption}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     </div>
@@ -522,240 +524,242 @@ export function GoalsView() {
             <>
               {visibleGoalDrafts.map((draft) => (
                 <Card key={draft.id} className="border-primary/30 shadow-sm">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex flex-1 items-start gap-3">
-                        <label className="block space-y-2">
-                          <span className="sr-only">Color</span>
-                          <ColorInput
-                            value={draft.color}
-                            onChange={(event) =>
+                  <fieldset disabled={isWorking} className="contents">
+                    <CardHeader>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex flex-1 items-start gap-3">
+                          <label className="block space-y-2">
+                            <span className="sr-only">Color</span>
+                            <ColorInput
+                              value={draft.color}
+                              onChange={(event) =>
+                                updateGoalDraft(draft.id, {
+                                  color: event.target.value,
+                                })
+                              }
+                              className={colorInputClassName}
+                              aria-label={`${draft.name || "Goal"} color`}
+                            />
+                          </label>
+                          <label className="block flex-1 space-y-2">
+                            <span className="text-sm font-medium">Name</span>
+                            <Input
+                              value={draft.name}
+                              onChange={(event) =>
+                                updateGoalDraft(draft.id, {
+                                  name: event.target.value,
+                                })
+                              }
+                              className={inputClassName}
+                              placeholder="Goal name"
+                            />
+                          </label>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            aria-label={draft.isVisible ? "Hide goal" : "Show goal"}
+                            title={draft.isVisible ? "Hide goal" : "Show goal"}
+                            onClick={() =>
                               updateGoalDraft(draft.id, {
-                                color: event.target.value,
+                                isVisible: !draft.isVisible,
                               })
                             }
-                            className={colorInputClassName}
-                            aria-label={`${draft.name || "Goal"} color`}
-                          />
-                        </label>
-                        <label className="block flex-1 space-y-2">
-                          <span className="text-sm font-medium">Name</span>
+                          >
+                            {draft.isVisible ? (
+                              <Eye className="h-4 w-4" />
+                            ) : (
+                              <EyeOff className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="destructive"
+                            size="icon"
+                            aria-label="Delete goal"
+                            title="Delete goal"
+                            onClick={() => markGoalForDeletion(draft.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Target</span>
                           <Input
-                            value={draft.name}
+                            value={draft.targetAmount}
                             onChange={(event) =>
                               updateGoalDraft(draft.id, {
-                                name: event.target.value,
+                                targetAmount: limitDecimalPlaces(event.target.value),
+                              })
+                            }
+                            type="number"
+                            className={inputClassName}
+                            placeholder="50000"
+                            step="0.01"
+                          />
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Status</span>
+                          <select
+                            value={draft.status}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, {
+                                status: event.target.value as GoalStatus,
                               })
                             }
                             className={inputClassName}
-                            placeholder="Goal name"
+                          >
+                            {goalStatusOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Currency</span>
+                          <select
+                            value={draft.currency}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, {
+                                currency: event.target.value as CurrencyCode,
+                              })
+                            }
+                            className={inputClassName}
+                          >
+                            {currencySchema.options.map((currency) => (
+                              <option key={currency} value={currency}>
+                                {currency}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Deadline</span>
+                          <DateInput
+                            value={draft.deadline}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, {
+                                deadline: event.target.value,
+                              })
+                            }
+                            className={inputClassName}
                           />
                         </label>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="icon"
-                          aria-label={draft.isVisible ? "Hide goal" : "Show goal"}
-                          title={draft.isVisible ? "Hide goal" : "Show goal"}
-                          onClick={() =>
-                            updateGoalDraft(draft.id, {
-                              isVisible: !draft.isVisible,
-                            })
-                          }
-                        >
-                          {draft.isVisible ? (
-                            <Eye className="h-4 w-4" />
-                          ) : (
-                            <EyeOff className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="destructive"
-                          size="icon"
-                          aria-label="Delete goal"
-                          title="Delete goal"
-                          onClick={() => markGoalForDeletion(draft.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Linked account</span>
+                          <select
+                            value={draft.accountId}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, {
+                                accountId: event.target.value,
+                              })
+                            }
+                            className={inputClassName}
+                          >
+                            <option value="">No account</option>
+                            {dataset.accounts.map((account) => (
+                              <option key={account.id} value={account.id}>
+                                {account.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                       </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Target</span>
-                        <Input
-                          value={draft.targetAmount}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              targetAmount: limitDecimalPlaces(event.target.value),
-                            })
-                          }
-                          type="number"
-                          className={inputClassName}
-                          placeholder="50000"
-                          step="0.01"
-                        />
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Status</span>
-                        <select
-                          value={draft.status}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              status: event.target.value as GoalStatus,
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          {goalStatusOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Currency</span>
-                        <select
-                          value={draft.currency}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              currency: event.target.value as CurrencyCode,
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          <option value="UYU">UYU</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="BRL">BRL</option>
-                          <option value="ARS">ARS</option>
-                        </select>
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Deadline</span>
-                        <DateInput
-                          value={draft.deadline}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              deadline: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        />
-                      </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Linked account</span>
-                        <select
-                          value={draft.accountId}
-                          onChange={(event) =>
-                            updateGoalDraft(draft.id, {
-                              accountId: event.target.value,
-                            })
-                          }
-                          className={inputClassName}
-                        >
-                          <option value="">No account</option>
-                          {dataset.accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="rounded-lg border p-4">
-                      <label className="flex items-center justify-between gap-3">
-                        <span>
-                          <span className="block text-sm font-medium">
-                            Captura automática de gastos
+                      <div className="rounded-lg border p-4">
+                        <label className="flex items-center justify-between gap-3">
+                          <span>
+                            <span className="block text-sm font-medium">
+                              Captura automática de gastos
+                            </span>
+                            <span className="block text-xs text-muted-foreground">
+                              Asocia gastos del rango y usa primero la reserva.
+                            </span>
                           </span>
-                          <span className="block text-xs text-muted-foreground">
-                            Asocia gastos del rango y usa primero la reserva.
-                          </span>
-                        </span>
-                        <input
-                          type="checkbox"
-                          className="h-5 w-5 accent-primary"
-                          checked={draft.autoCaptureEnabled}
+                          <input
+                            type="checkbox"
+                            className="h-5 w-5 accent-primary"
+                            checked={draft.autoCaptureEnabled}
+                            onChange={(event) =>
+                              updateGoalDraft(draft.id, {
+                                autoCaptureEnabled: event.target.checked,
+                              })
+                            }
+                          />
+                        </label>
+                        {draft.autoCaptureEnabled ? (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                            <label className="space-y-2">
+                              <span className="text-sm font-medium">Desde</span>
+                              <DateInput
+                                className={inputClassName}
+                                value={draft.autoCaptureStart}
+                                onChange={(event) =>
+                                  updateGoalDraft(draft.id, {
+                                    autoCaptureStart: event.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="space-y-2">
+                              <span className="text-sm font-medium">Hasta</span>
+                              <DateInput
+                                className={inputClassName}
+                                value={draft.autoCaptureEnd}
+                                onChange={(event) =>
+                                  updateGoalDraft(draft.id, {
+                                    autoCaptureEnd: event.target.value,
+                                  })
+                                }
+                              />
+                            </label>
+                            <label className="space-y-2">
+                              <span className="text-sm font-medium">Account de reserva</span>
+                              <select
+                                className={inputClassName}
+                                value={draft.autoReservationAccountId}
+                                onChange={(event) =>
+                                  updateGoalDraft(draft.id, {
+                                    autoReservationAccountId: event.target.value,
+                                  })
+                                }
+                              >
+                                <option value="">Sin fallback</option>
+                                {dataset.accounts.map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                          </div>
+                        ) : null}
+                      </div>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Note</span>
+                        <textarea
+                          value={draft.note}
                           onChange={(event) =>
                             updateGoalDraft(draft.id, {
-                              autoCaptureEnabled: event.target.checked,
+                              note: event.target.value,
                             })
                           }
+                          className={textareaClassName}
+                          placeholder="Goal context or description"
                         />
                       </label>
-                      {draft.autoCaptureEnabled ? (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <label className="space-y-2">
-                            <span className="text-sm font-medium">Desde</span>
-                            <DateInput
-                              className={inputClassName}
-                              value={draft.autoCaptureStart}
-                              onChange={(event) =>
-                                updateGoalDraft(draft.id, {
-                                  autoCaptureStart: event.target.value,
-                                })
-                              }
-                            />
-                          </label>
-                          <label className="space-y-2">
-                            <span className="text-sm font-medium">Hasta</span>
-                            <DateInput
-                              className={inputClassName}
-                              value={draft.autoCaptureEnd}
-                              onChange={(event) =>
-                                updateGoalDraft(draft.id, {
-                                  autoCaptureEnd: event.target.value,
-                                })
-                              }
-                            />
-                          </label>
-                          <label className="space-y-2">
-                            <span className="text-sm font-medium">Account de reserva</span>
-                            <select
-                              className={inputClassName}
-                              value={draft.autoReservationAccountId}
-                              onChange={(event) =>
-                                updateGoalDraft(draft.id, {
-                                  autoReservationAccountId: event.target.value,
-                                })
-                              }
-                            >
-                              <option value="">Sin fallback</option>
-                              {dataset.accounts.map((account) => (
-                                <option key={account.id} value={account.id}>
-                                  {account.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                      ) : null}
-                    </div>
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Note</span>
-                      <textarea
-                        value={draft.note}
-                        onChange={(event) =>
-                          updateGoalDraft(draft.id, {
-                            note: event.target.value,
-                          })
-                        }
-                        className={textareaClassName}
-                        placeholder="Goal context or description"
-                      />
-                    </label>
-                  </CardContent>
+                    </CardContent>
+                  </fieldset>
                 </Card>
               ))}
               {visibleGoalDrafts.length === 0 ? (

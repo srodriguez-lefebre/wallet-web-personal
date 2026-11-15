@@ -471,11 +471,11 @@ export function InvestmentsView() {
                           }
                           className={inputClassName}
                         >
-                          <option value="UYU">UYU</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="BRL">BRL</option>
-                          <option value="ARS">ARS</option>
+                          {currencySchema.options.map((currency) => (
+                            <option key={currency} value={currency}>
+                              {currency}
+                            </option>
+                          ))}
                         </select>
                       </label>
                     </div>
@@ -614,7 +614,7 @@ export function InvestmentsView() {
               {isEditing ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {visibleInvestmentDrafts.map((draft) => (
-                    <div key={draft.id} className="rounded-md border p-3">
+                    <fieldset key={draft.id} disabled={isSaving} className="rounded-md border p-3">
                       <div className="flex items-start justify-between gap-3">
                         <label className="block flex-1 space-y-2">
                           <span className="text-sm font-medium">Name</span>
@@ -690,11 +690,11 @@ export function InvestmentsView() {
                             }
                             className={inputClassName}
                           >
-                            <option value="UYU">UYU</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="BRL">BRL</option>
-                            <option value="ARS">ARS</option>
+                            {currencySchema.options.map((currency) => (
+                              <option key={currency} value={currency}>
+                                {currency}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       </div>
@@ -754,7 +754,7 @@ export function InvestmentsView() {
                           placeholder="Optional context"
                         />
                       </label>
-                    </div>
+                    </fieldset>
                   ))}
                 </div>
               ) : (

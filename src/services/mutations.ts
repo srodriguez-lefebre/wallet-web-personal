@@ -99,13 +99,49 @@ export type WalletMutations = {
   [Id in MutationOperationId]: (input: ClientInput<Id>) => Promise<OperationResponse<Id>>;
 };
 
+interface WriteState {
+  pending: Set<Promise<unknown>>;
+  fence: Promise<unknown>;
+  listeners: Set<() => void>;
+}
+const writes = new WeakMap<QueryClient, WriteState>();
+function writeState(cache: QueryClient): WriteState {
+  let state = writes.get(cache);
+  if (!state) {
+    state = { pending: new Set(), fence: Promise.resolve(), listeners: new Set() };
+    writes.set(cache, state);
+  }
+  return state;
+}
+
+/** Restore drains earlier requests, including delayed transport, and gates later writes. */
+function orderedWrite<T>(cache: QueryClient, restore: boolean, work: () => Promise<T>): Promise<T> {
+  const state = writeState(cache);
+  const before = restore ? [state.fence, ...state.pending] : [state.fence];
+  const result = Promise.allSettled(before).then(work);
+  state.pending.add(result);
+  if (restore)
+    state.fence = result.then(
+      () => {},
+      () => {},
+    );
+  const finish = () => {
+    state.pending.delete(result);
+    state.listeners.forEach((listener) => listener());
+  };
+  void result.then(finish, finish);
+  return result;
+}
+
 export function waitForWalletMutations(cache: QueryClient, signal: AbortSignal): Promise<void> {
   signal.throwIfAborted();
   const mutations = cache.getMutationCache();
+  const state = writeState(cache);
   return new Promise((resolve, reject) => {
     let unsubscribe = () => {};
     const cleanup = () => {
       unsubscribe();
+      state.listeners.delete(check);
       signal.removeEventListener("abort", abort);
     };
     const abort = () => {
@@ -114,6 +150,7 @@ export function waitForWalletMutations(cache: QueryClient, signal: AbortSignal):
     };
     const check = () => {
       if (
+        state.pending.size === 0 &&
         !mutations
           .getAll()
           .some(
@@ -127,6 +164,7 @@ export function waitForWalletMutations(cache: QueryClient, signal: AbortSignal):
       }
     };
     unsubscribe = mutations.subscribe(check);
+    state.listeners.add(check);
     signal.addEventListener("abort", abort, { once: true });
     check();
   });
@@ -143,35 +181,40 @@ export function createWalletMutations(
           ? AbortSignal.any([options.signal, input.signal])
           : (options.signal ?? input.signal);
       signal?.throwIfAborted();
-      // The contract ties this indexed method to its input/output; TS cannot preserve
-      // that correlation while indexing a union of function signatures.
-      const call = client[operationId];
-      const observer = new MutationObserver(cache, {
-        mutationKey: ["wallet-mutation", operationId],
-        retry: false,
-        mutationFn: call,
-        // Invalidation alone can join an initial GET with no cached data. Cancel
-        // its result before writing, so settlement always reads canonical state.
-        onMutate: async () => {
-          options.signal?.throwIfAborted();
-          await Promise.all(
-            mutationDefinitions[operationId].map((key) => cache.cancelQueries({ queryKey: [key] })),
-          );
-        },
-        onSettled: async () => {
-          if (options.signal?.aborted) return;
-          await Promise.all(
-            mutationDefinitions[operationId].map((key) =>
-              cache.invalidateQueries({ queryKey: [key] }),
-            ),
-          );
-        },
+      return orderedWrite(cache, operationId === "wallet.restore", async () => {
+        signal?.throwIfAborted();
+        // The contract ties this indexed method to its input/output; TS cannot preserve
+        // that correlation while indexing a union of function signatures.
+        const call = client[operationId];
+        const observer = new MutationObserver(cache, {
+          mutationKey: ["wallet-mutation", operationId],
+          retry: false,
+          mutationFn: call,
+          // Invalidation alone can join an initial GET with no cached data. Cancel
+          // its result before writing, so settlement always reads canonical state.
+          onMutate: async () => {
+            options.signal?.throwIfAborted();
+            await Promise.all(
+              mutationDefinitions[operationId].map((key) =>
+                cache.cancelQueries({ queryKey: [key] }),
+              ),
+            );
+          },
+          onSettled: async () => {
+            if (options.signal?.aborted) return;
+            await Promise.all(
+              mutationDefinitions[operationId].map((key) =>
+                cache.invalidateQueries({ queryKey: [key] }),
+              ),
+            );
+          },
+        });
+        try {
+          return await observer.mutate({ ...input, signal });
+        } finally {
+          observer.reset();
+        }
       });
-      try {
-        return await observer.mutate({ ...input, signal });
-      } finally {
-        observer.reset();
-      }
     };
   }
   return Object.fromEntries(

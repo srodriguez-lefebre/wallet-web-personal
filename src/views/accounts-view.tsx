@@ -489,11 +489,11 @@ export function AccountsView() {
                             }
                             className={inputClassName}
                           >
-                            <option value="UYU">UYU</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="BRL">BRL</option>
-                            <option value="ARS">ARS</option>
+                            {currencySchema.options.map((currencyOption) => (
+                              <option key={currencyOption} value={currencyOption}>
+                                {currencyOption}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       </div>
@@ -670,11 +670,11 @@ export function AccountsView() {
                       }
                       className={inputClassName}
                     >
-                      <option value="UYU">UYU</option>
-                      <option value="USD">USD</option>
-                      <option value="EUR">EUR</option>
-                      <option value="BRL">BRL</option>
-                      <option value="ARS">ARS</option>
+                      {currencySchema.options.map((currencyOption) => (
+                        <option key={currencyOption} value={currencyOption}>
+                          {currencyOption}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>

@@ -1,9 +1,23 @@
 import { expect, test } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
-import { createDebtSettlement } from "./debt-settlement";
+import { createDebtPayment, createDebtSettlement } from "./debt-settlement";
 
 import type { ClientInput } from "@/services/api-client";
+
+test("a partial retry keeps its payload when refreshed debt metadata changes the save-account default", async () => {
+  const requests: ClientInput<"debts.pay">[] = [];
+  const pay = createDebtPayment(async (input) => {
+    requests.push(input);
+    if (requests.length === 1) throw new Error("Synthetic response lost");
+  });
+  const body = { amount: 20, accountId: "synthetic-bank", occurredAt: "2026-11-14T15:00:00Z" };
+  await expect(pay("synthetic-debt", { ...body, saveAccountToDebt: true })).rejects.toThrow(
+    "response lost",
+  );
+  await pay("synthetic-debt", { ...body, saveAccountToDebt: false });
+  expect(requests[1]).toEqual(requests[0]);
+});
 
 test("settlement retries preserve the exact request and confirmed identical settlements receive new keys", async () => {
   const requests: ClientInput<"debts.pay">[] = [];

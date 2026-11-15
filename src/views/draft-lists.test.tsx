@@ -148,3 +148,36 @@ test.each(["goals", "investments"] as const)(
     expect(update).not.toHaveBeenCalled();
   },
 );
+
+test.each(["goals", "investments"] as const)(
+  "%s freezes the complete bulk editor until acknowledgment",
+  async (kind) => {
+    let release!: () => void;
+    update.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    await act(async () => {
+      tree = create(kind === "goals" ? <GoalsView /> : <InvestmentsView />);
+    });
+    await act(async () => tree!.root.findByProps({ "aria-label": `Edit ${kind}` }).props.onClick());
+    const input = tree!.root
+      .findAllByType("input")
+      .find((input) => input.props.value === dataset[kind][0]!.name)!;
+    await act(async () => input.props.onChange({ target: { value: "Synthetic pending edit" } }));
+    await save();
+    const current = tree!.root
+      .findAllByType("input")
+      .find((input) => input.props.value === "Synthetic pending edit")!;
+    let ancestor = current.parent;
+    while (ancestor && !(ancestor.type === "fieldset" && ancestor.props.disabled))
+      ancestor = ancestor.parent;
+    expect(
+      ancestor,
+      "all bulk inputs must be inside a disabled fieldset while saving",
+    ).not.toBeNull();
+    await act(async () => release());
+  },
+);

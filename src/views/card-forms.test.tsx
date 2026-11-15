@@ -12,6 +12,7 @@ import { withWalletMetadata } from "@/test/legacy-wallet-view";
 const actions = vi.hoisted(() => ({
   addCreditCard: vi.fn(),
   updateCreditCard: vi.fn(),
+  deleteCreditCard: vi.fn().mockResolvedValue(undefined),
   refreshCardStatements: vi.fn().mockResolvedValue(undefined),
 }));
 let dataset = structuredClone(mockWalletData);
@@ -93,6 +94,24 @@ function fillNewCard() {
     target: { value: "2500.5" },
   });
 }
+
+test("card action buttons have no interactive ancestor and keep native keyboard activation", async () => {
+  mount();
+  const edit = screen.getByRole("button", { name: "Edit" });
+  const archive = screen.getByRole("button", { name: "Archive" });
+  for (const button of [edit, archive]) {
+    expect(button.closest('[role="link"],a')).toBeNull();
+    expect(fireEvent.keyDown(button, { key: "Enter" })).toBe(true);
+    expect(fireEvent.keyDown(button, { key: " " })).toBe(true);
+  }
+  fireEvent.click(edit);
+  expect(screen.getByRole("dialog")).toBeDefined();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(archive);
+  await waitFor(() =>
+    expect(actions.deleteCreditCard).toHaveBeenCalledExactlyOnceWith("synthetic-card"),
+  );
+});
 test("new card submits the trimmed identity, masked digits and billing defaults", async () => {
   mount();
   fillNewCard();

@@ -62,6 +62,43 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
+test("restore fences earlier delayed transport and subsequent writes", async () => {
+  let arrived!: () => void, release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  const transport = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const order: string[] = [];
+  server.use(
+    http.patch(`http://test.local/api/records/${id}`, async () => {
+      arrived();
+      await transport;
+      order.push("earlier write");
+      return response(record);
+    }),
+    http.post("http://test.local/api/wallet/restore", () => {
+      order.push("restore");
+      return response(snapshot);
+    }),
+    http.patch("http://test.local/api/settings", () => {
+      order.push("later write");
+      return response(snapshot.settings);
+    }),
+  );
+  const { actions } = setup();
+  const earlier = actions.updateRecord(id, { note: "Synthetic delayed request" });
+  await started;
+  const restore = actions.restoreBackup(walletBackupSchema.parse(snapshot));
+  const later = actions.updateWalletSettings({ theme: "dark" });
+  // Give both later requests a turn to reach the mock transport if no fence exists.
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  release();
+  await Promise.all([earlier, restore, later]);
+  expect(order).toEqual(["earlier write", "restore", "later write"]);
+});
+
 test("generated CRUD aliases retain IDs, sparse patches and archived-filter callbacks", async () => {
   const account = {
     name: "Synthetic bank",

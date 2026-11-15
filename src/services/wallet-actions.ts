@@ -5,7 +5,17 @@ import type { ClientInput, WalletClient } from "./api-client";
 import type { WalletMutations } from "./mutations";
 
 import { importRecordBatches } from "@/lib/record-import";
-import { createDebtSettlement } from "@/lib/debt-settlement";
+import { createDebtPayment, createDebtSettlement } from "@/lib/debt-settlement";
+
+// WalletMutations is owned by SessionQueries. Weak keys release retry payloads
+// with that session, while separate facade consumers share the same identity.
+const debtActions = new WeakMap<
+  WalletMutations,
+  {
+    settleDebt: ReturnType<typeof createDebtSettlement>;
+    recordDebtPayment: ReturnType<typeof createDebtPayment>;
+  }
+>();
 
 const crud = {
   Account: ["accounts.create", "accounts.patch", "accounts.delete"],
@@ -48,6 +58,14 @@ export function createWalletActions(
   mutations: WalletMutations,
   options: ActionOptions,
 ) {
+  let payments = debtActions.get(mutations);
+  if (!payments) {
+    payments = {
+      settleDebt: createDebtSettlement(mutations["debts.pay"]),
+      recordDebtPayment: createDebtPayment(mutations["debts.pay"]),
+    };
+    debtActions.set(mutations, payments);
+  }
   const aliases = Object.fromEntries(
     (Object.keys(crud) as Name[]).flatMap((name) => {
       const [createId, patchId, deleteId] = crud[name];
@@ -89,7 +107,7 @@ export function createWalletActions(
   };
   return {
     ...aliases,
-    settleDebt: createDebtSettlement(mutations["debts.pay"]),
+    ...payments,
     getCompleteDataset,
     getBackupDataset,
     restoreBackup: async (body: Body<"wallet.restore">) => {
@@ -144,12 +162,6 @@ export function createWalletActions(
     },
     releaseGoalReservation: async (body: Body<"goalReservations.release">) => {
       await mutations["goalReservations.release"]({ body });
-    },
-    recordDebtPayment: async (id: string, payment: Body<"debts.pay">) => {
-      await mutations["debts.pay"]({
-        params: { id },
-        body: { ...payment, idempotencyKey: payment.idempotencyKey ?? crypto.randomUUID() },
-      });
     },
     toggleAccountVisibility: async (id: string) => {
       const account = options.getReference().accounts.find((value) => value.id === id);

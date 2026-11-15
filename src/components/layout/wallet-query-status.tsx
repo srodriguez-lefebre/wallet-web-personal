@@ -36,7 +36,15 @@ export function WalletQueryStatus() {
             Some wallet data could not be loaded or refreshed. Values may be out of date.{" "}
             {errors[0]?.state.error?.message}
           </span>
-          <Button variant="outline" onClick={() => void client.refetchQueries({ type: "active" })}>
+          <Button
+            variant="outline"
+            onClick={() =>
+              void client.refetchQueries({
+                type: "active",
+                predicate: (query) => query.queryKey[0] !== "bootstrap",
+              })
+            }
+          >
             Retry refresh
           </Button>
         </div>

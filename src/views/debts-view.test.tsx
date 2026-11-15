@@ -7,7 +7,7 @@ import { DebtsView } from "./debts-view";
 
 import type { PropsWithChildren } from "react";
 
-import { createDebtSettlement } from "@/lib/debt-settlement";
+import { createDebtPayment, createDebtSettlement } from "@/lib/debt-settlement";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const payment = vi.hoisted(() => vi.fn());
@@ -15,8 +15,9 @@ const reportedToast = vi.hoisted(() => vi.fn());
 
 let dataset = structuredClone(mockWalletData);
 let settle: ReturnType<typeof createDebtSettlement>;
+let partial: ReturnType<typeof createDebtPayment>;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => withWalletMetadata({ dataset, recordDebtPayment: payment, settleDebt: settle }),
+  useWallet: () => withWalletMetadata({ dataset, recordDebtPayment: partial, settleDebt: settle }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -44,6 +45,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   payment.mockReset().mockResolvedValue(undefined);
   settle = createDebtSettlement((input) => payment(input.params.id, input.body));
+  partial = createDebtPayment((input) => payment(input.params.id, input.body));
   reportedToast.mockClear();
 
   dataset = structuredClone(mockWalletData);

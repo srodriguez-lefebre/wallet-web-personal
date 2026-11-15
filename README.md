@@ -520,6 +520,8 @@ la sesión que hizo la llamada y no cierra una sesión posterior. GET reintenta
 una vez ante fallos transitorios; las mutaciones no se reintentan. Los backups
 conservan su tipo y metadata propios. Las lecturas explícitas de snapshot y
 respaldo esperan las escrituras en curso y se abortan al bloquear la sesión.
+Restore espera las escrituras anteriores y ordena las posteriores detrás de la
+restauración; esa barrera y los reintentos de pagos sobreviven a la navegación.
 
 El contrato también ofrece `GET /api/wallet/reference` y
 `POST /api/wallet/bootstrap-reference`: diccionarios sin movimientos y una primera
