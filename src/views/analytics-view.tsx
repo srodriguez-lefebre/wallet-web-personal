@@ -1,3 +1,7 @@
+import { formatMoney } from "@shared/calculations";
+import { ArrowLeft, Sparkles, X } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -13,43 +17,13 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowLeft, Sparkles, X } from "lucide-react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  calculateAccountBalances,
-  buildExpenseComparisonSeries,
-  buildExpenseSequenceComparisonSeries,
-  calculateBudgetProgress,
-  calculateBudgetProgressForDateRange,
-  calculateCategoryExpenses,
-  calculateCategoryExpensesForDateRange,
-  calculateCategoryIncome,
-  calculateCategoryIncomeForDateRange,
-  calculateEmergencyRunway,
-  calculateMonthlySeries,
-  calculateSavingsRate,
-  calculateSummary,
-  calculateSummaryForDateRange,
-  dateRangeForMonth,
-  formatMoney,
-  monthKey,
-  recentMonthKeys,
-  relativeDateRanges,
-  relativeMonthKeys,
-} from "@shared/calculations";
-import {
-  buildSavingsRecommendations,
-  calculateAllowedDailySpend,
-  calculateEndOfMonthProjection,
-} from "@shared/simulations";
-import { calculateMerchantSpending } from "@shared/merchant-analytics";
 
+import { walletMessages } from "@/lib/i18n";
 import { PageHeader } from "@/components/page/page-header";
+import { ReadState } from "@/components/page/read-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -58,11 +32,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { BudgetAssistant } from "@/components/wallet/budget-assistant";
+import { Progress } from "@/components/ui/progress";
 import { AccountStateSummary } from "@/components/wallet/account-state-summary";
+import { BudgetAssistant } from "@/components/wallet/budget-assistant";
 import { CategoryIcon } from "@/components/wallet/category-icon";
+import { useAccounts, useAnalytics } from "@/hooks/wallet-entities";
+import { categoryBreakdown } from "@/lib/wallet-read-model";
 import { useWallet } from "@/providers/wallet-provider";
-import { reportDataset } from "@/lib/preferences";
 
 export function AnalyticsView() {
   const [budgetAssistantOpen, setBudgetAssistantOpen] = useState(false);
@@ -77,42 +53,51 @@ export function AnalyticsView() {
     selectedDateRange,
     recordFilters,
     setRecordFilters,
-    isAllHistoryComplete,
   } = useWallet();
   const selectedAccount = recordFilters.accountId
     ? dataset.accounts.find((account) => account.id === recordFilters.accountId)
     : undefined;
-  const selectedAccountBalance =
-    selectedAccount && isAllHistoryComplete
-      ? calculateAccountBalances(dataset).find(
-          (balance) => balance.account.id === selectedAccount.id,
-        )
-      : undefined;
-  const analyticsDataset = reportDataset(dataset, selectedAccount?.id);
-  const merchants = calculateMerchantSpending(
-    analyticsDataset.records,
-    selectedPeriodMode === "month" ? dateRangeForMonth(selectedMonth) : selectedDateRange,
-  ).slice(0, 10);
-  const summary =
-    selectedPeriodMode !== "month"
-      ? calculateSummaryForDateRange(analyticsDataset, selectedDateRange)
-      : calculateSummary(analyticsDataset, selectedMonth);
-  const expenseCategories =
-    selectedPeriodMode !== "month"
-      ? calculateCategoryExpensesForDateRange(
-          analyticsDataset,
-          selectedDateRange,
-          selectedExpenseCategoryId,
-        )
-      : calculateCategoryExpenses(analyticsDataset, selectedMonth, selectedExpenseCategoryId);
-  const incomeCategories =
-    selectedPeriodMode !== "month"
-      ? calculateCategoryIncomeForDateRange(
-          analyticsDataset,
-          selectedDateRange,
-          selectedIncomeCategoryId,
-        )
-      : calculateCategoryIncome(analyticsDataset, selectedMonth, selectedIncomeCategoryId);
+  const accounts = useAccounts();
+  const report = useAnalytics(
+    {
+      ...selectedDateRange,
+      selectedMonth,
+      periodMode: selectedPeriodMode,
+      accountId: selectedAccount?.id,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    new Date(),
+  );
+  const selectedAccountBalance = accounts.balances.find(
+    (balance) => balance.account.id === selectedAccount?.id,
+  );
+  if (!report.model || !report.totals.data)
+    return <ReadState label="analytics" error={report.isError} />;
+  const {
+    summary,
+    budgets,
+    monthlySeries,
+    expenseTrend,
+    expenseSequenceTrend,
+    savingsRate,
+    savingsRateChange,
+    emergencyRunway,
+    projection,
+    allowedDaily,
+    recommendations,
+  } = report.model;
+  const merchants = report.model.merchants.slice(0, 10);
+  const expenseCategories = categoryBreakdown(
+    report.totals.data,
+    "expense",
+    selectedExpenseCategoryId,
+  );
+  const incomeCategories = categoryBreakdown(
+    report.totals.data,
+    "income",
+    selectedIncomeCategoryId,
+  );
+  const isReportReady = Boolean(report.model);
   const selectedExpenseCategory = selectedExpenseCategoryId
     ? dataset.categories.find((category) => category.id === selectedExpenseCategoryId)
     : undefined;
@@ -131,46 +116,6 @@ export function AnalyticsView() {
       setSelectedIncomeCategoryId(categoryId);
     }
   }
-  const budgets =
-    selectedPeriodMode !== "month"
-      ? calculateBudgetProgressForDateRange(analyticsDataset, selectedDateRange)
-      : calculateBudgetProgress(analyticsDataset, selectedMonth);
-  const monthlySeries = calculateMonthlySeries(
-    analyticsDataset,
-    recentMonthKeys(
-      analyticsDataset.records,
-      selectedPeriodMode !== "month" ? monthKey(selectedDateRange.to) : selectedMonth,
-      6,
-    )
-      .slice()
-      .reverse(),
-  );
-  const comparisonPeriods =
-    selectedPeriodMode === "custom"
-      ? relativeDateRanges(selectedDateRange, 3)
-      : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
-  const expenseTrend = buildExpenseComparisonSeries(analyticsDataset, comparisonPeriods);
-  const expenseSequenceTrend = buildExpenseSequenceComparisonSeries(
-    analyticsDataset,
-    comparisonPeriods,
-  );
-  const savingsRate = calculateSavingsRate(summary.income, summary.expenses);
-  const previousPeriod = comparisonPeriods[1];
-  if (!previousPeriod) throw new Error("Analytics requires a previous comparison period");
-  const previousSummary = calculateSummaryForDateRange(analyticsDataset, previousPeriod);
-  const previousSavingsRate = calculateSavingsRate(
-    previousSummary.income,
-    previousSummary.expenses,
-  );
-  const savingsRateChange = savingsRate - previousSavingsRate;
-  const emergencyRunway = calculateEmergencyRunway(
-    analyticsDataset,
-    selectedPeriodMode !== "month" ? monthKey(selectedDateRange.to) : selectedMonth,
-  );
-  const projection = calculateEndOfMonthProjection(analyticsDataset, summary.dailyAverageExpense);
-  const allowedDaily = calculateAllowedDailySpend(analyticsDataset);
-  const recommendations = buildSavingsRecommendations(analyticsDataset);
-
   function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters({
       ...filters,
@@ -231,7 +176,7 @@ export function AnalyticsView() {
 
       {selectedAccountBalance ? (
         <AccountStateSummary balance={selectedAccountBalance} />
-      ) : selectedAccount && !isAllHistoryComplete ? (
+      ) : selectedAccount && !isReportReady ? (
         <p className="mb-4 text-sm text-muted-foreground">
           Loading complete history to calculate the current balance...
         </p>
@@ -416,7 +361,7 @@ export function AnalyticsView() {
           <CardTitle>Top merchants</CardTitle>
         </CardHeader>
         <CardContent>
-          {!isAllHistoryComplete ? (
+          {!isReportReady ? (
             <p className="text-sm text-muted-foreground" role="status">
               Loading complete history to compare merchants…
             </p>
@@ -717,14 +662,14 @@ export function AnalyticsView() {
                     <p className="text-sm text-muted-foreground">
                       {Number.isFinite(budget.spent)
                         ? formatMoney(budget.spent, budget.budget.currency)
-                        : "Falta cotización"}{" "}
+                        : walletMessages.missingExchangeRate}{" "}
                       of {formatMoney(budget.budget.limitAmount, budget.budget.currency)}
                     </p>
                   </div>
                   <p className="font-semibold">
                     {Number.isFinite(budget.percentage)
                       ? `${budget.percentage.toFixed(0)}%`
-                      : "Falta cotización"}
+                      : walletMessages.missingExchangeRate}
                   </p>
                 </div>
                 <Progress

@@ -3,10 +3,12 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
 import { DataHealthPanel } from "./data-health-panel";
+
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (work: () => Promise<unknown>) => work(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 let tree: ReactTestRenderer | undefined;

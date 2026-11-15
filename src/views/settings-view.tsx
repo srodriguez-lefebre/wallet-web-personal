@@ -1,3 +1,4 @@
+import { currencySchema } from "@shared/schemas";
 import {
   ArrowRight,
   Banknote,
@@ -19,6 +20,16 @@ import { useNavigate } from "react-router-dom";
 import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import type { Category, CurrencyCode, Tag } from "@shared/types";
 
+import {
+  controlClassName as fieldClassName,
+  inlineControlClassName as inlineFieldClassName,
+  colorControlClassName as colorInputClassName,
+  ColorInput,
+  Input,
+} from "@/components/ui/form/controls";
+import { ConfirmDialog } from "@/components/ui/form/dialogs";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
+import { useDraftFields } from "@/hooks/use-draft-fields";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Button } from "@/components/ui/button";
@@ -39,7 +50,6 @@ import { paymentDefaults } from "@/lib/preferences";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useAuth } from "@/providers/auth-provider";
 import { useWallet } from "@/providers/wallet-provider";
-import { getSessionCapabilities, lockAllSessions } from "@/services/wallet-api";
 
 type TagDraft = Omit<Tag, "id">;
 type CategoryDraft = Omit<Category, "id">;
@@ -51,6 +61,7 @@ function childCategories(categories: Category[], parentId: string) {
 }
 
 export function SettingsView() {
+  const { confirm, confirmationProps } = useConfirmDialog();
   const navigate = useNavigate();
   const {
     dataset,
@@ -66,12 +77,12 @@ export function SettingsView() {
     deleteBudget,
     updateWalletSettings,
   } = useWallet();
-  const { lock, expiresAt, token } = useAuth();
+  const { lock, expiresAt, token, client } = useAuth();
   const [sessionControl, setSessionControl] = useState<"disabled" | "ready" | "busy">("disabled");
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
-    void getSessionCapabilities(token)
+    void client["auth.session"]()
       .then((result) => {
         if (!cancelled) setSessionControl(result.revocable ? "ready" : "disabled");
       })
@@ -81,12 +92,12 @@ export function SettingsView() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [client, token]);
   const { toast, runAction } = useActionToast();
   async function closeAllSessions() {
     if (!token || sessionControl !== "ready") return;
     setSessionControl("busy");
-    const ok = await runSettingAction(() => lockAllSessions(token), {
+    const ok = await runSettingAction(() => client["auth.lockAll"](), {
       processing: "Locking all sessions...",
       success: "All sessions locked",
       error: "Could not lock all sessions",
@@ -95,47 +106,78 @@ export function SettingsView() {
     else setSessionControl("ready");
   }
   async function runSettingAction(work: () => Promise<unknown>, options: ActionToastOptions) {
-    try {
-      await runAction(work, options);
-      return true;
-    } catch {
-      return false;
-    }
+    return (await runAction(work, options)).ok;
   }
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState("");
-  const [newCategoryParentId, setNewCategoryParentId] = useState("");
-  const [newCategoryColor, setNewCategoryColor] = useState("#2563EB");
-  const [newCategoryIcon, setNewCategoryIcon] = useState("tag");
-  const [editingCategoryIconId, setEditingCategoryIconId] = useState<string | null>(null);
+  const [
+    {
+      isCategoryDialogOpen,
+      newCategoryName,
+      newCategoryParentId,
+      newCategoryColor,
+      newCategoryIcon,
+      editingCategoryIconId,
+    },
+    {
+      isCategoryDialogOpen: setIsCategoryDialogOpen,
+      newCategoryName: setNewCategoryName,
+      newCategoryParentId: setNewCategoryParentId,
+      newCategoryColor: setNewCategoryColor,
+      newCategoryIcon: setNewCategoryIcon,
+      editingCategoryIconId: setEditingCategoryIconId,
+    },
+  ] = useDraftFields(() => ({
+    isCategoryDialogOpen: false,
+    newCategoryName: "",
+    newCategoryParentId: "",
+    newCategoryColor: "#2563EB",
+    newCategoryIcon: "tag",
+    editingCategoryIconId: null as string | null,
+  }));
+
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<Record<string, boolean>>({});
   const [categoryDrafts, setCategoryDrafts] = useState<Record<string, CategoryDraft>>({});
-  const [newTagName, setNewTagName] = useState("");
-  const [newTagColor, setNewTagColor] = useState("#2563EB");
+  const [{ newTagName, newTagColor }, { newTagName: setNewTagName, newTagColor: setNewTagColor }] =
+    useDraftFields(() => ({ newTagName: "", newTagColor: "#2563EB" }));
+
   const [tagDrafts, setTagDrafts] = useState<Record<string, TagDraft>>({});
-  const [newBudgetName, setNewBudgetName] = useState("");
-  const [newBudgetLimit, setNewBudgetLimit] = useState("");
-  const [newBudgetCategoryId, setNewBudgetCategoryId] = useState("");
-  const [defaultAccountId, setDefaultAccountId] = useState(
-    dataset.settings.defaultAccountId ?? dataset.settings.primaryAccountId ?? "",
-  );
-  const [defaultPaymentMethod, setDefaultPaymentMethod] = useState(
-    dataset.settings.defaultCreditCardId
+  const [
+    { newBudgetName, newBudgetLimit, newBudgetCategoryId },
+    {
+      newBudgetName: setNewBudgetName,
+      newBudgetLimit: setNewBudgetLimit,
+      newBudgetCategoryId: setNewBudgetCategoryId,
+    },
+  ] = useDraftFields(() => ({ newBudgetName: "", newBudgetLimit: "", newBudgetCategoryId: "" }));
+
+  const [defaultsDraft, setDefaultsDraft] = useState<
+    Partial<{
+      defaultAccountId: string;
+      defaultPaymentMethod: string;
+      defaultPaymentStatus: typeof dataset.settings.defaultPaymentStatus;
+      primaryCurrency: CurrencyCode;
+    }>
+  >({});
+  const defaultAccountId =
+    defaultsDraft.defaultAccountId ??
+    dataset.settings.defaultAccountId ??
+    dataset.settings.primaryAccountId ??
+    "";
+  const defaultPaymentMethod =
+    defaultsDraft.defaultPaymentMethod ??
+    (dataset.settings.defaultCreditCardId
       ? `card:${dataset.settings.defaultCreditCardId}`
-      : dataset.settings.defaultPaymentType,
-  );
-  const [defaultPaymentStatus, setDefaultPaymentStatus] = useState(
-    dataset.settings.defaultPaymentStatus,
-  );
-  const [primaryCurrency, setPrimaryCurrency] = useState<CurrencyCode>(
-    dataset.settings.primaryCurrency,
-  );
-  const fieldClassName =
-    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const inlineFieldClassName =
-    "h-10 rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const colorInputClassName =
-    "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
+      : dataset.settings.defaultPaymentType);
+  const defaultPaymentStatus =
+    defaultsDraft.defaultPaymentStatus ?? dataset.settings.defaultPaymentStatus;
+  const primaryCurrency = defaultsDraft.primaryCurrency ?? dataset.settings.primaryCurrency;
+  const setDefaultAccountId = (value: string) =>
+    setDefaultsDraft((current) => ({ ...current, defaultAccountId: value }));
+  const setDefaultPaymentMethod = (value: string) =>
+    setDefaultsDraft((current) => ({ ...current, defaultPaymentMethod: value }));
+  const setDefaultPaymentStatus = (value: typeof defaultPaymentStatus) =>
+    setDefaultsDraft((current) => ({ ...current, defaultPaymentStatus: value }));
+  const setPrimaryCurrency = (value: CurrencyCode) =>
+    setDefaultsDraft((current) => ({ ...current, primaryCurrency: value }));
 
   function openRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
@@ -173,7 +215,7 @@ export function SettingsView() {
   }
 
   async function saveRecordDefaults() {
-    await runSettingAction(
+    const saved = await runSettingAction(
       () =>
         updateWalletSettings({
           primaryCurrency,
@@ -188,6 +230,7 @@ export function SettingsView() {
         error: "Could not save defaults",
       },
     );
+    if (saved) setDefaultsDraft({});
   }
 
   function getCategoryDraft(category: Category): CategoryDraft {
@@ -297,7 +340,11 @@ export function SettingsView() {
 
   async function handleDeleteCategory(categoryId: string) {
     if (
-      !window.confirm("Delete this category tree and reassign its history to Category eliminated?")
+      !(await confirm({
+        title: "Eliminate category tree?",
+        description: "Delete this category tree and reassign its history to Category eliminated?",
+        confirmLabel: "Eliminate category",
+      }))
     )
       return;
     if (
@@ -489,14 +536,13 @@ export function SettingsView() {
           >
             <CategoryIcon icon={draft.icon} color={draft.color} />
           </button>
-          <input
+          <ColorInput
             value={draft.color}
             onChange={(event) => updateCategoryDraft(category.id, { color: event.target.value })}
-            type="color"
             className={colorInputClassName}
             aria-label={`${category.name} color`}
           />
-          <input
+          <Input
             value={draft.name}
             onChange={(event) => updateCategoryDraft(category.id, { name: event.target.value })}
             className={`${inlineFieldClassName} min-w-40 flex-1`}
@@ -625,7 +671,7 @@ export function SettingsView() {
                 value={primaryCurrency}
                 onChange={(event) => setPrimaryCurrency(event.target.value as CurrencyCode)}
               >
-                {(["UYU", "USD", "EUR", "BRL", "ARS"] as CurrencyCode[]).map((currency) => (
+                {(currencySchema.options as CurrencyCode[]).map((currency) => (
                   <option key={currency}>{currency}</option>
                 ))}
               </select>
@@ -731,60 +777,61 @@ export function SettingsView() {
                       finishAction(handleAddCategory(event));
                     }}
                   >
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Name</span>
-                      <input
-                        value={newCategoryName}
-                        onChange={(event) => setNewCategoryName(event.target.value)}
-                        className={fieldClassName}
-                        placeholder="Groceries, Butcher, Rent..."
-                      />
-                    </label>
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Parent</span>
-                      <select
-                        value={newCategoryParentId}
-                        onChange={(event) => setNewCategoryParentId(event.target.value)}
-                        className={fieldClassName}
-                      >
-                        <option value="">No parent</option>
-                        {dataset.categories
-                          .filter((category) => !category.parentId)
-                          .sort((a, b) => a.name.localeCompare(b.name))
-                          .map((category) => (
-                            <option key={category.id} value={category.id}>
-                              {category.name}
-                            </option>
-                          ))}
-                      </select>
-                    </label>
-                    <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+                    <fieldset disabled={toast?.status === "processing"} className="contents">
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Color</span>
-                        <div className="flex items-center gap-2">
-                          <CategoryIcon icon={newCategoryIcon} color={newCategoryColor} />
-                          <input
-                            value={newCategoryColor}
-                            onChange={(event) => setNewCategoryColor(event.target.value)}
-                            type="color"
-                            className={colorInputClassName}
-                            aria-label="New category color"
-                          />
-                        </div>
+                        <span className="text-sm font-medium">Name</span>
+                        <Input
+                          value={newCategoryName}
+                          onChange={(event) => setNewCategoryName(event.target.value)}
+                          className={fieldClassName}
+                          placeholder="Groceries, Butcher, Rent..."
+                        />
                       </label>
-                      <div className="space-y-2">
-                        <span className="text-sm font-medium">Icon</span>
-                        {renderCategoryIconGrid({
-                          selectedIcon: newCategoryIcon,
-                          color: newCategoryColor,
-                          onSelect: setNewCategoryIcon,
-                        })}
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Parent</span>
+                        <select
+                          value={newCategoryParentId}
+                          onChange={(event) => setNewCategoryParentId(event.target.value)}
+                          className={fieldClassName}
+                        >
+                          <option value="">No parent</option>
+                          {dataset.categories
+                            .filter((category) => !category.parentId)
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Color</span>
+                          <div className="flex items-center gap-2">
+                            <CategoryIcon icon={newCategoryIcon} color={newCategoryColor} />
+                            <ColorInput
+                              value={newCategoryColor}
+                              onChange={(event) => setNewCategoryColor(event.target.value)}
+                              className={colorInputClassName}
+                              aria-label="New category color"
+                            />
+                          </div>
+                        </label>
+                        <div className="space-y-2">
+                          <span className="text-sm font-medium">Icon</span>
+                          {renderCategoryIconGrid({
+                            selectedIcon: newCategoryIcon,
+                            color: newCategoryColor,
+                            onSelect: setNewCategoryIcon,
+                          })}
+                        </div>
                       </div>
-                    </div>
-                    <Button className="w-full" type="submit">
-                      <Plus className="h-4 w-4" />
-                      Add category
-                    </Button>
+                      <Button className="w-full" type="submit">
+                        <Plus className="h-4 w-4" />
+                        Add category
+                      </Button>
+                    </fieldset>
                   </form>
                 </DialogContent>
               </Dialog>
@@ -858,23 +905,24 @@ export function SettingsView() {
                   finishAction(handleAddTag(event));
                 }}
               >
-                <input
-                  value={newTagName}
-                  onChange={(event) => setNewTagName(event.target.value)}
-                  className={fieldClassName}
-                  placeholder="New tag"
-                />
-                <input
-                  value={newTagColor}
-                  onChange={(event) => setNewTagColor(event.target.value)}
-                  type="color"
-                  className={colorInputClassName}
-                  aria-label="New tag color"
-                />
-                <Button type="submit">
-                  <Plus className="h-4 w-4" />
-                  Add
-                </Button>
+                <fieldset disabled={toast?.status === "processing"} className="contents">
+                  <Input
+                    value={newTagName}
+                    onChange={(event) => setNewTagName(event.target.value)}
+                    className={fieldClassName}
+                    placeholder="New tag"
+                  />
+                  <ColorInput
+                    value={newTagColor}
+                    onChange={(event) => setNewTagColor(event.target.value)}
+                    className={colorInputClassName}
+                    aria-label="New tag color"
+                  />
+                  <Button type="submit">
+                    <Plus className="h-4 w-4" />
+                    Add
+                  </Button>
+                </fieldset>
               </form>
 
               <div className="space-y-2">
@@ -890,14 +938,13 @@ export function SettingsView() {
                       key={tag.id}
                       className="grid gap-2 rounded-md border p-3 md:grid-cols-[auto_1fr_120px_auto_auto_auto]"
                     >
-                      <input
+                      <ColorInput
                         value={draft.color}
                         onChange={(event) => updateTagDraft(tag.id, { color: event.target.value })}
-                        type="color"
                         className={colorInputClassName}
                         aria-label={`${tag.name} color`}
                       />
-                      <input
+                      <Input
                         value={draft.name}
                         onChange={(event) => updateTagDraft(tag.id, { name: event.target.value })}
                         className={fieldClassName}
@@ -971,37 +1018,39 @@ export function SettingsView() {
                 finishAction(handleAddBudget(event));
               }}
             >
-              <input
-                value={newBudgetName}
-                onChange={(event) => setNewBudgetName(event.target.value)}
-                className={fieldClassName}
-                placeholder="Monthly budget"
-              />
-              <input
-                value={newBudgetLimit}
-                onChange={(event) => setNewBudgetLimit(event.target.value)}
-                className={fieldClassName}
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Limit"
-              />
-              <select
-                value={newBudgetCategoryId}
-                onChange={(event) => setNewBudgetCategoryId(event.target.value)}
-                className={fieldClassName}
-              >
-                <option value="">All categories</option>
-                {dataset.categories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-              <Button type="submit">
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
+              <fieldset disabled={toast?.status === "processing"} className="contents">
+                <Input
+                  value={newBudgetName}
+                  onChange={(event) => setNewBudgetName(event.target.value)}
+                  className={fieldClassName}
+                  placeholder="Monthly budget"
+                />
+                <Input
+                  value={newBudgetLimit}
+                  onChange={(event) => setNewBudgetLimit(event.target.value)}
+                  className={fieldClassName}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Limit"
+                />
+                <select
+                  value={newBudgetCategoryId}
+                  onChange={(event) => setNewBudgetCategoryId(event.target.value)}
+                  className={fieldClassName}
+                >
+                  <option value="">All categories</option>
+                  {dataset.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <Button type="submit">
+                  <Plus className="h-4 w-4" />
+                  Add
+                </Button>
+              </fieldset>
             </form>
             <div className="space-y-2">
               {dataset.budgets.map((budget) => (
@@ -1109,6 +1158,7 @@ export function SettingsView() {
         </Card>
       </div>
       <RecordTemplateManager />
+      <ConfirmDialog {...confirmationProps} />
     </div>
   );
 }

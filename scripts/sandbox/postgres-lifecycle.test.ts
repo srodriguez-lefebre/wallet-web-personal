@@ -17,6 +17,7 @@ test("files clone a migrated template on one cluster without sharing synthetic r
   expect(first.pool.options.port).toBe(config.port);
   expect(second.pool.options.port).toBe(config.port);
   expect(first.pool.options.database).not.toBe(second.pool.options.database);
+  expect((await first.pool.query("SHOW server_encoding")).rows[0].server_encoding).toBe("UTF8");
   await first.pool.query("INSERT INTO tags(name,color) VALUES('Isolated fixture','#123456')");
   expect((await first.pool.query("SELECT name FROM tags")).rows).toHaveLength(1);
   expect((await second.pool.query("SELECT name FROM tags")).rows).toHaveLength(0);

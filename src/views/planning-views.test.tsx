@@ -10,15 +10,18 @@ import { GoalFundingPlan } from "../components/wallet/goal-funding-plan";
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)() }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset: state.dataset }),
+  useWallet: () => withWalletMetadata({ dataset: state.dataset }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/wallet/category-picker", () => ({
@@ -208,4 +211,10 @@ test("paused goal preserves remaining but does not suggest daily contributions",
   expect(text()).toContain(formatMoney(50, progress.goal.currency));
   expect(text()).toContain("No contributions planned");
   expect(text()).not.toContain("Per day");
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

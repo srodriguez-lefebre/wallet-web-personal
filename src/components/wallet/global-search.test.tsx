@@ -1,4 +1,5 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -9,6 +10,8 @@ import { AppShell } from "../layout/app-shell";
 import type { RecordFilters } from "@shared/types";
 import type { ReactNode } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const state = vi.hoisted(() => ({
   dataset: {} as typeof mockWalletData,
   filters: {},
@@ -17,32 +20,33 @@ const state = vi.hoisted(() => ({
   draft: vi.fn(),
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    selectedMonth: "2026-10",
-    selectedPeriodMode: state.period,
-    customDateRange: { from: "2026-10-01", to: "2026-10-03" },
-    setSelectedMonth: vi.fn(),
-    setCustomDateRange: vi.fn(),
-    isAllHistoryComplete: false,
-    clearRecordFilters: () => {
-      state.filters = { type: "all" };
-    },
-    setRecordFilters: (filters: RecordFilters) => {
-      state.filters = { ...state.filters, ...filters };
-    },
-    setAllPeriod: () => {
-      state.period = "all";
-    },
-    openReviewQueue: () => {
-      state.filters = { type: "all", paymentStatus: "needs_review" };
-      state.period = "all";
-    },
-    requestNewRecord: state.draft,
-    addRecord: state.writes,
-    payDebt: state.writes,
-    addCreditCardPayment: state.writes,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      selectedMonth: "2026-10",
+      selectedPeriodMode: state.period,
+      customDateRange: { from: "2026-10-01", to: "2026-10-03" },
+      setSelectedMonth: vi.fn(),
+      setCustomDateRange: vi.fn(),
+      isAllHistoryComplete: false,
+      clearRecordFilters: () => {
+        state.filters = { type: "all" };
+      },
+      setRecordFilters: (filters: RecordFilters) => {
+        state.filters = { ...state.filters, ...filters };
+      },
+      setAllPeriod: () => {
+        state.period = "all";
+      },
+      openReviewQueue: () => {
+        state.filters = { type: "all", paymentStatus: "needs_review" };
+        state.period = "all";
+      },
+      requestNewRecord: state.draft,
+      addRecord: state.writes,
+      payDebt: state.writes,
+      addCreditCardPayment: state.writes,
+    }),
 }));
 // React test renderer has no DOM portal. Keep component state and handlers real;
 // exercise the Dialog focus callbacks at the boundary owned by this component.
@@ -84,18 +88,20 @@ function button(label: string) {
 async function mount(shell = false) {
   await act(async () => {
     tree = create(
-      <MemoryRouter>
-        {shell ? (
-          <AppShell>
-            <Location />
-          </AppShell>
-        ) : (
-          <>
-            <GlobalSearch />
-            <Location />
-          </>
-        )}
-      </MemoryRouter>,
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          {shell ? (
+            <AppShell>
+              <Location />
+            </AppShell>
+          ) : (
+            <>
+              <GlobalSearch />
+              <Location />
+            </>
+          )}
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
 }
@@ -212,7 +218,8 @@ test("text search and the review command replace unrelated filters without claim
   expect(state.filters).toEqual({ type: "all", search: "café" });
   expect(state.period).toBe("all");
   await open();
-  expect(JSON.stringify(tree!.toJSON())).toContain("may be incomplete");
+  expect(JSON.stringify(tree!.toJSON())).not.toContain("may be incomplete");
+  expect(button("Review records")).toBeDefined();
   await act(async () => button("Review records").props.onClick());
   expect(state.filters).toEqual({ type: "all", paymentStatus: "needs_review" });
   expect(state.writes).not.toHaveBeenCalled();
@@ -265,4 +272,10 @@ test("dialog focus callbacks focus its input and restore prior focus on closure"
   );
   content.onCloseAutoFocus(event);
   expect(priorFocus.focus).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

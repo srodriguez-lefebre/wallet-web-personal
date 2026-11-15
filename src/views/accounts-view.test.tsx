@@ -7,6 +7,8 @@ import { AccountsView } from "./accounts-view";
 
 import type { ReactNode } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const actions = vi.hoisted(() => ({
   addAccount: vi.fn(),
   updateAccount: vi.fn(),
@@ -18,7 +20,7 @@ let dataset = structuredClone(mockWalletData);
 let complete = true;
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset, ...actions, isAllHistoryComplete: complete }),
+  useWallet: () => withWalletMetadata({ dataset, ...actions, isAllHistoryComplete: complete }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -88,7 +90,9 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
       throw new Error("Offline");
   });
   await edit();
-  const names = tree!.root.findAllByProps({ placeholder: "Account name" });
+  const names = tree!.root
+    .findAllByType("input")
+    .filter((input) => input.props.placeholder === "Account name");
   await act(async () => {
     names[0]!.props.onChange({ target: { value: "First edited" } });
     names[1]!.props.onChange({ target: { value: "Second edited" } });
@@ -97,7 +101,10 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
     save().props.onClick();
   });
   expect(
-    tree!.root.findAllByProps({ placeholder: "Account name" }).map((input) => input.props.value),
+    tree!.root
+      .findAllByType("input")
+      .filter((input) => input.props.placeholder === "Account name")
+      .map((input) => input.props.value),
   ).toEqual(["First edited", "Second edited"]);
   await act(async () => {
     save().props.onClick();
@@ -156,15 +163,13 @@ test("double creation submits a single request and preserves the form after fail
     "Retained bank",
   );
 });
-test("incomplete history withholds account balances and displays its loading state", async () => {
+test("pending aggregate withholds account balances and displays its loading state", async () => {
   complete = false;
   await mount();
   expect(
     tree!.root.findAllByType("div").filter((node) => node.props.role === "button"),
   ).toHaveLength(0);
-  expect(JSON.stringify(tree!.toJSON())).toContain(
-    "Loading complete history to calculate current balances",
-  );
+  expect(tree!.root.findByProps({ role: "status" }).props.children).toBe("Loading accounts...");
 });
 
 test("a successful archive is not repeated when another account save fails", async () => {
@@ -226,4 +231,10 @@ test("revealing a hidden account preserves the existing account cards and their 
       .children.map((child) => (typeof child === "object" ? "" : String(child)))
       .join(""),
   ).toBe(originalBalance);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

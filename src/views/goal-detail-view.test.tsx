@@ -7,6 +7,8 @@ import { GoalDetailView } from "./goal-detail-view";
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const state = vi.hoisted(() => ({
   dataset: ((): unknown => undefined)(),
   id: "",
@@ -14,12 +16,13 @@ const state = vi.hoisted(() => ({
   messages: [] as string[],
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    updateGoal: state.update,
-    setRecordFilters: vi.fn(),
-    releaseGoalReservation: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      updateGoal: state.update,
+      setRecordFilters: vi.fn(),
+      releaseGoalReservation: vi.fn(),
+    }),
 }));
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
@@ -183,4 +186,25 @@ test("a completed goal cannot be closed again from the detail action", async () 
     tree = create(<GoalDetailView />);
   });
   expect(tree!.root.findByProps({ "aria-label": "Close goal" }).props.disabled).toBe(true);
+});
+
+test("navigating to another goal closes the previous entity's editor", async () => {
+  const dataset = state.dataset as WalletDataset;
+  dataset.goals.push({
+    ...dataset.goals[0]!,
+    id: "00000000-0000-4000-8000-000000000004",
+    name: "Synthetic second goal",
+  });
+  await open("Edit goal");
+  expect(tree!.root.findAllByProps({ "aria-label": "Edit goal details" })).toHaveLength(1);
+  state.id = dataset.goals[1]!.id;
+  await act(async () => tree!.update(<GoalDetailView />));
+  expect(tree!.root.findAllByProps({ "aria-label": "Edit goal details" })).toHaveLength(0);
+  expect(state.update).not.toHaveBeenCalled();
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

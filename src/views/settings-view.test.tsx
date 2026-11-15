@@ -6,17 +6,23 @@ import { SettingsView } from "./settings-view";
 
 import type { SettingsPatch } from "@shared/schemas";
 
-import * as walletApi from "@/services/wallet-api";
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
-const auth = vi.hoisted(() => ({ lock: vi.fn(), token: undefined as string | undefined }));
+const auth = vi.hoisted(() => ({
+  lock: vi.fn(),
+  token: undefined as string | undefined,
+  client: { "auth.session": vi.fn(), "auth.lockAll": vi.fn() },
+}));
 const update = vi.hoisted(() => vi.fn());
 const addTag = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: mockWalletData,
-    updateWalletSettings: update,
-    addTag,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: mockWalletData,
+      updateWalletSettings: update,
+      addTag,
+    }),
 }));
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => auth,
@@ -25,7 +31,7 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 afterEach(() => {
@@ -33,6 +39,27 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+test("untouched defaults follow refreshed reference settings", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const previous = mockWalletData.settings.primaryCurrency;
+  let tree!: ReturnType<typeof create>;
+  await act(async () => {
+    tree = create(<SettingsView />);
+  });
+  try {
+    mockWalletData.settings.primaryCurrency = previous === "USD" ? "UYU" : "USD";
+    await act(async () => tree.update(<SettingsView />));
+    expect(
+      tree.root
+        .findAllByType("select")
+        .some((select) => select.props.value === mockWalletData.settings.primaryCurrency),
+    ).toBe(true);
+  } finally {
+    mockWalletData.settings.primaryCurrency = previous;
+    await act(async () => tree.unmount());
+  }
 });
 
 test("settings provide the template management section", async () => {
@@ -61,7 +88,11 @@ test("failed tag creation preserves the draft and handles the rejected request",
         .findByProps({ placeholder: "New tag" })
         .props.onChange({ target: { value: "Retain draft" } });
     });
-    const form = tree.root.findByProps({ placeholder: "New tag" }).parent!;
+    const form = tree.root
+      .findAllByType("form")
+      .find((form) =>
+        form.findAllByType("input").some((input) => input.props.placeholder === "New tag"),
+      )!;
     await act(async () => {
       expect(form.props.onSubmit({ preventDefault: vi.fn() })).toBeUndefined();
     });
@@ -108,8 +139,8 @@ test("saving defaults while a theme patch is queued does not revert the theme", 
 test("the optional lock-all control appears only when supported and clears the local session after success", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   auth.token = "synthetic-session";
-  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: true });
-  const revoke = vi.spyOn(walletApi, "lockAllSessions").mockResolvedValue({ locked: true });
+  auth.client["auth.session"].mockResolvedValue({ revocable: true });
+  const revoke = auth.client["auth.lockAll"].mockResolvedValue({ locked: true });
   let tree!: ReturnType<typeof create>;
   await act(async () => {
     tree = create(<SettingsView />);
@@ -122,7 +153,7 @@ test("the optional lock-all control appears only when supported and clears the l
     await act(async () => {
       button!.props.onClick();
     });
-    expect(revoke).toHaveBeenCalledWith("synthetic-session");
+    expect(revoke).toHaveBeenCalledExactlyOnceWith();
     expect(auth.lock).toHaveBeenCalledTimes(1);
   } finally {
     await act(async () => tree.unmount());
@@ -131,7 +162,7 @@ test("the optional lock-all control appears only when supported and clears the l
 test("disabled revocation never renders the lock-all action", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   auth.token = "synthetic-session";
-  vi.spyOn(walletApi, "getSessionCapabilities").mockResolvedValue({ revocable: false });
+  auth.client["auth.session"].mockResolvedValue({ revocable: false });
   let tree!: ReturnType<typeof create>;
   await act(async () => {
     tree = create(<SettingsView />);
@@ -143,4 +174,10 @@ test("disabled revocation never renders the lock-all action", async () => {
   } finally {
     await act(async () => tree.unmount());
   }
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

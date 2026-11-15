@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { timeZoneSchema } from "./time-zone.js";
+
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
 export const uuidSchema = z.string().uuid("Invalid UUID");
 const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD");
@@ -688,6 +690,10 @@ export const recordFiltersSchema = z
     tagId: uuidSchema.optional(),
     goalId: uuidSchema.optional(),
     search: z.string().trim().min(1).max(100).optional(),
+    searchMode: z.enum(["legacy", "wallet"]).optional(),
+    note: z.string().trim().min(1).max(1000).optional(),
+    categoryMode: z.enum(["exact", "descendants"]).optional(),
+    timeZone: timeZoneSchema.optional(),
     paymentStatus: z.enum(["all", "cleared", "pending", "needs_review", "cancelled"]).optional(),
     from: dateOnlySchema.optional(),
     to: dateOnlySchema.optional(),
@@ -795,6 +801,18 @@ export const walletRecordResponseSchema = z.object({
   importMerchant: z.string().optional(),
   importHistory: z.array(z.string()).optional(),
   merchantCorrection: merchantCorrectionSchema.optional(),
+  linkedCardRecordKind: z.enum(["purchase", "refund"]).optional(),
+});
+export const recordReviewBaselineSchema = walletRecordResponseSchema.pick({
+  id: true,
+  type: true,
+  paymentType: true,
+  paymentStatus: true,
+  categoryId: true,
+  importMerchant: true,
+  merchantCorrection: true,
+  updatedAt: true,
+  counterpartyName: true,
 });
 export const cardStatementResponseSchema = z.object({
   ...id,

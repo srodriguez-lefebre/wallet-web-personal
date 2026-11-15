@@ -1,25 +1,20 @@
-import { ArrowLeft, CalendarDays, Flag, PiggyBank, ReceiptText } from "lucide-react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Check, Edit3 } from "lucide-react";
-import { useRef, useState } from "react";
-import { calculateGoalFundingPlan } from "@shared/planning";
-import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
+import { calculateGoalFundingPlan } from "@shared/planning";
+import { ArrowLeft, CalendarDays, Check, Edit3, Flag, PiggyBank, ReceiptText } from "lucide-react";
+import { useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 
 import type { GoalPatch } from "@shared/schemas";
 
-import { finishAction } from "@/lib/async-event";
+import { readableForeground } from "@/lib/palette";
+import { Input } from "@/components/ui/form/controls";
 import { PageHeader } from "@/components/page/page-header";
+import { ReadState } from "@/components/page/read-state";
+import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ActionToast } from "@/components/ui/action-toast";
-import { useActionToast } from "@/lib/use-action-toast";
-import { useWallet } from "@/providers/wallet-provider";
-import { formatCalendarDate } from "@/lib/utils";
-import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
-import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
-import { GoalEditDialog } from "@/components/wallet/goal-edit-dialog";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +22,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { GoalEditDialog } from "@/components/wallet/goal-edit-dialog";
+import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
+import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
+import { useGoals, useRecords } from "@/hooks/wallet-entities";
+import { finishAction } from "@/lib/async-event";
+import { useActionToast } from "@/lib/use-action-toast";
+import { formatCalendarDate } from "@/lib/utils";
+import { useWallet } from "@/providers/wallet-provider";
 
 export function GoalDetailView() {
-  const { goalId } = useParams();
+  const { goalId = "" } = useParams();
+  return <GoalDetail key={goalId} goalId={goalId} />;
+}
+
+function GoalDetail({ goalId }: { goalId: string }) {
   const navigate = useNavigate();
   const { dataset, setRecordFilters, releaseGoalReservation, updateGoal } = useWallet();
   const [releaseAmounts, setReleaseAmounts] = useState<Record<string, string>>({});
@@ -38,7 +45,11 @@ export function GoalDetailView() {
   const [pending, setPending] = useState(false);
   const mutationPending = useRef(false);
   const { toast, runAction } = useActionToast();
-  const progress = calculateGoalProgress(dataset).find((item) => item.goal.id === goalId);
+  const goals = useGoals();
+  const linked = useRecords({ goalId }, Boolean(dataset.goals.find((goal) => goal.id === goalId)));
+  const progress = goals.progress.find((item) => item.goal.id === goalId);
+  if (goals.isPending || (goals.isError && !progress))
+    return <ReadState label="goal" error={goals.isError} />;
 
   if (!progress) {
     return (
@@ -58,9 +69,7 @@ export function GoalDetailView() {
   }
 
   const goalProgress = progress;
-  const linkedRecords = dataset.records
-    .filter((record) => (record.goalIds ?? []).includes(goalProgress.goal.id))
-    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
+  const linkedRecords = linked.records;
   const reservations = dataset.goalReservations.filter(
     (reservation) => reservation.goalId === goalProgress.goal.id,
   );
@@ -71,16 +80,19 @@ export function GoalDetailView() {
     mutationPending.current = true;
     setPending(true);
     try {
-      await runAction(() => updateGoal(goalProgress.goal.id, patch), {
-        processing: closing ? "Closing goal..." : "Saving goal...",
-        success: closing ? "Goal completed and reservations released" : "Goal updated",
-        error: closing ? "Could not close goal" : "Could not update goal",
-      });
+      {
+        const actionResult = await runAction(() => updateGoal(goalProgress.goal.id, patch), {
+          processing: closing ? "Closing goal..." : "Saving goal...",
+          success: closing ? "Goal completed and reservations released" : "Goal updated",
+          error: closing ? "Could not close goal" : "Could not update goal",
+        });
+        if (!actionResult.ok) {
+          return false;
+        }
+      }
       setIsEditing(false);
       setIsClosing(false);
       return true;
-    } catch {
-      return false;
     } finally {
       mutationPending.current = false;
       setPending(false);
@@ -201,7 +213,10 @@ export function GoalDetailView() {
                 <div className="flex items-center gap-3">
                   <span
                     className="grid h-12 w-12 place-items-center rounded-lg text-white"
-                    style={{ backgroundColor: goalProgress.goal.color }}
+                    style={{
+                      backgroundColor: goalProgress.goal.color,
+                      color: readableForeground(goalProgress.goal.color),
+                    }}
                   >
                     <Flag className="h-5 w-5" />
                   </span>
@@ -287,7 +302,11 @@ export function GoalDetailView() {
               <CardTitle>Linked records</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {linkedRecords.length === 0 ? (
+              {linked.query.isPending ? (
+                <p role="status">Loading linked records...</p>
+              ) : linked.query.isError ? (
+                <p role="alert">Could not load linked records. Retry refresh.</p>
+              ) : linkedRecords.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   There are no records linked to this goal yet.
                 </p>
@@ -325,6 +344,15 @@ export function GoalDetailView() {
                     </button>
                   );
                 })
+              )}
+              {linked.hasMore && (
+                <Button
+                  variant="outline"
+                  disabled={linked.query.isFetching}
+                  onClick={() => void linked.loadMore()}
+                >
+                  Load older records
+                </Button>
               )}
             </CardContent>
           </Card>
@@ -367,7 +395,7 @@ export function GoalDetailView() {
                           <p className="font-semibold">
                             {formatMoney(reservation.amount, reservation.currency)}
                           </p>
-                          <input
+                          <Input
                             aria-label="Amount to release"
                             className="h-9 w-28 rounded-md border bg-background px-2 text-sm"
                             type="number"

@@ -4,9 +4,9 @@ import { act, render, type RenderResult } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { AuthProvider, useAuth } from "./auth-provider";
-import { createSession } from "../services/auth-service";
 
-vi.mock("@/services/auth-service");
+const createSession =
+  vi.fn<(token: string) => Promise<{ token: string; expiresAt: string } | null>>();
 let context: ReturnType<typeof useAuth>,
   tree: RenderResult | undefined,
   storage: Map<string, string>;
@@ -38,6 +38,17 @@ beforeEach(() => {
     key: () => null,
   });
   window.sessionStorage.clear();
+  vi.stubGlobal("fetch", async (_path: string, init: RequestInit) => {
+    const input = JSON.parse(init.body as string) as { token: string };
+    const result = await createSession(input.token);
+    return Response.json(
+      {
+        data: result ?? null,
+        error: result ? null : { code: "UNAUTHORIZED", message: "Invalid token" },
+      },
+      { status: result ? 200 : 401 },
+    );
+  });
 });
 afterEach(async () => {
   if (tree) await act(async () => tree!.unmount());

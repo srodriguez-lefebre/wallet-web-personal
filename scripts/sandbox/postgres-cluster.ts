@@ -32,6 +32,9 @@ async function startCluster() {
     user: config.user,
     password: config.password,
     persistent: true,
+    // This cluster is disposable and rebuilt from migrations on every test run.
+    // Avoid initdb's disk sync (slow on Windows); durability is not under test.
+    initdbFlags: ["--no-sync", "--encoding=UTF8"],
     postgresFlags: ["-h", config.host],
     onLog: () => {},
     onError: () => {},

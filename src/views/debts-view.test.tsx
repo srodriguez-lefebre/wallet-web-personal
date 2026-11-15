@@ -7,24 +7,22 @@ import { DebtsView } from "./debts-view";
 
 import type { PropsWithChildren } from "react";
 
+import { createDebtPayment, createDebtSettlement } from "@/lib/debt-settlement";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const payment = vi.hoisted(() => vi.fn());
 const reportedToast = vi.hoisted(() => vi.fn());
-const runnerState = vi.hoisted(() => ({ returnFalseOnFailure: false }));
+
 let dataset = structuredClone(mockWalletData);
+let settle: ReturnType<typeof createDebtSettlement>;
+let partial: ReturnType<typeof createDebtPayment>;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset, recordDebtPayment: payment }),
+  useWallet: () => withWalletMetadata({ dataset, recordDebtPayment: partial, settleDebt: settle }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: async (action: () => Promise<unknown>) => {
-      try {
-        return await createActionToastRunner(reportedToast)(action);
-      } catch (error) {
-        if (runnerState.returnFalseOnFailure) return false;
-        throw error;
-      }
-    },
+    runAction: createActionToastRunner(reportedToast),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {
@@ -46,8 +44,10 @@ let tree: ReactTestRenderer | undefined;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   payment.mockReset().mockResolvedValue(undefined);
+  settle = createDebtSettlement((input) => payment(input.params.id, input.body));
+  partial = createDebtPayment((input) => payment(input.params.id, input.body));
   reportedToast.mockClear();
-  runnerState.returnFalseOnFailure = false;
+
   dataset = structuredClone(mockWalletData);
   dataset.debts = [
     {
@@ -97,16 +97,15 @@ test("an uncertain partial payment keeps its key for the retry", async () => {
   });
   payment.mockRejectedValueOnce(new Error("connection lost after server commit"));
   await pay("partial");
-  expect(reportedToast).toHaveBeenCalledWith("error", "Action failed");
+  expect(reportedToast).toHaveBeenCalledWith("error", "Could not save payment");
   const firstKey = payment.mock.calls[0]![1].idempotencyKey;
   await pay("partial");
   expect(payment.mock.calls[1]![1].idempotencyKey).toBe(firstKey);
 });
 
 test.each(["partial", "settle"] as const)(
-  "%s payment retains the key when the toast runner returns false",
+  "%s payment retains the key when the action reports failure",
   async (path) => {
-    runnerState.returnFalseOnFailure = true;
     await act(async () => {
       tree = create(<DebtsView />);
     });
@@ -117,3 +116,9 @@ test.each(["partial", "settle"] as const)(
     expect(payment.mock.calls[1]![1].idempotencyKey).toBe(firstKey);
   },
 );
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});

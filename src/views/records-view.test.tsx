@@ -4,10 +4,13 @@ import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { createDb } from "../../server/db/client.js";
-import { RecordsView } from "./records-view";
 
 import type { RecordFilters, WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
+
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+import { RecordsView } from "@/features/records/RecordsView";
 const update = vi.hoisted(() => vi.fn());
 const add = vi.hoisted(() => vi.fn());
 const clearFilters = vi.hoisted(() => vi.fn());
@@ -20,37 +23,40 @@ let filters: RecordFilters;
 let periodMode: "month" | "all";
 let historyComplete: boolean;
 let isReviewQueueOpen: boolean;
+let globalReviewCount: number | undefined;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2020-06",
-    selectedPeriodMode: periodMode,
-    selectedDateRange:
-      periodMode === "all"
-        ? { from: "2019-01-01", to: "2026-12-31" }
-        : { from: "2020-06-01", to: "2020-06-30" },
-    recordFilters: filters,
-    setRecordFilters: setFilters,
-    clearRecordFilters: clearFilters,
-    setAllPeriod,
-    openReviewQueue,
-    closeReviewQueue,
-    isReviewQueueOpen,
-    addRecord: add,
-    updateRecord: update,
-    deleteRecord: vi.fn(),
-    newRecordRequestId: 0,
-    consumeNewRecordRequest: vi.fn(),
-    recordsPage: {},
-    isAllHistoryComplete: historyComplete,
-    isSelectedRangeComplete: historyComplete,
-    loadMoreRecords: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2020-06",
+      selectedPeriodMode: periodMode,
+      selectedDateRange:
+        periodMode === "all"
+          ? { from: "2019-01-01", to: "2026-12-31" }
+          : { from: "2020-06-01", to: "2020-06-30" },
+      recordFilters: filters,
+      setRecordFilters: setFilters,
+      clearRecordFilters: clearFilters,
+      setAllPeriod,
+      openReviewQueue,
+      closeReviewQueue,
+      isReviewQueueOpen,
+      addRecord: add,
+      updateRecord: update,
+      deleteRecord: vi.fn(),
+      newRecordRequestId: 0,
+      consumeNewRecordRequest: vi.fn(),
+      recordsPage: {},
+      isAllHistoryComplete: historyComplete,
+      isSelectedRangeComplete: historyComplete,
+      loadMoreRecords: vi.fn(),
+      ...(globalReviewCount === undefined ? {} : { globalReviewCount }),
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {
@@ -93,6 +99,7 @@ beforeEach(() => {
   filters = {};
   periodMode = "month";
   historyComplete = true;
+  globalReviewCount = undefined;
   isReviewQueueOpen = false;
   clearFilters.mockImplementation(() => {
     isReviewQueueOpen = false;
@@ -484,14 +491,15 @@ test("review queue clears incompatible filters and includes drafts outside the s
   expect(tree!.root.findAllByProps({ role: "button" })).toHaveLength(1);
   expect(JSON.stringify(tree!.toJSON())).toContain("Old review merchant");
 });
-test("review count does not present partial loaded history as a complete total", async () => {
+test("review count uses complete reference metadata independently of the loaded record page", async () => {
   historyComplete = false;
+  globalReviewCount = 41;
   await act(async () => {
     tree = create(<RecordsView />);
   });
   expect(
     JSON.stringify(tree!.root.findByProps({ "aria-label": "Open review queue" }).props.children),
-  ).toContain("Loading");
+  ).toContain("41");
 });
 test("duplicating opens a fresh draft and writes only once on submit with current conversions", async () => {
   const accountId = "11111111-1111-4111-8111-111111111111",
@@ -681,4 +689,10 @@ test("editing an existing card-only purchase retains Card only", async () => {
   expect(
     tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),
   ).toHaveLength(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

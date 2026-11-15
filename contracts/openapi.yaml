@@ -516,6 +516,518 @@ paths:
       tags:
         - accounts
       x-stability: stable
+  /api/analytics/accounts:
+    get:
+      operationId: analytics.accountBalances
+      parameters:
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+        - in: query
+          name: cutoff
+          required: false
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        accountId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        balance:
+                          type: number
+                        balanceInPrimary:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        freeBalance:
+                          type: number
+                        reserved:
+                          type: number
+                        totalBalance:
+                          type: number
+                        totalBalanceInPrimary:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                      required:
+                        - accountId
+                        - balance
+                        - totalBalance
+                        - reserved
+                        - freeBalance
+                        - balanceInPrimary
+                        - totalBalanceInPrimary
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read account balances without downloading financial history
+      tags:
+        - analytics
+      x-stability: stable
+  /api/analytics/balance-trend:
+    get:
+      operationId: analytics.balanceTrend
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: accountId
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+        - in: query
+          name: selectedMonth
+          required: true
+          schema:
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+            type: string
+        - in: query
+          name: periodMode
+          required: true
+          schema:
+            enum:
+              - month
+              - custom
+              - all
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        current:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        day:
+                          type: string
+                        previous:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        previousPrevious:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                      required:
+                        - day
+                        - previousPrevious
+                        - previous
+                        - current
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Compare account balances at local calendar cutoffs without returning history
+      tags:
+        - analytics
+      x-stability: stable
+  /api/analytics/details:
+    get:
+      operationId: analytics.details
+      parameters:
+        - in: query
+          name: from
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: to
+          required: true
+          schema:
+            format: date
+            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+            type: string
+        - in: query
+          name: accountId
+          required: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+        - in: query
+          name: selectedMonth
+          required: true
+          schema:
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+            type: string
+        - in: query
+          name: periodMode
+          required: true
+          schema:
+            enum:
+              - month
+              - custom
+              - all
+            type: string
+        - in: query
+          name: creditCardId
+          required: false
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      averageMonthlyExpenses:
+                        type: number
+                      currentMonthTotals:
+                        additionalProperties: false
+                        properties:
+                          cashFlow:
+                            type: number
+                          expenses:
+                            type: number
+                          income:
+                            type: number
+                        required:
+                          - income
+                          - expenses
+                          - cashFlow
+                        type: object
+                      expenseMonths:
+                        items:
+                          type: string
+                        type: array
+                      expenseSequenceTrend:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            current:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            expense:
+                              type: string
+                            previous:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            previousPrevious:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                          required:
+                            - expense
+                            - previousPrevious
+                            - previous
+                            - current
+                          type: object
+                        type: array
+                      expenseTrend:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            current:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            day:
+                              type: string
+                            previous:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                            previousPrevious:
+                              anyOf:
+                                - type: number
+                                - type: "null"
+                          required:
+                            - day
+                            - previousPrevious
+                            - previous
+                            - current
+                          type: object
+                        type: array
+                      merchants:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            average:
+                              type: number
+                            key:
+                              type: string
+                            name:
+                              type: string
+                            purchases:
+                              maximum: 9007199254740991
+                              minimum: -9007199254740991
+                              type: integer
+                            total:
+                              type: number
+                          required:
+                            - key
+                            - name
+                            - purchases
+                            - total
+                            - average
+                          type: object
+                        type: array
+                      monthlySeries:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            cashFlow:
+                              type: number
+                            expenses:
+                              type: number
+                            income:
+                              type: number
+                            month:
+                              type: string
+                          required:
+                            - income
+                            - expenses
+                            - cashFlow
+                            - month
+                          type: object
+                        type: array
+                      previousTotals:
+                        additionalProperties: false
+                        properties:
+                          cashFlow:
+                            type: number
+                          expenses:
+                            type: number
+                          income:
+                            type: number
+                        required:
+                          - income
+                          - expenses
+                          - cashFlow
+                        type: object
+                    required:
+                      - monthlySeries
+                      - expenseTrend
+                      - expenseSequenceTrend
+                      - previousTotals
+                      - currentMonthTotals
+                      - averageMonthlyExpenses
+                      - expenseMonths
+                      - merchants
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Aggregate report charts and merchant purchases without returning history
+      tags:
+        - analytics
+      x-stability: stable
+  /api/analytics/goals:
+    get:
+      operationId: analytics.goalProgress
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        committed:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        goalId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        hasMissingExchangeRate:
+                          type: boolean
+                        overTarget:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        percentage:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        remaining:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        reserved:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                        spent:
+                          anyOf:
+                            - type: number
+                            - type: "null"
+                      required:
+                        - goalId
+                        - hasMissingExchangeRate
+                        - reserved
+                        - spent
+                        - committed
+                        - remaining
+                        - overTarget
+                        - percentage
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read allocated goal progress and unresolved conversions
+      tags:
+        - analytics
+      x-stability: stable
   /api/analytics/summary:
     get:
       operationId: analytics.summary
@@ -1684,6 +2196,214 @@ paths:
       tags:
         - cards
       x-stability: stable
+  /api/cards/agenda:
+    get:
+      operationId: cards.agenda
+      parameters:
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        card:
+                          additionalProperties: false
+                          properties:
+                            closingDay:
+                              maximum: 31
+                              minimum: 1
+                              type: integer
+                            color:
+                              minLength: 1
+                              type: string
+                            creditLimit:
+                              exclusiveMinimum: 0
+                              type: number
+                            dueDay:
+                              maximum: 31
+                              minimum: 1
+                              type: integer
+                            icon:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isActive:
+                              type: boolean
+                            issuer:
+                              minLength: 1
+                              type: string
+                            lastFour:
+                              pattern: ^\d{4}$
+                              type: string
+                            limitCurrency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                          required:
+                            - name
+                            - issuer
+                            - lastFour
+                            - creditLimit
+                            - limitCurrency
+                            - closingDay
+                            - dueDay
+                            - color
+                            - icon
+                            - isActive
+                            - id
+                          type: object
+                        currencyBreakdown:
+                          items:
+                            additionalProperties: false
+                            properties:
+                              amount:
+                                type: number
+                              currency:
+                                enum:
+                                  - UYU
+                                  - USD
+                                  - EUR
+                                  - BRL
+                                  - ARS
+                                type: string
+                            required:
+                              - currency
+                              - amount
+                            type: object
+                          type: array
+                        daysUntilDue:
+                          maximum: 9007199254740991
+                          minimum: -9007199254740991
+                          type: integer
+                        dueAmountInLimitCurrency:
+                          type: number
+                        href:
+                          type: string
+                        paidAmountInLimitCurrency:
+                          type: number
+                        statement:
+                          additionalProperties: false
+                          properties:
+                            closedAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            cycleEnd:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            cycleStart:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            dueAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            paidAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            status:
+                              enum:
+                                - pending
+                                - partial
+                                - paid
+                                - overdue
+                              type: string
+                          required:
+                            - id
+                            - creditCardId
+                            - cycleStart
+                            - cycleEnd
+                            - dueAt
+                            - status
+                            - closedAt
+                          type: object
+                        totalAmountInLimitCurrency:
+                          type: number
+                        urgency:
+                          enum:
+                            - overdue
+                            - today
+                            - soon
+                            - later
+                          type: string
+                      required:
+                        - card
+                        - statement
+                        - totalAmountInLimitCurrency
+                        - paidAmountInLimitCurrency
+                        - dueAmountInLimitCurrency
+                        - currencyBreakdown
+                        - daysUntilDue
+                        - urgency
+                        - href
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read outstanding statement balances and calendar urgency without history
+      tags:
+        - cards
+      x-stability: stable
   /api/cards/refresh-statements:
     post:
       operationId: cards.refreshStatements
@@ -1962,6 +2682,354 @@ paths:
       security:
         - sessionBearer: []
       summary: Update a credit card
+      tags:
+        - cards
+      x-stability: stable
+  /api/cards/{id}/category-usage:
+    get:
+      operationId: cards.categoryUsage
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    items:
+                      additionalProperties: false
+                      properties:
+                        amount:
+                          type: number
+                        color:
+                          type: string
+                        id:
+                          anyOf:
+                            - format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            - const: uncategorized
+                              type: string
+                        name:
+                          type: string
+                      required:
+                        - id
+                        - name
+                        - color
+                        - amount
+                      type: object
+                    type: array
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Aggregate frozen card purchases by root category
+      tags:
+        - cards
+      x-stability: stable
+  /api/cards/{id}/ledger:
+    get:
+      operationId: cards.ledger
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      creditCardPaymentAllocations:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            amount:
+                              minimum: 0
+                              type: number
+                            amountInLimitCurrency:
+                              minimum: 0
+                              type: number
+                            creditCardRecordId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            paymentId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                          required:
+                            - id
+                            - paymentId
+                            - creditCardRecordId
+                            - amount
+                            - amountInLimitCurrency
+                          type: object
+                        type: array
+                      creditCardPayments:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            amountInLimitCurrency:
+                              exclusiveMinimum: 0
+                              type: number
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            idempotencyKey:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            note:
+                              type: string
+                            occurredAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            statementId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                          required:
+                            - amount
+                            - currency
+                            - amountInLimitCurrency
+                            - occurredAt
+                            - id
+                            - creditCardId
+                          type: object
+                        type: array
+                      creditCardRecords:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            accountImpactAtCreation:
+                              default: false
+                              type: boolean
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            amountInLimitCurrency:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            exchangeRateToLimitCurrency:
+                              exclusiveMinimum: 0
+                              type: number
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            kind:
+                              default: purchase
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
+                            note:
+                              type: string
+                            occurredAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            originalRecordId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            statementId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            walletRecordId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                          required:
+                            - kind
+                            - amount
+                            - currency
+                            - amountInLimitCurrency
+                            - exchangeRateToLimitCurrency
+                            - categoryId
+                            - accountImpactAtCreation
+                            - occurredAt
+                            - id
+                            - creditCardId
+                          type: object
+                        type: array
+                      creditCardStatements:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            closedAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            cycleEnd:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            cycleStart:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            dueAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            paidAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            status:
+                              enum:
+                                - pending
+                                - partial
+                                - paid
+                                - overdue
+                              type: string
+                          required:
+                            - id
+                            - creditCardId
+                            - cycleStart
+                            - cycleEnd
+                            - dueAt
+                            - status
+                            - closedAt
+                          type: object
+                        type: array
+                    required:
+                      - creditCardRecords
+                      - creditCardStatements
+                      - creditCardPayments
+                      - creditCardPaymentAllocations
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read one card's movements, statements, payments and allocations
       tags:
         - cards
       x-stability: stable
@@ -4910,6 +5978,11 @@ paths:
                             type: string
                           isFixed:
                             type: boolean
+                          linkedCardRecordKind:
+                            enum:
+                              - purchase
+                              - refund
+                            type: string
                           merchantCorrection:
                             additionalProperties: false
                             properties:
@@ -7894,6 +8967,35 @@ paths:
             minLength: 1
             type: string
         - in: query
+          name: searchMode
+          required: false
+          schema:
+            enum:
+              - legacy
+              - wallet
+            type: string
+        - in: query
+          name: note
+          required: false
+          schema:
+            maxLength: 1000
+            minLength: 1
+            type: string
+        - in: query
+          name: categoryMode
+          required: false
+          schema:
+            enum:
+              - exact
+              - descendants
+            type: string
+        - in: query
+          name: timeZone
+          required: false
+          schema:
+            maxLength: 100
+            type: string
+        - in: query
           name: paymentStatus
           required: false
           schema:
@@ -8050,6 +9152,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -8415,6 +9522,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -8794,6 +9906,11 @@ paths:
                           type: string
                         isFixed:
                           type: boolean
+                        linkedCardRecordKind:
+                          enum:
+                            - purchase
+                            - refund
+                          type: string
                         merchantCorrection:
                           additionalProperties: false
                           properties:
@@ -9252,6 +10369,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -11741,6 +12863,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -13432,6 +14559,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:
@@ -14816,6 +15948,11 @@ paths:
                                   type: string
                                 isFixed:
                                   type: boolean
+                                linkedCardRecordKind:
+                                  enum:
+                                    - purchase
+                                    - refund
+                                  type: string
                                 merchantCorrection:
                                   additionalProperties: false
                                   properties:
@@ -15203,6 +16340,2297 @@ paths:
       security:
         - sessionBearer: []
       summary: Generate recurring debts and load a paginated snapshot
+      tags:
+        - wallet
+      x-stability: stable
+  /api/wallet/bootstrap-reference:
+    post:
+      operationId: wallet.bootstrapReference
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                recordsCursor:
+                  anyOf:
+                    - type: string
+                    - type: "null"
+                recordsLimit:
+                  default: 100
+                  maximum: 500
+                  minimum: 1
+                  type: integer
+                timeZone:
+                  default: America/Montevideo
+                  maxLength: 100
+                  type: string
+              required:
+                - timeZone
+                - recordsLimit
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      generatedDebts:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            direction:
+                              enum:
+                                - payable
+                                - receivable
+                              type: string
+                            dueAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isVisible:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            originalAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                            pendingAmount:
+                              minimum: 0
+                              type: number
+                            recurringDebtId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            recurringMonth:
+                              type: string
+                            startedAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            status:
+                              default: active
+                              enum:
+                                - active
+                                - paid
+                                - paused
+                              type: string
+                          required:
+                            - name
+                            - direction
+                            - currency
+                            - counterpartyName
+                            - categoryId
+                            - status
+                            - isVisible
+                            - startedAt
+                            - id
+                          type: object
+                        type: array
+                      recordsPage:
+                        additionalProperties: false
+                        properties:
+                          hasMore:
+                            type: boolean
+                          items:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                amount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                amountInLimitCurrency:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  type: string
+                                createdAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                creditCardId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                debtId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                destinationAccountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                destinationAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                exchangeRateToLimitCurrency:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                exchangeRateToPrimary:
+                                  default: 1
+                                  minimum: 0
+                                  type: number
+                                goalAssociations:
+                                  default: []
+                                  items:
+                                    additionalProperties: false
+                                    properties:
+                                      allocatedAmount:
+                                        exclusiveMinimum: 0
+                                        type: number
+                                      assignmentSource:
+                                        default: manual
+                                        enum:
+                                          - manual
+                                          - date_rule
+                                        type: string
+                                      goalId:
+                                        format: uuid
+                                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                        type: string
+                                      reserveIncome:
+                                        default: true
+                                        type: boolean
+                                      useReserved:
+                                        default: true
+                                        type: boolean
+                                    required:
+                                      - goalId
+                                      - assignmentSource
+                                      - useReserved
+                                      - reserveIncome
+                                    type: object
+                                  type: array
+                                goalIds:
+                                  default: []
+                                  items:
+                                    format: uuid
+                                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                    type: string
+                                  type: array
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                importHistory:
+                                  items:
+                                    type: string
+                                  type: array
+                                importMerchant:
+                                  type: string
+                                isFixed:
+                                  type: boolean
+                                linkedCardRecordKind:
+                                  enum:
+                                    - purchase
+                                    - refund
+                                  type: string
+                                merchantCorrection:
+                                  additionalProperties: false
+                                  properties:
+                                    autoApply:
+                                      type: boolean
+                                    savedAt:
+                                      format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                  required:
+                                    - savedAt
+                                    - autoApply
+                                  type: object
+                                note:
+                                  type: string
+                                occurredAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                paymentStatus:
+                                  enum:
+                                    - cleared
+                                    - pending
+                                    - needs_review
+                                    - cancelled
+                                  type: string
+                                paymentType:
+                                  enum:
+                                    - cash
+                                    - debit
+                                    - credit
+                                    - transfer
+                                    - other
+                                  type: string
+                                tagIds:
+                                  default: []
+                                  items:
+                                    format: uuid
+                                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                    type: string
+                                  maxItems: 1
+                                  type: array
+                                type:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - transfer
+                                  type: string
+                                updatedAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                              required:
+                                - type
+                                - amount
+                                - currency
+                                - tagIds
+                                - goalIds
+                                - goalAssociations
+                                - paymentType
+                                - paymentStatus
+                                - exchangeRateToPrimary
+                                - occurredAt
+                                - id
+                              type: object
+                            type: array
+                          nextCursor:
+                            anyOf:
+                              - type: string
+                              - type: "null"
+                        required:
+                          - items
+                          - nextCursor
+                          - hasMore
+                        type: object
+                      reference:
+                        additionalProperties: false
+                        properties:
+                          accounts:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                color:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                icon:
+                                  minLength: 1
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                initialBalance:
+                                  type: number
+                                isActive:
+                                  type: boolean
+                                isVisible:
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                type:
+                                  enum:
+                                    - cash
+                                    - bank
+                                    - credit_card
+                                    - savings
+                                    - recurring
+                                    - investment
+                                    - custom
+                                  type: string
+                              required:
+                                - name
+                                - type
+                                - currency
+                                - initialBalance
+                                - color
+                                - icon
+                                - isVisible
+                                - isActive
+                                - id
+                              type: object
+                            type: array
+                          budgets:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                color:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                goalId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isActive:
+                                  default: true
+                                  type: boolean
+                                limitAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                name:
+                                  minLength: 1
+                                  type: string
+                                period:
+                                  const: monthly
+                                  type: string
+                                tagId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                              required:
+                                - name
+                                - limitAmount
+                                - currency
+                                - period
+                                - color
+                                - isActive
+                                - id
+                              type: object
+                            type: array
+                          categories:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                color:
+                                  minLength: 1
+                                  type: string
+                                icon:
+                                  minLength: 1
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                name:
+                                  minLength: 1
+                                  type: string
+                                parentId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                systemKey:
+                                  type: string
+                              required:
+                                - name
+                                - color
+                                - icon
+                                - id
+                              type: object
+                            type: array
+                          creditCards:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                closingDay:
+                                  maximum: 31
+                                  minimum: 1
+                                  type: integer
+                                color:
+                                  minLength: 1
+                                  type: string
+                                creditLimit:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                dueDay:
+                                  maximum: 31
+                                  minimum: 1
+                                  type: integer
+                                icon:
+                                  minLength: 1
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isActive:
+                                  type: boolean
+                                issuer:
+                                  minLength: 1
+                                  type: string
+                                lastFour:
+                                  pattern: ^\d{4}$
+                                  type: string
+                                limitCurrency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                              required:
+                                - name
+                                - issuer
+                                - lastFour
+                                - creditLimit
+                                - limitCurrency
+                                - closingDay
+                                - dueDay
+                                - color
+                                - icon
+                                - isActive
+                                - id
+                              type: object
+                            type: array
+                          debtRecordCounts:
+                            additionalProperties:
+                              maximum: 9007199254740991
+                              minimum: 0
+                              type: integer
+                            default: {}
+                            propertyNames:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type: object
+                          debts:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                direction:
+                                  enum:
+                                    - payable
+                                    - receivable
+                                  type: string
+                                dueAt:
+                                  anyOf:
+                                    - format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                    - format: date
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                      type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isVisible:
+                                  default: true
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                originalAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                pendingAmount:
+                                  minimum: 0
+                                  type: number
+                                recurringDebtId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                recurringMonth:
+                                  type: string
+                                startedAt:
+                                  anyOf:
+                                    - format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                    - format: date
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                      type: string
+                                status:
+                                  default: active
+                                  enum:
+                                    - active
+                                    - paid
+                                    - paused
+                                  type: string
+                              required:
+                                - name
+                                - direction
+                                - currency
+                                - counterpartyName
+                                - categoryId
+                                - status
+                                - isVisible
+                                - startedAt
+                                - id
+                              type: object
+                            type: array
+                          exchangeRates:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                date:
+                                  type: string
+                                fromCurrency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                rate:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                source:
+                                  type: string
+                                toCurrency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                              required:
+                                - id
+                                - fromCurrency
+                                - toCurrency
+                                - rate
+                                - date
+                              type: object
+                            type: array
+                          goalReservations:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                amount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                createdAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                goalId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                note:
+                                  type: string
+                              required:
+                                - goalId
+                                - accountId
+                                - amount
+                                - currency
+                                - createdAt
+                                - id
+                              type: object
+                            type: array
+                          goals:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                autoCaptureEnabled:
+                                  default: false
+                                  type: boolean
+                                autoCaptureEnd:
+                                  pattern: ^\d{4}-\d{2}-\d{2}$
+                                  type: string
+                                autoCaptureStart:
+                                  pattern: ^\d{4}-\d{2}-\d{2}$
+                                  type: string
+                                autoReservationAccountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                color:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                deadline:
+                                  type: string
+                                icon:
+                                  minLength: 1
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isVisible:
+                                  default: true
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                status:
+                                  default: active
+                                  enum:
+                                    - active
+                                    - completed
+                                    - paused
+                                    - cancelled
+                                  type: string
+                                tagIds:
+                                  default: []
+                                  items:
+                                    format: uuid
+                                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                    type: string
+                                  type: array
+                                targetAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                              required:
+                                - name
+                                - targetAmount
+                                - currency
+                                - color
+                                - icon
+                                - isVisible
+                                - status
+                                - autoCaptureEnabled
+                                - id
+                                - tagIds
+                              type: object
+                            type: array
+                          installmentPlans:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                installmentsPaid:
+                                  maximum: 9007199254740991
+                                  minimum: 0
+                                  type: integer
+                                installmentsTotal:
+                                  exclusiveMinimum: 0
+                                  maximum: 9007199254740991
+                                  type: integer
+                                name:
+                                  minLength: 1
+                                  type: string
+                                nextPaymentAt:
+                                  anyOf:
+                                    - format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                    - format: date
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                      type: string
+                                note:
+                                  type: string
+                                totalAmount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                              required:
+                                - name
+                                - totalAmount
+                                - currency
+                                - installmentsTotal
+                                - installmentsPaid
+                                - accountId
+                                - categoryId
+                                - id
+                              type: object
+                            type: array
+                          investments:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                amountInvested:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                currentValue:
+                                  minimum: 0
+                                  type: number
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isVisible:
+                                  default: true
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                startedAt:
+                                  anyOf:
+                                    - format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                    - format: date
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                      type: string
+                                type:
+                                  enum:
+                                    - stock
+                                    - fund
+                                    - crypto
+                                    - deposit
+                                    - other
+                                  type: string
+                              required:
+                                - name
+                                - type
+                                - amountInvested
+                                - currentValue
+                                - currency
+                                - isVisible
+                                - startedAt
+                                - id
+                              type: object
+                            type: array
+                          merchantCorrections:
+                            default: []
+                            items:
+                              additionalProperties: false
+                              properties:
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                importMerchant:
+                                  type: string
+                                merchantCorrection:
+                                  additionalProperties: false
+                                  properties:
+                                    autoApply:
+                                      type: boolean
+                                    savedAt:
+                                      format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                  required:
+                                    - savedAt
+                                    - autoApply
+                                  type: object
+                                paymentStatus:
+                                  enum:
+                                    - cleared
+                                    - pending
+                                    - needs_review
+                                    - cancelled
+                                  type: string
+                                paymentType:
+                                  enum:
+                                    - cash
+                                    - debit
+                                    - credit
+                                    - transfer
+                                    - other
+                                  type: string
+                                type:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - transfer
+                                  type: string
+                                updatedAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                              required:
+                                - id
+                                - type
+                                - paymentType
+                                - paymentStatus
+                              type: object
+                            type: array
+                          recordSummary:
+                            additionalProperties: false
+                            properties:
+                              from:
+                                anyOf:
+                                  - format: date
+                                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                    type: string
+                                  - type: "null"
+                              latestReviewAt:
+                                anyOf:
+                                  - format: date-time
+                                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                    type: string
+                                  - type: "null"
+                              months:
+                                items:
+                                  pattern: ^\d{4}-\d{2}$
+                                  type: string
+                                type: array
+                              newReviews:
+                                maximum: 9007199254740991
+                                minimum: 0
+                                type: integer
+                              review:
+                                maximum: 9007199254740991
+                                minimum: 0
+                                type: integer
+                              to:
+                                anyOf:
+                                  - format: date
+                                    pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                    type: string
+                                  - type: "null"
+                              total:
+                                maximum: 9007199254740991
+                                minimum: 0
+                                type: integer
+                            required:
+                              - from
+                              - to
+                              - months
+                              - total
+                              - review
+                              - newReviews
+                              - latestReviewAt
+                            type: object
+                          recordTemplates:
+                            default: []
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                amount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  type: string
+                                creditCardId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                destinationAccountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                name:
+                                  maxLength: 80
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                paymentType:
+                                  enum:
+                                    - cash
+                                    - debit
+                                    - credit
+                                    - transfer
+                                    - other
+                                  type: string
+                                tagId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                type:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - transfer
+                                  type: string
+                              required:
+                                - name
+                                - type
+                                - amount
+                                - currency
+                                - paymentType
+                                - id
+                              type: object
+                            maxItems: 100
+                            type: array
+                          recurringDebts:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                accountId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                amount:
+                                  exclusiveMinimum: 0
+                                  type: number
+                                categoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                counterpartyName:
+                                  minLength: 1
+                                  type: string
+                                currency:
+                                  enum:
+                                    - UYU
+                                    - USD
+                                    - EUR
+                                    - BRL
+                                    - ARS
+                                  type: string
+                                dayOfMonth:
+                                  maximum: 31
+                                  minimum: 1
+                                  type: integer
+                                direction:
+                                  enum:
+                                    - payable
+                                    - receivable
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isActive:
+                                  default: true
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                                note:
+                                  type: string
+                                startedAt:
+                                  anyOf:
+                                    - format: date-time
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                      type: string
+                                    - format: date
+                                      pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                      type: string
+                              required:
+                                - name
+                                - direction
+                                - currency
+                                - counterpartyName
+                                - categoryId
+                                - dayOfMonth
+                                - isActive
+                                - startedAt
+                                - id
+                              type: object
+                            type: array
+                          settings:
+                            additionalProperties: false
+                            properties:
+                              defaultAccountId:
+                                format: uuid
+                                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                type: string
+                              defaultCreditCardId:
+                                format: uuid
+                                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                type: string
+                              defaultDashboardPreset:
+                                enum:
+                                  - general
+                                  - spending
+                                  - cash-flow
+                                  - goals
+                                  - accounts
+                                  - monthly-review
+                                type: string
+                              defaultPaymentStatus:
+                                enum:
+                                  - cleared
+                                  - pending
+                                  - needs_review
+                                  - cancelled
+                                type: string
+                              defaultPaymentType:
+                                enum:
+                                  - cash
+                                  - debit
+                                  - credit
+                                  - transfer
+                                  - other
+                                type: string
+                              includeHiddenAccountsInReports:
+                                type: boolean
+                              locale:
+                                const: es-UY
+                                type: string
+                              primaryAccountId:
+                                format: uuid
+                                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                type: string
+                              primaryCurrency:
+                                enum:
+                                  - UYU
+                                  - USD
+                                  - EUR
+                                  - BRL
+                                  - ARS
+                                type: string
+                              reviewSeenThrough:
+                                format: date-time
+                                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                type: string
+                              theme:
+                                enum:
+                                  - light
+                                  - dark
+                                  - system
+                                type: string
+                            required:
+                              - primaryCurrency
+                              - theme
+                              - defaultDashboardPreset
+                              - locale
+                              - includeHiddenAccountsInReports
+                              - defaultPaymentType
+                              - defaultPaymentStatus
+                            type: object
+                          tags:
+                            items:
+                              additionalProperties: false
+                              properties:
+                                color:
+                                  minLength: 1
+                                  type: string
+                                id:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                isActive:
+                                  default: true
+                                  type: boolean
+                                name:
+                                  minLength: 1
+                                  type: string
+                              required:
+                                - name
+                                - color
+                                - isActive
+                                - id
+                              type: object
+                            type: array
+                        required:
+                          - recordTemplates
+                          - settings
+                          - accounts
+                          - categories
+                          - tags
+                          - creditCards
+                          - goals
+                          - goalReservations
+                          - budgets
+                          - exchangeRates
+                          - investments
+                          - debts
+                          - recurringDebts
+                          - installmentPlans
+                          - merchantCorrections
+                          - debtRecordCounts
+                          - recordSummary
+                        type: object
+                      serverDate:
+                        format: date
+                        pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                        type: string
+                    required:
+                      - reference
+                      - recordsPage
+                      - generatedDebts
+                      - serverDate
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Generate recurring debts and seed reference plus the first records page
+      tags:
+        - wallet
+      x-stability: stable
+  /api/wallet/reference:
+    get:
+      operationId: wallet.reference
+      parameters:
+        - in: query
+          name: timeZone
+          required: true
+          schema:
+            default: America/Montevideo
+            maxLength: 100
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      accounts:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            color:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            icon:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            initialBalance:
+                              type: number
+                            isActive:
+                              type: boolean
+                            isVisible:
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            type:
+                              enum:
+                                - cash
+                                - bank
+                                - credit_card
+                                - savings
+                                - recurring
+                                - investment
+                                - custom
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - currency
+                            - initialBalance
+                            - color
+                            - icon
+                            - isVisible
+                            - isActive
+                            - id
+                          type: object
+                        type: array
+                      budgets:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            color:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            goalId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isActive:
+                              default: true
+                              type: boolean
+                            limitAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                            name:
+                              minLength: 1
+                              type: string
+                            period:
+                              const: monthly
+                              type: string
+                            tagId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                          required:
+                            - name
+                            - limitAmount
+                            - currency
+                            - period
+                            - color
+                            - isActive
+                            - id
+                          type: object
+                        type: array
+                      categories:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            color:
+                              minLength: 1
+                              type: string
+                            icon:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                            parentId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            systemKey:
+                              type: string
+                          required:
+                            - name
+                            - color
+                            - icon
+                            - id
+                          type: object
+                        type: array
+                      creditCards:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            closingDay:
+                              maximum: 31
+                              minimum: 1
+                              type: integer
+                            color:
+                              minLength: 1
+                              type: string
+                            creditLimit:
+                              exclusiveMinimum: 0
+                              type: number
+                            dueDay:
+                              maximum: 31
+                              minimum: 1
+                              type: integer
+                            icon:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isActive:
+                              type: boolean
+                            issuer:
+                              minLength: 1
+                              type: string
+                            lastFour:
+                              pattern: ^\d{4}$
+                              type: string
+                            limitCurrency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                          required:
+                            - name
+                            - issuer
+                            - lastFour
+                            - creditLimit
+                            - limitCurrency
+                            - closingDay
+                            - dueDay
+                            - color
+                            - icon
+                            - isActive
+                            - id
+                          type: object
+                        type: array
+                      debtRecordCounts:
+                        additionalProperties:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        default: {}
+                        propertyNames:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        type: object
+                      debts:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            direction:
+                              enum:
+                                - payable
+                                - receivable
+                              type: string
+                            dueAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isVisible:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            originalAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                            pendingAmount:
+                              minimum: 0
+                              type: number
+                            recurringDebtId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            recurringMonth:
+                              type: string
+                            startedAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            status:
+                              default: active
+                              enum:
+                                - active
+                                - paid
+                                - paused
+                              type: string
+                          required:
+                            - name
+                            - direction
+                            - currency
+                            - counterpartyName
+                            - categoryId
+                            - status
+                            - isVisible
+                            - startedAt
+                            - id
+                          type: object
+                        type: array
+                      exchangeRates:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            date:
+                              type: string
+                            fromCurrency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            rate:
+                              exclusiveMinimum: 0
+                              type: number
+                            source:
+                              type: string
+                            toCurrency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                          required:
+                            - id
+                            - fromCurrency
+                            - toCurrency
+                            - rate
+                            - date
+                          type: object
+                        type: array
+                      goalReservations:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            createdAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            goalId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            note:
+                              type: string
+                          required:
+                            - goalId
+                            - accountId
+                            - amount
+                            - currency
+                            - createdAt
+                            - id
+                          type: object
+                        type: array
+                      goals:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            autoCaptureEnabled:
+                              default: false
+                              type: boolean
+                            autoCaptureEnd:
+                              pattern: ^\d{4}-\d{2}-\d{2}$
+                              type: string
+                            autoCaptureStart:
+                              pattern: ^\d{4}-\d{2}-\d{2}$
+                              type: string
+                            autoReservationAccountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            color:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            deadline:
+                              type: string
+                            icon:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isVisible:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            status:
+                              default: active
+                              enum:
+                                - active
+                                - completed
+                                - paused
+                                - cancelled
+                              type: string
+                            tagIds:
+                              default: []
+                              items:
+                                format: uuid
+                                pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                type: string
+                              type: array
+                            targetAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                          required:
+                            - name
+                            - targetAmount
+                            - currency
+                            - color
+                            - icon
+                            - isVisible
+                            - status
+                            - autoCaptureEnabled
+                            - id
+                            - tagIds
+                          type: object
+                        type: array
+                      installmentPlans:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            installmentsPaid:
+                              maximum: 9007199254740991
+                              minimum: 0
+                              type: integer
+                            installmentsTotal:
+                              exclusiveMinimum: 0
+                              maximum: 9007199254740991
+                              type: integer
+                            name:
+                              minLength: 1
+                              type: string
+                            nextPaymentAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            note:
+                              type: string
+                            totalAmount:
+                              exclusiveMinimum: 0
+                              type: number
+                          required:
+                            - name
+                            - totalAmount
+                            - currency
+                            - installmentsTotal
+                            - installmentsPaid
+                            - accountId
+                            - categoryId
+                            - id
+                          type: object
+                        type: array
+                      investments:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            amountInvested:
+                              exclusiveMinimum: 0
+                              type: number
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            currentValue:
+                              minimum: 0
+                              type: number
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isVisible:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            startedAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                            type:
+                              enum:
+                                - stock
+                                - fund
+                                - crypto
+                                - deposit
+                                - other
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - amountInvested
+                            - currentValue
+                            - currency
+                            - isVisible
+                            - startedAt
+                            - id
+                          type: object
+                        type: array
+                      merchantCorrections:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            importMerchant:
+                              type: string
+                            merchantCorrection:
+                              additionalProperties: false
+                              properties:
+                                autoApply:
+                                  type: boolean
+                                savedAt:
+                                  format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                              required:
+                                - savedAt
+                                - autoApply
+                              type: object
+                            paymentStatus:
+                              enum:
+                                - cleared
+                                - pending
+                                - needs_review
+                                - cancelled
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                            updatedAt:
+                              format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                          required:
+                            - id
+                            - type
+                            - paymentType
+                            - paymentStatus
+                          type: object
+                        type: array
+                      recordSummary:
+                        additionalProperties: false
+                        properties:
+                          from:
+                            anyOf:
+                              - format: date
+                                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                type: string
+                              - type: "null"
+                          latestReviewAt:
+                            anyOf:
+                              - format: date-time
+                                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                type: string
+                              - type: "null"
+                          months:
+                            items:
+                              pattern: ^\d{4}-\d{2}$
+                              type: string
+                            type: array
+                          newReviews:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          review:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          to:
+                            anyOf:
+                              - format: date
+                                pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                type: string
+                              - type: "null"
+                          total:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                        required:
+                          - from
+                          - to
+                          - months
+                          - total
+                          - review
+                          - newReviews
+                          - latestReviewAt
+                        type: object
+                      recordTemplates:
+                        default: []
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              type: string
+                            creditCardId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            destinationAccountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            name:
+                              maxLength: 80
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            paymentType:
+                              enum:
+                                - cash
+                                - debit
+                                - credit
+                                - transfer
+                                - other
+                              type: string
+                            tagId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            type:
+                              enum:
+                                - expense
+                                - income
+                                - transfer
+                              type: string
+                          required:
+                            - name
+                            - type
+                            - amount
+                            - currency
+                            - paymentType
+                            - id
+                          type: object
+                        maxItems: 100
+                        type: array
+                      recurringDebts:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            amount:
+                              exclusiveMinimum: 0
+                              type: number
+                            categoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            counterpartyName:
+                              minLength: 1
+                              type: string
+                            currency:
+                              enum:
+                                - UYU
+                                - USD
+                                - EUR
+                                - BRL
+                                - ARS
+                              type: string
+                            dayOfMonth:
+                              maximum: 31
+                              minimum: 1
+                              type: integer
+                            direction:
+                              enum:
+                                - payable
+                                - receivable
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isActive:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                            note:
+                              type: string
+                            startedAt:
+                              anyOf:
+                                - format: date-time
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                                  type: string
+                                - format: date
+                                  pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))$
+                                  type: string
+                          required:
+                            - name
+                            - direction
+                            - currency
+                            - counterpartyName
+                            - categoryId
+                            - dayOfMonth
+                            - isActive
+                            - startedAt
+                            - id
+                          type: object
+                        type: array
+                      settings:
+                        additionalProperties: false
+                        properties:
+                          defaultAccountId:
+                            format: uuid
+                            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                            type: string
+                          defaultCreditCardId:
+                            format: uuid
+                            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                            type: string
+                          defaultDashboardPreset:
+                            enum:
+                              - general
+                              - spending
+                              - cash-flow
+                              - goals
+                              - accounts
+                              - monthly-review
+                            type: string
+                          defaultPaymentStatus:
+                            enum:
+                              - cleared
+                              - pending
+                              - needs_review
+                              - cancelled
+                            type: string
+                          defaultPaymentType:
+                            enum:
+                              - cash
+                              - debit
+                              - credit
+                              - transfer
+                              - other
+                            type: string
+                          includeHiddenAccountsInReports:
+                            type: boolean
+                          locale:
+                            const: es-UY
+                            type: string
+                          primaryAccountId:
+                            format: uuid
+                            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                            type: string
+                          primaryCurrency:
+                            enum:
+                              - UYU
+                              - USD
+                              - EUR
+                              - BRL
+                              - ARS
+                            type: string
+                          reviewSeenThrough:
+                            format: date-time
+                            pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                            type: string
+                          theme:
+                            enum:
+                              - light
+                              - dark
+                              - system
+                            type: string
+                        required:
+                          - primaryCurrency
+                          - theme
+                          - defaultDashboardPreset
+                          - locale
+                          - includeHiddenAccountsInReports
+                          - defaultPaymentType
+                          - defaultPaymentStatus
+                        type: object
+                      tags:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            color:
+                              minLength: 1
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            isActive:
+                              default: true
+                              type: boolean
+                            name:
+                              minLength: 1
+                              type: string
+                          required:
+                            - name
+                            - color
+                            - isActive
+                            - id
+                          type: object
+                        type: array
+                    required:
+                      - recordTemplates
+                      - settings
+                      - accounts
+                      - categories
+                      - tags
+                      - creditCards
+                      - goals
+                      - goalReservations
+                      - budgets
+                      - exchangeRates
+                      - investments
+                      - debts
+                      - recurringDebts
+                      - installmentPlans
+                      - merchantCorrections
+                      - debtRecordCounts
+                      - recordSummary
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read reference dictionaries and history metadata without movements
       tags:
         - wallet
       x-stability: stable
@@ -16620,6 +20048,11 @@ paths:
                         type: string
                       isFixed:
                         type: boolean
+                      linkedCardRecordKind:
+                        enum:
+                          - purchase
+                          - refund
+                        type: string
                       merchantCorrection:
                         additionalProperties: false
                         properties:
@@ -17950,6 +21383,11 @@ paths:
                               type: string
                             isFixed:
                               type: boolean
+                            linkedCardRecordKind:
+                              enum:
+                                - purchase
+                                - refund
+                              type: string
                             merchantCorrection:
                               additionalProperties: false
                               properties:

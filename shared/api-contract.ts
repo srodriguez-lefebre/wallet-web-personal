@@ -2,6 +2,29 @@ import { z, type ZodType } from "zod";
 
 import { analyticsQuerySchema, analyticsSummarySchema } from "./analytics-contract.js";
 import {
+  cardAgendaQuerySchema,
+  cardAgendaSchema,
+  cardCategoryUsageSchema,
+  cardLedgerSchema,
+} from "./card-read-contract.js";
+import {
+  balanceTrendQuerySchema,
+  balanceTrendSchema,
+  reportDetailsSchema,
+  reportDetailsQuerySchema,
+} from "./report-contract.js";
+import {
+  accountBalanceMetricsSchema,
+  accountBalanceQuerySchema,
+  goalProgressMetricsSchema,
+} from "./read-model-contract.js";
+import {
+  referenceBootstrapInputSchema,
+  referenceBootstrapSchema,
+  referenceQuerySchema,
+  walletReferenceSchema,
+} from "./reference-contract.js";
+import {
   accountPatchSchema,
   accountSchema,
   budgetPatchSchema,
@@ -93,81 +116,129 @@ const entities = {
   installmentPlans: installmentPlanSchema.extend({ id: uuidSchema }),
 };
 const pagination = z.object({ nextCursor: z.string().nullable(), hasMore: z.boolean() });
-function operationResponse(operationId: string): ZodType {
-  if (operationId === "analytics.summary") return analyticsSummarySchema;
-  if (operationId === "cards.refreshStatements") return z.object({ refreshed: z.literal(true) });
-  if (operationId === "cards.delete") return z.object({ archived: z.literal(true) });
-  if (operationId === "auth.session") return z.object({ revocable: z.boolean() });
-  if (operationId === "auth.lockAll") return z.object({ locked: z.literal(true) });
-  if (operationId === "auth.unlock")
-    return z.object({ token: z.string(), expiresAt: z.string().datetime() });
-  if (operationId === "health.get")
-    return z.object({ ok: z.literal(true), service: z.literal("wallet-web-personal") });
-  if (operationId === "wallet.get" || operationId === "wallet.restore") return walletDatasetSchema;
-  if (operationId === "wallet.backup") return walletBackupSchema;
-  if (operationId === "wallet.bootstrap")
-    return z.object({
-      dataset: walletDatasetSchema,
-      recordsPage: pagination,
-      generatedDebts: z.array(entities.debts),
-      serverDate: z.string().date(),
-    });
-  if (operationId.startsWith("settings.")) return settingsSchema;
-  if (operationId === "ingest.mailTransaction")
-    return z.object({
-      status: z.enum(["created", "needs_review", "already_processed", "duplicate", "ignored"]),
-      recordId: uuidSchema.optional(),
-      creditCardRecordId: uuidSchema.optional(),
-      duplicateOfId: uuidSchema.optional(),
-      warnings: z.array(z.string()).optional(),
-    });
-  if (operationId === "records.list")
-    return pagination.extend({ items: z.array(walletRecordResponseSchema) });
-  if (operationId === "records.import") return z.array(walletRecordResponseSchema);
-  if (operationId === "debts.pay")
-    return z.object({ debt: entities.debts, record: walletRecordResponseSchema });
-  if (operationId === "debts.generateRecurring") return z.array(entities.debts);
-  if (operationId === "cardStatements.pay") return cardPaymentResponseSchema;
-  if (operationId === "goalReservations.release" || operationId === "goalReservations.create")
-    return reservationMovementResponseSchema;
-  if (operationId === "categories.delete")
-    return z.object({
-      deleted: z.literal(true),
-      fallbackCategoryId: uuidSchema,
-      archivedCategoryIds: z.array(uuidSchema),
-      reassigned: z.record(z.string(), z.number().int().nonnegative()),
-    });
-  if (operationId === "cards.summary") {
-    const amounts = z.array(
-      z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
-    );
-    return z.object({
-      card: entities.cards,
-      usedLimit: z.number(),
-      availableLimit: z.number(),
-      utilizationPercent: z.number(),
-      currentCycleStart: z.string(),
-      currentCycleEnd: z.string(),
-      lastClosingDate: z.string(),
-      dueDate: z.string(),
-      currentCycle: amounts,
-      outstanding: amounts,
-      statementDue: amounts,
-      status: z.enum(["ok", "partial", "overdue", "over_limit"]),
-    });
+const deletedResponse = z.object({ deleted: z.literal(true) });
+const currencyAmounts = z.array(
+  z.object({ currency: z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]), amount: z.number() }),
+);
+const specialResponses = {
+  "cards.agenda": cardAgendaSchema,
+  "cards.categoryUsage": cardCategoryUsageSchema,
+  "cards.ledger": cardLedgerSchema,
+  "analytics.accountBalances": accountBalanceMetricsSchema,
+  "analytics.goalProgress": goalProgressMetricsSchema,
+  "wallet.reference": walletReferenceSchema,
+  "wallet.bootstrapReference": referenceBootstrapSchema,
+  "analytics.summary": analyticsSummarySchema,
+  "analytics.details": reportDetailsSchema,
+  "analytics.balanceTrend": balanceTrendSchema,
+  "cards.refreshStatements": z.object({ refreshed: z.literal(true) }),
+  "cards.delete": z.object({ archived: z.literal(true) }),
+  "auth.session": z.object({ revocable: z.boolean() }),
+  "auth.lockAll": z.object({ locked: z.literal(true) }),
+  "auth.unlock": z.object({ token: z.string(), expiresAt: z.string().datetime() }),
+  "health.get": z.object({ ok: z.literal(true), service: z.literal("wallet-web-personal") }),
+  "wallet.get": walletDatasetSchema,
+  "wallet.restore": walletDatasetSchema,
+  "wallet.backup": walletBackupSchema,
+  "wallet.bootstrap": z.object({
+    dataset: walletDatasetSchema,
+    recordsPage: pagination,
+    generatedDebts: z.array(entities.debts),
+    serverDate: z.string().date(),
+  }),
+  "settings.get": settingsSchema,
+  "settings.replace": settingsSchema,
+  "settings.patch": settingsSchema,
+  "ingest.mailTransaction": z.object({
+    status: z.enum(["created", "needs_review", "already_processed", "duplicate", "ignored"]),
+    recordId: uuidSchema.optional(),
+    creditCardRecordId: uuidSchema.optional(),
+    duplicateOfId: uuidSchema.optional(),
+    warnings: z.array(z.string()).optional(),
+  }),
+  "records.list": pagination.extend({ items: z.array(walletRecordResponseSchema) }),
+  "records.import": z.array(walletRecordResponseSchema),
+  "debts.pay": z.object({ debt: entities.debts, record: walletRecordResponseSchema }),
+  "debts.generateRecurring": z.array(entities.debts),
+  "cardStatements.pay": cardPaymentResponseSchema,
+  "goalReservations.release": reservationMovementResponseSchema,
+  "goalReservations.create": reservationMovementResponseSchema,
+  "categories.delete": z.object({
+    deleted: z.literal(true),
+    fallbackCategoryId: uuidSchema,
+    archivedCategoryIds: z.array(uuidSchema),
+    reassigned: z.record(z.string(), z.number().int().nonnegative()),
+  }),
+  "cards.summary": z.object({
+    card: entities.cards,
+    usedLimit: z.number(),
+    availableLimit: z.number(),
+    utilizationPercent: z.number(),
+    currentCycleStart: z.string(),
+    currentCycleEnd: z.string(),
+    lastClosingDate: z.string(),
+    dueDate: z.string(),
+    currentCycle: currencyAmounts,
+    outstanding: currencyAmounts,
+    statementDue: currencyAmounts,
+    status: z.enum(["ok", "partial", "overdue", "over_limit"]),
+  }),
+};
+type ResponseSchema<Id extends string> = Id extends keyof typeof specialResponses
+  ? (typeof specialResponses)[Id]
+  : Id extends `${infer Entity}.${infer Action}`
+    ? Action extends "delete"
+      ? typeof deletedResponse
+      : Entity extends keyof typeof entities
+        ? Action extends "list"
+          ? z.ZodArray<(typeof entities)[Entity]>
+          : (typeof entities)[Entity]
+        : never
+    : never;
+function operationResponse<Id extends string>(operationId: Id): ResponseSchema<Id> {
+  let response: ZodType;
+  if (operationId in specialResponses)
+    response = specialResponses[operationId as keyof typeof specialResponses];
+  else {
+    const [entity = "", action] = operationId.split(".");
+    if (action === "delete") response = deletedResponse;
+    else {
+      if (!(entity in entities)) throw new Error(`Missing response schema for ${operationId}`);
+      const schema = entities[entity as keyof typeof entities];
+      response = action === "list" ? z.array(schema) : schema;
+    }
   }
-  const [entity = "", action] = operationId.split(".");
-  if (action === "delete") return z.object({ deleted: z.literal(true) });
-  if (!(entity in entities)) throw new Error(`Missing response schema for ${operationId}`);
-  const response = entities[entity as keyof typeof entities];
-  return action === "list" ? z.array(response) : response;
+  // The runtime lookup and this conditional type follow the same registry keys.
+  return response as ResponseSchema<Id>;
 }
+
 const op = <const T extends Omit<ApiOperation, "response">>(definition: T) => ({
   ...definition,
-  response: operationResponse(definition.operationId),
+  response: operationResponse<T["operationId"]>(definition.operationId),
 });
 
 export const apiOperations = [
+  op({
+    operationId: "analytics.accountBalances",
+    method: "GET",
+    path: "/api/analytics/accounts",
+    auth: "session",
+    stability: "stable",
+    query: accountBalanceQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read account balances without downloading financial history",
+  }),
+  op({
+    operationId: "analytics.goalProgress",
+    method: "GET",
+    path: "/api/analytics/goals",
+    auth: "session",
+    stability: "stable",
+    successStatus: 200,
+    errors: [401, 500],
+    summary: "Read allocated goal progress and unresolved conversions",
+  }),
   op({
     operationId: "auth.session",
     method: "GET",
@@ -187,6 +258,28 @@ export const apiOperations = [
     successStatus: 200,
     errors: [401, 503, 500],
     summary: "Revoke all sessions when the optional profile is activated",
+  }),
+  op({
+    operationId: "analytics.balanceTrend",
+    method: "GET",
+    path: "/api/analytics/balance-trend",
+    auth: "session",
+    stability: "stable",
+    query: balanceTrendQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Compare account balances at local calendar cutoffs without returning history",
+  }),
+  op({
+    operationId: "analytics.details",
+    method: "GET",
+    path: "/api/analytics/details",
+    auth: "session",
+    stability: "stable",
+    query: reportDetailsQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate report charts and merchant purchases without returning history",
   }),
   op({
     operationId: "analytics.summary",
@@ -304,6 +397,28 @@ export const apiOperations = [
     successStatus: 200,
     errors: [401, 500],
     summary: "Legacy full wallet snapshot",
+  }),
+  op({
+    operationId: "wallet.reference",
+    method: "GET",
+    path: "/api/wallet/reference",
+    auth: "session",
+    stability: "stable",
+    query: referenceQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read reference dictionaries and history metadata without movements",
+  }),
+  op({
+    operationId: "wallet.bootstrapReference",
+    method: "POST",
+    path: "/api/wallet/bootstrap-reference",
+    auth: "session",
+    stability: "stable",
+    body: referenceBootstrapInputSchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Generate recurring debts and seed reference plus the first records page",
   }),
   op({
     operationId: "wallet.bootstrap",
@@ -508,6 +623,39 @@ export const apiOperations = [
     summary: "Atomically import up to 200 validated records",
   }),
 
+  op({
+    operationId: "cards.agenda",
+    method: "GET",
+    path: "/api/cards/agenda",
+    auth: "session",
+    stability: "stable",
+    query: cardAgendaQuerySchema,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read outstanding statement balances and calendar urgency without history",
+  }),
+  op({
+    operationId: "cards.categoryUsage",
+    method: "GET",
+    path: "/api/cards/{id}/category-usage",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Aggregate frozen card purchases by root category",
+  }),
+  op({
+    operationId: "cards.ledger",
+    method: "GET",
+    path: "/api/cards/{id}/ledger",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    successStatus: 200,
+    errors: [400, 401, 500],
+    summary: "Read one card's movements, statements, payments and allocations",
+  }),
   op({
     operationId: "cards.list",
     method: "GET",
@@ -1045,6 +1193,11 @@ export const apiOperations = [
 ] as const satisfies readonly ApiOperation[];
 
 export type ApiOperationId = (typeof apiOperations)[number]["operationId"];
+export type ContractOperations = {
+  [Op in (typeof apiOperations)[number] as Op["operationId"]]: Op;
+};
+export type ContractOperation<Id extends ApiOperationId> = ContractOperations[Id];
+export type OperationResponse<Id extends ApiOperationId> = z.output<ResponseSchema<Id>>;
 export type UnlockRequest = z.infer<typeof unlockSchema>;
 export interface UnlockResult {
   token: string;

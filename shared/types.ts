@@ -1,5 +1,7 @@
 export type CurrencyCode = "UYU" | "USD" | "EUR" | "BRL" | "ARS";
 
+export type WalletBackup = import("zod").infer<typeof import("./schemas.js").walletBackupSchema>;
+
 export type RecordType = "expense" | "income" | "transfer";
 
 export type AccountType =
@@ -71,6 +73,7 @@ export interface RecordGoalAssociation {
 }
 
 export interface WalletRecord {
+  linkedCardRecordKind?: "purchase" | "refund";
   id: string;
   type: RecordType;
   amount: number;

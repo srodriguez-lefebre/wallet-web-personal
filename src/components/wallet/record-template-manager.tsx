@@ -1,10 +1,11 @@
+import { currencySchema, recordTemplateSchema } from "@shared/schemas";
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { recordTemplateSchema } from "@shared/schemas";
 import { formatMoney } from "@shared/calculations";
 
 import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
 
+import { Input } from "@/components/ui/form/controls";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -120,36 +121,41 @@ export function RecordTemplateManager() {
     setBusy(true);
     setError("");
     try {
-      await runAction(
-        async () => {
-          if (saveUncertain.current) {
-            const fresh = await getCompleteDataset();
-            const found = fresh.recordTemplates?.find((item) =>
-              editingId
-                ? item.id === editingId
-                : item.name.trim().toLowerCase() === payload.name.toLowerCase(),
-            );
-            if (found && sameTemplateDetails(found, payload)) return;
-          }
-          if (editingId) await updateRecordTemplate(editingId, templateReplacementPatch(payload));
-          else await addRecordTemplate(payload);
-        },
-        {
-          processing: "Guardando plantilla…",
-          success: "Plantilla guardada",
-          error: "No se pudo guardar la plantilla",
-        },
-      );
-      if (currentRevision === revision.current) close();
-    } catch (reason) {
-      if (currentRevision === revision.current) {
-        saveUncertain.current = true;
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "No se pudo guardar. Reintentá para comprobar el estado actual.",
+      {
+        const actionResult = await runAction(
+          async () => {
+            if (saveUncertain.current) {
+              const fresh = await getCompleteDataset();
+              const found = fresh.recordTemplates?.find((item) =>
+                editingId
+                  ? item.id === editingId
+                  : item.name.trim().toLowerCase() === payload.name.toLowerCase(),
+              );
+              if (found && sameTemplateDetails(found, payload)) return;
+            }
+            if (editingId) await updateRecordTemplate(editingId, templateReplacementPatch(payload));
+            else await addRecordTemplate(payload);
+          },
+          {
+            processing: "Guardando plantilla…",
+            success: "Plantilla guardada",
+            error: "No se pudo guardar la plantilla",
+          },
         );
+        if (!actionResult.ok) {
+          const reason = actionResult.error;
+          if (currentRevision === revision.current) {
+            saveUncertain.current = true;
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "No se pudo guardar. Reintentá para comprobar el estado actual.",
+            );
+          }
+          return;
+        }
       }
+      if (currentRevision === revision.current) close();
     } finally {
       pending.current = false;
       setBusy(false);
@@ -161,28 +167,33 @@ export function RecordTemplateManager() {
     setBusy(true);
     setError("");
     try {
-      await runAction(
-        async () => {
-          if (removeUncertain.current.has(id)) {
-            const fresh = await getCompleteDataset();
-            if (!fresh.recordTemplates?.some((item) => item.id === id)) return;
-          }
-          await deleteRecordTemplate(id);
-        },
-        {
-          processing: "Quitando plantilla…",
-          success: "Plantilla eliminada",
-          error: "No se pudo quitar la plantilla",
-        },
-      );
+      {
+        const actionResult = await runAction(
+          async () => {
+            if (removeUncertain.current.has(id)) {
+              const fresh = await getCompleteDataset();
+              if (!fresh.recordTemplates?.some((item) => item.id === id)) return;
+            }
+            await deleteRecordTemplate(id);
+          },
+          {
+            processing: "Quitando plantilla…",
+            success: "Plantilla eliminada",
+            error: "No se pudo quitar la plantilla",
+          },
+        );
+        if (!actionResult.ok) {
+          const reason = actionResult.error;
+          removeUncertain.current.add(id);
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "No se pudo quitar. Reintentá para comprobar el estado actual.",
+          );
+          return;
+        }
+      }
       removeUncertain.current.delete(id);
-    } catch (reason) {
-      removeUncertain.current.add(id);
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "No se pudo quitar. Reintentá para comprobar el estado actual.",
-      );
     } finally {
       pending.current = false;
       setBusy(false);
@@ -288,7 +299,7 @@ export function RecordTemplateManager() {
               )}
               <label className="block space-y-1 text-sm">
                 Nombre de plantilla
-                <input
+                <Input
                   aria-label="Nombre de plantilla"
                   className={field}
                   value={draft.name}
@@ -326,14 +337,14 @@ export function RecordTemplateManager() {
                     value={draft.currency}
                     onChange={(event) => change("currency", event.target.value as CurrencyCode)}
                   >
-                    {["UYU", "USD", "EUR", "BRL", "ARS"].map((currency) => (
+                    {currencySchema.options.map((currency) => (
                       <option key={currency}>{currency}</option>
                     ))}
                   </select>
                 </label>
                 <label className="space-y-1 text-sm">
                   Importe
-                  <input
+                  <Input
                     aria-label="Importe de plantilla"
                     className={field}
                     type="number"
@@ -450,7 +461,7 @@ export function RecordTemplateManager() {
                 </label>
                 <label className="space-y-1 text-sm">
                   Contraparte
-                  <input
+                  <Input
                     aria-label="Contraparte de plantilla"
                     className={field}
                     value={draft.counterpartyName ?? ""}

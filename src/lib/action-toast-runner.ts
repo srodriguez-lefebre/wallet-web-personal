@@ -8,6 +8,7 @@ export interface ActionToastOptions {
 }
 
 export type ShowActionToast = (status: ActionToastStatus, message: string) => void;
+export type ActionResult<T> = { ok: true; value: T } | { ok: false; error: Error };
 
 export function createActionToastRunner(showToast: ShowActionToast) {
   let activeActions = 0;
@@ -16,11 +17,11 @@ export function createActionToastRunner(showToast: ShowActionToast) {
   return async function runAction<T>(
     action: () => Promise<T>,
     options: ActionToastOptions = {},
-  ): Promise<T> {
+  ): Promise<ActionResult<T>> {
     if (options.singleFlight) {
       const key = options.singleFlight;
       const existing = pending.get(key);
-      if (existing) return existing as Promise<T>;
+      if (existing) return existing as Promise<ActionResult<T>>;
       const promise = Promise.resolve()
         .then(() => runAction(action, { ...options, singleFlight: undefined }))
         .finally(() => pending.delete(key));
@@ -41,11 +42,11 @@ export function createActionToastRunner(showToast: ShowActionToast) {
         showToast("success", options.success ?? "Successfully completed");
       }
 
-      return result;
+      return { ok: true, value: result };
     } catch (error) {
       activeActions = Math.max(0, activeActions - 1);
       showToast("error", options.error ?? "Action failed");
-      throw error;
+      return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
     }
   };
 }

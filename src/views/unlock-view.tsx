@@ -1,6 +1,7 @@
 import { FormEvent, useState } from "react";
 import { LockKeyhole, WalletCards } from "lucide-react";
 
+import { Input } from "@/components/ui/form/controls";
 import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,7 +42,7 @@ export function UnlockView() {
           >
             <label className="block space-y-2">
               <span className="text-sm font-medium">Token</span>
-              <input
+              <Input
                 value={token}
                 onChange={(event) => {
                   setToken(event.target.value);

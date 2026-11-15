@@ -4,18 +4,32 @@ import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { formatMoney } from "@shared/calculations";
 import { debtDirectionLabels } from "@shared/constants";
+import { debtDueState, selectDebtsByDueDate } from "@shared/planning";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { walletAttention } from "@/lib/wallet-attention";
+import { useCardAgenda } from "@/hooks/wallet-entities";
 import { useWallet } from "@/providers/wallet-provider";
 
 export function WalletNotifications() {
   const navigate = useNavigate();
-  const { dataset, isAllHistoryComplete, clearRecordFilters, openReviewQueue, setAllPeriod } =
-    useWallet();
+  const { dataset, recordSummary, clearRecordFilters, openReviewQueue, setAllPeriod } = useWallet();
+  const agenda = useCardAgenda();
   const [open, setOpen] = useState(false);
-  const attention = isAllHistoryComplete ? walletAttention(dataset) : null;
+  const asOf = new Date();
+  const attention = agenda.data
+    ? {
+        review: recordSummary.review,
+        debts: selectDebtsByDueDate(
+          dataset.debts.filter((debt) => debt.isVisible),
+          { asOf },
+        ).filter((debt) => {
+          const due = debtDueState(debt, asOf);
+          return due.days !== null && due.days <= 7;
+        }),
+        statements: agenda.data,
+      }
+    : null;
   const count = attention
     ? attention.review + attention.debts.length + attention.statements.length
     : 0;
@@ -63,7 +77,7 @@ export function WalletNotifications() {
             <h2 className="font-semibold">Notifications</h2>
             {!attention ? (
               <p role="status" className="mt-3 text-sm text-muted-foreground">
-                Loading complete history...
+                Loading notifications...
               </p>
             ) : (
               <div className="mt-3 space-y-4">

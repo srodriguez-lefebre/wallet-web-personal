@@ -2,36 +2,39 @@ import { act, create, type ReactTestRenderer, type ReactTestInstance } from "rea
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
-import { RecordsView } from "./records-view";
-
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
+
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+import { RecordsView } from "@/features/records/RecordsView";
 
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2026-02",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
-    recordFilters: {},
-    setRecordFilters: vi.fn(),
-    clearRecordFilters: vi.fn(),
-    addRecord: vi.fn(),
-    updateRecord: update,
-    deleteRecord: vi.fn(),
-    newRecordRequestId: 0,
-    consumeNewRecordRequest: vi.fn(),
-    recordsPage: {},
-    isSelectedRangeComplete: true,
-    loadMoreRecords: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2026-02",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
+      recordFilters: {},
+      setRecordFilters: vi.fn(),
+      clearRecordFilters: vi.fn(),
+      addRecord: vi.fn(),
+      updateRecord: update,
+      deleteRecord: vi.fn(),
+      newRecordRequestId: 0,
+      consumeNewRecordRequest: vi.fn(),
+      recordsPage: {},
+      isSelectedRangeComplete: true,
+      loadMoreRecords: vi.fn(),
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/wallet/category-picker", () => ({
@@ -343,4 +346,10 @@ test("changing goal allocations requires primary FX", async () => {
   );
   await submit();
   expect(update).not.toHaveBeenCalled();
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

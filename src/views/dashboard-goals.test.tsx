@@ -6,17 +6,20 @@ import { DashboardView } from "./dashboard-view";
 
 import type { PropsWithChildren } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)() }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    selectedMonth: "2026-02",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
-    setRecordFilters: vi.fn(),
-    recordDebtPayment: vi.fn(),
-    isAllHistoryComplete: true,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      selectedMonth: "2026-02",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
+      setRecordFilters: vi.fn(),
+      recordDebtPayment: vi.fn(),
+      isAllHistoryComplete: true,
+    }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
@@ -74,4 +77,10 @@ test("dashboard excludes completed visible goals while keeping active goals", as
     if (tree) await act(async () => tree.unmount());
     vi.unstubAllGlobals();
   }
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

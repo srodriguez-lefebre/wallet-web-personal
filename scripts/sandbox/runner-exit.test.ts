@@ -15,7 +15,9 @@ test("a failed Vitest run with global PostgreSQL setup exits with status one", a
       config,
       `export default ${JSON.stringify({
         test: {
-          include: [resolve("scripts/sandbox/fixtures/expected-failure.fixture.ts")],
+          include: [
+            resolve("scripts/sandbox/fixtures/expected-failure.fixture.ts").replaceAll("\\", "/"),
+          ],
           globalSetup: [resolve("scripts/sandbox/postgres-global.ts")],
           maxWorkers: 1,
         },

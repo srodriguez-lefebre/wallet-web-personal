@@ -8,22 +8,25 @@ import { AnalyticsView } from "./analytics-view";
 import type { WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 let dataset: WalletDataset, historyComplete: boolean, assistantReads: number;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2026-02",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
-    recordFilters: {},
-    setRecordFilters: vi.fn(),
-    isAllHistoryComplete: historyComplete,
-    getCompleteDataset: async () => {
-      assistantReads += 1;
-      return structuredClone(dataset);
-    },
-    addBudget: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2026-02",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
+      recordFilters: {},
+      setRecordFilters: vi.fn(),
+      isAllHistoryComplete: historyComplete,
+      getCompleteDataset: async () => {
+        assistantReads += 1;
+        return structuredClone(dataset);
+      },
+      addBudget: vi.fn(),
+    }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("recharts", () => {
@@ -105,13 +108,13 @@ test("merchant table displays frozen spending once and explains the gross purcha
       ),
   ).toEqual(["1", formatMoney(400, "UYU"), formatMoney(400, "UYU")]);
 });
-test("merchant table withholds partial totals and shows a clear empty state for a complete period", async () => {
+test("pending aggregate withholds merchant totals and shows an empty state for a complete period", async () => {
   historyComplete = false;
   await act(async () => {
     tree = create(<AnalyticsView />);
   });
   expect(tree!.root.findAllByType("table")).toHaveLength(0);
-  expect(JSON.stringify(tree!.toJSON())).toContain("Loading complete history to compare merchants");
+  expect(tree!.root.findByProps({ role: "status" }).props.children).toBe("Loading analytics...");
   historyComplete = true;
   dataset.records = [];
   await act(async () => tree!.update(<AnalyticsView />));
@@ -170,11 +173,11 @@ test("a budget with missing FX displays a missing-rate placeholder for spent and
   const spent = budget.findAllByType("p")[1]!;
   expect(
     spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
-  ).toContain("Falta cotización");
+  ).toContain("Exchange rate unavailable");
   expect(
     spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
   ).not.toContain("NaN");
-  expect(budget.findAllByType("p")[2]!.children).toEqual(["Falta cotización"]);
+  expect(budget.findAllByType("p")[2]!.children).toEqual(["Exchange rate unavailable"]);
 });
 
 test("opens budget creation from analytics using the selected month and fresh full history", async () => {
@@ -191,4 +194,10 @@ test("opens budget creation from analytics using the selected month and fresh fu
   });
   expect(assistantReads).toBe(1);
   expect(tree!.root.findByProps({ "aria-label": "Target month" }).props.value).toBe("2026-02");
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

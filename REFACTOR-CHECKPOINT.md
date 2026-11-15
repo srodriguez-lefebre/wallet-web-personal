@@ -375,3 +375,26 @@ No FK, drop legacy, reparación de referencias huérfanas, secreto nuevo ni
 revocación activada. Main098 sigue compatible con la ampliación durante rollout.
 Siguiente: pushFF del candidato completo, único draftPR3/CI+previewSHA exacto,
 merge normal y CI main/READY+alias/smokeGET sin sesión. Bloque4 permanece300db45.
+
+### Paquete3 publicado · 2026-11-14
+
+PR11 https://github.com/srodriguez-lefebre/wallet-web-personal/pull/11 fusionado
+2026-11-14T15:49:55Z. Head7d2a21d6a9f0bf7ba1a02fd3f666cfb1fa5c1507,
+main670164637a44b60a641c76a563bf5e186343b765. CIhead43611856122 y
+CImain43612282124success. Producción READY dpl_ANvFnKmCHVtdQYFvHWTDg4ynDyNY,
+wallet-web-personal-h18ixni3n.vercel.app; aliaswallet-web-personal.vercel.app
+asignado almismoSHA. 0022aplicada/verificada antesdelpush/preview, sinreplay.
+
+Smoke inicialmente rechazado por revisiónautomática antesdeejecutarse poruna
+interpretación de lasinstrucciones retenidas. Santiago confirmó explícitamente
+losGET sin sesión; se reintentó una sola vez y fueaceptado. Alias: portada200,
+health401JSON y ruta records/:id401JSON, ambasAPI no-store. Deploymentconcreto:
+las3rutas302porprotecciónVercel; no se afirma smokeautenticado ni se creó bypass.
+Sinunlock/bootstrap/sesionesreales. El bloqueoyaestáresuelto para eseverificación.
+
+Paquete4 continúa en worktreeaislado y rama refactor/04-entity-cache-views;
+main integrado sinreescribirhistoria. Checkpointcompatiblesubido b43b15219fc9c20c1236ee05284ce9df68f1f6e6,
+previewREADY dpl_4oPMx7rD2M93ynsgNWzm6DQLdNxn. Ver PACKAGE4-CHECKPOINT.md para
+los consumidoresdelclientenuevo y pruebasposteriores; Query/vistas siguenpendientes.
+3/5PRusados (#9,#10,#11); no abrirPR4 hasta completar supaquete. Nada deAppsScript
+activo, secretosnuevos, activaciónderevocación, dropLegacy oFKconhuérfanos.

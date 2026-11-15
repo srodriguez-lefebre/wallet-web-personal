@@ -1,5 +1,5 @@
 import { mockWalletData } from "@shared/mock-data";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
@@ -9,26 +9,30 @@ import { CardsView } from "./cards-view";
 
 import type { ReactNode } from "react";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
+
 let dataset = structuredClone(mockWalletData);
 const refreshStatements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const payment = vi.hoisted(() => vi.fn());
 const updateMovement = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    refreshCardStatements: refreshStatements,
-    isAllHistoryComplete: true,
-    payCreditCardStatement: payment,
-    updateCreditCardRecord: updateMovement,
-    selectedMonth: "2026-11",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      refreshCardStatements: refreshStatements,
+      isAllHistoryComplete: true,
+      payCreditCardStatement: payment,
+      updateCreditCardRecord: updateMovement,
+      selectedMonth: "2026-11",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {
@@ -105,6 +109,55 @@ async function detail(query = "") {
     );
   });
 }
+
+test("navigating to another card discards the previous card's movement draft", async () => {
+  dataset.creditCards.push({
+    ...dataset.creditCards[0]!,
+    id: "second-card",
+    name: "Synthetic second card",
+  });
+  function NextCard() {
+    const navigate = useNavigate();
+    return (
+      <button data-next-card onClick={() => void navigate("/cards/second-card")}>
+        Next card
+      </button>
+    );
+  }
+  await act(async () => {
+    tree = create(
+      <MemoryRouter initialEntries={["/cards/card"]}>
+        <NextCard />
+        <Routes>
+          <Route path="/cards/:cardId" element={<CardDetailView />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  });
+  await act(async () =>
+    tree!.root
+      .findAllByType("button")
+      .find((button) =>
+        button.children.some(
+          (child) => typeof child === "string" && child.includes("Add movement"),
+        ),
+      )!
+      .props.onClick(),
+  );
+  const movement = () =>
+    tree!.root
+      .findAllByType("form")
+      .find((form) => form.props.className === "grid gap-4 md:grid-cols-3");
+  expect(movement()).toBeDefined();
+  await act(async () =>
+    movement()!
+      .findAllByType("input")[0]!
+      .props.onChange({ target: { value: "77" } }),
+  );
+  await act(async () => tree!.root.findByProps({ "data-next-card": true }).props.onClick());
+  expect(movement()).toBeUndefined();
+  expect(updateMovement).not.toHaveBeenCalled();
+});
 
 test("purchase and payment history use Uruguay's local day and preserve calendar dates", async () => {
   vi.stubEnv("TZ", "America/Montevideo");
@@ -315,4 +368,16 @@ test("opening Cards refreshes statements once without repeating after a render",
     );
   });
   expect(refreshStatements).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});
+
+vi.mock("@/features/cards/use-card-reads", async () => {
+  const { legacyCardReads } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyCardReads(useWallet);
 });

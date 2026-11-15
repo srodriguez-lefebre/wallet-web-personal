@@ -1,12 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { findApiOperation } from "@shared/api-contract";
 
-import {
-  createRecordTemplate,
-  deleteRecordTemplate,
-  listRecordTemplates,
-  updateRecordTemplate,
-} from "./wallet-api";
+import { createWalletClient } from "./api-client";
+const client = createWalletClient(() => "session");
 
 afterEach(() => vi.unstubAllGlobals());
 test("template client sends authenticated CRUD requests that match the shared contract", async () => {
@@ -39,10 +35,12 @@ test("template client sends authenticated CRUD requests that match the shared co
     });
   });
   const { id, ...input } = template;
-  expect(await createRecordTemplate("session", input)).toEqual(template);
-  expect(await listRecordTemplates("session")).toEqual([template]);
-  expect(await updateRecordTemplate("session", id, { note: null })).toEqual(template);
-  expect(await deleteRecordTemplate("session", id)).toEqual({ deleted: true });
+  expect(await client["recordTemplates.create"]({ body: input })).toEqual(template);
+  expect(await client["recordTemplates.list"]()).toEqual([template]);
+  expect(await client["recordTemplates.patch"]({ params: { id }, body: { note: null } })).toEqual(
+    template,
+  );
+  expect(await client["recordTemplates.delete"]({ params: { id } })).toEqual({ deleted: true });
   expect(calls.map((call) => call.init.method ?? "GET")).toEqual([
     "POST",
     "GET",
@@ -61,12 +59,14 @@ test("template client propagates safe capacity conflicts", async () => {
     ),
   );
   await expect(
-    createRecordTemplate("session", {
-      name: "Coffee",
-      type: "expense",
-      amount: 20,
-      currency: "UYU",
-      paymentType: "cash",
+    client["recordTemplates.create"]({
+      body: {
+        name: "Coffee",
+        type: "expense",
+        amount: 20,
+        currency: "UYU",
+        paymentType: "cash",
+      },
     }),
   ).rejects.toThrow(/100 templates/);
 });

@@ -601,3 +601,144 @@ test("concurrent first settings writes create one row and disjoint first patches
     defaultPaymentStatus: "needs_review",
   });
 });
+
+test("wallet record search keeps descendant categories, Unicode labels and literal note filters across pages", async () => {
+  const db = createDb();
+  await fixture.pool.query("UPDATE categories SET name='Café' WHERE id=$1", [categoryId]);
+  await fixture.pool.query("UPDATE categories SET name='Comida' WHERE id=$1", [childId]);
+  await fixture.pool.query("UPDATE tags SET name='Viajé' WHERE id=$1", [tagId]);
+  const first = await repository.createRecord(db, {
+    ...recordInput(),
+    categoryId: childId,
+    note: "Literal 100%_\\ receipt",
+    occurredAt: "2026-10-02T02:30:00Z",
+  });
+  const second = await repository.createRecord(db, {
+    ...recordInput(),
+    categoryId: childId,
+    note: "Other 100%_\\ receipt",
+    occurredAt: "2026-10-01T02:30:00Z",
+  });
+  await fixture.pool.query(
+    "UPDATE records SET import_merchant='Amélie Synthetic' WHERE id=ANY($1::uuid[])",
+    [[first.id, second.id]],
+  );
+  for (const search of ["CAFE / COMIDA", "viaje", "amelie", "100%_\\"]) {
+    const page = await repository.listRecords(db, {
+      search,
+      searchMode: "wallet",
+      categoryId,
+      categoryMode: "descendants",
+      limit: 1,
+    });
+    expect(page.items.map((row) => row.id)).toEqual([first.id]);
+    expect(page.hasMore).toBe(true);
+    expect(
+      (
+        await repository.listRecords(db, {
+          search,
+          searchMode: "wallet",
+          categoryId,
+          categoryMode: "descendants",
+          limit: 1,
+          cursor: page.nextCursor!,
+        })
+      ).items.map((row) => row.id),
+    ).toEqual([second.id]);
+  }
+  expect((await repository.listRecords(db, { categoryId })).items).toEqual([]);
+  expect((await repository.listRecords(db, { search: "viaje" })).items).toEqual([]);
+  expect(
+    (await repository.listRecords(db, { search: "100%_\\" })).items.map((row) => row.id),
+  ).toEqual([first.id, second.id]);
+  expect(
+    (
+      await repository.listRecords(db, {
+        search: "amelie",
+        searchMode: "wallet",
+        note: "literal 100%_\\",
+      })
+    ).items.map((row) => row.id),
+  ).toEqual([first.id]);
+  expect(
+    (
+      await repository.listRecords(db, {
+        from: "2026-10-01",
+        to: "2026-10-01",
+        timeZone: "America/Montevideo",
+      })
+    ).items.map((row) => row.id),
+  ).toEqual([first.id]);
+  expect(
+    (await repository.listRecords(db, { from: "2026-10-01", to: "2026-10-01" })).items.map(
+      (row) => row.id,
+    ),
+  ).toEqual([second.id]);
+});
+
+test("record pages expose linked refund kind without loading the card ledger", async () => {
+  const db = createDb();
+  const walletPurchase = await repository.createRecord(db, {
+    ...recordInput(),
+    creditCardId: cardId,
+    paymentType: "credit",
+    accountAmount: 20,
+    amountInLimitCurrency: 20,
+    exchangeRateToLimitCurrency: 1,
+  });
+  const purchase = (await repository.listCreditCardRecords(db, cardId)).find(
+    (row) => row.walletRecordId === walletPurchase.id,
+  )!;
+  const refund = await repository.createCreditCardRecord(
+    db,
+    cardId,
+    creditCardRecordSchema.parse({
+      kind: "refund",
+      originalRecordId: purchase.id,
+      amount: 10,
+      currency: "UYU",
+      amountInLimitCurrency: 10,
+      exchangeRateToLimitCurrency: 1,
+      categoryId,
+      occurredAt,
+    }),
+  );
+  const page = await repository.listRecords(db, { creditCardId: cardId });
+  expect(page.items.find((row) => row.id === purchase.walletRecordId)).toMatchObject({
+    linkedCardRecordKind: "purchase",
+  });
+  expect(page.items.find((row) => row.id === refund.walletRecordId)).toMatchObject({
+    linkedCardRecordKind: "refund",
+  });
+});
+
+test("local date pagination includes both ends of a 25-hour daylight-saving day", async () => {
+  const db = createDb();
+  const early = await repository.createRecord(db, {
+    ...recordInput(),
+    occurredAt: "2026-11-01T04:30:00Z",
+  });
+  const late = await repository.createRecord(db, {
+    ...recordInput(),
+    occurredAt: "2026-11-02T04:30:00Z",
+  });
+  await repository.createRecord(db, { ...recordInput(), occurredAt: "2026-11-02T05:00:00Z" });
+  const first = await repository.listRecords(db, {
+    from: "2026-11-01",
+    to: "2026-11-01",
+    timeZone: "America/New_York",
+    limit: 1,
+  });
+  expect(first.items.map((row) => row.id)).toEqual([late.id]);
+  expect(
+    (
+      await repository.listRecords(db, {
+        from: "2026-11-01",
+        to: "2026-11-01",
+        timeZone: "America/New_York",
+        limit: 1,
+        cursor: first.nextCursor!,
+      })
+    ).items.map((row) => row.id),
+  ).toEqual([early.id]);
+});

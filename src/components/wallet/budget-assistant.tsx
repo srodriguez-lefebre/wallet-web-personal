@@ -142,74 +142,79 @@ export function BudgetAssistant({
       amount: Number(choiceFor(proposal).amount),
     }));
     try {
-      await runAction(
-        async () => {
-          // A rejected create may have committed before its canonical reload failed.
-          // No write is safe to retry until this fresh canonical read succeeds.
-          const current = await getCompleteDataset();
-          const currentBudgets = [...current.budgets];
-          if (current.settings.primaryCurrency !== currentPlan.currency)
-            throw new Error("Primary currency changed. Reload proposals before saving.");
-          for (const { proposal, amount } of batch) {
-            if (!active.current) break;
-            const category = current.categories.find((value) => value.id === proposal.categoryId);
-            if (!category || category.parentId) {
-              setOutcomes((values) => ({
-                ...values,
-                [proposal.categoryId]: "unavailable",
-              }));
-              continue;
+      {
+        const actionResult = await runAction(
+          async () => {
+            // A rejected create may have committed before its canonical reload failed.
+            // No write is safe to retry until this fresh canonical read succeeds.
+            const current = await getCompleteDataset();
+            const currentBudgets = [...current.budgets];
+            if (current.settings.primaryCurrency !== currentPlan.currency)
+              throw new Error("Primary currency changed. Reload proposals before saving.");
+            for (const { proposal, amount } of batch) {
+              if (!active.current) break;
+              const category = current.categories.find((value) => value.id === proposal.categoryId);
+              if (!category || category.parentId) {
+                setOutcomes((values) => ({
+                  ...values,
+                  [proposal.categoryId]: "unavailable",
+                }));
+                continue;
+              }
+              const conflicts = conflictingCategoryBudgets(
+                current.categories,
+                currentBudgets,
+                proposal.categoryId,
+              );
+              if (conflicts.length) {
+                setOutcomes((values) => ({
+                  ...values,
+                  [proposal.categoryId]:
+                    values[proposal.categoryId] === "uncertain" ? "reconciled" : "conflict",
+                }));
+                continue;
+              }
+              const payload = budgetSchema.parse({
+                name: category.name,
+                categoryId: category.id,
+                color: category.color,
+                limitAmount: amount,
+                currency: currentPlan.currency,
+                period: "monthly",
+                isActive: true,
+              });
+              try {
+                const id = await addBudget(payload);
+                currentBudgets.push({ ...payload, id });
+                setOutcomes((values) => ({
+                  ...values,
+                  [proposal.categoryId]: "confirmed",
+                }));
+              } catch (reason) {
+                setOutcomes((values) => ({
+                  ...values,
+                  [proposal.categoryId]: "uncertain",
+                }));
+                throw reason;
+              }
             }
-            const conflicts = conflictingCategoryBudgets(
-              current.categories,
-              currentBudgets,
-              proposal.categoryId,
-            );
-            if (conflicts.length) {
-              setOutcomes((values) => ({
-                ...values,
-                [proposal.categoryId]:
-                  values[proposal.categoryId] === "uncertain" ? "reconciled" : "conflict",
-              }));
-              continue;
-            }
-            const payload = budgetSchema.parse({
-              name: category.name,
-              categoryId: category.id,
-              color: category.color,
-              limitAmount: amount,
-              currency: currentPlan.currency,
-              period: "monthly",
-              isActive: true,
-            });
-            try {
-              const id = await addBudget(payload);
-              currentBudgets.push({ ...payload, id });
-              setOutcomes((values) => ({
-                ...values,
-                [proposal.categoryId]: "confirmed",
-              }));
-            } catch (reason) {
-              setOutcomes((values) => ({
-                ...values,
-                [proposal.categoryId]: "uncertain",
-              }));
-              throw reason;
-            }
-          }
-        },
-        {
-          processing: "Checking current budgets and saving selections…",
-          success: "Budget selections processed. Review the results below.",
-          error: "Budget batch stopped. Review the results and reconcile before retrying.",
-        },
-      );
-    } catch (reason) {
-      setError(
-        reason instanceof Error
-          ? reason.message
-          : "Budget batch stopped. Reconcile before retrying.",
-      );
+          },
+          {
+            processing: "Checking current budgets and saving selections…",
+            success: "Budget selections processed. Review the results below.",
+            error: "Budget batch stopped. Review the results and reconcile before retrying.",
+          },
+        );
+        if (!actionResult.ok) {
+          const reason = actionResult.error;
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : "Budget batch stopped. Reconcile before retrying.",
+          );
+          return;
+        }
+      }
     } finally {
       saving.current = false;
       setBusy(false);

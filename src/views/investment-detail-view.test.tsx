@@ -5,6 +5,9 @@ import { mockWalletData } from "@shared/mock-data";
 import { InvestmentDetailView } from "./investment-detail-view";
 
 import type { PropsWithChildren } from "react";
+import type { WalletDataset } from "@shared/types";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const state = vi.hoisted(() => ({
   dataset: ((): unknown => undefined)(),
@@ -13,7 +16,7 @@ const state = vi.hoisted(() => ({
   messages: [] as Array<{ status: string; message: string }>,
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset: state.dataset, updateInvestment: state.update }),
+  useWallet: () => withWalletMetadata({ dataset: state.dataset, updateInvestment: state.update }),
 }));
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
@@ -76,6 +79,23 @@ function submit() {
     .findByProps({ "aria-label": "Update investment valuation" })
     .props.onSubmit({ preventDefault: vi.fn() });
 }
+
+test("an open valuation draft cannot cross investment navigation", async () => {
+  const dataset = state.dataset as WalletDataset;
+  dataset.investments.push({
+    ...dataset.investments[0]!,
+    id: "synthetic-second-investment",
+    name: "Second synthetic investment",
+  });
+  await open();
+  await change("999");
+  state.id = "synthetic-second-investment";
+  await act(async () => tree!.update(<InvestmentDetailView />));
+  expect(tree!.root.findAllByProps({ "aria-label": "Update investment valuation" })).toHaveLength(
+    0,
+  );
+  expect(state.update).not.toHaveBeenCalled();
+});
 
 test("valuation sends only currentValue and accepts a complete loss", async () => {
   await open();
@@ -147,3 +167,9 @@ test.each(["", "-1", "NaN", "Infinity"])(
     ).toHaveLength(1);
   },
 );
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});

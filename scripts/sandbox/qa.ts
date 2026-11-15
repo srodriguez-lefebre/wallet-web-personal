@@ -120,6 +120,21 @@ await pg.query(
   "INSERT INTO credit_card_payments(credit_card_id,amount,currency,amount_in_limit_currency,occurred_at) VALUES($1,10,'UYU',10,'2026-11-13T02:38:00Z')",
   [card],
 );
+// Real aggregate/form QA includes financial history outside the first Records page.
+const goal = randomUUID();
+await pg.query(
+  "INSERT INTO goals(id,name,target_amount,currency,color,icon,status,is_visible) VALUES($1,'QA paginated goal',1000,'UYU','#75D4FA','flag','active',true)",
+  [goal],
+);
+await pg.query(
+  "INSERT INTO records(type,amount,currency,account_id,account_amount,category_id,counterparty_name,payment_type,payment_status,exchange_rate_to_primary,occurred_at) SELECT 'expense',1,'UYU',$1,1,$2,'QA older synthetic expense ' || n,'debit','cleared',1,'2026-11-01T15:00:00Z'::timestamptz FROM generate_series(1,105) n",
+  [bank, category],
+);
+await pg.query(
+  "INSERT INTO record_goals(record_id,goal_id,assignment_source,use_reserved,reserve_income) SELECT id,$1,'manual',false,true FROM records WHERE counterparty_name LIKE 'QA older synthetic expense %' OR counterparty_name='QA New review'",
+  [goal],
+);
+
 const { serveWalletApi } = await import("./http.js");
 let stopping = false;
 const server = createServer((req, res) => {

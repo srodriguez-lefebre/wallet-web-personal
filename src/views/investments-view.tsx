@@ -1,3 +1,4 @@
+import { currencySchema, investmentSchema } from "@shared/schemas";
 import { FormEvent, useRef, useState } from "react";
 import { Edit3, Eye, EyeOff, Landmark, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -7,7 +8,15 @@ import { summarizeInvestmentsByCurrency } from "@shared/planning";
 
 import type { CurrencyCode, Investment } from "@shared/types";
 
+import {
+  controlClassName as inputClassName,
+  textareaClassName,
+  Input,
+  DateInput,
+} from "@/components/ui/form/controls";
+import { useDraftFields } from "@/hooks/use-draft-fields";
 import { finishAction } from "@/lib/async-event";
+import { commitDraftRows, draftBaseline } from "@/lib/draft-list";
 import { PageHeader } from "@/components/page/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -65,6 +74,7 @@ function buildInvestmentDrafts(investments: Investment[]): InvestmentDraft[] {
 }
 
 export function InvestmentsView() {
+  const savedDrafts = useRef(new Map<string, string>());
   const navigate = useNavigate();
   const {
     dataset,
@@ -84,18 +94,60 @@ export function InvestmentsView() {
   const [investmentDrafts, setInvestmentDrafts] = useState<InvestmentDraft[]>(() =>
     buildInvestmentDrafts(dataset.investments),
   );
-  const [name, setName] = useState("");
-  const [type, setType] = useState<Investment["type"]>("fund");
-  const [amountInvested, setAmountInvested] = useState("");
-  const [currentValue, setCurrentValue] = useState("");
-  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [startedAt, setStartedAt] = useState(new Date().toISOString().slice(0, 10));
-  const [isVisible, setIsVisible] = useState(true);
-  const [note, setNote] = useState("");
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [installmentName, setInstallmentName] = useState("");
-  const [installmentAmount, setInstallmentAmount] = useState("");
-  const [installmentCount, setInstallmentCount] = useState("");
+  const [
+    {
+      isCreateOpen,
+      name,
+      type,
+      amountInvested,
+      currentValue,
+      currency,
+      startedAt,
+      isVisible,
+      note,
+    },
+    {
+      isCreateOpen: setIsCreateOpen,
+      name: setName,
+      type: setType,
+      amountInvested: setAmountInvested,
+      currentValue: setCurrentValue,
+      currency: setCurrency,
+      startedAt: setStartedAt,
+      isVisible: setIsVisible,
+      note: setNote,
+    },
+  ] = useDraftFields<{
+    isCreateOpen: boolean;
+    name: string;
+    type: Investment["type"];
+    amountInvested: string;
+    currentValue: string;
+    currency: CurrencyCode;
+    startedAt: string;
+    isVisible: boolean;
+    note: string;
+  }>(() => ({
+    isCreateOpen: false,
+    name: "",
+    type: "fund",
+    amountInvested: "",
+    currentValue: "",
+    currency: "UYU",
+    startedAt: new Date().toISOString().slice(0, 10),
+    isVisible: true,
+    note: "",
+  }));
+
+  const [
+    { installmentName, installmentAmount, installmentCount },
+    {
+      installmentName: setInstallmentName,
+      installmentAmount: setInstallmentAmount,
+      installmentCount: setInstallmentCount,
+    },
+  ] = useDraftFields(() => ({ installmentName: "", installmentAmount: "", installmentCount: "" }));
+
   const visibleInvestments = dataset.investments.filter(
     (investment) => showHidden || investment.isVisible,
   );
@@ -115,15 +167,25 @@ export function InvestmentsView() {
       installmentsTotal <= 0
     )
       return;
-    await addInstallmentPlan({
-      name: installmentName.trim(),
-      totalAmount,
-      currency: account.currency,
-      installmentsTotal,
-      installmentsPaid: 0,
-      accountId: account.id,
-      categoryId: category.id,
-    });
+    const result = await runAction(
+      () =>
+        addInstallmentPlan({
+          name: installmentName.trim(),
+          totalAmount,
+          currency: account.currency,
+          installmentsTotal,
+          installmentsPaid: 0,
+          accountId: account.id,
+          categoryId: category.id,
+        }),
+      {
+        singleFlight: "create-installment",
+        processing: "Creating installment...",
+        success: "Installment created",
+        error: "Could not create installment",
+      },
+    );
+    if (!result.ok) return;
     setInstallmentName("");
     setInstallmentAmount("");
     setInstallmentCount("");
@@ -134,12 +196,9 @@ export function InvestmentsView() {
   const shouldShowInvestmentsPanel = isEditing
     ? visibleInvestmentDrafts.length > 0
     : visibleInvestments.length > 0;
-  const inputClassName =
-    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const textareaClassName =
-    "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
 
   function startEditingInvestments() {
+    savedDrafts.current = draftBaseline(buildInvestmentDrafts(dataset.investments));
     setInvestmentDrafts(buildInvestmentDrafts(dataset.investments));
     setShowHidden(false);
     setEditError("");
@@ -200,40 +259,39 @@ export function InvestmentsView() {
     saving.current = true;
     setIsSaving(true);
     try {
-      await runAction(
-        async () => {
-          await Promise.all(
-            investmentDrafts
-              .filter((draft) => draft.isDeleted)
-              .map((draft) => deleteInvestment(draft.id)),
-          );
-
-          await Promise.all(
-            activeDrafts.map((draft) =>
-              updateInvestment(draft.id, {
-                name: draft.name.trim(),
-                type: draft.type,
-                amountInvested: Number(draft.amountInvested),
-                currentValue: Number(draft.currentValue),
-                currency: draft.currency,
-                startedAt: draft.startedAt,
-                isVisible: draft.isVisible,
-                note: draft.note.trim() || undefined,
-              }),
-            ),
-          );
-        },
-        {
-          processing: "Saving investments...",
-          success: "Investments saved",
-          error: "Could not save investments",
-        },
-      );
+      {
+        const actionResult = await runAction(
+          async () => {
+            await commitDraftRows(investmentDrafts, savedDrafts.current, (draft) =>
+              draft.isDeleted
+                ? deleteInvestment(draft.id)
+                : updateInvestment(draft.id, {
+                    name: draft.name.trim(),
+                    type: draft.type,
+                    amountInvested: Number(draft.amountInvested),
+                    currentValue: Number(draft.currentValue),
+                    currency: draft.currency,
+                    startedAt: draft.startedAt,
+                    isVisible: draft.isVisible,
+                    note: draft.note.trim() || undefined,
+                  }),
+            );
+          },
+          {
+            processing: "Saving investments...",
+            success: "Investments saved",
+            error: "Could not save investments",
+          },
+        );
+        if (!actionResult.ok) {
+          const error = actionResult.error;
+          setEditError(error instanceof Error ? error.message : "Could not save investments.");
+          return;
+        }
+      }
       setShowHidden(false);
       setEditError("");
       setIsEditing(false);
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Could not save investments.");
     } finally {
       saving.current = false;
       setIsSaving(false);
@@ -260,7 +318,7 @@ export function InvestmentsView() {
     setIsSaving(true);
     setEditError("");
     try {
-      const id = await runAction(
+      const actionResult = await runAction(
         () =>
           addInvestment({
             name: name.trim(),
@@ -278,6 +336,12 @@ export function InvestmentsView() {
           error: "Could not create investment",
         },
       );
+      if (!actionResult.ok) {
+        const error = actionResult.error;
+        setEditError(error instanceof Error ? error.message : "Could not create investment.");
+        return;
+      }
+      const id = actionResult.value;
 
       setName("");
       setAmountInvested("");
@@ -287,8 +351,6 @@ export function InvestmentsView() {
       setNote("");
       setIsCreateOpen(false);
       void navigate(`/investments/${id}`);
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Could not create investment.");
     } finally {
       saving.current = false;
       setIsSaving(false);
@@ -373,112 +435,117 @@ export function InvestmentsView() {
                     finishAction(handleCreateInvestment(event));
                   }}
                 >
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Name</span>
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      className={inputClassName}
-                      placeholder="Fondo, accion, deposito..."
-                    />
-                  </label>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <fieldset disabled={toast?.status === "processing"} className="contents">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Type</span>
-                      <select
-                        value={type}
-                        onChange={(event) => setType(event.target.value as Investment["type"])}
+                      <span className="text-sm font-medium">Name</span>
+                      <Input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
                         className={inputClassName}
-                      >
-                        {investmentTypeOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Currency</span>
-                      <select
-                        value={currency}
-                        onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                        className={inputClassName}
-                      >
-                        <option value="UYU">UYU</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="BRL">BRL</option>
-                        <option value="ARS">ARS</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Invested</span>
-                      <input
-                        value={amountInvested}
-                        onChange={(event) =>
-                          setAmountInvested(limitDecimalPlaces(event.target.value))
-                        }
-                        type="number"
-                        className={inputClassName}
-                        placeholder="10000"
-                        step="0.01"
+                        placeholder="Fondo, accion, deposito..."
                       />
                     </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Type</span>
+                        <select
+                          value={type}
+                          onChange={(event) =>
+                            setType(investmentSchema.shape.type.parse(event.target.value))
+                          }
+                          className={inputClassName}
+                        >
+                          {investmentTypeOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Currency</span>
+                        <select
+                          value={currency}
+                          onChange={(event) =>
+                            setCurrency(currencySchema.parse(event.target.value))
+                          }
+                          className={inputClassName}
+                        >
+                          {currencySchema.options.map((currency) => (
+                            <option key={currency} value={currency}>
+                              {currency}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Invested</span>
+                        <Input
+                          value={amountInvested}
+                          onChange={(event) =>
+                            setAmountInvested(limitDecimalPlaces(event.target.value))
+                          }
+                          type="number"
+                          className={inputClassName}
+                          placeholder="10000"
+                          step="0.01"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Current value</span>
+                        <Input
+                          value={currentValue}
+                          onChange={(event) => setCurrentValue(event.target.value)}
+                          type="number"
+                          className={inputClassName}
+                          placeholder="Opcional"
+                          min="0"
+                          step="0.01"
+                        />
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Start date</span>
+                        <DateInput
+                          value={startedAt}
+                          onChange={(event) => setStartedAt(event.target.value)}
+                          className={inputClassName}
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Visibility</span>
+                        <select
+                          value={isVisible ? "visible" : "hidden"}
+                          onChange={(event) => setIsVisible(event.target.value === "visible")}
+                          className={inputClassName}
+                        >
+                          <option value="visible">Visible</option>
+                          <option value="hidden">Hidden</option>
+                        </select>
+                      </label>
+                    </div>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Current value</span>
-                      <input
-                        value={currentValue}
-                        onChange={(event) => setCurrentValue(event.target.value)}
-                        type="number"
-                        className={inputClassName}
-                        placeholder="Opcional"
-                        min="0"
-                        step="0.01"
+                      <span className="text-sm font-medium">Note</span>
+                      <textarea
+                        value={note}
+                        onChange={(event) => setNote(event.target.value)}
+                        className={textareaClassName}
+                        placeholder="Optional context"
                       />
                     </label>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Start date</span>
-                      <input
-                        value={startedAt}
-                        onChange={(event) => setStartedAt(event.target.value)}
-                        type="date"
-                        className={inputClassName}
-                      />
-                    </label>
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Visibility</span>
-                      <select
-                        value={isVisible ? "visible" : "hidden"}
-                        onChange={(event) => setIsVisible(event.target.value === "visible")}
-                        className={inputClassName}
-                      >
-                        <option value="visible">Visible</option>
-                        <option value="hidden">Hidden</option>
-                      </select>
-                    </label>
-                  </div>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Note</span>
-                    <textarea
-                      value={note}
-                      onChange={(event) => setNote(event.target.value)}
-                      className={textareaClassName}
-                      placeholder="Optional context"
-                    />
-                  </label>
-                  {editError ? (
-                    <p role="alert" className="text-sm text-destructive">
-                      {editError}
-                    </p>
-                  ) : null}
-                  <Button className="w-full" type="submit" disabled={isSaving}>
-                    <Plus className="h-4 w-4" />
-                    Crear y abrir detalle
-                  </Button>
+                    {editError ? (
+                      <p role="alert" className="text-sm text-destructive">
+                        {editError}
+                      </p>
+                    ) : null}
+                    <Button className="w-full" type="submit" disabled={isSaving}>
+                      <Plus className="h-4 w-4" />
+                      Crear y abrir detalle
+                    </Button>
+                  </fieldset>
                 </form>
               </DialogContent>
             </Dialog>
@@ -547,11 +614,11 @@ export function InvestmentsView() {
               {isEditing ? (
                 <div className="grid gap-3 md:grid-cols-2">
                   {visibleInvestmentDrafts.map((draft) => (
-                    <div key={draft.id} className="rounded-md border p-3">
+                    <fieldset key={draft.id} disabled={isSaving} className="rounded-md border p-3">
                       <div className="flex items-start justify-between gap-3">
                         <label className="block flex-1 space-y-2">
                           <span className="text-sm font-medium">Name</span>
-                          <input
+                          <Input
                             value={draft.name}
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
@@ -623,18 +690,18 @@ export function InvestmentsView() {
                             }
                             className={inputClassName}
                           >
-                            <option value="UYU">UYU</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="BRL">BRL</option>
-                            <option value="ARS">ARS</option>
+                            {currencySchema.options.map((currency) => (
+                              <option key={currency} value={currency}>
+                                {currency}
+                              </option>
+                            ))}
                           </select>
                         </label>
                       </div>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         <label className="block space-y-2">
                           <span className="text-sm font-medium">Invested</span>
-                          <input
+                          <Input
                             value={draft.amountInvested}
                             onChange={(event) =>
                               updateInvestmentDraft(draft.id, {
@@ -648,7 +715,7 @@ export function InvestmentsView() {
                         </label>
                         <label className="block space-y-2">
                           <span className="text-sm font-medium">Current value</span>
-                          <input
+                          <Input
                             value={draft.currentValue}
                             min="0"
                             onChange={(event) =>
@@ -664,14 +731,13 @@ export function InvestmentsView() {
                       </div>
                       <label className="mt-3 block space-y-2">
                         <span className="text-sm font-medium">Start date</span>
-                        <input
+                        <DateInput
                           value={draft.startedAt}
                           onChange={(event) =>
                             updateInvestmentDraft(draft.id, {
                               startedAt: event.target.value,
                             })
                           }
-                          type="date"
                           className={inputClassName}
                         />
                       </label>
@@ -688,7 +754,7 @@ export function InvestmentsView() {
                           placeholder="Optional context"
                         />
                       </label>
-                    </div>
+                    </fieldset>
                   ))}
                 </div>
               ) : (
@@ -791,34 +857,36 @@ export function InvestmentsView() {
                 finishAction(handleAddInstallment(event));
               }}
             >
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={installmentName}
-                onChange={(event) => setInstallmentName(event.target.value)}
-                placeholder="Installment plan"
-              />
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={installmentAmount}
-                onChange={(event) => setInstallmentAmount(event.target.value)}
-                type="number"
-                min="0.01"
-                step="0.01"
-                placeholder="Total"
-              />
-              <input
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-                value={installmentCount}
-                onChange={(event) => setInstallmentCount(event.target.value)}
-                type="number"
-                min="1"
-                step="1"
-                placeholder="Count"
-              />
-              <Button type="submit">
-                <Plus className="h-4 w-4" />
-                Add
-              </Button>
+              <fieldset disabled={toast?.status === "processing"} className="contents">
+                <Input
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={installmentName}
+                  onChange={(event) => setInstallmentName(event.target.value)}
+                  placeholder="Installment plan"
+                />
+                <Input
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={installmentAmount}
+                  onChange={(event) => setInstallmentAmount(event.target.value)}
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  placeholder="Total"
+                />
+                <Input
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                  value={installmentCount}
+                  onChange={(event) => setInstallmentCount(event.target.value)}
+                  type="number"
+                  min="1"
+                  step="1"
+                  placeholder="Count"
+                />
+                <Button type="submit">
+                  <Plus className="h-4 w-4" />
+                  Add
+                </Button>
+              </fieldset>
             </form>
             {dataset.installmentPlans.map((plan) => {
               const percentage = (plan.installmentsPaid / plan.installmentsTotal) * 100;
@@ -841,10 +909,19 @@ export function InvestmentsView() {
                         variant="outline"
                         disabled={plan.installmentsPaid >= plan.installmentsTotal}
                         onClick={() =>
-                          void updateInstallmentPlan(plan.id, {
-                            ...plan,
-                            installmentsPaid: plan.installmentsPaid + 1,
-                          })
+                          void runAction(
+                            () =>
+                              updateInstallmentPlan(plan.id, {
+                                ...plan,
+                                installmentsPaid: plan.installmentsPaid + 1,
+                              }),
+                            {
+                              singleFlight: `installment:${plan.id}`,
+                              processing: "Updating installment...",
+                              success: "Installment updated",
+                              error: "Could not update installment",
+                            },
+                          )
                         }
                       >
                         Mark paid
@@ -853,7 +930,14 @@ export function InvestmentsView() {
                         size="icon"
                         variant="destructive"
                         aria-label={`Delete ${plan.name}`}
-                        onClick={() => void deleteInstallmentPlan(plan.id)}
+                        onClick={() =>
+                          void runAction(() => deleteInstallmentPlan(plan.id), {
+                            singleFlight: `installment:${plan.id}`,
+                            processing: "Deleting installment...",
+                            success: "Installment deleted",
+                            error: "Could not delete installment",
+                          })
+                        }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

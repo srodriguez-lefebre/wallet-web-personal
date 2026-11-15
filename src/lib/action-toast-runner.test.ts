@@ -25,8 +25,8 @@ describe("createActionToastRunner", () => {
     const first = runAction(save, { singleFlight: "card-payment" });
     const duplicate = runAction(save, { singleFlight: "card-payment" });
     pending.resolve("saved");
-    expect(await first).toBe("saved");
-    expect(await duplicate).toBe("saved");
+    expect(await first).toEqual({ ok: true, value: "saved" });
+    expect(await duplicate).toEqual({ ok: true, value: "saved" });
     expect(writes).toBe(1);
     await runAction(
       async () => {
@@ -69,4 +69,17 @@ describe("createActionToastRunner", () => {
       message: "Record deleted",
     });
   });
+});
+
+it("returns an explicit failure without throwing and releases single flight for a retry", async () => {
+  const states: ActionToastState[] = [];
+  const runAction = createActionToastRunner((status, message) => states.push({ status, message }));
+  const error = new Error("Synthetic offline failure");
+  await expect(
+    runAction(() => Promise.reject(error), { singleFlight: "save-draft", error: "Draft retained" }),
+  ).resolves.toEqual({ ok: false, error });
+  expect(states.at(-1)).toEqual({ status: "error", message: "Draft retained" });
+  await expect(
+    runAction(() => Promise.resolve(false), { singleFlight: "save-draft" }),
+  ).resolves.toEqual({ ok: true, value: false });
 });

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { walletDataHealth } from "@shared/data-quality";
 
-import type { WalletDataset } from "@shared/types";
+import type { WalletBackup, WalletDataset } from "@shared/types";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { ActionToast } from "@/components/ui/action-toast";
 import { useActionToast } from "@/lib/use-action-toast";
 
 interface Props {
-  getSnapshot: () => Promise<WalletDataset>;
+  getSnapshot: () => Promise<WalletDataset | WalletBackup>;
   onReview: () => void;
   onRecords: () => void;
   onCards: () => void;
@@ -29,22 +29,26 @@ export function DataHealthPanel({ getSnapshot, onReview, onRecords, onCards }: P
     setBusy(true);
     setError("");
     try {
-      await runAction(
-        async () => {
-          const snapshot = await getSnapshot();
-          setResult({
-            counts: walletDataHealth(snapshot),
-            checkedAt: new Date().toISOString(),
-          });
-        },
-        {
-          processing: "Checking complete history...",
-          success: "Data check complete",
-          error: "Could not check data",
-        },
-      );
-    } catch {
-      setError("Could not load complete history. Retry the check.");
+      {
+        const actionResult = await runAction(
+          async () => {
+            const snapshot = await getSnapshot();
+            setResult({
+              counts: walletDataHealth(snapshot),
+              checkedAt: new Date().toISOString(),
+            });
+          },
+          {
+            processing: "Checking complete history...",
+            success: "Data check complete",
+            error: "Could not check data",
+          },
+        );
+        if (!actionResult.ok) {
+          setError("Could not load complete history. Retry the check.");
+          return;
+        }
+      }
     } finally {
       running.current = false;
       setBusy(false);

@@ -6,6 +6,9 @@ import { RecordTemplateManager } from "./record-template-manager";
 
 import type { RecordTemplate, WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
+
+import { createActionToastRunner } from "@/lib/action-toast-runner";
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 const actions = vi.hoisted(() => ({
   add: vi.fn(),
   update: vi.fn(),
@@ -20,21 +23,22 @@ const accountId = "00000000-0000-4000-8000-000000000001",
   categoryId = "00000000-0000-4000-8000-000000000002",
   templateId = "00000000-0000-4000-8000-000000000003";
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    addRecordTemplate: actions.add,
-    updateRecordTemplate: actions.update,
-    deleteRecordTemplate: actions.remove,
-    getCompleteDataset: actions.read,
-    requestNewRecord: actions.request,
-    addRecord: actions.addRecord,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      addRecordTemplate: actions.add,
+      updateRecordTemplate: actions.update,
+      deleteRecordTemplate: actions.remove,
+      getCompleteDataset: actions.read,
+      requestNewRecord: actions.request,
+      addRecord: actions.addRecord,
+    }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => actions.navigate }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (work: () => Promise<unknown>) => work(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {
@@ -234,4 +238,10 @@ test("late save completion does not close another configuration draft", async ()
     "Otra plantilla",
   );
   expect(tree!.root.findByType("form")).toBeDefined();
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

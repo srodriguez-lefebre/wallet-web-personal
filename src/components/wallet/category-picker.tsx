@@ -14,6 +14,7 @@ interface CategoryPickerProps<T extends CategoryPickerItem> {
   value: string;
   onChange: (categoryId: string) => void;
   inputClassName: string;
+  id?: string;
   getLabel?: (category: T) => string;
 }
 
@@ -22,6 +23,7 @@ export function CategoryPicker<T extends CategoryPickerItem>({
   value,
   onChange,
   inputClassName,
+  id,
   getLabel = (category) => category.name,
 }: CategoryPickerProps<T>) {
   const selectedCategory = categories.find((category) => category.id === value);
@@ -34,6 +36,8 @@ export function CategoryPicker<T extends CategoryPickerItem>({
   return (
     <div className="space-y-2">
       <input
+        id={id}
+        aria-label={id ? undefined : "Search category"}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
         className={inputClassName}
