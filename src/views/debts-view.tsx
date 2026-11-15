@@ -1,3 +1,4 @@
+import { categoryMatchesKind } from "@shared/categories";
 import { currencySchema } from "@shared/schemas";
 import { FormEvent, useMemo, useState } from "react";
 import {
@@ -974,6 +975,7 @@ export function DebtsView() {
                 </label>
                 <CategoryField
                   categories={dataset.categories}
+                  kind={debtForm.direction === "receivable" ? "income" : "expense"}
                   value={debtForm.categoryId}
                   onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
                 />
@@ -985,6 +987,15 @@ export function DebtsView() {
                       setDebtForm({
                         ...debtForm,
                         direction,
+                        categoryId:
+                          dataset.categories.find(
+                            (entry) =>
+                              entry.id === debtForm.categoryId &&
+                              categoryMatchesKind(
+                                entry,
+                                direction === "receivable" ? "income" : "expense",
+                              ),
+                          )?.id ?? "",
                       })
                     }
                   />
@@ -1178,12 +1189,22 @@ export function DebtsView() {
                   <span>Direction</span>
                   <select
                     value={recurringForm.direction}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const direction = event.target.value as DebtDirection;
                       setRecurringForm({
                         ...recurringForm,
-                        direction: event.target.value as DebtDirection,
-                      })
-                    }
+                        direction,
+                        categoryId:
+                          dataset.categories.find(
+                            (entry) =>
+                              entry.id === recurringForm.categoryId &&
+                              categoryMatchesKind(
+                                entry,
+                                direction === "receivable" ? "income" : "expense",
+                              ),
+                          )?.id ?? "",
+                      });
+                    }}
                     className={inputClassName}
                   >
                     <option value="payable">I owe</option>
@@ -1241,6 +1262,7 @@ export function DebtsView() {
                 <CategoryField
                   className="md:col-span-2"
                   categories={dataset.categories}
+                  kind={recurringForm.direction === "receivable" ? "income" : "expense"}
                   value={recurringForm.categoryId}
                   onChange={(categoryId) =>
                     setRecurringForm({

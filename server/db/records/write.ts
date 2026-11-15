@@ -257,7 +257,7 @@ export async function updateRecord(db: Db, id: string, input: RecordPatch) {
   ) {
     const [category] = merged.categoryId
       ? await db
-          .select()
+          .select({ id: categories.id, name: categories.name, systemKey: categories.systemKey })
           .from(categories)
           .where(and(eq(categories.id, merged.categoryId), isNull(categories.deletedAt)))
       : [];

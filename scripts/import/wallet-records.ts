@@ -170,7 +170,11 @@ export async function importWalletRecords(
   for (const table of resetTables) queries.push(db.delete(table));
   queries.push(
     db.insert(schema.accounts).values(prepared.account),
-    db.insert(schema.categories).values(prepared.categories),
+    // List the existing columns explicitly so imports work on either side of 0024.
+    db.execute(sql`INSERT INTO ${schema.categories} (id, name, parent_id, color, icon, system_key)
+      SELECT id, name, "parentId", color, icon, "systemKey"
+      FROM jsonb_to_recordset(${JSON.stringify(prepared.categories)}::jsonb)
+        AS category(id uuid, name text, "parentId" uuid, color text, icon text, "systemKey" text)`),
   );
   if (prepared.tags.length) queries.push(db.insert(schema.tags).values(prepared.tags));
   queries.push(db.insert(schema.records).values(prepared.records));

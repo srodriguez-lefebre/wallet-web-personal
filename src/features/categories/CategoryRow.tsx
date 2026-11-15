@@ -70,6 +70,8 @@ export function CategoryRow({
           ) : (
             category.systemKey && <Badge variant="info">Ingestion</Badge>
           )}
+          {category.kind === "income" && <Badge variant="default">Income</Badge>}
+          {category.kind === "expense" && <Badge variant="default">Expense</Badge>}
           {category.archivedAt && <Badge variant="muted">Archived</Badge>}
         </div>
         {parentPath && (

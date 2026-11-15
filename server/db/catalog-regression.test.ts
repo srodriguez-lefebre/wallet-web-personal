@@ -824,3 +824,26 @@ test("a record racing a category merge either follows the merge or rejects the a
   expect(page.items).toHaveLength(write.status === "fulfilled" ? 1 : 0);
   await expect(repository.createRecord(db, recordInput())).rejects.toMatchObject({ status: 422 });
 });
+
+test("review can save a merchant correction before the kind migration", async () => {
+  const db = createDb();
+  await fixture.pool.query("ALTER TABLE categories DROP COLUMN kind");
+  try {
+    const record = await repository.createRecord(db, {
+      ...recordInput(),
+      paymentStatus: "needs_review",
+    });
+    await fixture.pool.query("UPDATE records SET import_merchant='Synthetic cafe' WHERE id=$1", [
+      record.id,
+    ]);
+    const updated = await repository.updateRecord(db, record.id, {
+      categoryId: childId,
+      merchantAutoApply: true,
+    });
+    expect(updated).toMatchObject({ categoryId: childId, merchantCorrection: { autoApply: true } });
+  } finally {
+    await fixture.pool.query(
+      "ALTER TABLE categories ADD COLUMN kind text NOT NULL DEFAULT 'both', ADD CONSTRAINT categories_kind_check CHECK (kind IN ('expense', 'income', 'both'))",
+    );
+  }
+});

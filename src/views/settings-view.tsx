@@ -614,6 +614,7 @@ export function SettingsView() {
                 />
                 <CategoryCombobox
                   label="Budget category"
+                  kind="expense"
                   enableCreation
                   categories={dataset.categories}
                   value={newBudgetCategoryId}

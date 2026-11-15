@@ -1,7 +1,11 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Check, ChevronDown, Plus } from "lucide-react";
 import { useContext, useId, useRef, useState } from "react";
-import { selectableCategory } from "@shared/categories";
+import {
+  categoryMatchesKind,
+  selectableCategory,
+  type MovementCategoryKind,
+} from "@shared/categories";
 
 import { useRecentCategoryPage } from "./use-recent-category-page";
 import { Input, controlClassName } from "./controls";
@@ -35,6 +39,7 @@ export interface CategoryComboboxProps {
   disabled?: boolean;
   filter?: (category: Category) => boolean;
   enableCreation?: boolean;
+  kind?: MovementCategoryKind;
 }
 
 export function CategoryCombobox({
@@ -50,6 +55,7 @@ export function CategoryCombobox({
   disabled,
   filter = selectableCategory,
   enableCreation = false,
+  kind,
 }: CategoryComboboxProps) {
   const requestCreation = useContext(CategoryCreationContext);
   const handoff = useRef(false);
@@ -66,7 +72,9 @@ export function CategoryCombobox({
   const term = normalizeCategoryName(query);
   const visible = pathEntries.filter(
     ({ category, path }) =>
-      filter(category) && (!term || normalizeCategoryName(path).includes(term)),
+      filter(category) &&
+      categoryMatchesKind(category, kind) &&
+      (!term || normalizeCategoryName(path).includes(term)),
   );
   const firstPage = useRecentCategoryPage(open && showRecent && !term);
   const recentIds = new Set(firstPage?.items.map(({ categoryId }) => categoryId));
@@ -113,7 +121,7 @@ export function CategoryCombobox({
     changeOpen(false);
     if (choice.create) {
       handoff.current = true;
-      requestCreation?.(query.trim(), onChange, () => trigger.current?.focus());
+      requestCreation?.(query.trim(), onChange, () => trigger.current?.focus(), kind);
     } else {
       onChange(choice.category?.id ?? "");
     }

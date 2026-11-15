@@ -1,9 +1,16 @@
+import type { CategoryKind } from "./schemas/categories.js";
 import type { Category } from "./types.js";
 
 export const protectedCategoryKeys = ["unknown_expense", "others", "category_eliminated"] as const;
 
 export function selectableCategory(category: Pick<Category, "systemKey">) {
   return category.systemKey !== "unknown_expense" && category.systemKey !== "category_eliminated";
+}
+
+export type MovementCategoryKind = Exclude<CategoryKind, "both">;
+
+export function categoryMatchesKind(category: Pick<Category, "kind">, kind?: MovementCategoryKind) {
+  return !kind || !category.kind || category.kind === "both" || category.kind === kind;
 }
 
 export function isCategoryOrDescendant(

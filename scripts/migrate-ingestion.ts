@@ -12,8 +12,9 @@ const tag = "0023_ingestion_policy_state";
 class MigrationInputError extends Error {}
 async function migrationPlan() {
   const manifest = await migrationManifest();
-  const entry = manifest.at(-1),
-    previous = manifest.at(-2);
+  const index = manifest.findIndex((entry) => entry.tag === tag);
+  const entry = manifest[index],
+    previous = manifest[index - 1];
   if (
     entry?.tag !== tag ||
     previous?.tag !== "0022_repository_baseline" ||
@@ -37,7 +38,7 @@ async function migrationPlan() {
     !expectedFunctions.has("wallet_assign_category_keys")
   )
     throw new MigrationInputError("Missing versioned ingestion functions");
-  return { entry, previous, source, expectedFunctions, countBefore: manifest.length - 1 };
+  return { entry, previous, source, expectedFunctions, countBefore: index };
 }
 
 const expectedColumns: Record<string, { type: string; nullable: string; default?: string }> = {
@@ -148,14 +149,10 @@ export async function inspectIngestionMigration(db: DbClient) {
     ].every((rows) => rows.length === 0);
   const additionsAbsent =
     columns.size === 0 && results[2].rows.length === 0 && results[3].rows.length === 0;
-  const readyToApply =
-    saneBaseline &&
-    baseline.pendingMigrations.length === 1 &&
-    baseline.pendingMigrations[0] === tag &&
-    additionsAbsent;
+  const readyToApply = saneBaseline && baseline.pendingMigrations[0] === tag && additionsAbsent;
   const alreadyApplied =
     saneBaseline &&
-    baseline.pendingMigrations.length === 0 &&
+    baseline.pendingMigrations.every((pending) => pending > tag) &&
     columnDrift.length === 0 &&
     indexDrift.length === 0 &&
     functionReady;

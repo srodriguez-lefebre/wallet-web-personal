@@ -70,17 +70,24 @@ export const accounts = pgTable("accounts", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
 
-export const categories = pgTable("categories", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
-  color: text("color").notNull(),
-  icon: text("icon").notNull(),
-  systemKey: text("system_key").unique(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-});
+export const categories = pgTable(
+  "categories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    kind: text("kind", { enum: ["expense", "income", "both"] })
+      .notNull()
+      .default("both"),
+    parentId: uuid("parent_id").references((): AnyPgColumn => categories.id),
+    color: text("color").notNull(),
+    icon: text("icon").notNull(),
+    systemKey: text("system_key").unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (table) => [check("categories_kind_check", sql`${table.kind} IN ('expense', 'income', 'both')`)],
+);
 
 export const recordTemplates = pgTable(
   "record_templates",

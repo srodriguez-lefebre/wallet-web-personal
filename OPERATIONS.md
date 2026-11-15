@@ -89,6 +89,26 @@ El perfil por defecto conserva el formato y las sesiones existentes. La baseline
 aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
 activar.
 
+## Tipos de categoría
+
+La migración aditiva `0024_category_kind` agrega `categories.kind` y lo
+inicializa según los movimientos vigentes y las compras de tarjeta. Una
+categoría usada exclusivamente para ingresos o gastos recibe ese tipo. Las
+categorías sin evidencia, de uso mixto o de sistema quedan en `both`.
+
+Antes de una aplicación autorizada, ejecutá `npm run db:preflight` con el
+archivo de entorno y la huella de endpoint verificados. El preflight debe
+reportar únicamente `0024_category_kind` pendiente y
+`categoryKindReadyToApply: true`. Desde ese mismo entorno verificado,
+`npm run db:migrate` aplica la migración registrada. Volvé a ejecutar el
+preflight y comprobá que ya no haya migraciones pendientes.
+
+La app desplegada sigue leyendo y editando categorías durante la transición.
+El campo de tipo aparece cuando la base tiene la columna. Los tipos limitan
+las opciones en los formularios. Los movimientos previos, los cálculos de
+reportes y la ingesta conservan sus reglas. Los respaldos nuevos incluyen
+el tipo y los anteriores se pueden restaurar con el valor por defecto.
+
 ## Funcionalidades nuevas
 
 - Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,

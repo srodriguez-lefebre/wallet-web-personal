@@ -1,4 +1,4 @@
-import { selectableCategory } from "@shared/categories";
+import { categoryMatchesKind, selectableCategory } from "@shared/categories";
 import { findExchangeRate } from "@shared/money";
 
 import type { RecordTemplate, WalletDataset, WalletRecord } from "@shared/types";
@@ -57,7 +57,12 @@ export function prepareTemplateDraft(
       : undefined;
   const categoryId =
     template.categoryId &&
-    dataset.categories.some((c) => c.id === template.categoryId && selectableCategory(c))
+    dataset.categories.some(
+      (c) =>
+        c.id === template.categoryId &&
+        selectableCategory(c) &&
+        categoryMatchesKind(c, template.type === "transfer" ? undefined : template.type),
+    )
       ? template.categoryId
       : undefined;
   const tagId =

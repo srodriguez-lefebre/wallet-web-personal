@@ -169,6 +169,13 @@
       "when": 1794715773249,
       "tag": "0023_ingestion_policy_state",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1794762000000,
+      "tag": "0024_category_kind",
+      "breakpoints": true
     }
   ]
 }

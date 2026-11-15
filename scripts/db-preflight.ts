@@ -110,6 +110,10 @@ export async function inspectMigrationState(db: DbClient) {
     db.execute(
       sql`SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid='settings'::regclass AND conname='settings_singleton_true'`,
     ),
+    db.execute(
+      sql`SELECT pg_get_constraintdef(oid) AS definition, convalidated
+        FROM pg_constraint WHERE conrelid='categories'::regclass AND conname='categories_kind_check'`,
+    ),
   ]);
   const columnDetails = new Map(
     results[2].rows.map((row) => [`${String(row.table_name)}.${String(row.column_name)}`, row]),
@@ -201,12 +205,36 @@ export async function inspectMigrationState(db: DbClient) {
     missingBaseline.length === Object.keys(baselineColumns).length &&
     missingIndexes.length === Object.keys(baselineIndexes).length &&
     !singletonConstraint;
+  const kindColumn = columnDetails.get("categories.kind");
+  const kindConstraint = results[7].rows[0];
+  const categoryKindSchemaReady =
+    kindColumn?.data_type === "text" &&
+    kindColumn.is_nullable === "NO" &&
+    kindColumn.column_default === "'both'::text" &&
+    kindConstraint?.convalidated === true &&
+    String(kindConstraint.definition).replace(/\s|[()]|::text/g, "") ===
+      "CHECKkind=ANYARRAY['expense','income','both']";
+  const categoryKindReadyToApply =
+    hasJournal &&
+    !unknownHashes &&
+    singletonReady &&
+    columns.has("goal_reservations.id") &&
+    pending.length === 1 &&
+    pending[0] === "0024_category_kind" &&
+    !columns.has("categories.kind") &&
+    !kindConstraint &&
+    missingBaseline.length === 0 &&
+    invalidColumns.length === 0 &&
+    missingIndexes.length === 0 &&
+    invalidIndexes.length === 0 &&
+    singletonConstraintReady;
   const complete =
     hasJournal &&
     !unknownHashes &&
     singletonReady &&
     columns.has("goal_reservations.id") &&
     pending.length === 0 &&
+    categoryKindSchemaReady &&
     missingBaseline.length === 0 &&
     invalidColumns.length === 0 &&
     missingIndexes.length === 0 &&
@@ -228,6 +256,8 @@ export async function inspectMigrationState(db: DbClient) {
     settingsSingletonReady: singletonReady,
     legacyReservationTablePresent: columns.has("goal_reservations.id"),
     hasOrphanDebts: results[4].rows[0]?.orphan_debts === true,
+    categoryKindReadyToApply,
+    categoryKindSchemaReady,
     baselineReadyToApply: ready,
     baselineAlreadyApplied: complete,
   };
@@ -264,7 +294,12 @@ async function main() {
       2,
     ),
   );
-  if (database !== configured || (!state.baselineReadyToApply && !state.baselineAlreadyApplied))
+  if (
+    database !== configured ||
+    (!state.baselineReadyToApply &&
+      !state.baselineAlreadyApplied &&
+      !state.categoryKindReadyToApply)
+  )
     process.exitCode = 1;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

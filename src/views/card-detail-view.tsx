@@ -390,6 +390,7 @@ function CardDetail({ cardId }: { cardId: string }) {
                 />
               </label>
               <CategoryField
+                kind="expense"
                 categories={dataset.categories}
                 value={categoryId}
                 onChange={setCategoryId}
