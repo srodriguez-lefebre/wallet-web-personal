@@ -87,7 +87,7 @@ límite de desbloqueo conserva cinco fallos por IP y agrega veinte globales por
 ventana de quince minutos. Un desbloqueo válido no borra el contador global.
 El perfil por defecto conserva el formato y las sesiones existentes. La baseline
 aditiva `0022` prepara el esquema; la revocación y nuevos soft deletes siguen sin
-activar según `REFACTOR-CHECKPOINT.md`.
+activar.
 
 ## Funcionalidades nuevas
 
@@ -135,9 +135,6 @@ sintética independiente. PGlite sigue cubriendo el sandbox. No se conecta Neon
 ni se leen credenciales productivas. Las pruebas de providers usan Testing
 Library con jsdom; otras pruebas de vistas conservan temporalmente el renderer.
 
-El alcance, compatibilidad y avance de los cinco paquetes están en
-[REFACTOR-CHECKPOINT.md](REFACTOR-CHECKPOINT.md).
-
 ## Setup Local
 
 Para reproducir el QA con datos completamente sintéticos, sin respaldo personal:
@@ -156,8 +153,6 @@ cambios sobreviven a una recarga del navegador y desaparecen al detenerlo:
 ```powershell
 curl.exe -X POST http://127.0.0.1:4175/__qa/stop
 ```
-
-El recorrido y los resultados del QA están en [QA-REVIEW.md](QA-REVIEW.md).
 
 Para pruebas aisladas con un respaldo personal, usar el sandbox:
 

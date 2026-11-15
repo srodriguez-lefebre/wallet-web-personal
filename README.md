@@ -360,5 +360,4 @@ con `X-Request-Id`, una ruta desconocida bajo `/api/` responde `404` JSON del ro
 
 El detalle operativo (sandbox con respaldo propio, importadores, preflight de migraciones,
 activación de sesiones revocables, despliegue del Apps Script) está en
-[OPERATIONS.md](OPERATIONS.md). Los libros de ejecución del refactor de noviembre de 2026 están en
-`REFACTOR-CHECKPOINT.md`, `PACKAGE4-*.md`, `PACKAGE5-*.md` y `QA-REVIEW.md`.
+[OPERATIONS.md](OPERATIONS.md).
