@@ -1,4 +1,5 @@
-import { formatMoney, calculateVisibleDebtSummary } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
+import { calculateVisibleDebtSummary } from "@shared/debts";
 
 import type { CurrencyCode } from "@shared/types";
 

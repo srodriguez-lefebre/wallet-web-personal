@@ -4,6 +4,7 @@ import { walletBackupSchema } from "../../shared/schemas.js";
 import { validationError } from "../api/errors.js";
 import { type DbClient } from "./client.js";
 import { getWalletDataset } from "./index.js";
+import { pgErrorDetails } from "./pg-error.js";
 import * as schema from "./schema.js";
 const collections: Array<[string, Table, string?]> = [
   ["accounts", schema.accounts],
@@ -13,6 +14,7 @@ const collections: Array<[string, Table, string?]> = [
   ["recordTemplates", schema.recordTemplates],
   ["merchants", schema.merchants],
   ["merchantAliases", schema.merchantAliases],
+  ["merchantCategoryRules", schema.merchantCategoryRules],
   ["goals", schema.goals],
   ["recurringDebts", schema.recurringDebts],
   ["debts", schema.debts],
@@ -42,13 +44,19 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     snapshot.merchants = currentMerchants.map((merchant) => {
       const oldCategory = currentCategories.find((category) => category.id === merchant.categoryId);
       const exact = dataset.categories.find((category) => category.id === merchant.categoryId);
+      const keyed = oldCategory?.systemKey
+        ? dataset.categories.filter((category) => category.systemKey === oldCategory.systemKey)
+        : [];
       const matches = exact
         ? [exact]
-        : dataset.categories.filter((category) =>
-            oldCategory?.systemKey
-              ? category.systemKey === oldCategory.systemKey
-              : oldCategory && normalize(category.name) === normalize(oldCategory.name),
-          );
+        : keyed.length
+          ? keyed
+          : dataset.categories.filter(
+              (category) =>
+                !category.systemKey &&
+                oldCategory &&
+                normalize(category.name) === normalize(oldCategory.name),
+            );
       if (matches.length !== 1)
         throw validationError(
           "The backup cannot preserve a merchant category; include merchant rules or restore matching categories",
@@ -58,6 +66,7 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     snapshot.merchantAliases = currentAliases;
   }
   const preserveIngestion = dataset.ingestionEvents === undefined;
+  const preservePolicies = dataset.merchantCategoryRules === undefined;
   const tables = [
     schema.recordTags,
     schema.recordGoals,
@@ -77,6 +86,17 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   queries.push(
     db.execute(sql`CREATE TEMP TABLE wallet_restore_session_state ON COMMIT DROP AS
     SELECT session_version,auth_attempts_pruned_at FROM settings`),
+  );
+  if (preservePolicies)
+    queries.push(
+      db.execute(
+        sql`CREATE TEMP TABLE wallet_restore_policies ON COMMIT DROP AS SELECT * FROM merchant_category_rules`,
+      ),
+    );
+  queries.push(
+    db.execute(
+      sql`CREATE TEMP TABLE wallet_restore_category_keys ON COMMIT DROP AS SELECT id,name,system_key FROM categories WHERE system_key IS NOT NULL`,
+    ),
   );
   if (preserveIngestion) {
     // Capture after acquiring the lock: preparation must not discard a concurrent
@@ -136,6 +156,31 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     queries.push(
       db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`),
     );
+  if (preservePolicies)
+    queries.push(
+      db.execute(sql`INSERT INTO merchant_category_rules SELECT * FROM wallet_restore_policies`),
+    );
+  queries.push(
+    db.execute(sql`UPDATE categories c SET system_key=previous.system_key
+    FROM wallet_restore_category_keys previous
+    WHERE c.id=previous.id AND c.system_key IS NULL
+    AND NOT EXISTS(SELECT 1 FROM categories existing WHERE existing.system_key=previous.system_key)`),
+    db.execute(sql`CREATE TEMP TABLE wallet_restore_key_matches ON COMMIT DROP AS
+      SELECT c.id,previous.system_key FROM categories c JOIN wallet_restore_category_keys previous
+      ON lower(btrim(normalize(c.name,NFKC)))=lower(btrim(normalize(previous.name,NFKC)))
+      WHERE c.system_key IS NULL AND c.deleted_at IS NULL
+      AND NOT EXISTS(SELECT 1 FROM categories existing WHERE existing.id=previous.id OR existing.system_key=previous.system_key)`),
+    db.execute(sql`DO $$ BEGIN
+      IF EXISTS(SELECT 1 FROM wallet_restore_key_matches GROUP BY id HAVING count(*)>1)
+      OR EXISTS(SELECT 1 FROM wallet_restore_key_matches GROUP BY system_key HAVING count(*)>1)
+      THEN RAISE EXCEPTION 'Ambiguous legacy category identity'
+      USING ERRCODE='23514', CONSTRAINT='wallet_restore_category_key_ambiguous'; END IF;
+      END $$`),
+    db.execute(
+      sql`UPDATE categories c SET system_key=matched.system_key FROM wallet_restore_key_matches matched WHERE c.id=matched.id`,
+    ),
+    db.execute(sql`SELECT wallet_assign_category_keys(true)`),
+  );
   insert(schema.settings, dataset.settings);
   queries.push(
     db.execute(sql`UPDATE settings SET
@@ -151,6 +196,14 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   }
   for (const goal of dataset.goals)
     for (const tagId of goal.tagIds) insert(schema.goalTags, { goalId: goal.id, tagId });
-  await db.batch(queries as unknown as Parameters<DbClient["batch"]>[0]);
+  try {
+    await db.batch(queries as unknown as Parameters<DbClient["batch"]>[0]);
+  } catch (error) {
+    if (pgErrorDetails(error).constraint === "wallet_restore_category_key_ambiguous")
+      throw validationError(
+        "Ambiguous category identities in backup; include explicit system keys or unique category names",
+      );
+    throw error;
+  }
   return getWalletDataset(db);
 }

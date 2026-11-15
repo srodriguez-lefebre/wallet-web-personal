@@ -1,6 +1,6 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { calculateVisibleDebtSummary } from "@shared/calculations";
+import { calculateVisibleDebtSummary } from "@shared/debts";
 import { mockWalletData } from "@shared/mock-data";
 
 import { DebtNetBadge } from "./debt-net-badge";
@@ -18,7 +18,9 @@ test("debt net distinguishes unknown amounts and partial known totals", async ()
     },
   ];
   await act(async () => {
-    tree = create(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
+    tree = create(
+      <DebtNetBadge summary={calculateVisibleDebtSummary(data, new Date())} currency="UYU" />,
+    );
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Net unavailable");
   expect(JSON.stringify(tree!.toJSON())).not.toContain("$ 0");
@@ -29,7 +31,9 @@ test("debt net distinguishes unknown amounts and partial known totals", async ()
     currency: "UYU",
   });
   await act(async () => {
-    tree!.update(<DebtNetBadge summary={calculateVisibleDebtSummary(data)} currency="UYU" />);
+    tree!.update(
+      <DebtNetBadge summary={calculateVisibleDebtSummary(data, new Date())} currency="UYU" />,
+    );
   });
   expect(JSON.stringify(tree!.toJSON())).toContain("Known net");
 });

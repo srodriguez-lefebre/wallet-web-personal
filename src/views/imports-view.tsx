@@ -1,8 +1,9 @@
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatMoney, recordsForDateRange } from "@shared/calculations";
-import { walletBackupSchema } from "@shared/wallet-backup-schema";
+import { formatMoney } from "@shared/money";
+import { recordsForDateRange } from "@shared/dates";
+import { walletBackupSchema } from "@shared/schemas";
 
 import type { WalletBackup } from "@shared/types";
 

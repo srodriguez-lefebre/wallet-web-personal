@@ -126,7 +126,7 @@ export function runMailAutomation(
       },
     },
   };
-  const source = ["EmailProcessors.gs", "Code.gs"]
+  const source = ["normalization.gs", "EmailProcessors.gs", "Code.gs"]
     .map((name) => readFileSync(new URL(`../../mail-service/${name}`, import.meta.url), "utf8"))
     .join("\n");
   try {

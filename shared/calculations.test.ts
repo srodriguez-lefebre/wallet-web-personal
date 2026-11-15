@@ -1,33 +1,38 @@
 import { describe, expect, it } from "vitest";
 
+import { applyDebtPayment, calculateVisibleDebtSummary } from "./debts.js";
 import {
-  applyDebtPayment,
   buildExpenseSequenceComparisonSeries,
-  calculateAccountBalanceAtDate,
-  calculateAccountBalanceAtMonthEnd,
-  calculateAccountBalances,
-  calculateBudgetProgress,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
   calculateCategoryIncome,
   calculateCategoryIncomeForDateRange,
-  calculateCreditCardCategoryUsage,
-  calculateCreditCardStatementBalance,
-  calculateCreditCardSummary,
   calculateEmergencyRunway,
-  calculateGoalProgress,
   calculateSavingsRate,
   calculateSummary,
   calculateSummaryForDateRange,
-  calculateVisibleDebtSummary,
+} from "./analytics.js";
+import {
+  calculateAccountBalanceAtDate,
+  calculateAccountBalanceAtMonthEnd,
+  calculateAccountBalances,
+} from "./balances.js";
+import { calculateBudgetProgress } from "./budgets.js";
+import {
+  calculateCreditCardCategoryUsage,
+  calculateCreditCardStatementBalance,
+  calculateCreditCardSummary,
   creditCardStatementStatusAfterPaymentChange,
+} from "./cards.js";
+import { calculateGoalProgress } from "./goals.js";
+import {
   dateKeysForRange,
-  formatMoney,
   groupRecordsByDay,
   recordsForDateRange,
   relativeDateRanges,
   relativeMonthKeys,
-} from "./calculations.js";
+} from "./dates.js";
+import { formatMoney } from "./money.js";
 import { mockWalletData } from "./mock-data.js";
 
 describe("wallet calculations", () => {
@@ -51,16 +56,18 @@ describe("wallet calculations", () => {
       isActive: true,
     };
     const dataset = { ...mockWalletData, records: [record], budgets: [budget], exchangeRates: [] };
-    expect(calculateBudgetProgress(dataset, "2026-06")[0]!.spent).toBe(10);
+    expect(calculateBudgetProgress(dataset, "2026-06", new Date())[0]!.spent).toBe(10);
     expect(
       calculateBudgetProgress(
         { ...dataset, budgets: [{ ...budget, currency: "UYU" }] },
         "2026-06",
+        new Date(),
       )[0]!.spent,
     ).toBe(400);
     const missing = calculateBudgetProgress(
       { ...dataset, budgets: [{ ...budget, currency: "EUR" }] },
       "2026-06",
+      new Date(),
     )[0]!;
     expect(Number.isNaN(missing.spent)).toBe(true);
     const goalDataset = {
@@ -82,11 +89,12 @@ describe("wallet calculations", () => {
       ],
       budgets: [{ ...budget, goalId: "goal-budget" }],
     };
-    expect(calculateBudgetProgress(goalDataset, "2026-06")[0]!.spent).toBe(2);
+    expect(calculateBudgetProgress(goalDataset, "2026-06", new Date())[0]!.spent).toBe(2);
     expect(
       calculateBudgetProgress(
         { ...goalDataset, budgets: [{ ...budget, goalId: "different-goal" }] },
         "2026-06",
+        new Date(),
       )[0]!.spent,
     ).toBe(0);
   });
@@ -113,20 +121,24 @@ describe("wallet calculations", () => {
         paymentStatus: "pending" as const,
       })),
     };
-    expect(calculateAccountBalances(dataset)).toEqual(calculateAccountBalances(validated));
+    expect(calculateAccountBalances(dataset, new Date())).toEqual(
+      calculateAccountBalances(validated, new Date()),
+    );
     expect(calculateAccountBalanceAtDate(dataset, "acc-bank", "2026-06-30")).toBe(
       calculateAccountBalanceAtDate(validated, "acc-bank", "2026-06-30"),
     );
-    expect(calculateSummary(dataset, "2026-06").expenses).toBe(35030);
-    expect(calculateCategoryExpenses(dataset, "2026-06")).toEqual(
-      calculateCategoryExpenses(validated, "2026-06"),
+    expect(calculateSummary(dataset, "2026-06", new Date()).expenses).toBe(35030);
+    expect(calculateCategoryExpenses(dataset, "2026-06", undefined, new Date())).toEqual(
+      calculateCategoryExpenses(validated, "2026-06", undefined, new Date()),
     );
-    expect(calculateCategoryIncome(dataset, "2026-06")).toEqual(
-      calculateCategoryIncome(validated, "2026-06"),
+    expect(calculateCategoryIncome(dataset, "2026-06", undefined, new Date())).toEqual(
+      calculateCategoryIncome(validated, "2026-06", undefined, new Date()),
     );
-    expect(calculateGoalProgress(dataset)).toEqual(calculateGoalProgress(validated));
-    expect(calculateBudgetProgress(dataset, "2026-06")).toEqual(
-      calculateBudgetProgress(validated, "2026-06"),
+    expect(calculateGoalProgress(dataset, new Date())).toEqual(
+      calculateGoalProgress(validated, new Date()),
+    );
+    expect(calculateBudgetProgress(dataset, "2026-06", new Date())).toEqual(
+      calculateBudgetProgress(validated, "2026-06", new Date()),
     );
   });
   it("never treats an unresolved foreign account amount as native money", () => {
@@ -152,17 +164,18 @@ describe("wallet calculations", () => {
     };
     const dataset = { ...base, records: [record] };
     expect(
-      calculateAccountBalances(dataset).find((item) => item.account.id === account.id)!
+      calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === account.id)!
         .totalBalance,
     ).toBe(account.initialBalance);
     expect(calculateAccountBalanceAtDate(dataset, account.id, "2026-06-30")).toBe(
       account.initialBalance,
     );
-    expect(calculateSummary(dataset, "2026-06").expenses).toBe(400);
+    expect(calculateSummary(dataset, "2026-06", new Date()).expenses).toBe(400);
     const converted = { ...base, records: [{ ...record, accountAmount: 400 }] };
     expect(
-      calculateAccountBalances(converted).find((item) => item.account.id === account.id)!
-        .totalBalance,
+      calculateAccountBalances(converted, new Date()).find(
+        (item) => item.account.id === account.id,
+      )!.totalBalance,
     ).toBe(account.initialBalance - 400);
     expect(calculateAccountBalanceAtDate(converted, account.id, "2026-06-30")).toBe(
       account.initialBalance - 400,
@@ -191,14 +204,14 @@ describe("wallet calculations", () => {
     };
     const dataset = { ...base, records: [record] };
     expect(
-      calculateAccountBalances(dataset).find((item) => item.account.id === account.id)!
+      calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === account.id)!
         .totalBalance,
     ).toBe(account.initialBalance - 400);
-    expect(calculateSummary(dataset, "2026-06").expenses).toBe(0);
-    expect(calculateCategoryExpenses(dataset, "2026-06")).toEqual([]);
+    expect(calculateSummary(dataset, "2026-06", new Date()).expenses).toBe(0);
+    expect(calculateCategoryExpenses(dataset, "2026-06", undefined, new Date())).toEqual([]);
   });
   it("calculates monthly income, expenses and cash flow without counting transfers", () => {
-    const summary = calculateSummary(mockWalletData, "2026-06");
+    const summary = calculateSummary(mockWalletData, "2026-06", new Date());
 
     expect(summary.income).toBe(55557);
     expect(summary.expenses).toBe(35030);
@@ -342,7 +355,7 @@ describe("wallet calculations", () => {
     expect(calculateSavingsRate(10_000, 7_500)).toBe(25);
     expect(calculateSavingsRate(0, 7_500)).toBe(0);
 
-    const runway = calculateEmergencyRunway(mockWalletData, "2026-06");
+    const runway = calculateEmergencyRunway(mockWalletData, "2026-06", undefined, new Date());
 
     expect(runway.expenseMonths).toEqual(["2026-03", "2026-04", "2026-05"]);
     expect(runway.freeBalance).toBeGreaterThan(0);
@@ -350,7 +363,7 @@ describe("wallet calculations", () => {
   });
 
   it("calculates account balances from initial balances and records", () => {
-    const balances = calculateAccountBalances(mockWalletData);
+    const balances = calculateAccountBalances(mockWalletData, new Date());
     const bank = balances.find((item) => item.account.id === "acc-bank")!;
     const hidden = balances.find((item) => item.account.id === "acc-hidden")!;
 
@@ -393,7 +406,7 @@ describe("wallet calculations", () => {
   it("filters and summarizes records by custom date range", () => {
     const range = { from: "2026-06-01", to: "2026-06-07" };
     const records = recordsForDateRange(mockWalletData.records, range);
-    const summary = calculateSummaryForDateRange(mockWalletData, range);
+    const summary = calculateSummaryForDateRange(mockWalletData, range, new Date());
     const categories = calculateCategoryExpensesForDateRange(mockWalletData, range);
 
     expect(records.map((record) => record.id)).toEqual([
@@ -409,7 +422,7 @@ describe("wallet calculations", () => {
   });
 
   it("groups expenses by category", () => {
-    const categories = calculateCategoryExpenses(mockWalletData, "2026-06");
+    const categories = calculateCategoryExpenses(mockWalletData, "2026-06", undefined, new Date());
     const housing = categories.find((item) => item.id === "cat-housing")!;
 
     expect(housing?.value).toBe(18500);
@@ -417,7 +430,12 @@ describe("wallet calculations", () => {
   });
 
   it("drills category expenses into direct children", () => {
-    const children = calculateCategoryExpenses(mockWalletData, "2026-06", "cat-groceries");
+    const children = calculateCategoryExpenses(
+      mockWalletData,
+      "2026-06",
+      "cat-groceries",
+      new Date(),
+    );
     expect(children.find((item) => item.id === "cat-groceries-supermarket")?.value).toBeGreaterThan(
       0,
     );
@@ -439,8 +457,8 @@ describe("wallet calculations", () => {
       paymentStatus: "cancelled",
     });
 
-    const categories = calculateCategoryIncome(dataset, "2026-06");
-    const children = calculateCategoryIncome(dataset, "2026-06", "cat-income");
+    const categories = calculateCategoryIncome(dataset, "2026-06", undefined, new Date());
+    const children = calculateCategoryIncome(dataset, "2026-06", "cat-income", new Date());
     const rangeCategories = calculateCategoryIncomeForDateRange(dataset, {
       from: "2026-06-01",
       to: "2026-06-07",
@@ -464,7 +482,7 @@ describe("wallet calculations", () => {
   });
 
   it("calculates goal progress with reserved money and directly associated expenses", () => {
-    const goals = calculateGoalProgress(mockWalletData);
+    const goals = calculateGoalProgress(mockWalletData, new Date());
     const trip = goals.find((item) => item.goal.id === "goal-trip")!;
 
     expect(trip?.reserved).toBe(15000);
@@ -484,7 +502,9 @@ describe("wallet calculations", () => {
         allocatedAmount: 3000,
       },
     ];
-    const trip = calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")!;
+    const trip = calculateGoalProgress(data, new Date()).find(
+      (item) => item.goal.id === "goal-trip",
+    )!;
 
     expect(trip?.spent).toBe(3000);
     expect(trip?.committed).toBe(18000);
@@ -507,15 +527,17 @@ describe("wallet calculations", () => {
         },
       ],
     });
-    expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(
-      7200,
-    );
+    expect(
+      calculateGoalProgress(data, new Date()).find((item) => item.goal.id === "goal-trip")?.spent,
+    ).toBe(7200);
     data.records[data.records.length - 1]!.amount = 20000;
-    expect(calculateGoalProgress(data).find((item) => item.goal.id === "goal-trip")?.spent).toBe(0);
+    expect(
+      calculateGoalProgress(data, new Date()).find((item) => item.goal.id === "goal-trip")?.spent,
+    ).toBe(0);
   });
 
   it("calculates budget status", () => {
-    const budgets = calculateBudgetProgress(mockWalletData, "2026-06");
+    const budgets = calculateBudgetProgress(mockWalletData, "2026-06", new Date());
     const general = budgets.find((item) => item.budget.id === "budget-general")!;
 
     expect(general?.spent).toBe(35030);
@@ -523,50 +545,53 @@ describe("wallet calculations", () => {
   });
 
   it("summarizes visible open debts with receivables as positive and payables as negative", () => {
-    const summary = calculateVisibleDebtSummary({
-      ...mockWalletData,
-      debts: [
-        {
-          id: "debt-receivable",
-          name: "Loan to friend",
-          direction: "receivable",
-          originalAmount: 10000,
-          pendingAmount: 6000,
-          currency: "UYU",
-          counterpartyName: "Friend",
-          categoryId: "cat-income",
-          status: "active",
-          isVisible: true,
-          startedAt: "2026-06-01T12:00:00.000Z",
-        },
-        {
-          id: "debt-payable",
-          name: "Mobile bill",
-          direction: "payable",
-          originalAmount: 1200,
-          pendingAmount: 1200,
-          currency: "UYU",
-          counterpartyName: "Carrier",
-          categoryId: "cat-shopping",
-          status: "active",
-          isVisible: true,
-          startedAt: "2026-06-03T12:00:00.000Z",
-        },
-        {
-          id: "debt-closed",
-          name: "Closed",
-          direction: "payable",
-          originalAmount: 500,
-          pendingAmount: 0,
-          currency: "UYU",
-          counterpartyName: "Store",
-          categoryId: "cat-shopping",
-          status: "paid",
-          isVisible: true,
-          startedAt: "2026-06-01T12:00:00.000Z",
-        },
-      ],
-    });
+    const summary = calculateVisibleDebtSummary(
+      {
+        ...mockWalletData,
+        debts: [
+          {
+            id: "debt-receivable",
+            name: "Loan to friend",
+            direction: "receivable",
+            originalAmount: 10000,
+            pendingAmount: 6000,
+            currency: "UYU",
+            counterpartyName: "Friend",
+            categoryId: "cat-income",
+            status: "active",
+            isVisible: true,
+            startedAt: "2026-06-01T12:00:00.000Z",
+          },
+          {
+            id: "debt-payable",
+            name: "Mobile bill",
+            direction: "payable",
+            originalAmount: 1200,
+            pendingAmount: 1200,
+            currency: "UYU",
+            counterpartyName: "Carrier",
+            categoryId: "cat-shopping",
+            status: "active",
+            isVisible: true,
+            startedAt: "2026-06-03T12:00:00.000Z",
+          },
+          {
+            id: "debt-closed",
+            name: "Closed",
+            direction: "payable",
+            originalAmount: 500,
+            pendingAmount: 0,
+            currency: "UYU",
+            counterpartyName: "Store",
+            categoryId: "cat-shopping",
+            status: "paid",
+            isVisible: true,
+            startedAt: "2026-06-01T12:00:00.000Z",
+          },
+        ],
+      },
+      new Date(),
+    );
 
     expect(summary.toCollect).toBe(6000);
     expect(summary.toPay).toBe(1200);
@@ -575,22 +600,25 @@ describe("wallet calculations", () => {
   });
 
   it("keeps amount-pending debts visible without adding them to totals", () => {
-    const summary = calculateVisibleDebtSummary({
-      ...mockWalletData,
-      debts: [
-        {
-          id: "debt-pending",
-          name: "Bill without amount",
-          direction: "payable",
-          currency: "UYU",
-          counterpartyName: "Carrier",
-          categoryId: "cat-shopping",
-          status: "active",
-          isVisible: true,
-          startedAt: "2026-06-03T12:00:00.000Z",
-        },
-      ],
-    });
+    const summary = calculateVisibleDebtSummary(
+      {
+        ...mockWalletData,
+        debts: [
+          {
+            id: "debt-pending",
+            name: "Bill without amount",
+            direction: "payable",
+            currency: "UYU",
+            counterpartyName: "Carrier",
+            categoryId: "cat-shopping",
+            status: "active",
+            isVisible: true,
+            startedAt: "2026-06-03T12:00:00.000Z",
+          },
+        ],
+      },
+      new Date(),
+    );
 
     expect(summary.amountPendingCount).toBe(1);
     expect(summary.toPay).toBe(0);
@@ -677,7 +705,7 @@ describe("wallet calculations", () => {
       ],
       creditCardPayments: [],
     };
-    const bankBefore = calculateAccountBalances(dataset).find(
+    const bankBefore = calculateAccountBalances(dataset, new Date()).find(
       (item) => item.account.id === "acc-bank",
     )?.balance;
     const summary = calculateCreditCardSummary(dataset, card, new Date("2026-06-25T12:00:00.000Z"));
@@ -690,7 +718,8 @@ describe("wallet calculations", () => {
     expect(summary.currentCycleEnd).toBe("2026-07-20");
     expect(summary.dueDate).toBe("2026-07-05");
     expect(
-      calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")?.balance,
+      calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === "acc-bank")
+        ?.balance,
     ).toBe(bankBefore);
   });
 
@@ -732,7 +761,8 @@ describe("wallet calculations", () => {
       creditCardPayments: [],
     };
     const before =
-      calculateAccountBalances(base).find((item) => item.account.id === "acc-bank")?.balance ?? 0;
+      calculateAccountBalances(base, new Date()).find((item) => item.account.id === "acc-bank")
+        ?.balance ?? 0;
     const dataset = {
       ...base,
       creditCardPayments: [
@@ -754,7 +784,8 @@ describe("wallet calculations", () => {
     expect(summary.outstanding).toEqual([{ currency: "USD", amount: 75 }]);
     expect(summary.statementDue).toEqual([{ currency: "USD", amount: 75 }]);
     expect(
-      calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")?.balance,
+      calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === "acc-bank")
+        ?.balance,
     ).toBe(before - 1000);
   });
 
@@ -846,7 +877,7 @@ describe("wallet calculations", () => {
       icon: "credit-card",
       isActive: true,
     };
-    const baseline = calculateAccountBalances(mockWalletData).find(
+    const baseline = calculateAccountBalances(mockWalletData, new Date()).find(
       (item) => item.account.id === "acc-bank",
     )!.balance;
     const dataset = {
@@ -890,7 +921,8 @@ describe("wallet calculations", () => {
       calculateCreditCardSummary(dataset, card, new Date("2026-06-12T12:00:00.000Z")).usedLimit,
     ).toBe(1_500);
     expect(
-      calculateAccountBalances(dataset).find((item) => item.account.id === "acc-bank")!.balance,
+      calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === "acc-bank")!
+        .balance,
     ).toBe(baseline - 1_500);
   });
 

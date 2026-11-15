@@ -549,3 +549,93 @@ y `GET /api/cards/:id/ledger` (movimientos, resúmenes, pagos y asignaciones de 
 tarjeta). Son lecturas sin actualización implícita de estados. El ledger usa un
 batch de sólo lectura y no devuelve movimientos globales de Wallet. Las rutas
 anteriores siguen disponibles para los consumidores existentes.
+
+## Correo y dominio compartido (paquete 5)
+
+Los parsers TypeScript de Itaú (crédito, débito, transferencia y pago) y Automation
+Wallet comparten la normalización con Apps Script. `npm run mail:build` genera
+`mail-service/normalization.gs`; `npm run mail:check` comprueba sus bytes en CI.
+Copiar los tres archivos `.gs` versionados solamente después de verificar el backend
+desplegado y guardar un respaldo del proyecto correcto. El sandbox ejecuta esos
+archivos reales sin acceder a Gmail. No hacen falta cambios de triggers, scopes,
+propiedades ni credenciales para esta actualización.
+
+La migración aditiva `0023_ingestion_policy_state` agrega políticas de categoría y
+estado operativo de proveedores. Las políticas usan `systemKey`; los aliases y las
+correcciones se buscan en SQL. Se conservan los aliases únicos del catálogo manual y
+aprendido: las políticas de fallback tienen su propia colección en el backup.
+El backfill asigna claves sólo a categorías canónicas no ambiguas, sin cambiar sus
+nombres, padres, asignaciones manuales ni movimientos. Renombrar una categoría
+conserva la clasificación. Un procesador sin comercio identificable y una cuenta
+bancaria sin mapear quedan en Needs review.
+La identidad por clave prevalece sobre el nombre visible, incluso si una categoría
+válida se renombra como «Others»; las claves de revisión o eliminación nunca
+confirman una clasificación. Los sufijos bancarios conocidos de procesadores se
+guardan como políticas SQL y no inventan el comercio subyacente.
+
+Al restaurar un backup antiguo sin claves se conservan primero las identidades
+existentes por ID o nombre inequívoco; la misma rutina SQL del backfill completa
+las correspondencias canónicas. Las claves explícitas prevalecen. Una identidad
+ambigua rechaza toda la restauración y conserva la base anterior.
+
+OpenAI dispone de 10 segundos por llamada y Frankfurter v2 de 4, incluida la lectura
+de la respuesta. Tres fallos consecutivos abren un circuito persistente durante
+cinco minutos; sólo una llamada prueba su recuperación. Una respuesta tardía no
+puede cerrar un circuito más nuevo. Se prefieren las cotizaciones almacenadas;
+una respuesta externa debe coincidir con el par solicitado, tener una fecha válida
+no posterior a la operación y una tasa finita positiva. La disponibilidad de UYU y
+ARS está documentada en el [catálogo de Frankfurter](https://frankfurter.dev/currencies/).
+La función consolidada mantiene sus rewrites y tiene `maxDuration: 60`.
+La poda de metadatos tiene una marca persistente y se ejecuta como máximo una vez
+por hora. Los circuitos y esa marca sobreviven a la restauración financiera; no
+contienen datos financieros ni se importan desde un JSON.
+
+Antes de desplegar el código que lee 0023, cotejar la huella del endpoint con un
+origen independiente, verificar el journal 0000–0022 y los hashes históricos
+permitidos, y probar la migración y el restore con datos sintéticos. No usar
+bootstrap ni copiar registros productivos para esta verificación. Aplicar el
+DDL y su entrada de journal en una transacción. Recuperación: rollback del código
+conservando las tablas, índices y claves agregadas; no ejecutar un down destructivo.
+Una versión anterior puede tratar las nuevas claves como categorías protegidas
+hasta volver al código actual. El checkpoint del paquete registra si la migración
+real y el despliegue ya fueron verificados.
+
+El comando de este rollout verifica el destino y aplica únicamente 0023 en un batch
+Neon HTTP, con lock, comprobación del predecesor y una entrada nueva de journal.
+Sin `--apply` sólo inspecciona metadatos. Una respuesta perdida se comprueba mediante
+el esquema y el journal antes de informar éxito; el comando repetido no reproduce
+el DDL ya confirmado. Las referencias históricas de deuda se conservan sin activar FK.
+
+```powershell
+npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada>
+npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada> --apply
+```
+
+Los cálculos viven en `dates`, `money`, `balances`, `cards`, `debts`, `analytics`,
+`categories`, `goals` y `budgets`; reciben un reloj explícito cuando lo necesitan.
+`calculateAccountBalances(dataset, now, cutoff?)` comparte el cálculo corriente e
+histórico, incluido el ledger de reservas. Los esquemas están separados por entidad
+y `shared/types.ts` infiere sus tipos de Zod. Los patches conservan la semántica de
+limpiar campos mediante `null`.
+
+Los importadores se ejecutan con `tsx` mediante npm y usan `process.loadEnvFile`:
+
+```powershell
+npm run db:import-wallet-records -- ruta/al/archivo.csv
+npm run db:import-merchant-rules -- ruta/al/catalogo.json
+```
+
+También admiten `WALLET_RECORDS_PATH`, `WALLET_MERCHANT_RULES_PATH` y un archivo de
+entorno explícito en `WALLET_IMPORT_ENV_FILE`. El catálogo admite cualquier cantidad
+positiva de reglas validadas y resuelve categorías por claves estables. No hay una
+ruta personal predeterminada. Cada importación reemplaza sus colecciones en un único
+batch con locks; una falla tardía revierte todo. El CSV se valida antes de escribir,
+conserva salarios iguales en fechas distintas y exige una referencia UYU válida
+para moneda extranjera. Las transferencias requieren el importador API con cuentas
+origen y destino explícitas. Las referencias de otros módulos que impidan un reset
+provocan rollback; no se borran para forzar la importación. Respaldar antes de una
+importación solicitada expresamente; estos scripts no se ejecutan como parte del
+despliegue ni de las pruebas contra producción.
+Si se pierde la respuesta HTTP, el resultado del importador queda sin confirmar:
+inspeccionar la base antes de repetir el reemplazo. Un error de transporte no
+demuestra que la transacción haya revertido.

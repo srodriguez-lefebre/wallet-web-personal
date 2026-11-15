@@ -1,5 +1,5 @@
 import { currencySchema } from "@shared/schemas";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { paymentStatusLabels, paymentTypeLabels, recordTypeLabels } from "@shared/constants";
 import { findExchangeRate } from "@shared/money";
 import { Copy, Edit3, Plus, Save, Trash2, X } from "lucide-react";

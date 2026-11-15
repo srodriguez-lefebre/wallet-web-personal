@@ -1,7 +1,7 @@
 import { ArrowLeft, Landmark, TrendingDown, TrendingUp } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useRef, useState, type FormEvent } from "react";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { investmentTypeLabels } from "@shared/constants";
 import { investmentPatchSchema } from "@shared/schemas";
 

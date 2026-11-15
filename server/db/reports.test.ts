@@ -7,18 +7,20 @@ import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.
 import {
   buildExpenseComparisonSeries,
   buildExpenseSequenceComparisonSeries,
-  calculateBudgetProgress,
   calculateMonthlySeries,
   calculateSummary,
   calculateSummaryForDateRange,
   calculateEmergencyRunway,
   calculateCategoryExpenses,
   calculateCategoryExpensesForDateRange,
+} from "../../shared/analytics.js";
+import { calculateBudgetProgress } from "../../shared/budgets.js";
+import {
   dateRangeForMonth,
   recentMonthKeys,
   relativeDateRanges,
   relativeMonthKeys,
-} from "../../shared/calculations.js";
+} from "../../shared/dates.js";
 import { calculateMerchantSpending } from "../../shared/merchant-analytics.js";
 import {
   buildSavingsRecommendations,
@@ -124,23 +126,27 @@ test.each([undefined, bank, hidden])(
       buildExpenseSequenceComparisonSeries(data, periods),
     );
     expect(result.monthlySeries).toEqual(
-      calculateMonthlySeries(data, recentMonthKeys(data.records, "2026-04", 6).reverse()),
+      calculateMonthlySeries(
+        data,
+        recentMonthKeys(data.records, "2026-04", 6).reverse(),
+        new Date(),
+      ),
     );
     expect(result.merchants).toEqual(
       calculateMerchantSpending(data.records, dateRangeForMonth("2026-04")),
     );
     expect(result.previousTotals).toMatchObject({
       income: 0,
-      expenses: calculateSummary(data, "2026-03").expenses,
+      expenses: calculateSummary(data, "2026-03", new Date()).expenses,
     });
     expect(result.currentMonthTotals).toMatchObject({
-      income: calculateSummary(data, "2026-04").income,
-      expenses: calculateSummary(data, "2026-04").expenses,
+      income: calculateSummary(data, "2026-04", new Date()).income,
+      expenses: calculateSummary(data, "2026-04", new Date()).expenses,
     });
     expect(result.averageMonthlyExpenses).toBeCloseTo(
-      (calculateSummary(data, "2026-01").expenses +
-        calculateSummary(data, "2026-02").expenses +
-        calculateSummary(data, "2026-03").expenses) /
+      (calculateSummary(data, "2026-01", new Date()).expenses +
+        calculateSummary(data, "2026-02", new Date()).expenses +
+        calculateSummary(data, "2026-03", new Date()).expenses) /
         3,
     );
     expect(result).not.toHaveProperty("records");
@@ -164,7 +170,7 @@ test("custom periods retain three equal calendar ranges and cumulative expense o
 });
 test("budget conversions preserve historical bridge rates and unresolved frozen primary values", async () => {
   const data = await scoped();
-  const expected = calculateBudgetProgress(data, "2026-04");
+  const expected = calculateBudgetProgress(data, "2026-04", new Date());
   const result = await getAnalyticsSummary(createDb(), {
     from: "2026-04-01",
     to: "2026-04-30",
@@ -303,23 +309,25 @@ test.each([undefined, bank, hidden])(
       const view = buildReportViewModel(reference, balances, totals, details, query, now);
       const expected =
         selection.periodMode === "month"
-          ? calculateSummary(dataset, "2026-04")
-          : calculateSummaryForDateRange(dataset, selection);
+          ? calculateSummary(dataset, "2026-04", new Date())
+          : calculateSummaryForDateRange(dataset, selection, new Date());
       expect(view.summary).toEqual(expected);
       expect(view.emergencyRunway).toEqual(
         calculateEmergencyRunway(
           dataset,
           selection.periodMode === "month" ? "2026-04" : selection.to.slice(0, 7),
+          undefined,
+          new Date(),
         ),
       );
-      expect(view.allowedDaily).toBe(calculateAllowedDailySpend(dataset));
+      expect(view.allowedDaily).toBe(calculateAllowedDailySpend(dataset, new Date()));
       expect(view.projection).toBe(
-        calculateEndOfMonthProjection(dataset, expected.dailyAverageExpense),
+        calculateEndOfMonthProjection(dataset, expected.dailyAverageExpense, new Date()),
       );
-      expect(view.recommendations).toEqual(buildSavingsRecommendations(dataset));
+      expect(view.recommendations).toEqual(buildSavingsRecommendations(dataset, new Date()));
       expect(categoryBreakdown(totals, "expense")).toEqual(
         selection.periodMode === "month"
-          ? calculateCategoryExpenses(dataset, "2026-04")
+          ? calculateCategoryExpenses(dataset, "2026-04", undefined, new Date())
           : calculateCategoryExpensesForDateRange(dataset, selection),
       );
       expect(view).not.toHaveProperty("records");

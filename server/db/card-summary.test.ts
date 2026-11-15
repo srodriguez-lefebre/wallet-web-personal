@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { calculateCreditCardSummary } from "../../shared/calculations.js";
+import { calculateCreditCardSummary } from "../../shared/cards.js";
 import { getCreditCardSummary } from "./cards/summary.js";
 import { createDb } from "./client.js";
 import { getWalletDataset } from "./dataset.js";

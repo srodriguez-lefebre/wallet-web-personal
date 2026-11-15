@@ -39,6 +39,7 @@ export async function inferCategoryWithOpenAi(
   merchantRaw: string,
   categories: CategoryOption[],
   onDiagnostic?: (diagnostic: CategoryInferenceDiagnostic) => void,
+  context?: { signal?: AbortSignal; budgetMs: number },
 ) {
   const apiKey = process.env.OPENAI_API_KEY;
   const model = process.env.OPENAI_MODEL?.trim() || "gpt-5-nano";
@@ -99,7 +100,7 @@ export async function inferCategoryWithOpenAi(
         },
         max_output_tokens: 2048,
       }),
-      signal: AbortSignal.timeout(30_000),
+      signal: context?.signal ?? AbortSignal.timeout(Math.min(context?.budgetMs ?? 10_000, 10_000)),
     });
     details.httpStatus = response.status;
     details.requestId = response.headers.get("x-request-id") ?? undefined;

@@ -30,10 +30,10 @@ beforeEach(async () => {
   vi.restoreAllMocks();
   await fixture.pool.query("TRUNCATE accounts,categories,credit_cards,settings CASCADE");
   for (const [id, name, systemKey] of [
-    [taxiId, "Taxi", null],
-    [publicId, "Public transport", null],
-    [foodId, "Restaurant, fast-food", null],
-    [tvId, "TV, Streaming", null],
+    [taxiId, "Taxi", "taxi"],
+    [publicId, "Public transport", "public_transport"],
+    [foodId, "Restaurant, fast-food", "restaurants"],
+    [tvId, "TV, Streaming", "streaming"],
     [unknownId, "Unknown expense", "unknown_expense"],
   ]) {
     await fixture.pool.query(
@@ -263,7 +263,7 @@ test("HBO bank-domain descriptors get the specific TV category without GPT", asy
 test("a pañalera is shopping rather than a guessed bakery", async () => {
   const shoppingId = randomUUID();
   await fixture.pool.query(
-    "INSERT INTO categories(id,name,color,icon) VALUES($1,'Shopping','blue','bank')",
+    "INSERT INTO categories(id,name,color,icon,system_key) VALUES($1,'Shopping','blue','bank','shopping')",
     [shoppingId],
   );
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
@@ -282,7 +282,7 @@ test("insurance without an appropriate category stays reviewable instead of beco
 test("insurance category matching ignores letter case", async () => {
   const insuranceId = randomUUID();
   await fixture.pool.query(
-    "INSERT INTO categories(id,name,color,icon) VALUES($1,'insurance','blue','bank')",
+    "INSERT INTO categories(id,name,color,icon,system_key) VALUES($1,'insurance','blue','bank','insurance')",
     [insuranceId],
   );
   await processMailIngestion(createDb(), input("BANCO DE SEGUROS 98290"));

@@ -1,0 +1,113 @@
+export const walletImportCategories = [
+  { name: "Food & Drinks", color: "#14B8A6", icon: "utensils" },
+  { name: "Restaurant, fast-food", parent: "Food & Drinks", color: "#0F766E", icon: "chef-hat" },
+  { name: "Groceries", parent: "Food & Drinks", color: "#10B981", icon: "shopping-cart" },
+  {
+    name: "Frutas, verduras y saludables",
+    parent: "Food & Drinks",
+    color: "#22C55E",
+    icon: "apple",
+  },
+  { name: "Bar, cafe", parent: "Food & Drinks", color: "#A16207", icon: "coffee" },
+  { name: "Alcohol y previa", parent: "Food & Drinks", color: "#BE123C", icon: "wine" },
+  { name: "Barbacoa", parent: "Food & Drinks", color: "#DC2626", icon: "beef" },
+
+  { name: "Housing", color: "#F59E0B", icon: "home" },
+  { name: "Alquiler", parent: "Housing", color: "#D97706", icon: "key" },
+  { name: "Gastos Comunes", parent: "Housing", color: "#F97316", icon: "building-2" },
+  { name: "Luz", parent: "Housing", color: "#EAB308", icon: "lightbulb" },
+  { name: "Wifi", parent: "Housing", color: "#FBBF24", icon: "wifi" },
+  { name: "Maintenance, repairs", parent: "Housing", color: "#EA580C", icon: "wrench" },
+  { name: "Services", parent: "Housing", color: "#F59E0B", icon: "plug" },
+  { name: "Telephony, mobile phone", parent: "Housing", color: "#FDBA74", icon: "phone" },
+  { name: "Tributos", parent: "Housing", color: "#B45309", icon: "receipt-text" },
+
+  { name: "Transportation", color: "#64748B", icon: "bus" },
+  { name: "Taxi", parent: "Transportation", color: "#475569", icon: "car" },
+  { name: "Public transport", parent: "Transportation", color: "#64748B", icon: "train" },
+  { name: "Long distance", parent: "Transportation", color: "#94A3B8", icon: "plane" },
+  { name: "Service station", parent: "Transportation", color: "#475569", icon: "fuel" },
+  { name: "Parking", parent: "Transportation", color: "#94A3B8", icon: "parking-circle" },
+
+  { name: "Life & Entertainment", color: "#8B5CF6", icon: "sparkles" },
+  {
+    name: "Active sport, fitness",
+    parent: "Life & Entertainment",
+    color: "#7C3AED",
+    icon: "dumbbell",
+  },
+  {
+    name: "Books, audio, subscriptions",
+    parent: "Life & Entertainment",
+    color: "#6366F1",
+    icon: "book-open",
+  },
+  { name: "Charity, gifts", parent: "Life & Entertainment", color: "#EC4899", icon: "gift" },
+  {
+    name: "Culture, sport events",
+    parent: "Life & Entertainment",
+    color: "#A855F7",
+    icon: "ticket",
+  },
+  {
+    name: "Education, development",
+    parent: "Life & Entertainment",
+    color: "#4F46E5",
+    icon: "graduation-cap",
+  },
+  { name: "Entradas", parent: "Life & Entertainment", color: "#9333EA", icon: "ticket" },
+  { name: "Gifts, joy", parent: "Life & Entertainment", color: "#D946EF", icon: "gift" },
+  {
+    name: "Holiday, trips, hotels",
+    parent: "Life & Entertainment",
+    color: "#0EA5E9",
+    icon: "plane",
+  },
+  { name: "Salidas", parent: "Life & Entertainment", color: "#A855F7", icon: "sparkles" },
+  {
+    name: "Software, apps, games",
+    parent: "Life & Entertainment",
+    color: "#7C3AED",
+    icon: "gamepad-2",
+  },
+  { name: "TV, Streaming", parent: "Life & Entertainment", color: "#6366F1", icon: "tv" },
+
+  { name: "Shopping", color: "#38BDF8", icon: "shopping-bag" },
+  { name: "Clothes & Footwear", parent: "Shopping", color: "#0EA5E9", icon: "shirt" },
+  { name: "Hardware", parent: "Shopping", color: "#0284C7", icon: "hammer" },
+
+  { name: "Health care, doctor", color: "#EF4444", icon: "heart-pulse" },
+  {
+    name: "Drug-store, chemist",
+    parent: "Health care, doctor",
+    color: "#F87171",
+    icon: "stethoscope",
+  },
+  { name: "Wellness, beauty", parent: "Health care, doctor", color: "#FB7185", icon: "scissors" },
+
+  { name: "Financial expenses", color: "#334155", icon: "landmark" },
+  { name: "Bank", parent: "Financial expenses", color: "#475569", icon: "landmark" },
+  { name: "Credito Volar", parent: "Financial expenses", color: "#64748B", icon: "credit-card" },
+  {
+    name: "Money services",
+    parent: "Financial expenses",
+    color: "#64748B",
+    icon: "circle-dollar-sign",
+  },
+
+  { name: "Income", color: "#22C55E", icon: "coins" },
+  { name: "Pago Amigo", parent: "Income", color: "#16A34A", icon: "wallet" },
+  { name: "Ayuda Familiar", parent: "Income", color: "#65A30D", icon: "gift" },
+  { name: "Parte mama", parent: "Income", color: "#84CC16", icon: "wallet" },
+  { name: "Parte papa", parent: "Income", color: "#4ADE80", icon: "wallet" },
+  { name: "Wage, invoices", parent: "Income", color: "#15803D", icon: "briefcase" },
+
+  { name: "Family", color: "#F472B6", icon: "baby" },
+  { name: "Fam", parent: "Family", color: "#EC4899", icon: "baby" },
+
+  { name: "Savings", color: "#0F766E", icon: "piggy-bank" },
+
+  { name: "Otros", color: "#71717A", icon: "tag" },
+  { name: "Unknown expense", parent: "Otros", color: "#A1A1AA", icon: "tag" },
+  { name: "Category eliminated", parent: "Otros", color: "#71717A", icon: "tag" },
+];

@@ -1,4 +1,5 @@
-import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
+import { calculateVisibleDebtSummary, isOpenDebt } from "@shared/debts";
+import { formatMoney } from "@shared/money";
 import { debtDirectionLabels, goalStatusLabels } from "@shared/constants";
 import {
   ArrowDownRight,
@@ -82,7 +83,7 @@ export function DashboardView() {
     (item) => item.goal.isVisible && item.goal.status !== "completed",
   );
   const visibleOpenDebts = dataset.debts.filter((debt) => debt.isVisible && isOpenDebt(debt));
-  const debtSummary = calculateVisibleDebtSummary(dataset);
+  const debtSummary = calculateVisibleDebtSummary(dataset, new Date());
   const recentRecords = recent.records.slice(0, 5);
   const hasBalances = accounts.metrics.data !== undefined;
   const { toast, runAction } = useActionToast();

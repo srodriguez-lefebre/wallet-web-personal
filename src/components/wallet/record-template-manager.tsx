@@ -1,7 +1,7 @@
 import { currencySchema, recordTemplateSchema } from "@shared/schemas";
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 
 import type { RecordTemplate, CurrencyCode, RecordType, PaymentType } from "@shared/types";
 

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { dateKey, dateRangeForMonth } from "@shared/calculations";
+import { dateKey, dateRangeForMonth } from "@shared/dates";
 import { useCallback, useMemo } from "react";
 
 import { useWalletReferenceQuery } from "./wallet-entities";

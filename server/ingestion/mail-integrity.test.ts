@@ -4,11 +4,9 @@ import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
 
 import { runMailAutomation } from "../../scripts/sandbox/mail.js";
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import {
-  calculateAccountBalances,
-  calculateCreditCardSummary,
-  calculateSummary,
-} from "../../shared/calculations.js";
+import { calculateAccountBalances } from "../../shared/balances.js";
+import { calculateCreditCardSummary } from "../../shared/cards.js";
+import { calculateSummary } from "../../shared/analytics.js";
 import { walletDataHealth } from "../../shared/data-quality.js";
 import { mailIngestionSchema, type MailIngestionInput } from "../../shared/schemas.js";
 import { createDb } from "../db/client.js";
@@ -145,12 +143,15 @@ test("missing primary FX remains reviewable while known bank and card currency a
     exchangeRateToPrimary: 0,
   });
   expect(dataset.creditCardRecords).toHaveLength(1);
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(450);
   expect(
-    calculateCreditCardSummary(dataset, dataset.creditCards.find((row) => row.id === cardId)!)
-      .usedLimit,
+    calculateCreditCardSummary(
+      dataset,
+      dataset.creditCards.find((row) => row.id === cardId)!,
+      new Date(),
+    ).usedLimit,
   ).toBe(50);
-  expect(calculateSummary(dataset, "2026-02").expenses).toBe(0);
+  expect(calculateSummary(dataset, "2026-02", new Date()).expenses).toBe(0);
   expect(walletDataHealth(dataset).conversions).toBe(1);
 });
 test("zero-amount notifications are ignored without financial writes", async () => {
@@ -267,7 +268,7 @@ test("debit notices debit the mapped bank account without matching a credit card
   });
   expect(dataset.records[0]!.creditCardId).toBeUndefined();
   expect(dataset.creditCardRecords).toHaveLength(0);
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(450);
 });
 test("a debit notice without an account mapping stays reviewable without guessing a bank account", async () => {
   const event = bankInput("debit");
@@ -279,7 +280,7 @@ test("a debit notice without an account mapping stays reviewable without guessin
     paymentStatus: "needs_review",
   });
   expect(dataset.records[0]!.accountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(500);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(500);
   expect(dataset.creditCardRecords).toHaveLength(0);
 });
 test("inactive bank mappings are not used for debit notices", async () => {
@@ -333,11 +334,11 @@ test("a positively mapped owned transfer moves both balances once without creati
     paymentStatus: "cleared",
   });
   const balances = new Map(
-    calculateAccountBalances(dataset).map((row) => [row.account.id, row.totalBalance]),
+    calculateAccountBalances(dataset, new Date()).map((row) => [row.account.id, row.totalBalance]),
   );
   expect(balances.get(accountId)).toBe(450);
   expect(balances.get(destinationAccountId)).toBe(150);
-  expect(calculateSummary(dataset, "2026-02").expenses).toBe(0);
+  expect(calculateSummary(dataset, "2026-02", new Date()).expenses).toBe(0);
   expect(dataset.creditCardRecords).toHaveLength(0);
 });
 test("owned transfers freeze source and destination amounts in their currencies", async () => {
@@ -376,10 +377,11 @@ test("missing destination FX preserves an owned transfer without inventing dolla
   });
   expect(dataset.records[0]!.destinationAmount).toBeUndefined();
   expect(
-    calculateAccountBalances(dataset).find((row) => row.account.id === destinationAccountId)
-      ?.totalBalance,
+    calculateAccountBalances(dataset, new Date()).find(
+      (row) => row.account.id === destinationAccountId,
+    )?.totalBalance,
   ).toBe(10);
-  expect(calculateSummary(dataset, "2026-02").expenses).toBe(0);
+  expect(calculateSummary(dataset, "2026-02", new Date()).expenses).toBe(0);
 });
 test("same-amount bank and unmatched credit notices remain distinct across sources", async () => {
   const credit = input();
@@ -403,7 +405,7 @@ test("external transfer destinations clear when the origin is mapped and retain 
   });
   expect(dataset.records[0]!.note).toContain("Destination: Test bank · 123456789012");
   expect(dataset.records[0]!.destinationAccountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(450);
   const metadata = (await fixture.pool.query("SELECT sanitized_payload FROM ingestion_events"))
     .rows[0].sanitized_payload;
   expect(JSON.stringify(metadata)).not.toContain("123456789012");
@@ -425,7 +427,7 @@ test("an unknown transfer origin stays under review regardless of the destinatio
     paymentStatus: "needs_review",
   });
   expect(dataset.records[0]!.accountId).toBeUndefined();
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(500);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(500);
 });
 test("the Itau mail flow preserves leading destination zeroes and records an outgoing transfer once", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
@@ -467,7 +469,7 @@ test("the Itau mail flow preserves leading destination zeroes and records an out
     paymentStatus: "cleared",
   });
   expect(dataset.records[0]!.note).toContain("Destination: Banco Itau · 0123929");
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(-130);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(-130);
 });
 test.each([true, false])(
   "Pago realizado records the payment, source and amount in notes without card activity (mapped: %s)",
@@ -516,7 +518,7 @@ test.each([true, false])(
     expect(dataset.records[0]!.note).toContain(
       "Payment to: SISTARBANC · UYU 1050.55 · from ****1440",
     );
-    expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBeCloseTo(
+    expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBeCloseTo(
       mapped ? -550.55 : 500,
       2,
     );
@@ -534,7 +536,7 @@ test("a known transfer origin still requires review when its primary currency co
     exchangeRateToPrimary: 0,
     paymentStatus: "needs_review",
   });
-  expect(calculateAccountBalances(dataset)[0]!.totalBalance).toBe(450);
+  expect(calculateAccountBalances(dataset, new Date())[0]!.totalBalance).toBe(450);
 });
 test("an invalid configured owned destination cannot become a third-party expense", async () => {
   const event = bankInput("transfer", randomUUID());

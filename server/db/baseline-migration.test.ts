@@ -70,6 +70,15 @@ test("the additive baseline rejects duplicate settings without losing rows, pres
   });
   await expect(pg.exec("INSERT INTO settings DEFAULT VALUES")).rejects.toThrow();
   await expect(pg.exec("INSERT INTO settings(singleton) VALUES(false)")).rejects.toThrow();
+  // The current reader requires subsequent additive schema, after the 0022 assertions above.
+  const folder = new URL("../../drizzle/migrations/", import.meta.url);
+  const journal = JSON.parse(await readFile(new URL("meta/_journal.json", folder), "utf8")) as {
+    entries: { tag: string }[];
+  };
+  for (const entry of journal.entries.filter((entry) => entry.tag > "0022_repository_baseline")) {
+    const source = await readFile(new URL(`${entry.tag}.sql`, folder), "utf8");
+    await pg.transaction((tx) => tx.exec(source));
+  }
   const oldBackup = walletBackupSchema.parse({
     settings: settingsSchema.parse({
       primaryCurrency: "UYU",

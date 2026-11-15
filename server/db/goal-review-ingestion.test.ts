@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import { calculateCreditCardSummary } from "../../shared/calculations.js";
+import { calculateCreditCardSummary } from "../../shared/cards.js";
 import * as classification from "../ingestion/openai-category.js";
 import { processMailIngestion } from "../ingestion/process-mail-ingestion.js";
 import { createDb } from "./client.js";
@@ -94,7 +94,7 @@ test("unresolved automatic goal conversion preserves a known card purchase and i
     true,
   );
   expect(data.creditCardRecords).toHaveLength(1);
-  expect(calculateCreditCardSummary(data, data.creditCards[0]!).usedLimit).toBe(50);
+  expect(calculateCreditCardSummary(data, data.creditCards[0]!, new Date()).usedLimit).toBe(50);
   expect(data.goalReservations[0]!.amount).toBe(100);
   expect((await fixture.pool.query("select status from ingestion_events")).rows).toEqual([
     { status: "completed" },

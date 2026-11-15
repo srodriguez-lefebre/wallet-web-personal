@@ -74,7 +74,3 @@ export const debtStatusLabels: Record<DebtStatus, string> = {
   paid: "Paid",
   paused: "Paused",
 };
-
-export const primaryCurrency: CurrencyCode = "UYU";
-
-export const todayIso = "2026-06-15T12:00:00.000Z";

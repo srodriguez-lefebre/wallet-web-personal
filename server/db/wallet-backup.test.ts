@@ -88,6 +88,43 @@ async function archiveHistory() {
   await deleteGoal(createDb(), goalId);
   return record;
 }
+
+test("policies round-trip, legacy backups preserve policies, and restore cannot reset operational circuits", async () => {
+  const backup = await getWalletBackup(createDb());
+  expect(backup.merchantCategoryRules!.length).toBeGreaterThan(20);
+  await pg.query(
+    "INSERT INTO provider_state(name,failures,open_until,generation) VALUES('synthetic-provider',3,'2099-01-01',5) ON CONFLICT(name) DO UPDATE SET failures=3,generation=5",
+  );
+  await restoreWalletBackup(createDb(), backup);
+  expect((await getWalletBackup(createDb())).merchantCategoryRules).toEqual(
+    backup.merchantCategoryRules,
+  );
+  const legacy = { ...backup, merchantCategoryRules: undefined };
+  await restoreWalletBackup(createDb(), legacy);
+  expect((await getWalletBackup(createDb())).merchantCategoryRules).toEqual(
+    backup.merchantCategoryRules,
+  );
+  expect(
+    (
+      await pg.query(
+        "SELECT failures,generation FROM provider_state WHERE name='synthetic-provider'",
+      )
+    ).rows,
+  ).toEqual([{ failures: 3, generation: 5 }]);
+});
+
+test("a legacy backup cannot erase a known category identity needed by mail policies", async () => {
+  await pg.query("UPDATE categories SET system_key='shopping' WHERE id=$1", [categoryId]);
+  const backup = await getWalletBackup(createDb());
+  await restoreWalletBackup(createDb(), {
+    ...backup,
+    categories: backup.categories.map((category) => ({ ...category, systemKey: undefined })),
+  });
+  expect(
+    (await getWalletDataset(createDb())).categories.find((category) => category.id === categoryId)
+      ?.systemKey,
+  ).toBe("shopping");
+});
 test("complete backups preserve mail retry identities and duplicate lineage after restoration", async () => {
   const record = await createRecord(
     createDb(),

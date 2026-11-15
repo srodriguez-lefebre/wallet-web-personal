@@ -30,6 +30,7 @@
     "server",
     "shared",
     "scripts/**/*.ts",
-    "tailwind.config.ts"
+    "tailwind.config.ts",
+    "mail-service/**/*.ts"
   ]
 }

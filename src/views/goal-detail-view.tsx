@@ -1,4 +1,4 @@
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { goalStatusLabels } from "@shared/constants";
 import { calculateGoalFundingPlan } from "@shared/planning";
 import { ArrowLeft, CalendarDays, Check, Edit3, Flag, PiggyBank, ReceiptText } from "lucide-react";
@@ -73,7 +73,7 @@ function GoalDetail({ goalId }: { goalId: string }) {
   const reservations = dataset.goalReservations.filter(
     (reservation) => reservation.goalId === goalProgress.goal.id,
   );
-  const deadlineDays = calculateGoalFundingPlan(goalProgress).daysRemaining;
+  const deadlineDays = calculateGoalFundingPlan(goalProgress, new Date()).daysRemaining;
 
   async function saveGoal(patch: GoalPatch, closing = false) {
     if (mutationPending.current) return false;

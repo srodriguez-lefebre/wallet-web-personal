@@ -16,6 +16,8 @@ import {
   type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
+import { mailSources } from "../../shared/mail-normalization.js";
+
 import type { MerchantCorrection } from "../../shared/types.js";
 
 export const accountTypeEnum = pgEnum("account_type", [
@@ -152,6 +154,25 @@ export const merchantAliases = pgTable(
     merchantIdx: index("merchant_aliases_merchant_idx").on(table.merchantId),
   }),
 );
+
+/** Fallback/conditional policies are separate from manually maintained and learned aliases. */
+export const merchantCategoryRules = pgTable("merchant_category_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  normalizedAlias: text("normalized_alias").notNull().unique(),
+  categorySystemKey: text("category_system_key").notNull(),
+  priority: integer("priority").notNull().default(0),
+  overrideMerchant: text("override_merchant"),
+  overrideFromCategoryKey: text("override_from_category_key"),
+  reviewWhenMissing: boolean("review_when_missing").notNull().default(false),
+});
+
+/** Operational leases/circuits survive wallet restore and never contain financial data. */
+export const providerState = pgTable("provider_state", {
+  name: text("name").primaryKey(),
+  openUntil: timestamp("open_until", { withTimezone: true }),
+  failures: integer("failures").notNull().default(0),
+  generation: integer("generation").notNull().default(0),
+});
 
 export const tags = pgTable("tags", {
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -555,7 +576,7 @@ export const ingestionEvents = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     idempotencyKey: text("idempotency_key").notNull(),
-    source: text("source").notNull(),
+    source: text("source", { enum: mailSources }).notNull(),
     status: text("status").notNull().default("processing"),
     action: text("action"),
     fingerprint: text("fingerprint"),

@@ -2,7 +2,7 @@ import { currencySchema, investmentSchema } from "@shared/schemas";
 import { FormEvent, useRef, useState } from "react";
 import { Edit3, Eye, EyeOff, Landmark, Plus, ReceiptText, Save, Trash2, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { investmentTypeLabels } from "@shared/constants";
 import { summarizeInvestmentsByCurrency } from "@shared/planning";
 

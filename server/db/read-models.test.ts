@@ -4,14 +4,9 @@ import { neonConfig } from "@neondatabase/serverless";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import {
-  calculateAccountBalanceAtDate,
-  calculateAccountBalances,
-  calculateGoalProgress,
-  dateKeysForRange,
-  dateRangeForMonth,
-  relativeMonthKeys,
-} from "../../shared/calculations.js";
+import { calculateAccountBalanceAtDate, calculateAccountBalances } from "../../shared/balances.js";
+import { calculateGoalProgress } from "../../shared/goals.js";
+import { dateKeysForRange, dateRangeForMonth, relativeMonthKeys } from "../../shared/dates.js";
 import {
   accountBalancesFromMetrics,
   goalProgressFromMetrics,
@@ -142,7 +137,7 @@ afterAll(async () => {
 const wire = (value: number) => (Number.isFinite(value) ? value : null);
 test("account SQL aggregates preserve frozen transfers, review impact, refund-credit releases and unknown FX without history payloads", async () => {
   const dataset = await getWalletDataset(createDb());
-  const expected = calculateAccountBalances(dataset);
+  const expected = calculateAccountBalances(dataset, new Date());
   let calls = 0;
   const previous = neonConfig.fetchFunction!;
   neonConfig.fetchFunction = (input: string, init: RequestInit) => {
@@ -200,7 +195,7 @@ test("historical account balances use the viewer's calendar cutoff and the reser
 });
 test("goal SQL aggregates preserve allocated portions, frozen account/primary FX, inverse bridges and unresolved rates", async () => {
   const dataset = await getWalletDataset(createDb());
-  const expected = calculateGoalProgress(dataset);
+  const expected = calculateGoalProgress(dataset, new Date());
   const actual = await getGoalProgressMetrics(createDb(), now);
   const presented = goalProgressFromMetrics(dataset, actual);
   for (const row of expected) {
