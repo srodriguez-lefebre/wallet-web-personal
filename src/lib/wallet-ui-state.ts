@@ -71,10 +71,18 @@ export function walletUIReducer(state: WalletUIState, action: WalletUIAction): W
       };
     case "clear-filters":
       return { ...state, recordFilters: { type: "all" }, reviewReturnContext: null };
-    case "archive-filter":
-      return action.key === "categoryId" || state.recordFilters[action.key] === action.id
-        ? { ...state, recordFilters: { ...state.recordFilters, [action.key]: undefined } }
-        : state;
+    case "archive-filter": {
+      const clear = (filters: RecordFilters) =>
+        filters[action.key] === action.id ? { ...filters, [action.key]: undefined } : filters;
+      return {
+        ...state,
+        recordFilters: clear(state.recordFilters),
+        reviewReturnContext: state.reviewReturnContext && {
+          ...state.reviewReturnContext,
+          recordFilters: clear(state.reviewReturnContext.recordFilters),
+        },
+      };
+    }
     case "open-review":
       return {
         ...state,

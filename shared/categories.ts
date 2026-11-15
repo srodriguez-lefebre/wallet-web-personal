@@ -13,8 +13,10 @@ export function isCategoryOrDescendant(
 ) {
   if (categoryId === selectedCategoryId) return true;
 
+  const visited = new Set<string>();
   let current = categories.find((category) => category.id === categoryId);
-  while (current?.parentId) {
+  while (current?.parentId && !visited.has(current.id)) {
+    visited.add(current.id);
     if (current.parentId === selectedCategoryId) return true;
     current = categories.find((category) => category.id === current?.parentId);
   }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { categoryEntitySchema } from "./schemas/categories.js";
 import { walletDatasetSchema, walletBackupSchema } from "./schemas/dataset.js";
 import { accountSchema } from "./schemas/accounts.js";
 import { budgetSchema } from "./schemas/budgets.js";
@@ -11,7 +12,6 @@ import {
   cardRecordResponseSchema,
   paymentAllocationResponseSchema,
 } from "./schemas/cards.js";
-import { categorySchema } from "./schemas/categories.js";
 import {
   currencySchema,
   uuidSchema,
@@ -60,10 +60,7 @@ export const moneyModelSchema = z.object({
 });
 export const dateRangeModelSchema = z.object({ from: z.string(), to: z.string() });
 export const accountModelSchema = accountSchema.extend({ id: uuidSchema });
-export const categoryModelSchema = categorySchema.extend({
-  id: uuidSchema,
-  systemKey: z.string().optional(),
-});
+export const categoryModelSchema = categoryEntitySchema;
 export const tagModelSchema = tagSchema.extend({ id: uuidSchema });
 export const recordGoalAssociationModelSchema = recordGoalAssociationSchema;
 export const walletRecordModelSchema = walletRecordResponseSchema.partial({

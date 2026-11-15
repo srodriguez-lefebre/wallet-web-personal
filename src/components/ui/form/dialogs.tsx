@@ -24,6 +24,7 @@ interface FormDialogProps {
   destructive?: boolean;
   className?: string;
   fieldsClassName?: string;
+  returnFocus?: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => Promise<unknown> | void;
 }
 export function FormDialog({
@@ -41,6 +42,7 @@ export function FormDialog({
   className,
   fieldsClassName = "grid gap-4 md:grid-cols-2",
   onSubmit,
+  returnFocus,
 }: FormDialogProps) {
   return (
     <Dialog
@@ -51,6 +53,14 @@ export function FormDialog({
     >
       <DialogContent
         className={className}
+        onCloseAutoFocus={
+          returnFocus
+            ? (event) => {
+                event.preventDefault();
+                returnFocus();
+              }
+            : undefined
+        }
         onEscapeKeyDown={(event) => {
           if (busy) event.preventDefault();
         }}

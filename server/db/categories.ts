@@ -53,13 +53,17 @@ function categoryDetails(row: typeof categories.$inferSelect) {
   const category = mapCategory(row);
   return {
     ...category,
+    archivedAt: row.deletedAt?.toISOString() ?? null,
     isSystem: protectedCategoryKeys.some((key) => key === category.systemKey),
-    isSelectable: selectableCategory(category),
+    isSelectable: row.deletedAt === null && selectableCategory(category),
   };
 }
 
-export async function listCategories(db: Db) {
-  const rows = await db.select().from(categories).where(isNull(categories.deletedAt));
+export async function listCategories(db: Db, includeArchived = false) {
+  const rows = await db
+    .select()
+    .from(categories)
+    .where(includeArchived ? undefined : isNull(categories.deletedAt));
   return rows.map(categoryDetails);
 }
 

@@ -96,6 +96,10 @@ activar.
   rápidas. Buscar movimientos limpia filtros anteriores y abre todo el historial.
   La búsqueda ignora mayúsculas y acentos; los movimientos se buscan en Records
   mediante filtros paginados del servidor.
+- Gestión de categorías en `/settings/categories`: los contadores de uso incluyen
+  referencias directas de todas las tablas. La vista de confirmación suma los
+  contadores de todo el árbol. Las categorías archivadas se pueden consultar
+  con **Show archived** y aparecen en modo de solo lectura.
 - Plantillas: gestión en Configuración para guardar, editar, reutilizar y quitar
   configuraciones sin modificar el historial financiero. Los nombres son únicos
   sin distinguir mayúsculas ni espacios exteriores y se admiten hasta 100 plantillas.

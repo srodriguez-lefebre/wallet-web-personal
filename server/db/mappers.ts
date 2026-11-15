@@ -109,6 +109,7 @@ export function mapCategory(row: typeof categories.$inferSelect | undefined): Ca
     color: row.color,
     icon: row.icon,
     systemKey: nullToUndefined(row.systemKey),
+    createdAt: row.createdAt.toISOString(),
   };
 }
 

@@ -63,6 +63,7 @@ export function ReviewRecordActions({
               setRuleChoice(undefined);
             }}
             label="Review category"
+            enableCreation
             disabled={busy}
           />
         </div>

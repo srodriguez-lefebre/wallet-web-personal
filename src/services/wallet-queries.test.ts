@@ -340,6 +340,7 @@ test("renaming a category or tag refreshes active record search results", async 
         name: "Synthetic renamed category",
         color: "blue",
         icon: "tag",
+        archivedAt: null,
         isSystem: false,
         isSelectable: true,
       }),

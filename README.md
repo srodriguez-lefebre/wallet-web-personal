@@ -1,4 +1,4 @@
-﻿<p align="center">
+<p align="center">
   <img src="public/favicon.svg" width="72" alt="Wallet Web Personal" />
 </p>
 
@@ -156,6 +156,13 @@ meses anteriores y deja editar cada importe antes de guardarlo.
     <td><img src="assets/readme/data.webp" alt="Importación CSV, respaldo JSON y verificación de datos" /></td>
   </tr>
 </table>
+
+### Organizá tus categorías
+
+En Ajustes → Manage categories podés buscar en el árbol, revisar el uso de cada categoría y
+fusionar o archivar un grupo después de ver cuántas referencias se van a mover. Los formularios
+comparten un selector con búsqueda, teclado y categorías recientes. También podés crear una
+categoría sin salir del formulario.
 
 ### Tus datos entran y salen
 

@@ -11,7 +11,7 @@ import { found } from "./helpers.js";
 
 import type { HandlerMap } from "../handler-types.js";
 export const categoriesHandlers = {
-  "categories.list": (ctx) => listCategories(ctx.db),
+  "categories.list": (ctx, { query }) => listCategories(ctx.db, query.includeArchived === "true"),
   "categories.create": (ctx, { body }) => createCategory(ctx.db, body),
   "categories.patch": async (ctx, { params, body }) =>
     found(await updateCategory(ctx.db, params.id, body), "Category"),
