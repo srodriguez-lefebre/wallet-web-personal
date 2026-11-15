@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { isCategoryOrDescendant } from "@shared/categories";
+import { isCategoryOrDescendant, type MovementCategoryKind } from "@shared/categories";
 
 import type { CategoryPatch } from "@shared/schemas";
 import type { Category } from "@shared/types";
@@ -32,6 +32,7 @@ export function useCategoryForm({
   category,
   parentId,
   initialName,
+  initialKind,
   onSave,
   onCreated,
   onClose,
@@ -40,12 +41,14 @@ export function useCategoryForm({
   category?: Category;
   parentId?: string;
   initialName?: string;
+  initialKind?: MovementCategoryKind;
   onSave: (draft: CategoryPatch) => Promise<string>;
   onCreated?: (id: string) => void;
   onClose: () => void;
 }) {
   const [draft, fields] = useDraftFields(() => ({
     name: category?.name ?? initialName ?? "",
+    kind: category?.kind ?? initialKind ?? ("both" as const),
     parentId: category?.parentId ?? parentId ?? "",
     color:
       category?.color ??
@@ -53,6 +56,8 @@ export function useCategoryForm({
       categoryColors[0]!,
     icon: category?.icon ?? "tag",
   }));
+  const kindEnabled =
+    category?.kind !== undefined || categories.some((entry) => entry.kind !== undefined);
   const [error, setError] = useState("");
   const { toast, runAction } = useActionToast();
   const name = draft.name.trim();
@@ -86,9 +91,15 @@ export function useCategoryForm({
         ...(name !== category.name && { name }),
         ...(draft.color !== category.color && { color: draft.color }),
         ...(draft.icon !== category.icon && { icon: draft.icon }),
+        ...(kindEnabled && draft.kind !== category.kind && { kind: draft.kind }),
         ...(draft.parentId !== (category.parentId ?? "") && { parentId: draft.parentId || null }),
       }
-    : { ...draft, name, parentId: draft.parentId || undefined };
+    : {
+        ...draft,
+        kind: kindEnabled ? draft.kind : undefined,
+        name,
+        parentId: draft.parentId || undefined,
+      };
   const canSubmit = Boolean(normalized && !duplicate && Object.keys(payload).length);
   async function submit() {
     if (!canSubmit) return;
@@ -109,6 +120,7 @@ export function useCategoryForm({
 
   return {
     draft,
+    kindEnabled,
     fields,
     setParent,
     setName,

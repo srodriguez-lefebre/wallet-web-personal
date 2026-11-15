@@ -1,5 +1,6 @@
 import { and, desc, isNotNull, isNull, sql } from "drizzle-orm";
 
+import { categoryReadColumns } from "./category-metadata.js";
 import { selectMerchantCorrections } from "../../shared/record-review.js";
 import { walletReferenceSchema } from "../../shared/reference-contract.js";
 import { recordReviewBaselineSchema } from "../../shared/schemas.js";
@@ -55,7 +56,7 @@ export async function getWalletReference(
     isolation: db.execute(sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY`),
     settings: db.select().from(settings).limit(1),
     accounts: db.select().from(accounts).where(isNull(accounts.deletedAt)),
-    categories: db.select().from(categories).where(isNull(categories.deletedAt)),
+    categories: db.select(categoryReadColumns).from(categories).where(isNull(categories.deletedAt)),
     tags: db.select().from(tags).where(isNull(tags.deletedAt)),
     cards: db.select().from(creditCards).orderBy(desc(creditCards.createdAt)),
     goals: db.select().from(goals).where(isNull(goals.deletedAt)),

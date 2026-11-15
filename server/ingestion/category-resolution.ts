@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
+import { categoryReadColumns } from "../db/category-metadata.js";
 import { isReviewCategory, normalizeBankMerchant } from "../../shared/record-review.js";
 import {
   categories,
@@ -67,7 +68,10 @@ export async function resolveCategory(
   const local = explicit ?? learned;
   // Classification may change, but the identity used to deduplicate must stay stable.
   const merchantName = local?.merchantName ?? merchantRaw;
-  const allCategories = await db.select().from(categories).where(isNull(categories.deletedAt));
+  const allCategories = await db
+    .select(categoryReadColumns)
+    .from(categories)
+    .where(isNull(categories.deletedAt));
   const fallback =
     allCategories.find((item) => item.systemKey === "unknown_expense") ??
     allCategories.find(

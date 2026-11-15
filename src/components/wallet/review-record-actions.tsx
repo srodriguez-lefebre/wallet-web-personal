@@ -1,3 +1,4 @@
+import { categoryMatchesKind } from "@shared/categories";
 import { useState } from "react";
 import { currentReviewIssues } from "@shared/record-review";
 
@@ -30,6 +31,14 @@ export function ReviewRecordActions({
       : undefined,
   );
   const [ruleChoice, setRuleChoice] = useState<boolean>();
+  const kind =
+    record.linkedCardRecordKind === "refund"
+      ? "expense"
+      : record.type === "transfer"
+        ? undefined
+        : record.type;
+  const matchingSuggestion =
+    suggestion && categoryMatchesKind(suggestion, kind) ? suggestion : undefined;
   const issues = currentReviewIssues(record, dataset);
   const needsCategory = record.type !== "transfer" && !selectedCategory;
   const currentNeedsCategory =
@@ -63,12 +72,13 @@ export function ReviewRecordActions({
               setRuleChoice(undefined);
             }}
             label="Review category"
+            kind={kind}
             enableCreation
             disabled={busy}
           />
         </div>
       )}
-      {suggestion && suggestion.id !== record.categoryId && (
+      {matchingSuggestion && matchingSuggestion.id !== record.categoryId && (
         <Button
           type="button"
           variant="outline"
@@ -76,11 +86,11 @@ export function ReviewRecordActions({
           disabled={busy}
           className="h-auto max-w-full whitespace-normal text-left"
           onClick={() => {
-            setSelectedCategory(suggestion.id);
+            setSelectedCategory(matchingSuggestion.id);
             setRuleChoice(undefined);
           }}
         >
-          Use suggestion · {suggestion.name}
+          Use suggestion · {matchingSuggestion.name}
         </Button>
       )}
       {canRemember && selectedCategory && (

@@ -3,10 +3,18 @@ import { protectedCategoryKeys } from "@shared/categories";
 
 import { categoryColors, useCategoryForm } from "./use-category-form";
 
+import type { MovementCategoryKind } from "@shared/categories";
 import type { CategoryPatch } from "@shared/schemas";
 import type { Category } from "@shared/types";
 
-import { Field, Input, ColorInput, CategoryField, FormDialog } from "@/components/ui/form";
+import {
+  Field,
+  Input,
+  ColorInput,
+  CategoryField,
+  FormDialog,
+  SegmentedControl,
+} from "@/components/ui/form";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { categoryIconOptions } from "@/components/wallet/category-icons";
 import { normalizeCategoryName } from "@/lib/category-options";
@@ -17,6 +25,7 @@ interface Props {
   category?: Category;
   parentId?: string;
   initialName?: string;
+  initialKind?: MovementCategoryKind;
   onSave: (draft: CategoryPatch) => Promise<string>;
   onCreated?: (id: string) => void;
   returnFocus?: () => void;
@@ -24,7 +33,7 @@ interface Props {
 }
 
 export function CategoryFormDialog(props: Props) {
-  const { category, categories, onClose } = props;
+  const { category, categories, initialKind, onClose } = props;
   const form = useCategoryForm(props);
   const nameId = useId();
   const [iconSearch, setIconSearch] = useState("");
@@ -80,6 +89,21 @@ export function CategoryFormDialog(props: Props) {
           <p className="text-xs text-muted-foreground">System categories have a fixed parent.</p>
         )}
       </div>
+      {form.kindEnabled && (
+        <div className="space-y-1 md:col-span-2">
+          <p className="text-sm font-medium">Type</p>
+          <SegmentedControl
+            label="Category type"
+            value={form.draft.kind}
+            onValueChange={form.fields.kind}
+            options={[
+              { value: "both", label: "Income and expenses" },
+              { value: "income", label: "Income", disabled: initialKind === "expense" },
+              { value: "expense", label: "Expenses", disabled: initialKind === "income" },
+            ]}
+          />
+        </div>
+      )}
       <div className="space-y-2 md:col-span-2">
         <div className="flex items-center gap-2">
           <CategoryIcon icon={form.draft.icon} color={form.draft.color} />

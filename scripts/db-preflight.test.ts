@@ -216,3 +216,44 @@ test.each(["timestamp", "bom", "new-migration"])(
     }
   },
 );
+
+test("the next category-kind migration can be planned without altering the target", async () => {
+  const entry = (await migrationManifest()).find(({ tag }) => tag === "0024_category_kind")!;
+  await fixture.pool.query("DELETE FROM drizzle.__drizzle_migrations WHERE hash=$1", [entry.hash]);
+  await fixture.pool.query("ALTER TABLE categories DROP COLUMN kind");
+  try {
+    expect(await inspectMigrationState(createDb())).toMatchObject({
+      pendingMigrations: [entry.tag],
+      categoryKindReadyToApply: true,
+      categoryKindSchemaReady: false,
+    });
+  } finally {
+    await fixture.pool.query(
+      await readFile(new URL(`../drizzle/migrations/${entry.tag}.sql`, import.meta.url), "utf8"),
+    );
+    await fixture.pool.query(
+      "INSERT INTO drizzle.__drizzle_migrations(hash,created_at) VALUES($1,$2)",
+      [entry.hash, entry.when],
+    );
+  }
+  expect(await inspectMigrationState(createDb())).toMatchObject({
+    pendingMigrations: [],
+    categoryKindReadyToApply: false,
+    categoryKindSchemaReady: true,
+  });
+});
+
+test("preflight detects category-kind constraint drift", async () => {
+  await fixture.pool.query("ALTER TABLE categories DROP CONSTRAINT categories_kind_check");
+  try {
+    expect(await inspectMigrationState(createDb())).toMatchObject({
+      pendingMigrations: [],
+      categoryKindSchemaReady: false,
+      baselineAlreadyApplied: false,
+    });
+  } finally {
+    await fixture.pool.query(
+      "ALTER TABLE categories ADD CONSTRAINT categories_kind_check CHECK (kind IN ('expense', 'income', 'both'))",
+    );
+  }
+});

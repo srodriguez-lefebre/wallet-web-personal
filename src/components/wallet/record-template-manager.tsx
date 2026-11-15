@@ -1,3 +1,4 @@
+import { categoryMatchesKind } from "@shared/categories";
 import { currencySchema, recordTemplateSchema } from "@shared/schemas";
 import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
@@ -321,6 +322,14 @@ export function RecordTemplateManager() {
                         ...current,
                         type,
                         creditCardId: undefined,
+                        categoryId:
+                          type === "transfer"
+                            ? undefined
+                            : dataset.categories.find(
+                                (entry) =>
+                                  entry.id === current.categoryId &&
+                                  categoryMatchesKind(entry, type),
+                              )?.id,
                         paymentType: type === "transfer" ? "transfer" : "debit",
                       }));
                     }}
@@ -398,6 +407,7 @@ export function RecordTemplateManager() {
                 ) : (
                   <CategoryField
                     label="Categoría de plantilla"
+                    kind={draft.type}
                     categories={dataset.categories}
                     value={draft.categoryId}
                     onChange={(value) => change("categoryId", value)}

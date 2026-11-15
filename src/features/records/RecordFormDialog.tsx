@@ -331,6 +331,7 @@ export function RecordFormDialog({ model }: { model: ReturnType<typeof useRecord
                 </label>
               ) : (
                 <CategoryField
+                  kind={editingLinkedRefund ? "expense" : type}
                   categories={categories}
                   value={categoryId}
                   onChange={setCategoryId}

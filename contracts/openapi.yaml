@@ -4633,6 +4633,12 @@ paths:
                           type: boolean
                         isSystem:
                           type: boolean
+                        kind:
+                          enum:
+                            - expense
+                            - income
+                            - both
+                          type: string
                         name:
                           minLength: 1
                           type: string
@@ -4698,6 +4704,12 @@ paths:
                 icon:
                   minLength: 1
                   type: string
+                kind:
+                  enum:
+                    - expense
+                    - income
+                    - both
+                  type: string
                 name:
                   minLength: 1
                   type: string
@@ -4745,6 +4757,12 @@ paths:
                         type: boolean
                       isSystem:
                         type: boolean
+                      kind:
+                        enum:
+                          - expense
+                          - income
+                          - both
+                        type: string
                       name:
                         minLength: 1
                         type: string
@@ -5024,6 +5042,12 @@ paths:
                 icon:
                   minLength: 1
                   type: string
+                kind:
+                  enum:
+                    - expense
+                    - income
+                    - both
+                  type: string
                 name:
                   minLength: 1
                   type: string
@@ -5069,6 +5093,12 @@ paths:
                         type: boolean
                       isSystem:
                         type: boolean
+                      kind:
+                        enum:
+                          - expense
+                          - income
+                          - both
+                        type: string
                       name:
                         minLength: 1
                         type: string
@@ -12297,6 +12327,12 @@ paths:
                               format: uuid
                               pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                               type: string
+                            kind:
+                              enum:
+                                - expense
+                                - income
+                                - both
+                              type: string
                             name:
                               minLength: 1
                               type: string
@@ -13646,6 +13682,12 @@ paths:
                             id:
                               format: uuid
                               pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            kind:
+                              enum:
+                                - expense
+                                - income
+                                - both
                               type: string
                             name:
                               minLength: 1
@@ -15424,6 +15466,12 @@ paths:
                                   format: uuid
                                   pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                                   type: string
+                                kind:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - both
+                                  type: string
                                 name:
                                   minLength: 1
                                   type: string
@@ -17163,6 +17211,12 @@ paths:
                                   format: uuid
                                   pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                                   type: string
+                                kind:
+                                  enum:
+                                    - expense
+                                    - income
+                                    - both
+                                  type: string
                                 name:
                                   minLength: 1
                                   type: string
@@ -18167,6 +18221,12 @@ paths:
                             id:
                               format: uuid
                               pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            kind:
+                              enum:
+                                - expense
+                                - income
+                                - both
                               type: string
                             name:
                               minLength: 1
@@ -19185,6 +19245,12 @@ paths:
                       id:
                         format: uuid
                         pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      kind:
+                        enum:
+                          - expense
+                          - income
+                          - both
                         type: string
                       name:
                         minLength: 1
@@ -20908,6 +20974,12 @@ paths:
                             id:
                               format: uuid
                               pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            kind:
+                              enum:
+                                - expense
+                                - income
+                                - both
                               type: string
                             name:
                               minLength: 1

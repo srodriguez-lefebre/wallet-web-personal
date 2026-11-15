@@ -2,7 +2,6 @@ import { splitImportNote } from "../../shared/record-review.js";
 import {
   accounts,
   budgets,
-  categories,
   creditCardPaymentAllocations,
   creditCardPayments,
   creditCardRecords,
@@ -22,6 +21,7 @@ import {
   tags,
 } from "./schema.js";
 
+import type { CategoryRow } from "./category-metadata.js";
 import type {
   Account,
   Budget,
@@ -100,7 +100,7 @@ export function mapAccount(row: typeof accounts.$inferSelect | undefined): Accou
   };
 }
 
-export function mapCategory(row: typeof categories.$inferSelect | undefined): Category {
+export function mapCategory(row: CategoryRow | undefined): Category {
   if (!row) throw new Error("Database mutation returned no row");
   return {
     id: row.id,
@@ -109,6 +109,7 @@ export function mapCategory(row: typeof categories.$inferSelect | undefined): Ca
     color: row.color,
     icon: row.icon,
     systemKey: nullToUndefined(row.systemKey),
+    kind: nullToUndefined(row.kind),
     createdAt: row.createdAt.toISOString(),
   };
 }

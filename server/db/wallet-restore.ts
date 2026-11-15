@@ -1,8 +1,9 @@
 import { getTableColumns, getTableName, sql, type Table } from "drizzle-orm";
 
 import { lockCategoryWrites } from "./category-references.js";
+import { categoryKindAvailable, categoryReadColumns } from "./category-metadata.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
-import { validationError } from "../api/errors.js";
+import { conflictError, validationError } from "../api/errors.js";
 import { type DbClient } from "./client.js";
 import { getWalletDataset } from "./index.js";
 import { pgErrorDetails } from "./pg-error.js";
@@ -37,7 +38,7 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   const snapshot = dataset as unknown as Record<string, unknown>;
   if (dataset.merchants === undefined) {
     const [currentCategories, currentMerchants, currentAliases] = await db.batch([
-      db.select().from(schema.categories),
+      db.select(categoryReadColumns).from(schema.categories),
       db.select().from(schema.merchants),
       db.select().from(schema.merchantAliases),
     ]);
@@ -66,6 +67,11 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     });
     snapshot.merchantAliases = currentAliases;
   }
+  if (
+    dataset.categories.some(({ kind }) => kind !== undefined) &&
+    !(await categoryKindAvailable(db))
+  )
+    throw conflictError("Category types are available after the database migration");
   const preserveIngestion = dataset.ingestionEvents === undefined;
   const preservePolicies = dataset.merchantCategoryRules === undefined;
   const tables = [

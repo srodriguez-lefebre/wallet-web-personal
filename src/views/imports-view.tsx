@@ -1,4 +1,4 @@
-import { selectableCategory } from "@shared/categories";
+import { categoryMatchesKind, selectableCategory } from "@shared/categories";
 import { type FormEvent, useMemo, useRef, useState } from "react";
 import { Download, Upload } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -64,12 +64,24 @@ export function ImportsView() {
   const [backup, setBackup] = useState<WalletBackup | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const activeAccountId = accountId || dataset.accounts.find((a) => a.isActive)?.id || "";
-  const expenseCategoryId = expenseId || dataset.categories.find(selectableCategory)?.id || "";
+  const expenseCategoryId =
+    expenseId ||
+    dataset.categories.find(
+      (category) => selectableCategory(category) && categoryMatchesKind(category, "expense"),
+    )?.id ||
+    "";
   const incomeCategoryId =
     incomeId ||
-    dataset.categories.find((c) => selectableCategory(c) && c.name.toLowerCase() === "income")
-      ?.id ||
-    expenseCategoryId;
+    dataset.categories.find(
+      (c) =>
+        selectableCategory(c) &&
+        categoryMatchesKind(c, "income") &&
+        c.name.toLowerCase() === "income",
+    )?.id ||
+    dataset.categories.find(
+      (category) => selectableCategory(category) && categoryMatchesKind(category, "income"),
+    )?.id ||
+    "";
   const preview = useMemo(() => {
     try {
       return {
@@ -266,6 +278,7 @@ export function ImportsView() {
               </label>
               <CategoryField
                 label="Default expense category"
+                kind="expense"
                 disabled={busy}
                 categories={dataset.categories}
                 value={expenseCategoryId}
@@ -273,6 +286,7 @@ export function ImportsView() {
               />
               <CategoryField
                 label="Default income category"
+                kind="income"
                 disabled={busy}
                 categories={dataset.categories}
                 value={incomeCategoryId}

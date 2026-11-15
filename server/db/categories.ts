@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 
 import { lockCategoryWrites } from "./category-references.js";
+import { categoryReadColumns, type CategoryRow } from "./category-metadata.js";
+import { isPgError } from "./pg-error.js";
 import { protectedCategoryKeys, selectableCategory } from "../../shared/categories.js";
 import { conflictError, notFoundError, validationError } from "../api/errors.js";
 import { mapCategory } from "./mappers.js";
@@ -49,7 +51,7 @@ function missingParent(parentId: SQL) {
     SELECT 1 FROM ${categories} parent WHERE parent.id = ${parentId} AND parent.deleted_at IS NULL)`;
 }
 
-function categoryDetails(row: typeof categories.$inferSelect) {
+function categoryDetails(row: CategoryRow) {
   const category = mapCategory(row);
   return {
     ...category,
@@ -61,24 +63,37 @@ function categoryDetails(row: typeof categories.$inferSelect) {
 
 export async function listCategories(db: Db, includeArchived = false) {
   const rows = await db
-    .select()
+    .select(categoryReadColumns)
     .from(categories)
     .where(includeArchived ? undefined : isNull(categories.deletedAt));
   return rows.map(categoryDetails);
 }
 
+async function changeCategoryKind<T>(kind: NewCategory["kind"], write: Promise<T>) {
+  try {
+    return await write;
+  } catch (error) {
+    if (kind && isPgError(error, "42703"))
+      throw conflictError("Category types are available after the database migration");
+    throw error;
+  }
+}
+
 export async function createCategory(db: Db, input: NewCategory) {
   const id = randomUUID();
   const parentId = sql`${input.parentId ?? null}::uuid`;
-  const [, validation, result, rows] = await db.batch([
-    lockCategoryWrites(db),
-    db.execute<{ missing: boolean }>(sql`SELECT (${missingParent(parentId)}) AS missing`),
-    db.execute(sql`INSERT INTO ${categories} (id, name, parent_id, color, icon, system_key)
-      SELECT ${id}::uuid, ${input.name}, ${parentId}, ${input.color}, ${input.icon}, ${input.systemKey ?? null}
+  const [, validation, result, rows] = await changeCategoryKind(
+    input.kind,
+    db.batch([
+      lockCategoryWrites(db),
+      db.execute<{ missing: boolean }>(sql`SELECT (${missingParent(parentId)}) AS missing`),
+      db.execute(sql`INSERT INTO ${categories} (id, name, parent_id, color, icon, system_key${input.kind ? sql`, kind` : sql.empty()})
+      SELECT ${id}::uuid, ${input.name}, ${parentId}, ${input.color}, ${input.icon}, ${input.systemKey ?? null}${input.kind ? sql`, ${input.kind}` : sql.empty()}
       WHERE NOT (${missingParent(parentId)}) AND NOT ${siblingExists(sql`${input.name}::text`, parentId, id)}
       RETURNING id`),
-    db.select().from(categories).where(eq(categories.id, id)),
-  ]);
+      db.select(categoryReadColumns).from(categories).where(eq(categories.id, id)),
+    ]),
+  );
   if (result.rows.length) return categoryDetails(rows[0]!);
   if (validation.rows[0]?.missing) throw validationError("Parent category does not exist");
   throw conflictError("A sibling category already has this name");
@@ -100,16 +115,20 @@ export async function updateCategory(db: Db, id: string, input: CategoryPatch) {
     WHEN ((${moved}) OR ${normalizedName(name)} <> ${normalizedName(sql`${categories.name}`)})
       AND ${siblingExists(name, parentId, id)} THEN 'duplicate'
     ELSE NULL END`;
-  const [, validity, rows] = await db.batch([
-    lockCategoryWrites(db),
-    db.select({ reason }).from(categories).where(current),
-    db
-      .update(categories)
-      .set({ ...input, updatedAt: new Date() })
-      .where(and(current, sql`(${reason}) IS NULL`))
-      .returning(),
-  ]);
-  if (rows[0]) return categoryDetails(rows[0]);
+  const [, validity, updated, rows] = await changeCategoryKind(
+    input.kind,
+    db.batch([
+      lockCategoryWrites(db),
+      db.select({ reason }).from(categories).where(current),
+      db
+        .update(categories)
+        .set({ ...input, updatedAt: new Date() })
+        .where(and(current, sql`(${reason}) IS NULL`))
+        .returning({ id: categories.id }),
+      db.select(categoryReadColumns).from(categories).where(current),
+    ]),
+  );
+  if (updated.length && rows[0]) return categoryDetails(rows[0]);
   switch (validity[0]?.reason) {
     case "protected":
       throw conflictError("System categories cannot be moved");

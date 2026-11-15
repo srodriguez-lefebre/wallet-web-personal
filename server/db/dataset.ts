@@ -1,5 +1,6 @@
 import { desc, isNull, sql } from "drizzle-orm";
 
+import { categoryReadColumns } from "./category-metadata.js";
 import { namedBatch } from "./batch.js";
 import { generateDueRecurringDebts } from "./debts.js";
 import { goalReservationBalancesQuery, mapGoalReservationBalance } from "./goals/ledger.js";
@@ -108,7 +109,7 @@ export async function getWalletDataset(
       .from(accounts)
       .where(options.includeArchived ? undefined : isNull(accounts.deletedAt)),
     categoryRows: db
-      .select()
+      .select(categoryReadColumns)
       .from(categories)
       .where(options.includeArchived ? undefined : isNull(categories.deletedAt)),
     tagRows: db

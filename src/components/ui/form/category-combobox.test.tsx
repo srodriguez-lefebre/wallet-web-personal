@@ -81,3 +81,18 @@ test("Tab leaves the picker and advances in a modal form", async () => {
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Note" })),
   );
 });
+
+test("movement type shows income and mixed categories while keeping pre-migration categories visible", () => {
+  const types = [
+    { ...root, id: "salary", name: "Salary", kind: "income" as const },
+    { ...root, id: "food", name: "Groceries", kind: "expense" as const },
+    { ...root, id: "mixed", name: "Reimbursements", kind: "both" as const },
+    root,
+  ];
+  render(<CategoryCombobox categories={types} kind="income" onChange={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Category" }));
+  expect(screen.queryByRole("option", { name: "Groceries" })).toBeNull();
+  for (const name of ["Salary", "Reimbursements", "Café"]) {
+    expect(screen.getByRole("option", { name })).toBeTruthy();
+  }
+});

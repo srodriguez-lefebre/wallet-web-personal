@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import { uuidSchema, nonEmptyPatch } from "./common.js";
 
+export const categoryKindSchema = z.enum(["expense", "income", "both"]);
+export type CategoryKind = z.infer<typeof categoryKindSchema>;
+
 export const categorySchema = z.object({
+  kind: categoryKindSchema.optional(),
   name: z.string().min(1),
   parentId: uuidSchema.optional(),
   color: z.string().min(1),
@@ -10,6 +14,7 @@ export const categorySchema = z.object({
 });
 
 export const categoryPatchSchema = nonEmptyPatch({
+  kind: categoryKindSchema.optional(),
   name: z.string().min(1).optional(),
   parentId: uuidSchema.nullable().optional(),
   color: z.string().min(1).optional(),
