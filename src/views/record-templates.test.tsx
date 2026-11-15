@@ -55,8 +55,8 @@ vi.mock("@/lib/use-action-toast", () => ({
     runAction: createActionToastRunner(() => {}),
   }),
 }));
-vi.mock("@/components/wallet/category-picker", () => ({
-  CategoryPicker: () => null,
+vi.mock("@/components/ui/form/category-combobox", () => ({
+  CategoryCombobox: () => null,
 }));
 vi.mock("@/components/ui/dialog", () => {
   const Part = ({ children }: PropsWithChildren) => <div>{children}</div>;

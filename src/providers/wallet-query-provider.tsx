@@ -75,8 +75,11 @@ export function WalletQueryProvider({ children }: PropsWithChildren) {
     </SessionQueries>
   );
 }
+export function useOptionalWalletData() {
+  return useContext(DataContext);
+}
 export function useWalletData() {
-  const value = useContext(DataContext);
+  const value = useOptionalWalletData();
   if (!value) throw new Error("useWalletData requires WalletQueryProvider");
   return value;
 }

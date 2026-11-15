@@ -1,3 +1,4 @@
+import { selectableCategory } from "@shared/categories";
 import { findExchangeRate } from "@shared/money";
 import { splitImportNote } from "@shared/record-review";
 
@@ -174,7 +175,9 @@ export function duplicateDraft(
     destinationAccountId: record.type === "transfer" ? (destination?.id ?? "") : "",
     currency: record.currency,
     amount: String(record.amount),
-    categoryId: record.categoryId ?? "",
+    categoryId:
+      dataset.categories.find((item) => item.id === record.categoryId && selectableCategory(item))
+        ?.id ?? "",
     counterpartyName: record.counterpartyName ?? "",
     note: record.note ?? "",
     tagId: record.tagIds[0] ?? "",

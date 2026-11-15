@@ -42,7 +42,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { CategoryPicker } from "@/components/wallet/category-picker";
+import { CategoryField } from "@/components/ui/form/wallet-fields";
 import { useActionToast } from "@/lib/use-action-toast";
 import { limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
@@ -972,15 +972,11 @@ export function DebtsView() {
                     placeholder="Required"
                   />
                 </label>
-                <div className="space-y-1 text-sm">
-                  <span>Category</span>
-                  <CategoryPicker
-                    categories={dataset.categories}
-                    value={debtForm.categoryId}
-                    inputClassName={inputClassName}
-                    onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
-                  />
-                </div>
+                <CategoryField
+                  categories={dataset.categories}
+                  value={debtForm.categoryId}
+                  onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
+                />
                 <div className="space-y-1 text-sm md:col-span-2">
                   <span>Direction</span>
                   <DirectionToggle
@@ -1242,20 +1238,17 @@ export function DebtsView() {
                     inputMode="numeric"
                   />
                 </label>
-                <div className="space-y-1 text-sm md:col-span-2">
-                  <span>Category</span>
-                  <CategoryPicker
-                    categories={dataset.categories}
-                    value={recurringForm.categoryId}
-                    inputClassName={inputClassName}
-                    onChange={(categoryId) =>
-                      setRecurringForm({
-                        ...recurringForm,
-                        categoryId,
-                      })
-                    }
-                  />
-                </div>
+                <CategoryField
+                  className="md:col-span-2"
+                  categories={dataset.categories}
+                  value={recurringForm.categoryId}
+                  onChange={(categoryId) =>
+                    setRecurringForm({
+                      ...recurringForm,
+                      categoryId,
+                    })
+                  }
+                />
                 <label className="space-y-1 text-sm">
                   <span>Account</span>
                   <select

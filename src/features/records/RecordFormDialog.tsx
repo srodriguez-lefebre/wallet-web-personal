@@ -21,10 +21,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CategoryPicker } from "@/components/wallet/category-picker";
+import { CategoryField } from "@/components/ui/form/wallet-fields";
 import { ImportHistory } from "@/components/wallet/record-import-history";
 import { finishAction } from "@/lib/async-event";
-import { formatCategoryName } from "@/lib/category-options";
 import { dateTimeInputToIso } from "@/lib/date-input";
 import { defaultRecordAccountId as defaultAccountId } from "@/lib/record-draft";
 import { limitDecimalPlaces } from "@/lib/utils";
@@ -331,16 +330,11 @@ export function RecordFormDialog({ model }: { model: ReturnType<typeof useRecord
                   </select>
                 </label>
               ) : (
-                <div className="space-y-2">
-                  <span className="text-sm font-medium">Category</span>
-                  <CategoryPicker
-                    categories={categories}
-                    value={categoryId}
-                    onChange={setCategoryId}
-                    inputClassName={fieldClassName}
-                    getLabel={(category) => formatCategoryName(dataset.categories, category)}
-                  />
-                </div>
+                <CategoryField
+                  categories={categories}
+                  value={categoryId}
+                  onChange={setCategoryId}
+                />
               )}
             </div>
 
