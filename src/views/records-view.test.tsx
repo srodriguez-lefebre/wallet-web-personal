@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { recordCreateSchema } from "@shared/schemas";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -9,6 +8,7 @@ import { createDb } from "../../server/db/client.js";
 import type { RecordFilters, WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { RecordsView } from "@/features/records/RecordsView";
 const update = vi.hoisted(() => vi.fn());
 const add = vi.hoisted(() => vi.fn());
@@ -22,6 +22,7 @@ let filters: RecordFilters;
 let periodMode: "month" | "all";
 let historyComplete: boolean;
 let isReviewQueueOpen: boolean;
+let globalReviewCount: number | undefined;
 vi.mock("@/providers/wallet-provider", () => ({
   useWallet: () =>
     withWalletMetadata({
@@ -48,6 +49,7 @@ vi.mock("@/providers/wallet-provider", () => ({
       isAllHistoryComplete: historyComplete,
       isSelectedRangeComplete: historyComplete,
       loadMoreRecords: vi.fn(),
+      ...(globalReviewCount === undefined ? {} : { globalReviewCount }),
     }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
@@ -96,6 +98,7 @@ beforeEach(() => {
   filters = {};
   periodMode = "month";
   historyComplete = true;
+  globalReviewCount = undefined;
   isReviewQueueOpen = false;
   clearFilters.mockImplementation(() => {
     isReviewQueueOpen = false;
@@ -487,14 +490,15 @@ test("review queue clears incompatible filters and includes drafts outside the s
   expect(tree!.root.findAllByProps({ role: "button" })).toHaveLength(1);
   expect(JSON.stringify(tree!.toJSON())).toContain("Old review merchant");
 });
-test("review count does not present partial loaded history as a complete total", async () => {
+test("review count uses complete reference metadata independently of the loaded record page", async () => {
   historyComplete = false;
+  globalReviewCount = 41;
   await act(async () => {
     tree = create(<RecordsView />);
   });
   expect(
     JSON.stringify(tree!.root.findByProps({ "aria-label": "Open review queue" }).props.children),
-  ).toContain("Loading");
+  ).toContain("41");
 });
 test("duplicating opens a fresh draft and writes only once on submit with current conversions", async () => {
   const accountId = "11111111-1111-4111-8111-111111111111",

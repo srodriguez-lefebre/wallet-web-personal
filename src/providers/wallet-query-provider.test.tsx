@@ -203,3 +203,39 @@ test("settings refreshes only reference; record edits refresh their active page 
   expect(refs).toBe(2);
   expect(records).toBe(1);
 });
+
+test("locking during a pending write prevents its late completion from recreating either cache", async () => {
+  let started!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  server.use(
+    http.post("http://test.local/api/wallet/bootstrap-reference", () => response(boot)),
+    http.patch(`http://test.local/api/records/${record.id}`, async () => {
+      started();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return response({ ...record, amount: 20 });
+    }),
+  );
+  mount();
+  await screen.findByText("system:10");
+  const old = cache;
+  const result = data.mutations["records.patch"]({
+    params: { id: record.id },
+    body: { amount: 20 },
+  }).catch((error) => error as Error);
+  await arrived;
+  await act(async () => {
+    auth.lock();
+    await Promise.resolve();
+  });
+  release();
+  await act(async () => {
+    await result;
+  });
+  expect(old.getQueryCache().getAll()).toEqual([]);
+  expect(old.getMutationCache().getAll()).toEqual([]);
+  expect(localStorage.getItem("wallet-dataset-cache")).toBeNull();
+});

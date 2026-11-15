@@ -4,10 +4,10 @@ import { Bell } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { formatMoney } from "@shared/calculations";
 import { debtDirectionLabels } from "@shared/constants";
+import { debtDueState, selectDebtsByDueDate } from "@shared/planning";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { debtDueState, selectDebtsByDueDate } from "@shared/planning";
 import { useCardAgenda } from "@/hooks/wallet-entities";
 import { useWallet } from "@/providers/wallet-provider";
 

@@ -35,13 +35,13 @@ se harán en la G14, por separado; no se modificó el script activo.
 Estos resultados pertenecen a sus respectivos estados del árbol; no implican
 que el checkpoint completo esté validado.
 
-| Estado | Ejecución | Resultado |
-| --- | --- | --- |
-| Base ac92edb | `npm run check` | Exit 0; 117 archivos, 835 pruebas; formato/lint/build/OpenAPI verdes |
-| Base ac92edb | `npm run sandbox:check` | Exit 0; 11 archivos, 109 pruebas |
-| Integración parcial | App Query + wallet-actions + UIProvider | 3 archivos, 10 pruebas aprobadas; status 0 |
-| Integración parcial posterior | Selección Query/pages/cards | 4 archivos, 12 pruebas aprobadas según salida de Vitest |
-| Última selección de vistas | 9 archivos | 6 archivos aprobados, 3 fallidos; 73 pruebas aprobadas, 3 fallidas; status 1 |
+| Estado                        | Ejecución                               | Resultado                                                                    |
+| ----------------------------- | --------------------------------------- | ---------------------------------------------------------------------------- |
+| Base ac92edb                  | `npm run check`                         | Exit 0; 117 archivos, 835 pruebas; formato/lint/build/OpenAPI verdes         |
+| Base ac92edb                  | `npm run sandbox:check`                 | Exit 0; 11 archivos, 109 pruebas                                             |
+| Integración parcial           | App Query + wallet-actions + UIProvider | 3 archivos, 10 pruebas aprobadas; status 0                                   |
+| Integración parcial posterior | Selección Query/pages/cards             | 4 archivos, 12 pruebas aprobadas según salida de Vitest                      |
+| Última selección de vistas    | 9 archivos                              | 6 archivos aprobados, 3 fallidos; 73 pruebas aprobadas, 3 fallidas; status 1 |
 
 Fallos pendientes de la última selección:
 

@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -7,6 +6,8 @@ import { budgetSchema } from "@shared/schemas";
 import { BudgetAssistant } from "./budget-assistant";
 
 import type { Budget, WalletDataset } from "@shared/types";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const food = "10000000-0000-4000-8000-000000000001";
 const travel = "10000000-0000-4000-8000-000000000002";

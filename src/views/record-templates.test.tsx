@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -6,6 +5,7 @@ import { mockWalletData } from "@shared/mock-data";
 import type { RecordTemplate, WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { RecordsView } from "@/features/records/RecordsView";
 const actions = vi.hoisted(() => ({
   addTemplate: vi.fn(),

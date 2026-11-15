@@ -18,9 +18,10 @@ import {
 import { NavLink, useNavigate } from "react-router-dom";
 import { monthKey } from "@shared/calculations";
 
+import { WalletQueryStatus } from "./wallet-query-status";
+
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/wallet/global-search";
-import { WalletQueryStatus } from "./wallet-query-status";
 import { WalletNotifications } from "@/components/wallet/wallet-notifications";
 import { useWallet } from "@/providers/wallet-provider";
 import { cn } from "@/lib/utils";

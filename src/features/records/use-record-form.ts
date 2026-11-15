@@ -257,11 +257,18 @@ export function useRecordForm() {
     const revision = recordDraftRevision.current;
     try {
       if (editingId && patch?.ok)
-        await runAction(() => updateRecord(editingId, patch.patch), {
-          processing: "Saving record...",
-          success: "Record saved",
-          error: "Could not save record",
-        });
+        await runAction(
+          () =>
+            updateRecord(editingId, {
+              ...patch.patch,
+              expectedUpdatedAt: editingRecord?.updatedAt,
+            }),
+          {
+            processing: "Saving record...",
+            success: "Record saved",
+            error: "Could not save record",
+          },
+        );
       else if (created?.ok)
         await runAction(() => addRecord(created.value), {
           processing: "Creating record...",

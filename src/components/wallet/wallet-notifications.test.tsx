@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -8,6 +7,8 @@ import { WalletNotifications } from "./wallet-notifications";
 
 import type { RecordFilters } from "@shared/types";
 import type { ReactNode } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const state = vi.hoisted(() => ({
   dataset: {} as typeof mockWalletData,
@@ -103,13 +104,13 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-test("incomplete history withholds counts and actionable partial items", async () => {
+test("a pending agenda withholds combined counts and actionable partial items", async () => {
   state.complete = false;
   state.dataset.records = [{ ...mockWalletData.records[0]!, paymentStatus: "needs_review" }];
   await mount();
   expect(tree!.root.findAllByProps({ "aria-label": "Pending notifications" })).toHaveLength(0);
   await open();
-  expect(JSON.stringify(tree!.toJSON())).toContain("Loading complete history");
+  expect(JSON.stringify(tree!.toJSON())).toContain("Loading notifications...");
   expect(tree!.root.findAllByType("button")).toHaveLength(1);
   expect(JSON.stringify(tree!.toJSON())).not.toContain("No pending reviews");
 });

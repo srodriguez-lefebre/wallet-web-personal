@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -7,6 +6,8 @@ import { createActionToastRunner } from "../lib/action-toast-runner";
 import { DebtsView } from "./debts-view";
 
 import type { PropsWithChildren } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const payment = vi.hoisted(() => vi.fn());
 const reportedToast = vi.hoisted(() => vi.fn());

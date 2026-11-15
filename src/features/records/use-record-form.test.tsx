@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { mockWalletData } from "@shared/mock-data";
@@ -8,6 +7,8 @@ import { useRecordForm } from "./use-record-form";
 
 import type { FormEvent } from "react";
 import type { WalletDataset } from "@shared/types";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;

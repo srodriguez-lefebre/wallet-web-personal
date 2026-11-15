@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { act, create } from "react-test-renderer";
 import { afterEach, expect, test, vi } from "vitest";
@@ -6,6 +5,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import { SettingsView } from "./settings-view";
 
 import type { SettingsPatch } from "@shared/schemas";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const auth = vi.hoisted(() => ({
   lock: vi.fn(),

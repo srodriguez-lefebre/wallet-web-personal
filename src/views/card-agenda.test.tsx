@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -9,6 +8,8 @@ import { CardDetailView } from "./card-detail-view";
 import { CardsView } from "./cards-view";
 
 import type { ReactNode } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 let dataset = structuredClone(mockWalletData);
 const refreshStatements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));

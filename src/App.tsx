@@ -1,10 +1,9 @@
 import { lazy, Suspense, useEffect, type PropsWithChildren } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
+import { monthKey } from "@shared/calculations";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
-import { monthKey } from "@shared/calculations";
-
 import { Button } from "@/components/ui/button";
 import { WalletQueryProvider, useWalletBootstrap } from "@/providers/wallet-query-provider";
 import { useWalletReferenceQuery } from "@/hooks/wallet-entities";

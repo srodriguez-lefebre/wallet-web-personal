@@ -8,8 +8,6 @@ import {
   calculateAccountBalances,
   calculateBudgetProgress,
   calculateBudgetProgressForDateRange,
-  calculateCategoryExpensesForDateRange,
-  calculateCategoryIncomeForDateRange,
   calculateCreditCardCategoryUsage,
   calculateCreditCardSummaries,
   calculateCreditCardSummary,
@@ -38,7 +36,7 @@ import {
   calculateEndOfMonthProjection,
 } from "@shared/simulations";
 
-import type { DateRange, RecordFilters, WalletDataset } from "@shared/types";
+import type { WalletDataset } from "@shared/types";
 import type { RecordQueryFilters } from "@/services/wallet-queries";
 import type { ClientInput } from "@/services/api-client";
 
@@ -54,6 +52,7 @@ type Fixture = {
   recordsPage?: { hasMore?: boolean; nextCursor?: string | null };
   loadMoreRecords?: () => Promise<void>;
   refreshCardStatements?: () => Promise<void>;
+  globalReviewCount?: number;
 };
 type Selection = NonNullable<ClientInput<"analytics.details">["query"]>;
 const wire = (value: number) => (Number.isFinite(value) ? value : null);
@@ -61,10 +60,8 @@ function datasetFor(fixture: Fixture) {
   if (!fixture.dataset) throw new Error("Synthetic view fixture needs a dataset");
   return fixture.dataset;
 }
-export function withWalletMetadata<T extends object>(wallet: T) {
-  const fixture = wallet as T & Fixture;
-  if (!fixture.dataset) return wallet;
-  const data = fixture.dataset;
+function metadataFor(fixture: Fixture) {
+  const data = datasetFor(fixture);
   const review = data.records.filter((record) => record.paymentStatus === "needs_review");
   const dates = data.records.map((record) => dateKey(record.occurredAt)).sort();
   const latest = review.reduce(
@@ -72,13 +69,12 @@ export function withWalletMetadata<T extends object>(wallet: T) {
     0,
   );
   return {
-    ...wallet,
     recordSummary: {
       from: dates[0] ?? null,
       to: dates.at(-1) ?? null,
       months: availableMonthKeys(data.records),
       total: data.records.length,
-      review: review.length,
+      review: fixture.globalReviewCount ?? review.length,
       newReviews: countNewReviews(data),
       latestReviewAt: latest ? new Date(latest).toISOString() : null,
     },
@@ -91,6 +87,14 @@ export function withWalletMetadata<T extends object>(wallet: T) {
     ),
     availableMonths: availableMonthKeys(data.records),
   };
+}
+export function withWalletMetadata<T extends { dataset: WalletDataset }>(
+  wallet: T,
+): T & ReturnType<typeof metadataFor>;
+export function withWalletMetadata<T extends object>(wallet: T): T;
+export function withWalletMetadata<T extends object>(wallet: T) {
+  const fixture = wallet as T & Fixture;
+  return fixture.dataset ? { ...wallet, ...metadataFor(fixture) } : wallet;
 }
 function fixtureRecords(data: WalletDataset, filters: RecordQueryFilters) {
   return data.records

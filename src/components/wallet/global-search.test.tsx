@@ -1,5 +1,5 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -9,6 +9,8 @@ import { AppShell } from "../layout/app-shell";
 
 import type { RecordFilters } from "@shared/types";
 import type { ReactNode } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const state = vi.hoisted(() => ({
   dataset: {} as typeof mockWalletData,
@@ -86,18 +88,20 @@ function button(label: string) {
 async function mount(shell = false) {
   await act(async () => {
     tree = create(
-      <MemoryRouter>
-        {shell ? (
-          <AppShell>
-            <Location />
-          </AppShell>
-        ) : (
-          <>
-            <GlobalSearch />
-            <Location />
-          </>
-        )}
-      </MemoryRouter>,
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          {shell ? (
+            <AppShell>
+              <Location />
+            </AppShell>
+          ) : (
+            <>
+              <GlobalSearch />
+              <Location />
+            </>
+          )}
+        </MemoryRouter>
+      </QueryClientProvider>,
     );
   });
 }
@@ -214,7 +218,8 @@ test("text search and the review command replace unrelated filters without claim
   expect(state.filters).toEqual({ type: "all", search: "café" });
   expect(state.period).toBe("all");
   await open();
-  expect(JSON.stringify(tree!.toJSON())).toContain("may be incomplete");
+  expect(JSON.stringify(tree!.toJSON())).not.toContain("may be incomplete");
+  expect(button("Review records")).toBeDefined();
   await act(async () => button("Review records").props.onClick());
   expect(state.filters).toEqual({ type: "all", paymentStatus: "needs_review" });
   expect(state.writes).not.toHaveBeenCalled();

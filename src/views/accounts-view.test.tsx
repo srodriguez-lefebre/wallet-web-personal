@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -7,6 +6,8 @@ import { createActionToastRunner } from "../lib/action-toast-runner";
 import { AccountsView } from "./accounts-view";
 
 import type { ReactNode } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const actions = vi.hoisted(() => ({
   addAccount: vi.fn(),
@@ -157,15 +158,13 @@ test("double creation submits a single request and preserves the form after fail
     "Retained bank",
   );
 });
-test("incomplete history withholds account balances and displays its loading state", async () => {
+test("pending aggregate withholds account balances and displays its loading state", async () => {
   complete = false;
   await mount();
   expect(
     tree!.root.findAllByType("div").filter((node) => node.props.role === "button"),
   ).toHaveLength(0);
-  expect(JSON.stringify(tree!.toJSON())).toContain(
-    "Loading complete history to calculate current balances",
-  );
+  expect(tree!.root.findByProps({ role: "status" }).props.children).toBe("Loading accounts...");
 });
 
 test("a successful archive is not repeated when another account save fails", async () => {

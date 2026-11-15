@@ -3,6 +3,7 @@ import { InfiniteQueryObserver, QueryObserver } from "@tanstack/react-query";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
+import { recordCreateSchema } from "@shared/schemas";
 
 import { createWalletClient } from "./api-client";
 import { createWalletMutations } from "./mutations";
@@ -38,6 +39,43 @@ function observe(cache: ReturnType<typeof createWalletQueryClient>) {
     new InfiniteQueryObserver(cache, recordsQueryOptions(client)).subscribe(() => {}),
   );
 }
+
+test("a failed import still reconciles canonical pages containing earlier committed rows", async () => {
+  server.use(
+    http.post("http://test.local/api/wallet/bootstrap-reference", () => response(boot)),
+    http.get("http://test.local/api/wallet/reference", () =>
+      response({ ...reference, recordSummary: { ...reference.recordSummary, total: 2 } }),
+    ),
+    http.get("http://test.local/api/records", () =>
+      response({
+        ...page,
+        items: [record, { ...record, id: "00000000-0000-4000-8000-000000000003" }],
+      }),
+    ),
+    http.post("http://test.local/api/records/import", () =>
+      HttpResponse.json(
+        {
+          data: null,
+          error: { code: "IMPORT_FAILED", message: "Earlier batch committed; later batch failed" },
+        },
+        { status: 409 },
+      ),
+    ),
+  );
+  const value = cache();
+  await ensureWalletBootstrap(value, client);
+  observe(value);
+  const { id: omitted, ...input } = record;
+  void omitted;
+  await expect(
+    createWalletMutations(client, value)["records.import"]({
+      body: { records: [recordCreateSchema.parse(input)] },
+    }),
+  ).rejects.toThrow("Earlier batch committed");
+  expect(value.getQueryData(["reference"])).toMatchObject({ recordSummary: { total: 2 } });
+  const loaded = await value.fetchInfiniteQuery(recordsQueryOptions(client));
+  expect(loaded.pages[0]?.items).toHaveLength(2);
+});
 test("bootstrap deduplicates and seeds reference plus the actual first infinite page without a second read", async () => {
   let calls = 0;
   server.use(

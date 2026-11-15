@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -10,6 +9,8 @@ import { GoalFundingPlan } from "../components/wallet/goal-funding-plan";
 
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const state = vi.hoisted(() => ({ dataset: ((): unknown => undefined)() }));
 vi.mock("@/providers/wallet-provider", () => ({

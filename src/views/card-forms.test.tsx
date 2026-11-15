@@ -1,4 +1,3 @@
-import { withWalletMetadata } from "@/test/legacy-wallet-view";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -6,6 +5,8 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
 
 import { CardsView } from "./cards-view";
+
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const actions = vi.hoisted(() => ({
   addCreditCard: vi.fn(),

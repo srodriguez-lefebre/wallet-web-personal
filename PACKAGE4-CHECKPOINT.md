@@ -475,7 +475,6 @@ Sandbox exit 0, 11 archivos / 109 pruebas, en
 `/tmp/wallet-package4-entity-readers-sandbox.log` y `.status`.
 No se modificaron App, producción, migraciones, secretos o Apps Script.
 
-
 ## Pausa y traspaso a G14 · integración parcial de Query
 
 Por instrucción de Santiago se pausa la implementación en la HP y se conserva
@@ -487,3 +486,40 @@ validado para merge**: última selección de vistas 73 aprobadas / 3 fallidas,
 check completo y sandbox pendientes después de la activación parcial.
 No se tocó main, producción, migraciones ni Apps Script. Bloque 5 y Apps Script
 se harán también en la G14.
+
+## Reanudación G14: paridad Query verificada
+
+El worktree G14 continúa en la misma rama `refactor/04-entity-cache-views` desde
+`fef5d44`; el checkout anterior quedó limpio e intacto. Se corrigieron las tres
+pruebas pendientes preservando los invariantes: los balances/reportes esperan
+sus agregados y el recuento de review usa metadata global, nunca una página.
+
+La cobertura del provider anterior se trasladó a Query/UI. Incluye biblioteca
+canónica, filtros/cola, patches parciales, archivo sin perder historia, lectura de
+backup separada, bloqueo durante bootstrap/escritura, cancelación de respuestas
+tardías, importación parcialmente fallida y error de refetch tras escritura
+confirmada. Reintentar refresh sólo lee; no repite la escritura. Se retiraron
+WalletSync y la caché persistida de referencia, sin consumidores activos.
+
+La integración Testing Library/MSW usa el formulario real de Records: saldo/meta
+970/30 → 950/50 → recarga → reversión 970/30, manteniendo historia fuera de la
+página. Dos aserciones RED→GREEN exigieron enviar `expectedUpdatedAt` al editar;
+un conflicto conserva el importe del draft y no reenvía la mutación.
+
+En Windows, el fixture PostgreSQL se inicializa explícitamente con UTF-8 y omite
+el sync de initdb porque es desechable. El diagnóstico confirmó WIN1252 y el
+rechazo de normalización Unicode antes del cambio. Se normalizó también el glob
+del fixture que comprueba exit 1. No cambian configuración ni datos productivos.
+
+Verificación de esta etapa: `WALLET_TEST_WORKERS=1 npm run check`, exit 0,
+119 archivos / 835 pruebas aprobadas / 1 omitida por plataforma; formato, lint,
+tipos/build y OpenAPI verdes. `npm run sandbox:check`, exit 0: 11 archivos /
+108 aprobadas / 1 omitida. El build mantiene un aviso de tamaño de chunk, sin
+modificar su umbral. Logs locales G14: `../g14-integration-check3.log` y
+`../g14-integration-sandbox.log` (no versionados).
+
+El bloque 4 sigue parcial: falta cerrar formularios/resultados/draft lists,
+confirmaciones accesibles, estado por entidad, revisión completa y smoke
+full-stack sintético antes del único PR draft, CI, merge y verificación del alias.
+No se inició el bloque 5 ni se modificaron Apps Script, secretos, permisos,
+migraciones, datos reales o producción.
