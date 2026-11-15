@@ -1,4 +1,4 @@
-import { monthKey, relativeMonthKeys } from "./calculations.js";
+import { monthKey, relativeMonthKeys } from "./dates.js";
 import { isFinancialRecord } from "./record-status.js";
 
 import type { Budget, Category, CurrencyCode, WalletDataset } from "./types.js";
@@ -58,7 +58,7 @@ export function buildBudgetPlan(
   targetMonth: string,
   headroomPercent: number,
   budgets = dataset.budgets,
-  today = new Date(),
+  today: Date,
 ): BudgetPlan {
   if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(targetMonth))
     throw new Error("Choose a valid target month.");

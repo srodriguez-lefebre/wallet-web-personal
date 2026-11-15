@@ -24,8 +24,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:import-wallet-records": "node scripts/import-wallet-records.mjs",
-    "db:import-merchant-rules": "node scripts/import-merchant-rules.mjs",
+    "db:import-wallet-records": "tsx scripts/import-wallet-records.mjs",
+    "db:import-merchant-rules": "tsx scripts/import-merchant-rules.mjs",
     "format:check": "prettier --check .",
     "mail:build": "tsx scripts/build-mail.ts",
     "mail:check": "tsx scripts/build-mail.ts --check"

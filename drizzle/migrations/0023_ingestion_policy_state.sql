@@ -88,3 +88,39 @@ $$;
 CREATE INDEX merchant_aliases_search_idx ON merchant_aliases(wallet_normalize_merchant(normalized_alias));
 --> statement-breakpoint
 CREATE INDEX record_merchant_correction_search_idx ON records(upper(btrim(regexp_replace(normalize(import_merchant,NFKC),'\s+',' ','g')))) WHERE deleted_at IS NULL AND merchant_correction IS NOT NULL;
+
+--> statement-breakpoint
+-- Import taxonomy identities; keep existing keys, parents, names and financial data.
+WITH mapping(name,key) AS (VALUES ('otros','others'),
+('others','others'),
+('unknown expense','unknown_expense'),
+('category eliminated','category_eliminated'),
+('shopping','shopping'),
+('taxi','taxi'),
+('public transport','public_transport'),
+('restaurant, fast-food','restaurants'),
+('tv, streaming','streaming'),
+('subscriptions','subscriptions'),
+('groceries','groceries'),
+('supermarket','supermarket'),
+('fruits, vegetables and healthy','greengrocer'),
+('frutas, verduras y saludables','greengrocer'),
+('bakery','bakery'),
+('meat, fish and eggs','butcher'),
+('drug-store, chemist','pharmacy'),
+('service station','service_station'),
+('services','services'),
+('money services','money_services'),
+('car','car'),
+('clothes & footwear','clothing'),
+('software, apps, games','software'),
+('hardware','hardware'),
+('culture, sport events','culture'),
+('bank','bank_fees'),
+('education, development','education'),
+('wellness, beauty','wellness'),
+('active sport, fitness','fitness'),
+('holiday, trips, hotels','travel')), candidates AS (
+SELECT c.id,m.key,count(*) OVER(PARTITION BY m.key) AS matches FROM categories c JOIN mapping m ON lower(c.name)=m.name
+WHERE c.system_key IS NULL AND c.deleted_at IS NULL AND NOT EXISTS(SELECT 1 FROM categories existing WHERE existing.system_key=m.key)
+) UPDATE categories c SET system_key=m.key FROM candidates m WHERE c.id=m.id AND m.matches=1;

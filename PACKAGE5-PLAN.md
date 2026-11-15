@@ -49,7 +49,7 @@
 - [ ] Seed current generic rules and Uber/Taxi/insurance overrides as data, resolving categories by stable keys. Remove `genericMerchantCategoryRules` and name-dependent runtime rules; match candidate aliases and corrections in SQL.
 - [ ] Introduce typed ingestion sources without discarding historical backup values or breaking deployed clients. Preserve existing record/event deduplication and goal writes.
 - [ ] Verify migration on disposable PostgreSQL/PGlite, full category/mail/concurrency/backup tests, OpenAPI and types. Expected: old and new clients remain compatible, earlier journal untouched.
-- [ ] Commit and push the validated stage; do not publish a candidate dependent on absent schema.
+- [ ] Commit and push the validated stage as a draft checkpoint. Apply and verify the compatible schema before authenticated preview testing or production activation.
 
 ## Task 3: Bounded providers, persistent circuits and hourly cleanup
 
@@ -79,6 +79,6 @@
 
 - [ ] Update README, mail instructions, operational checkpoint and generated artifacts. Run `mail:check`, full `npm run check`, sandbox and synthetic full-stack smoke including ingestion retries, equal salaries, generic/unmapped review and backup/restore. Stop own servers.
 - [ ] One fresh whole-branch reviewer; fix Important/Critical findings with RED→GREEN and a green suite, record rulings and deferred minors.
-- [ ] Validate any additive migration target and rollback evidence before preview/release. Open one draft PR, require exact-head CI and READY preview, then ready/normal merge without bypass. Verify main CI, merged SHA, production READY/alias and unauthenticated GET smoke.
+- [ ] Validate additive migration target and rollback evidence before authenticated preview testing or release. Draft branch pushes and build verification preserve the checkpoint while that gate is pending; they do not authorize requests against real financial data. Open one draft PR, require exact-head CI and READY preview, then ready/normal merge without bypass. Verify main CI, merged SHA, production READY/alias and unauthenticated GET smoke.
 - [ ] Reverify Chrome identity/project, save a prior-code backup, compare versioned GS artifacts with the deployed backend contract, then apply through the authorized browser workflow only. No triggers/scopes/properties/credentials/real batches. If a precondition fails, leave the tested versioned code and report the exact blocker.
 - [ ] Record final evidence and stop; no sixth PR or unrelated work.

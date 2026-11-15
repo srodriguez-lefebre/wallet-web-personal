@@ -1,37 +1,33 @@
 import { differenceInCalendarDays, endOfMonth } from "date-fns";
 
-import {
-  calculateSummary,
-  calculateVisibleBalance,
-  formatMoney,
-  monthKey,
-} from "./calculations.js";
+import { calculateSummary } from "./analytics.js";
+import { calculateVisibleBalance } from "./balances.js";
+import { formatMoney } from "./money.js";
+import { monthKey } from "./dates.js";
 
 import type { WalletDataset } from "./types.js";
 
-export function calculateEndOfMonthProjection(dataset: WalletDataset, dailySpend: number) {
-  const remainingDays = Math.max(
-    1,
-    differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1,
-  );
-  const balance = calculateVisibleBalance(dataset);
+export function calculateEndOfMonthProjection(
+  dataset: WalletDataset,
+  dailySpend: number,
+  now: Date,
+) {
+  const remainingDays = Math.max(1, differenceInCalendarDays(endOfMonth(now), now) + 1);
+  const balance = calculateVisibleBalance(dataset, now);
 
   return balance - dailySpend * remainingDays;
 }
 
-export function calculateAllowedDailySpend(dataset: WalletDataset) {
-  const remainingDays = Math.max(
-    1,
-    differenceInCalendarDays(endOfMonth(new Date()), new Date()) + 1,
-  );
-  const balance = calculateVisibleBalance(dataset);
+export function calculateAllowedDailySpend(dataset: WalletDataset, now: Date) {
+  const remainingDays = Math.max(1, differenceInCalendarDays(endOfMonth(now), now) + 1);
+  const balance = calculateVisibleBalance(dataset, now);
 
   return balance / remainingDays;
 }
 
-export function buildSavingsRecommendations(dataset: WalletDataset) {
-  const summary = calculateSummary(dataset, monthKey(new Date()));
-  const allowedDaily = calculateAllowedDailySpend(dataset);
+export function buildSavingsRecommendations(dataset: WalletDataset, now: Date) {
+  const summary = calculateSummary(dataset, monthKey(now), now);
+  const allowedDaily = calculateAllowedDailySpend(dataset, now);
   const recommendations = [
     `Average daily spending: ${formatMoney(
       summary.dailyAverageExpense,

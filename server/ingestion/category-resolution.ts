@@ -132,17 +132,27 @@ export async function resolveCategory(
     .where(
       sql`${merchantCategoryRules.normalizedAlias} IN (SELECT value FROM jsonb_array_elements_text(${JSON.stringify(merchantTerms)}::jsonb))`,
     );
-  const policy = pickLongestMerchantMatch(merchantRaw, policies);
+  const policy = pickLongestMerchantMatch(
+    merchantRaw,
+    policies.filter((rule) =>
+      allCategories.some((category) => category.systemKey === rule.categorySystemKey),
+    ),
+  );
   const descriptorWithoutReferences = normalizeMerchantTerm(merchantRaw)
     .split(" ")
     .filter((token) => !/^\d+$/.test(token))
     .join(" ");
+  const processorPolicy = policies.find(
+    (rule) =>
+      rule.reviewWhenMissing &&
+      rule.categorySystemKey === "unknown_expense" &&
+      rule.normalizedAlias === descriptorWithoutReferences,
+  );
   if (
     fallback &&
-    policy?.reviewWhenMissing &&
+    processorPolicy &&
     (!local || isUnknown(local.categoryId)) &&
-    policy.categorySystemKey === "unknown_expense" &&
-    descriptorWithoutReferences === policy.normalizedAlias
+    descriptorWithoutReferences === processorPolicy.normalizedAlias
   ) {
     return {
       categoryId: fallback.id,
@@ -174,7 +184,13 @@ export async function resolveCategory(
       source: "merchant_rule",
       needsReview: false,
     };
-  if (policy?.reviewWhenMissing && !target && fallback)
+  const missingRequiredPolicy = policies.find(
+    (rule) =>
+      rule.reviewWhenMissing &&
+      rule.categorySystemKey !== "unknown_expense" &&
+      !allCategories.some((category) => category.systemKey === rule.categorySystemKey),
+  );
+  if (missingRequiredPolicy && fallback)
     return {
       categoryId: fallback.id,
       merchantName,

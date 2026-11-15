@@ -9,7 +9,8 @@ import {
   LOCAL_DATABASE_URL,
 } from "../../scripts/sandbox/database.js";
 import { importSnapshot } from "../../scripts/sandbox/snapshot.js";
-import { calculateAccountBalances, calculateGoalProgress } from "../../shared/calculations.js";
+import { calculateAccountBalances } from "../../shared/balances.js";
+import { calculateGoalProgress } from "../../shared/goals.js";
 import { recordSchema } from "../../shared/schemas.js";
 import { createDb } from "./client.js";
 import {
@@ -114,14 +115,18 @@ test.each(["cleared", "needs_review"])(
     });
     await createRecord(createDb(), input({ paymentStatus }));
     const before = await getWalletDataset(createDb());
-    const totals = calculateAccountBalances(before).map((account) => account.totalBalance);
+    const totals = calculateAccountBalances(before, new Date()).map(
+      (account) => account.totalBalance,
+    );
     await updateGoal(createDb(), goalId, { status: "completed" });
     const after = await getWalletDataset(createDb());
     expect(after.goals[0]!).toMatchObject({ status: "completed", autoCaptureEnabled: false });
     expect(after.goalReservations).toEqual([]);
-    expect(calculateGoalProgress(after)[0]!.spent).toBe(40);
+    expect(calculateGoalProgress(after, new Date())[0]!.spent).toBe(40);
     expect(after.records).toEqual(before.records);
-    expect(calculateAccountBalances(after).map((account) => account.totalBalance)).toEqual(totals);
+    expect(
+      calculateAccountBalances(after, new Date()).map((account) => account.totalBalance),
+    ).toEqual(totals);
     const released = await pg.query(
       "select account_id,amount,currency from goal_reservation_movements where type='release' order by currency",
     );

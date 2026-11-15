@@ -1,4 +1,4 @@
-import { isOpenDebt } from "./calculations.js";
+import { isOpenDebt } from "./debts.js";
 
 import type { CurrencyCode, Debt, GoalProgress, Investment } from "./types.js";
 
@@ -28,10 +28,7 @@ export interface GoalFundingPlan {
   weeklyContribution: number | null;
 }
 
-export function calculateGoalFundingPlan(
-  progress: GoalProgress,
-  asOf = new Date(),
-): GoalFundingPlan {
+export function calculateGoalFundingPlan(progress: GoalProgress, asOf: Date): GoalFundingPlan {
   const daysRemaining = daysUntil(progress.goal.deadline, asOf);
   const remaining =
     progress.hasMissingExchangeRate || !Number.isFinite(progress.remaining)
@@ -72,7 +69,7 @@ export interface DebtDueState {
   kind: "overdue" | "today" | "upcoming" | "undated" | "settled";
   days: number | null;
 }
-export function debtDueState(debt: Debt, asOf = new Date()): DebtDueState {
+export function debtDueState(debt: Debt, asOf: Date): DebtDueState {
   const days = daysUntil(debt.dueAt, asOf);
   if (!isOpenDebt(debt)) return { kind: "settled", days };
   if (days === null) return { kind: "undated", days };
@@ -84,7 +81,7 @@ export function debtDueState(debt: Debt, asOf = new Date()): DebtDueState {
 
 export function selectDebtsByDueDate(
   debts: Debt[],
-  { window = "all", asOf = new Date() }: { window?: DebtDueWindow; asOf?: Date } = {},
+  { window = "all", asOf }: { window?: DebtDueWindow; asOf: Date },
 ): Debt[] {
   return debts
     .filter(isOpenDebt)

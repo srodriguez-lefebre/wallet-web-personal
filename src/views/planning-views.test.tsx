@@ -1,7 +1,8 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
-import { calculateGoalProgress, formatMoney } from "@shared/calculations";
+import { calculateGoalProgress } from "@shared/goals";
+import { formatMoney } from "@shared/money";
 
 import { DebtsView } from "./debts-view";
 import { InvestmentsView } from "./investments-view";
@@ -55,7 +56,7 @@ afterEach(async () => {
 const text = () => JSON.stringify(tree?.toJSON());
 
 test("completed goals do not show a remaining contribution plan", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0]!;
+  const progress = calculateGoalProgress(mockWalletData, new Date())[0]!;
   await act(async () => {
     tree = create(
       <GoalFundingPlan
@@ -177,7 +178,7 @@ test("portfolio groups currencies and includes hidden investments only after the
   expect(text()).toContain("including hidden");
 });
 test("goal funding displays missing FX as unavailable without NaN or zero", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0]!;
+  const progress = calculateGoalProgress(mockWalletData, new Date())[0]!;
   await act(async () => {
     tree = create(
       <GoalFundingPlan
@@ -195,7 +196,7 @@ test("goal funding displays missing FX as unavailable without NaN or zero", asyn
   expect(text()).not.toContain("Per day");
 });
 test("paused goal preserves remaining but does not suggest daily contributions", async () => {
-  const progress = calculateGoalProgress(mockWalletData)[0]!;
+  const progress = calculateGoalProgress(mockWalletData, new Date())[0]!;
   await act(async () => {
     tree = create(
       <GoalFundingPlan

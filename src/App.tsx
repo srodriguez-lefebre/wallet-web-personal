@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, type PropsWithChildren } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
-import { monthKey } from "@shared/calculations";
+import { monthKey } from "@shared/dates";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";

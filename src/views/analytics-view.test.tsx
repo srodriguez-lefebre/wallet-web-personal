@@ -1,7 +1,7 @@
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 
 import { AnalyticsView } from "./analytics-view";
 

@@ -229,7 +229,11 @@ export function useRecordForm() {
     setDestinationAmount("");
     const card = dataset.creditCards.find((item) => item.id === creditCardId);
     setExchangeRateToLimitCurrency(
-      card ? String(findExchangeRate(dataset.exchangeRates, next, card.limitCurrency) ?? "") : "1",
+      card
+        ? String(
+            findExchangeRate(dataset.exchangeRates, next, card.limitCurrency, new Date()) ?? "",
+          )
+        : "1",
     );
   }
   async function handleSubmit(event: FormEvent) {

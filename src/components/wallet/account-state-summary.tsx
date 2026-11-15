@@ -1,5 +1,5 @@
 import { Eye, EyeOff } from "lucide-react";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 
 import type { AccountBalance } from "@shared/types";
 

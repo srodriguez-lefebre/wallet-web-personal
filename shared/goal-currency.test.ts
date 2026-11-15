@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { calculateGoalProgress } from "./calculations.js";
+import { calculateGoalProgress } from "./goals.js";
 import { mockWalletData } from "./mock-data.js";
 
 function dataset() {
@@ -40,7 +40,7 @@ test("goal record conversion uses rates known when the record occurred", () => {
       date: "2026-06-01T00:00:00.000Z",
     },
   ];
-  expect(calculateGoalProgress(data)[0]!.spent).toBe(100);
+  expect(calculateGoalProgress(data, new Date())[0]!.spent).toBe(100);
 });
 
 test("stored amount in the goal account currency preserves the historical conversion", () => {
@@ -57,11 +57,11 @@ test("stored amount in the goal account currency preserves the historical conver
       reserveIncome: true,
     },
   ];
-  expect(calculateGoalProgress(data)[0]!.spent).toBe(40);
+  expect(calculateGoalProgress(data, new Date())[0]!.spent).toBe(40);
 });
 
 test("missing goal conversion is marked unavailable instead of a 1:1 total", () => {
-  const result = calculateGoalProgress(dataset())[0]!;
+  const result = calculateGoalProgress(dataset(), new Date())[0]!;
   expect(result.hasMissingExchangeRate).toBe(true);
   expect(Number.isNaN(result.committed)).toBe(true);
 });
@@ -71,7 +71,7 @@ test("review records with unknown primary conversion leave goal progress unavail
   data.settings.primaryCurrency = "USD";
   data.records[0]!.paymentStatus = "needs_review";
   data.records[0]!.exchangeRateToPrimary = 0;
-  const progress = calculateGoalProgress(data)[0]!;
+  const progress = calculateGoalProgress(data, new Date())[0]!;
   expect(progress.hasMissingExchangeRate).toBe(true);
   expect(Number.isNaN(progress.spent)).toBe(true);
 });
@@ -81,7 +81,7 @@ test("a zero foreign account amount cannot invent a goal conversion", () => {
   data.accounts = [{ ...data.accounts[0]!, id: "usd-account", currency: "USD" }];
   data.records[0]!.accountId = "usd-account";
   data.records[0]!.accountAmount = 0;
-  const progress = calculateGoalProgress(data)[0]!;
+  const progress = calculateGoalProgress(data, new Date())[0]!;
   expect(progress.hasMissingExchangeRate).toBe(true);
   expect(Number.isNaN(progress.spent)).toBe(true);
 });
@@ -108,5 +108,5 @@ test("goal reservations support inverse quotes without fabricating a primary rat
       date: "2026-06-01T00:00:00.000Z",
     },
   ];
-  expect(calculateGoalProgress(data)[0]!.reserved).toBe(100);
+  expect(calculateGoalProgress(data, new Date())[0]!.reserved).toBe(100);
 });

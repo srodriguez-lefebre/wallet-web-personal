@@ -4,7 +4,7 @@ import { neonConfig } from "@neondatabase/serverless";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { createPostgresTestDatabase } from "../../../scripts/sandbox/postgres-test.js";
-import { calculateCreditCardCategoryUsage } from "../../../shared/calculations.js";
+import { calculateCreditCardCategoryUsage } from "../../../shared/cards.js";
 import { selectPendingCardStatements } from "../../../src/lib/cards-presentation.js";
 import { createDb } from "../client.js";
 import { getWalletDataset } from "../dataset.js";

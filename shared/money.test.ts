@@ -15,8 +15,8 @@ test("selects the last historical quote and supports inverse and bridge currenci
 });
 test("missing or future quotes cannot silently become one-to-one", () => {
   expect(findExchangeRate(rates, "USD", "UYU", "2025-01-01")).toBeNull();
-  expect(findExchangeRate(rates, "BRL", "UYU")).toBeNull();
-  expect(findExchangeRate(rates, "UYU", "UYU")).toBe(1);
+  expect(findExchangeRate(rates, "BRL", "UYU", new Date())).toBeNull();
+  expect(findExchangeRate(rates, "UYU", "UYU", new Date())).toBe(1);
 });
 
 test("proportional reserve cents round exactly at half cents and preserve the last cent", () => {

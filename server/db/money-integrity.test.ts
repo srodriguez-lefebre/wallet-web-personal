@@ -3,10 +3,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, expect, test } from "vitest";
 
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
-import {
-  calculateAccountBalances,
-  calculateVisibleDebtSummary,
-} from "../../shared/calculations.js";
+import { calculateAccountBalances } from "../../shared/balances.js";
+import { calculateVisibleDebtSummary } from "../../shared/debts.js";
 import { createDb } from "./client.js";
 import {
   createDebt,
@@ -70,9 +68,10 @@ test("debt payment freezes separate account and reporting amounts and retries on
   expect(second!.record.id).toBe(first!.record.id);
   const dataset = await getWalletDataset(createDb());
   expect(
-    calculateAccountBalances(dataset).find((item) => item.account.id === accountId)!.balance,
+    calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === accountId)!
+      .balance,
   ).toBe(1000);
-  expect(calculateVisibleDebtSummary(dataset).toPay).toBe(4000);
+  expect(calculateVisibleDebtSummary(dataset, new Date()).toPay).toBe(4000);
 });
 test("cancelling, editing and deleting payments reconciles the debt atomically", async () => {
   const debt = await createDebt(createDb(), debtInput);
@@ -108,7 +107,7 @@ test("reviewing a valid debt payment preserves the debt payment and bank balance
   await updateRecord(createDb(), result!.record.id, { paymentStatus: "needs_review" });
   expect((await getWalletDataset(createDb())).debts[0]!.pendingAmount).toBe(100);
   expect(
-    calculateAccountBalances(await getWalletDataset(createDb())).find(
+    calculateAccountBalances(await getWalletDataset(createDb()), new Date()).find(
       (item) => item.account.id === accountId,
     )!.balance,
   ).toBe(1000);
@@ -137,7 +136,8 @@ test("unclassified review history with unknown primary conversion can be cancell
   expect(dataset.records[0]!.accountId).toBeUndefined();
   expect(dataset.records[0]!.categoryId).toBeUndefined();
   expect(
-    calculateAccountBalances(dataset).find((item) => item.account.id === accountId)!.totalBalance,
+    calculateAccountBalances(dataset, new Date()).find((item) => item.account.id === accountId)!
+      .totalBalance,
   ).toBe(5000);
 });
 test("cross currency transfer persists the actual amount received", async () => {
@@ -155,7 +155,7 @@ test("cross currency transfer persists the actual amount received", async () => 
     occurredAt: payment.occurredAt,
   };
   await createRecord(createDb(), input);
-  const balances = calculateAccountBalances(await getWalletDataset(createDb()));
+  const balances = calculateAccountBalances(await getWalletDataset(createDb()), new Date());
   expect(balances.find((item) => item.account.id === accountId)!.balance).toBe(1000);
   expect(balances.find((item) => item.account.id === dollarAccount)!.balance).toBe(100);
   await expect(

@@ -1,5 +1,5 @@
 import { currencySchema, accountSchema } from "@shared/schemas";
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { accountTypeLabels } from "@shared/constants";
 import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
 import { FormEvent, useRef, useState } from "react";

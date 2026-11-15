@@ -1,11 +1,17 @@
 import type { CurrencyCode, ExchangeRate } from "./types.js";
 
+export const moneyTolerance = 0.005;
+/** Display/import rounding only; persistence arithmetic remains PostgreSQL numeric. */
+export function roundMoney(amount: number) {
+  return Number(amount.toFixed(2));
+}
+
 /** Uses only quotes known at the requested instant; never invents a 1:1 quote. */
 export function findExchangeRate(
   rates: ExchangeRate[],
   from: CurrencyCode,
   to: CurrencyCode,
-  date: string | Date = new Date(),
+  date: string | Date,
 ): number | null {
   if (from === to) return 1;
   const cutoff = new Date(date).getTime();
@@ -50,4 +56,18 @@ export function proportionalMoneyCents(amount: number, part: number, total: numb
   if (money === undefined || fraction === undefined || whole === undefined || whole === 0n)
     return Number.NaN;
   return Number((2n * money * fraction + whole) / (2n * whole));
+}
+
+export function toPrimaryCurrency(amount: number, recordRate = 1) {
+  return amount * recordRate;
+}
+
+export function formatMoney(amount: number, currency: CurrencyCode, locale = "es-UY") {
+  if (!Number.isFinite(amount)) return "Sin cotización";
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
 }

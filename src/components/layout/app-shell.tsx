@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { monthKey } from "@shared/calculations";
+import { monthKey } from "@shared/dates";
 
 import { WalletQueryStatus } from "./wallet-query-status";
 

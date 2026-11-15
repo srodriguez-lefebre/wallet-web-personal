@@ -2,31 +2,33 @@
 import { useEffect } from "react";
 import {
   availableMonthKeys,
-  buildExpenseComparisonSeries,
-  buildExpenseSequenceComparisonSeries,
-  calculateAccountBalanceAtDate,
-  calculateAccountBalances,
-  calculateBudgetProgress,
-  calculateBudgetProgressForDateRange,
-  calculateCreditCardCategoryUsage,
-  calculateCreditCardSummaries,
-  calculateCreditCardSummary,
-  calculateEmergencyRunway,
-  calculateGoalProgress,
-  calculateMonthlySeries,
-  calculateSavingsRate,
-  calculateSummary,
-  calculateSummaryForDateRange,
   dateKey,
   dateKeysForRange,
   dateRangeForMonth,
-  isCategoryOrDescendant,
   monthKey,
   recentMonthKeys,
   recordsForDateRange,
   relativeDateRanges,
   relativeMonthKeys,
-} from "@shared/calculations";
+} from "@shared/dates";
+import {
+  buildExpenseComparisonSeries,
+  buildExpenseSequenceComparisonSeries,
+  calculateEmergencyRunway,
+  calculateMonthlySeries,
+  calculateSavingsRate,
+  calculateSummary,
+  calculateSummaryForDateRange,
+} from "@shared/analytics";
+import { calculateAccountBalanceAtDate, calculateAccountBalances } from "@shared/balances";
+import { calculateBudgetProgress, calculateBudgetProgressForDateRange } from "@shared/budgets";
+import {
+  calculateCreditCardCategoryUsage,
+  calculateCreditCardSummaries,
+  calculateCreditCardSummary,
+} from "@shared/cards";
+import { calculateGoalProgress } from "@shared/goals";
+import { isCategoryOrDescendant } from "@shared/categories";
 import { calculateMerchantSpending } from "@shared/merchant-analytics";
 import { countNewReviews, getMerchantCorrections, recordReviewDate } from "@shared/record-review";
 import { isPrimaryReportingRecord } from "@shared/record-status";
@@ -136,7 +138,7 @@ function fixtureRecords(data: WalletDataset, filters: RecordQueryFilters) {
     .sort((a, b) => Date.parse(b.occurredAt) - Date.parse(a.occurredAt));
 }
 function accountMetrics(data: WalletDataset) {
-  return calculateAccountBalances(data).map(({ account, ...value }) => ({
+  return calculateAccountBalances(data, new Date()).map(({ account, ...value }) => ({
     ...value,
     accountId: account.id,
     balanceInPrimary: wire(value.balanceInPrimary),
@@ -157,7 +159,7 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
         data = datasetFor(wallet),
         complete = wallet.isAllHistoryComplete !== false;
       return {
-        balances: complete ? calculateAccountBalances(data) : [],
+        balances: complete ? calculateAccountBalances(data, new Date()) : [],
         metrics: query(complete ? accountMetrics(data) : undefined, !complete),
         isPending: !complete,
         isError: false,
@@ -167,7 +169,7 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
       const wallet = getWallet(),
         data = datasetFor(wallet),
         complete = wallet.isAllHistoryComplete !== false,
-        progress = calculateGoalProgress(data);
+        progress = calculateGoalProgress(data, new Date());
       return {
         progress: complete ? progress : [],
         metrics: query(complete ? progress : undefined, !complete),
@@ -205,20 +207,20 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
       const range = { from: selection.from, to: selection.to };
       const summary =
         selection.periodMode === "month"
-          ? calculateSummary(data, selection.selectedMonth)
-          : calculateSummaryForDateRange(data, range);
+          ? calculateSummary(data, selection.selectedMonth, new Date())
+          : calculateSummaryForDateRange(data, range, new Date());
       const periods =
         selection.periodMode === "custom"
           ? relativeDateRanges(range, 3)
           : relativeMonthKeys(selection.selectedMonth, 3).map(dateRangeForMonth);
-      const previous = calculateSummaryForDateRange(data, periods[1]!);
+      const previous = calculateSummaryForDateRange(data, periods[1]!, new Date());
       const savingsRate = calculateSavingsRate(summary.income, summary.expenses);
       const previousRate = calculateSavingsRate(previous.income, previous.expenses);
       const model = {
         summary,
         budgets:
           selection.periodMode === "month"
-            ? calculateBudgetProgress(data, selection.selectedMonth)
+            ? calculateBudgetProgress(data, selection.selectedMonth, new Date())
             : calculateBudgetProgressForDateRange(data, range),
         monthlySeries: calculateMonthlySeries(
           data,
@@ -227,6 +229,7 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
             selection.periodMode === "month" ? selection.selectedMonth : monthKey(selection.to),
             6,
           ).reverse(),
+          new Date(),
         ),
         expenseTrend: buildExpenseComparisonSeries(data, periods),
         expenseSequenceTrend: buildExpenseSequenceComparisonSeries(data, periods),
@@ -235,10 +238,12 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
         emergencyRunway: calculateEmergencyRunway(
           data,
           selection.periodMode === "month" ? selection.selectedMonth : monthKey(selection.to),
+          undefined,
+          new Date(),
         ),
-        projection: calculateEndOfMonthProjection(data, summary.dailyAverageExpense),
-        allowedDaily: calculateAllowedDailySpend(data),
-        recommendations: buildSavingsRecommendations(data),
+        projection: calculateEndOfMonthProjection(data, summary.dailyAverageExpense, new Date()),
+        allowedDaily: calculateAllowedDailySpend(data, new Date()),
+        recommendations: buildSavingsRecommendations(data, new Date()),
         merchants: calculateMerchantSpending(data.records, range),
       };
       const records = recordsForDateRange(data.records, range).filter(isPrimaryReportingRecord);
@@ -308,7 +313,7 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
         complete = wallet.isAllHistoryComplete !== false;
       return {
         card,
-        summary: query(card ? calculateCreditCardSummary(data, card) : undefined),
+        summary: query(card ? calculateCreditCardSummary(data, card, new Date()) : undefined),
         ledger: query(
           complete
             ? {
@@ -338,9 +343,9 @@ export function legacyEntityHooks(getWallet: () => Fixture) {
                 dateRangeForMonth,
               );
       return {
-        entries: calculateCreditCardSummaries(data).map((summary) => ({
+        entries: calculateCreditCardSummaries(data, new Date()).map((summary) => ({
           summary,
-          categoryUsage: calculateCreditCardCategoryUsage(data, summary.card),
+          categoryUsage: calculateCreditCardCategoryUsage(data, summary.card, new Date()),
           expenseTrend: buildExpenseComparisonSeries(
             {
               ...data,

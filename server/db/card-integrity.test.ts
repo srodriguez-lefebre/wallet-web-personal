@@ -8,14 +8,13 @@ import {
   installLocalTransport,
   LOCAL_DATABASE_URL,
 } from "../../scripts/sandbox/database.js";
+import { calculateAccountBalanceAtDate, calculateAccountBalances } from "../../shared/balances.js";
 import {
-  calculateAccountBalanceAtDate,
-  calculateAccountBalances,
   calculateCreditCardStatementBalance,
   calculateCreditCardSummary,
   creditCardCycleDates,
   creditCardStatementStatusAfterPaymentChange,
-} from "../../shared/calculations.js";
+} from "../../shared/cards.js";
 import { recordPatchSchema } from "../../shared/schemas.js";
 import { createDb } from "./client.js";
 import {
@@ -236,7 +235,7 @@ test("payment allocations settle debt in the purchase currency", async () => {
   const [statement] = await listCreditCardStatements(createDb(), cardId);
   if (!statement) throw new Error("Expected synthetic fixture row");
   await payCreditCardStatement(createDb(), cardId, statement.id, payment(4000));
-  const summary = calculateCreditCardSummary(await getWalletDataset(createDb()), card);
+  const summary = calculateCreditCardSummary(await getWalletDataset(createDb()), card, new Date());
   expect(summary.usedLimit).toBe(0);
   expect(summary.outstanding).toEqual([]);
   expect(summary.statementDue).toEqual([]);
@@ -250,9 +249,9 @@ test("the cycle includes the complete first day after closing", () => {
   ).toBe("2026-06-21T00:00:00.000Z");
 });
 test("a partially paid statement becomes overdue after its due date", () => {
-  expect(creditCardStatementStatusAfterPaymentChange(100, 50, "2020-01-01T00:00:00.000Z")).toBe(
-    "overdue",
-  );
+  expect(
+    creditCardStatementStatusAfterPaymentChange(100, 50, "2020-01-01T00:00:00.000Z", new Date()),
+  ).toBe("overdue");
 });
 test("concurrent statement payments debit the bank only once", async () => {
   await purchase();
@@ -361,7 +360,8 @@ test("a paid linked purchase refund cannot credit the bank while its payment cre
   const dataset = await getWalletDataset(createDb());
   expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(0);
   expect(
-    calculateAccountBalances(dataset).find((row) => row.account.id === accountId)?.totalBalance,
+    calculateAccountBalances(dataset, new Date()).find((row) => row.account.id === accountId)
+      ?.totalBalance,
   ).toBe(9900);
 });
 test("a paid direct purchase refund keeps its credit on the card", async () => {
@@ -398,7 +398,8 @@ test("a paid direct purchase refund keeps its credit on the card", async () => {
   expect(returned.accountImpactAtCreation).toBe(false);
   expect(returned.accountAmount).toBeUndefined();
   expect(
-    calculateAccountBalances(dataset).find((row) => row.account.id === accountId)?.totalBalance,
+    calculateAccountBalances(dataset, new Date()).find((row) => row.account.id === accountId)
+      ?.totalBalance,
   ).toBe(9900);
   expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(0);
 });
@@ -441,12 +442,13 @@ test("a partially paid linked refund restores only the unpaid bank reservation",
   expect(returned.accountAmount).toBe(60);
   expect(dataset.records.find((row) => row.type === "income")?.amount).toBe(60);
   expect(
-    calculateAccountBalances(dataset).find((row) => row.account.id === accountId)?.totalBalance,
+    calculateAccountBalances(dataset, new Date()).find((row) => row.account.id === accountId)
+      ?.totalBalance,
   ).toBe(9960);
   expect(calculateCreditCardStatementBalance(dataset, statement).dueAmountInLimitCurrency).toBe(60);
   await payCreditCardStatement(createDb(), cardId, statement.id, payment(60));
   expect(
-    calculateAccountBalances(await getWalletDataset(createDb())).find(
+    calculateAccountBalances(await getWalletDataset(createDb()), new Date()).find(
       (row) => row.account.id === accountId,
     )?.totalBalance,
   ).toBe(9900);
@@ -483,7 +485,7 @@ test("the final partial bank refund returns the remaining cent", async () => {
   }
   expect(amounts).toEqual([0.33, 0.33, 0.34]);
   expect(
-    calculateAccountBalances(await getWalletDataset(createDb())).find(
+    calculateAccountBalances(await getWalletDataset(createDb()), new Date()).find(
       (row) => row.account.id === accountId,
     )?.totalBalance,
   ).toBe(10000);
@@ -521,7 +523,7 @@ test("editing a direct bank refund recomputes its authoritative bank amount", as
   });
   expect(edited?.accountAmount).toBe(50);
   expect(
-    calculateAccountBalances(await getWalletDataset(createDb())).find(
+    calculateAccountBalances(await getWalletDataset(createDb()), new Date()).find(
       (row) => row.account.id === accountId,
     )?.totalBalance,
   ).toBe(9950);
@@ -618,7 +620,7 @@ test("reused payment credit releases the other purchase's reservation in its own
     accountImpactAtCreation: true,
     occurredAt: new Date().toISOString(),
   });
-  const balances = calculateAccountBalances(await getWalletDataset(createDb()));
+  const balances = calculateAccountBalances(await getWalletDataset(createDb()), new Date());
   expect(balances.find((row) => row.account.id === accountId)?.totalBalance).toBe(9900);
   expect(balances.find((row) => row.account.id === otherAccountId)?.totalBalance).toBe(10000);
 });
@@ -687,7 +689,7 @@ test("reservation release excludes future refunds and payments from historical b
   expect(calculateAccountBalanceAtDate(dataset, otherAccountId, "2020-07-10")).toBe(9940);
   expect(calculateAccountBalanceAtDate(dataset, otherAccountId, "2020-07-20")).toBe(9940);
   expect(
-    calculateAccountBalances(dataset).find((row) => row.account.id === otherAccountId)
+    calculateAccountBalances(dataset, new Date()).find((row) => row.account.id === otherAccountId)
       ?.totalBalance,
   ).toBe(9940);
 });
@@ -748,7 +750,7 @@ test("releasing part of a bank reservation preserves its rounding remainder", as
   });
   // Of the bank's 1.00 debit: .33 is settled, .33 is still reserved, .34 is released.
   expect(
-    calculateAccountBalances(await getWalletDataset(createDb())).find(
+    calculateAccountBalances(await getWalletDataset(createDb()), new Date()).find(
       (row) => row.account.id === otherAccountId,
     )?.totalBalance,
   ).toBe(9999.34);
@@ -923,16 +925,22 @@ test("review purchases preserve linked liability through single and bulk creatio
   const reviewed = await getWalletDataset(createDb());
   expect(reviewed.creditCardRecords.filter((row) => row.kind === "purchase")).toHaveLength(2);
   expect(
-    calculateCreditCardSummary(reviewed, reviewed.creditCards.find((row) => row.id === cardId)!)
-      .usedLimit,
+    calculateCreditCardSummary(
+      reviewed,
+      reviewed.creditCards.find((row) => row.id === cardId)!,
+      new Date(),
+    ).usedLimit,
   ).toBe(200);
   await updateRecord(createDb(), single.id, { paymentStatus: "cleared" });
   await updateRecord(createDb(), bulk.id, { paymentStatus: "cleared" });
   const cleared = await getWalletDataset(createDb());
   expect(cleared.creditCardRecords).toHaveLength(2);
   expect(
-    calculateCreditCardSummary(cleared, cleared.creditCards.find((row) => row.id === cardId)!)
-      .usedLimit,
+    calculateCreditCardSummary(
+      cleared,
+      cleared.creditCards.find((row) => row.id === cardId)!,
+      new Date(),
+    ).usedLimit,
   ).toBe(200);
 });
 test("clearing a card-only review purchase preserves its wallet history and reporting amount", async () => {
@@ -967,7 +975,8 @@ test("unknown original primary FX cannot produce a cleared bank refund unless a 
   expect(rejected.records).toHaveLength(1);
   expect(rejected.creditCardRecords).toHaveLength(1);
   expect(
-    calculateAccountBalances(rejected).find((row) => row.account.id === accountId)!.totalBalance,
+    calculateAccountBalances(rejected, new Date()).find((row) => row.account.id === accountId)!
+      .totalBalance,
   ).toBe(9900);
   await createDb()
     .insert(exchangeRates)
@@ -986,7 +995,8 @@ test("unknown original primary FX cannot produce a cleared bank refund unless a 
     exchangeRateToPrimary: 0.025,
   });
   expect(
-    calculateAccountBalances(resolved).find((row) => row.account.id === accountId)!.totalBalance,
+    calculateAccountBalances(resolved, new Date()).find((row) => row.account.id === accountId)!
+      .totalBalance,
   ).toBe(9920);
 });
 test("an unencumbered linked purchase can be cancelled, reviewed, and restored", async () => {

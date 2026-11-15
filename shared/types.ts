@@ -1,512 +1,56 @@
-export type CurrencyCode = "UYU" | "USD" | "EUR" | "BRL" | "ARS";
+import type { z } from "zod";
+import type * as models from "./read-models.js";
 
-export type WalletBackup = import("zod").infer<typeof import("./schemas.js").walletBackupSchema>;
-
-export type RecordType = "expense" | "income" | "transfer";
-
-export type AccountType =
-  | "cash"
-  | "bank"
-  | "credit_card"
-  | "savings"
-  | "recurring"
-  | "investment"
-  | "custom";
-
-export type PaymentType = "cash" | "debit" | "credit" | "transfer" | "other";
-
-export type PaymentStatus = "cleared" | "pending" | "needs_review" | "cancelled";
-
-export type GoalStatus = "active" | "completed" | "paused" | "cancelled";
-
-export type BudgetStatus = "ok" | "warning" | "exceeded";
-
-export type DebtStatus = "active" | "paid" | "paused";
-
-export type DebtDirection = "payable" | "receivable";
-
-export interface Money {
-  amount: number;
-  currency: CurrencyCode;
-}
-
-export interface DateRange {
-  from: string;
-  to: string;
-}
-
-export interface Account {
-  id: string;
-  name: string;
-  type: AccountType;
-  currency: CurrencyCode;
-  initialBalance: number;
-  color: string;
-  icon: string;
-  isVisible: boolean;
-  isActive: boolean;
-  note?: string;
-}
-
-export interface Category {
-  id: string;
-  name: string;
-  parentId?: string;
-  color: string;
-  icon: string;
-  systemKey?: string;
-}
-
-export interface Tag {
-  id: string;
-  name: string;
-  color: string;
-  isActive: boolean;
-}
-
-export interface RecordGoalAssociation {
-  goalId: string;
-  assignmentSource: "manual" | "date_rule";
-  useReserved: boolean;
-  reserveIncome: boolean;
-  allocatedAmount?: number;
-}
-
-export interface WalletRecord {
-  linkedCardRecordKind?: "purchase" | "refund";
-  id: string;
-  type: RecordType;
-  amount: number;
-  currency: CurrencyCode;
-  accountId?: string;
-  accountAmount?: number;
-  creditCardId?: string;
-  destinationAccountId?: string;
-  destinationAmount?: number;
-  categoryId?: string;
-  counterpartyName?: string;
-  tagIds: string[];
-  goalIds?: string[];
-  goalAssociations?: RecordGoalAssociation[];
-  paymentType: PaymentType;
-  paymentStatus: PaymentStatus;
-  exchangeRateToPrimary: number;
-  amountInLimitCurrency?: number;
-  exchangeRateToLimitCurrency?: number;
-  occurredAt: string;
-  note?: string;
-  isFixed?: boolean;
-  debtId?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  importMerchant?: string;
-  importHistory?: string[];
-  merchantCorrection?: MerchantCorrection;
-}
-
-export interface MerchantCorrection {
-  savedAt: string;
-  autoApply: boolean;
-}
-
-export interface RecordTemplate {
-  id: string;
-  name: string;
-  type: RecordType;
-  amount: number;
-  currency: CurrencyCode;
-  accountId?: string;
-  creditCardId?: string;
-  destinationAccountId?: string;
-  categoryId?: string;
-  tagId?: string;
-  counterpartyName?: string;
-  note?: string;
-  paymentType: PaymentType;
-}
-
-export interface CreditCard {
-  id: string;
-  name: string;
-  issuer: string;
-  lastFour: string;
-  creditLimit: number;
-  limitCurrency: CurrencyCode;
-  closingDay: number;
-  dueDay: number;
-  color: string;
-  icon: string;
-  isActive: boolean;
-  note?: string;
-}
-
-export interface CreditCardPayment {
-  id: string;
-  creditCardId: string;
-  idempotencyKey?: string;
-  statementId?: string;
-  amount: number;
-  currency: CurrencyCode;
-  amountInLimitCurrency: number;
-  accountId?: string;
-  accountAmount?: number;
-  occurredAt: string;
-  note?: string;
-}
-
-export type CreditCardRecordKind = "purchase" | "refund";
-
-export interface CreditCardRecord {
-  id: string;
-  creditCardId: string;
-  walletRecordId?: string;
-  originalRecordId?: string;
-  statementId?: string;
-  kind: CreditCardRecordKind;
-  amount: number;
-  currency: CurrencyCode;
-  amountInLimitCurrency: number;
-  exchangeRateToLimitCurrency: number;
-  categoryId: string;
-  counterpartyName?: string;
-  note?: string;
-  accountId?: string;
-  accountAmount?: number;
-  accountImpactAtCreation: boolean;
-  occurredAt: string;
-}
-
-export interface CreditCardStatement {
-  id: string;
-  creditCardId: string;
-  cycleStart: string;
-  cycleEnd: string;
-  dueAt: string;
-  status: "pending" | "partial" | "paid" | "overdue";
-  closedAt: string;
-  paidAt?: string;
-}
-
-export interface CreditCardPaymentAllocation {
-  id: string;
-  paymentId: string;
-  creditCardRecordId: string;
-  amount: number;
-  amountInLimitCurrency: number;
-}
-
-export interface CreditCardCurrencyAmount {
-  currency: CurrencyCode;
-  amount: number;
-}
-
-export interface CreditCardSummary {
-  card: CreditCard;
-  usedLimit: number;
-  availableLimit: number;
-  utilizationPercent: number;
-  currentCycleStart: string;
-  currentCycleEnd: string;
-  lastClosingDate: string;
-  dueDate: string;
-  currentCycle: CreditCardCurrencyAmount[];
-  outstanding: CreditCardCurrencyAmount[];
-  statementDue: CreditCardCurrencyAmount[];
-  status: "ok" | "partial" | "overdue" | "over_limit";
-}
-
-export interface CreditCardCategoryUsage {
-  id: string;
-  name: string;
-  color: string;
-  amount: number;
-}
-
-export interface Goal {
-  id: string;
-  name: string;
-  targetAmount: number;
-  currency: CurrencyCode;
-  color: string;
-  icon: string;
-  isVisible: boolean;
-  deadline?: string;
-  status: GoalStatus;
-  /** @deprecated Goals no longer calculate progress through tags. */
-  tagIds: string[];
-  accountId?: string;
-  autoCaptureEnabled?: boolean;
-  autoCaptureStart?: string;
-  autoCaptureEnd?: string;
-  autoReservationAccountId?: string;
-  note?: string;
-}
-
-export interface GoalReservation {
-  id: string;
-  goalId: string;
-  accountId: string;
-  amount: number;
-  currency: CurrencyCode;
-  createdAt: string;
-  note?: string;
-}
-
-export type GoalReservationMovementType = "reserve" | "consume" | "restore" | "release";
-
-export interface GoalReservationMovement {
-  id: string;
-  goalId: string;
-  accountId: string;
-  type: GoalReservationMovementType;
-  amount: number;
-  currency: CurrencyCode;
-  recordId?: string;
-  reversesMovementId?: string;
-  note?: string;
-  createdAt: string;
-}
-
-export interface Budget {
-  id: string;
-  name: string;
-  limitAmount: number;
-  currency: CurrencyCode;
-  period: "monthly";
-  categoryId?: string;
-  tagId?: string;
-  accountId?: string;
-  goalId?: string;
-  color: string;
-  isActive: boolean;
-}
-
-export interface ExchangeRate {
-  id: string;
-  fromCurrency: CurrencyCode;
-  toCurrency: CurrencyCode;
-  rate: number;
-  date: string;
-  source?: string;
-}
-
-export interface MailIngestionResult {
-  status: "created" | "needs_review" | "already_processed" | "duplicate" | "ignored";
-  recordId?: string;
-  creditCardRecordId?: string;
-  duplicateOfId?: string;
-  warnings?: string[];
-}
-
-export interface Investment {
-  id: string;
-  name: string;
-  type: "stock" | "fund" | "crypto" | "deposit" | "other";
-  amountInvested: number;
-  currentValue: number;
-  currency: CurrencyCode;
-  isVisible: boolean;
-  startedAt: string;
-  note?: string;
-}
-
-export interface Debt {
-  id: string;
-  name: string;
-  direction: DebtDirection;
-  originalAmount?: number;
-  pendingAmount?: number;
-  currency: CurrencyCode;
-  counterpartyName: string;
-  accountId?: string;
-  categoryId: string;
-  status: DebtStatus;
-  isVisible: boolean;
-  startedAt: string;
-  dueAt?: string;
-  note?: string;
-  recurringDebtId?: string;
-  recurringMonth?: string;
-}
-
-export interface RecurringDebt {
-  id: string;
-  name: string;
-  direction: DebtDirection;
-  amount?: number;
-  currency: CurrencyCode;
-  counterpartyName: string;
-  accountId?: string;
-  categoryId: string;
-  dayOfMonth: number;
-  isActive: boolean;
-  startedAt: string;
-  note?: string;
-}
-
-export interface InstallmentPlan {
-  id: string;
-  name: string;
-  totalAmount: number;
-  currency: CurrencyCode;
-  installmentsTotal: number;
-  installmentsPaid: number;
-  accountId: string;
-  categoryId: string;
-  nextPaymentAt?: string;
-  note?: string;
-}
-
-export interface WalletSettings {
-  primaryCurrency: CurrencyCode;
-  primaryAccountId?: string;
-  theme: "light" | "dark" | "system";
-  defaultDashboardPreset:
-    | "general"
-    | "spending"
-    | "cash-flow"
-    | "goals"
-    | "accounts"
-    | "monthly-review";
-  locale: "es-UY";
-  includeHiddenAccountsInReports: boolean;
-  defaultAccountId?: string;
-  defaultPaymentType: PaymentType;
-  defaultCreditCardId?: string;
-  defaultPaymentStatus: PaymentStatus;
-  reviewSeenThrough?: string;
-}
-
-export interface WalletDataset {
-  merchantCategoryRules?: import("zod").infer<
-    typeof import("./schemas.js").merchantCategoryRuleSchema
-  >[];
-  recordTemplates?: RecordTemplate[];
-  ingestionEvents?: Array<{
-    id: string;
-    idempotencyKey: string;
-    source: string;
-    status: string;
-    action?: string;
-    fingerprint?: string;
-    targetKey?: string;
-    merchantNormalized?: string;
-    amount?: number;
-    currency?: CurrencyCode;
-    occurredAt?: string;
-    recordId?: string;
-    creditCardRecordId?: string;
-    duplicateOfId?: string;
-    completedAt?: string;
-    createdAt: string;
-    updatedAt: string;
-  }>;
-  merchants?: Array<{
-    id: string;
-    name: string;
-    categoryId: string;
-    priority: number;
-    matchMode?: "alias" | "exact";
-    isActive: boolean;
-    createdAt?: string;
-    updatedAt?: string;
-  }>;
-  merchantAliases?: Array<{
-    id: string;
-    merchantId: string;
-    alias: string;
-    normalizedAlias: string;
-    createdAt?: string;
-  }>;
-  settings: WalletSettings;
-  accounts: Account[];
-  categories: Category[];
-  tags: Tag[];
-  records: WalletRecord[];
-  creditCards: CreditCard[];
-  creditCardRecords: CreditCardRecord[];
-  creditCardStatements: CreditCardStatement[];
-  creditCardPayments: CreditCardPayment[];
-  creditCardPaymentAllocations: CreditCardPaymentAllocation[];
-  goals: Goal[];
-  goalReservations: GoalReservation[];
-  goalReservationMovements?: GoalReservationMovement[];
-  budgets: Budget[];
-  exchangeRates: ExchangeRate[];
-  investments: Investment[];
-  debts: Debt[];
-  recurringDebts: RecurringDebt[];
-  installmentPlans: InstallmentPlan[];
-}
-
-export interface RecordPage {
-  items: WalletRecord[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
-
-export interface WalletBootstrap {
-  dataset: WalletDataset;
-  recordsPage: Omit<RecordPage, "items">;
-  generatedDebts: Debt[];
-  serverDate: string;
-}
-
-export interface RecordFilters {
-  type?: RecordType | "all";
-  accountId?: string;
-  creditCardId?: string;
-  categoryId?: string;
-  tagId?: string;
-  goalId?: string;
-  search?: string;
-  note?: string;
-  paymentStatus?: PaymentStatus | "all";
-}
-
-export interface AccountBalance {
-  account: Account;
-  balance: number;
-  totalBalance: number;
-  balanceInPrimary: number;
-  totalBalanceInPrimary: number;
-  reserved: number;
-  freeBalance: number;
-}
-
-export interface GoalProgress {
-  goal: Goal;
-  hasMissingExchangeRate: boolean;
-  reserved: number;
-  spent: number;
-  committed: number;
-  remaining: number;
-  overTarget: number;
-  percentage: number;
-}
-
-export interface BudgetProgress {
-  budget: Budget;
-  spent: number;
-  remaining: number;
-  percentage: number;
-  status: BudgetStatus;
-}
-
-export interface AnalyticsSummary {
-  income: number;
-  expenses: number;
-  cashFlow: number;
-  balance: number;
-  spending: number;
-  dailyAverageExpense: number;
-  availableDaily: number;
-}
-
-export interface VisibleDebtSummary {
-  toCollect: number;
-  toPay: number;
-  net: number;
-  openCount: number;
-  amountPendingCount: number;
-}
+export type CurrencyCode = z.infer<typeof models.currencyCodeModelSchema>;
+export type WalletBackup = z.infer<typeof import("./schemas.js").walletBackupSchema>;
+export type RecordType = z.infer<typeof models.recordTypeModelSchema>;
+export type AccountType = z.infer<typeof models.accountTypeModelSchema>;
+export type PaymentType = z.infer<typeof models.paymentTypeModelSchema>;
+export type PaymentStatus = z.infer<typeof models.paymentStatusModelSchema>;
+export type GoalStatus = z.infer<typeof models.goalStatusModelSchema>;
+export type BudgetStatus = z.infer<typeof models.budgetStatusModelSchema>;
+export type DebtStatus = z.infer<typeof models.debtStatusModelSchema>;
+export type DebtDirection = z.infer<typeof models.debtDirectionModelSchema>;
+export type Money = z.infer<typeof models.moneyModelSchema>;
+export type DateRange = z.infer<typeof models.dateRangeModelSchema>;
+export type Account = z.infer<typeof models.accountModelSchema>;
+export type Category = z.infer<typeof models.categoryModelSchema>;
+export type Tag = z.infer<typeof models.tagModelSchema>;
+export type RecordGoalAssociation = z.infer<typeof models.recordGoalAssociationModelSchema>;
+export type WalletRecord = z.infer<typeof models.walletRecordModelSchema>;
+export type MerchantCorrection = z.infer<typeof models.merchantCorrectionModelSchema>;
+export type RecordTemplate = z.infer<typeof models.recordTemplateModelSchema>;
+export type CreditCard = z.infer<typeof models.creditCardModelSchema>;
+export type CreditCardPayment = z.infer<typeof models.creditCardPaymentModelSchema>;
+export type CreditCardRecordKind = z.infer<typeof models.creditCardRecordKindModelSchema>;
+export type CreditCardRecord = z.infer<typeof models.creditCardRecordModelSchema>;
+export type CreditCardStatement = z.infer<typeof models.creditCardStatementModelSchema>;
+export type CreditCardPaymentAllocation = z.infer<
+  typeof models.creditCardPaymentAllocationModelSchema
+>;
+export type CreditCardCurrencyAmount = z.infer<typeof models.creditCardCurrencyAmountModelSchema>;
+export type CreditCardSummary = z.infer<typeof models.creditCardSummaryModelSchema>;
+export type CreditCardCategoryUsage = z.infer<typeof models.creditCardCategoryUsageModelSchema>;
+export type Goal = z.infer<typeof models.goalModelSchema>;
+export type GoalReservation = z.infer<typeof models.goalReservationModelSchema>;
+export type GoalReservationMovementType = z.infer<
+  typeof models.goalReservationMovementTypeModelSchema
+>;
+export type GoalReservationMovement = z.infer<typeof models.goalReservationMovementModelSchema>;
+export type Budget = z.infer<typeof models.budgetModelSchema>;
+export type ExchangeRate = z.infer<typeof models.exchangeRateModelSchema>;
+export type MailIngestionResult = z.infer<typeof models.mailIngestionResultModelSchema>;
+export type Investment = z.infer<typeof models.investmentModelSchema>;
+export type Debt = z.infer<typeof models.debtModelSchema>;
+export type RecurringDebt = z.infer<typeof models.recurringDebtModelSchema>;
+export type InstallmentPlan = z.infer<typeof models.installmentPlanModelSchema>;
+export type WalletSettings = z.infer<typeof models.walletSettingsModelSchema>;
+export type WalletDataset = z.infer<typeof models.walletDatasetModelSchema>;
+export type RecordPage = z.infer<typeof models.recordPageModelSchema>;
+export type WalletBootstrap = z.infer<typeof models.walletBootstrapModelSchema>;
+export type RecordFilters = z.infer<typeof models.recordFiltersModelSchema>;
+export type AccountBalance = z.infer<typeof models.accountBalanceModelSchema>;
+export type GoalProgress = z.infer<typeof models.goalProgressModelSchema>;
+export type BudgetProgress = z.infer<typeof models.budgetProgressModelSchema>;
+export type AnalyticsSummary = z.infer<typeof models.analyticsSummaryModelSchema>;
+export type VisibleDebtSummary = z.infer<typeof models.visibleDebtSummaryModelSchema>;

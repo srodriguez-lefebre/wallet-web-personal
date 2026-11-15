@@ -12,7 +12,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
+import { calculateVisibleDebtSummary, isOpenDebt } from "@shared/debts";
+import { formatMoney } from "@shared/money";
 import { debtDirectionLabels, debtStatusLabels } from "@shared/constants";
 import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/planning";
 
@@ -169,14 +170,14 @@ function debtProgress(debt: Debt) {
 }
 
 function dueVariant(debt: Debt) {
-  const state = debtDueState(debt);
+  const state = debtDueState(debt, new Date());
   if (state.kind === "overdue") return "danger";
   if (state.kind === "today" || (state.kind === "upcoming" && state.days! <= 7)) return "info";
   return "muted";
 }
 
 function dueLabel(debt: Debt) {
-  const state = debtDueState(debt);
+  const state = debtDueState(debt, new Date());
   if (state.kind === "settled") return "Settled";
   if (state.kind === "undated") return "No due date";
   if (state.kind === "overdue") return `Overdue ${Math.abs(state.days!)}d`;
@@ -314,10 +315,16 @@ export function DebtsView() {
 
   const { toast, runAction } = useActionToast();
   const [dueWindow, setDueWindow] = useState<DebtDueWindow>("all");
-  const openDebts = useMemo(() => selectDebtsByDueDate(dataset.debts), [dataset.debts]);
-  const filteredOpenDebts = selectDebtsByDueDate(openDebts, { window: dueWindow });
+  const openDebts = useMemo(
+    () => selectDebtsByDueDate(dataset.debts, { asOf: new Date() }),
+    [dataset.debts],
+  );
+  const filteredOpenDebts = selectDebtsByDueDate(openDebts, {
+    window: dueWindow,
+    asOf: new Date(),
+  });
   const closedDebts = dataset.debts.filter((debt) => !isOpenDebt(debt));
-  const summary = calculateVisibleDebtSummary(dataset);
+  const summary = calculateVisibleDebtSummary(dataset, new Date());
   const hasKnownSummary = summary.openCount === 0 || summary.amountPendingCount < summary.openCount;
   const activePaymentDebt = dataset.debts.find((debt) => debt.id === paymentDebtId);
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildBudgetPlan, conflictingCategoryBudgets } from "@shared/budget-planning";
-import { formatMoney, monthKey } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
+import { monthKey } from "@shared/dates";
 import { budgetSchema } from "@shared/schemas";
 
 import type { BudgetPlan, BudgetProposal } from "@shared/budget-planning";

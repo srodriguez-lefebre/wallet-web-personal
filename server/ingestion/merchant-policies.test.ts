@@ -79,3 +79,28 @@ test("specific food policy overrides a broad legacy ride alias after renaming", 
     merchantName: "UBER EATS SYNTHETIC",
   });
 });
+
+test("an unavailable longer policy does not hide an available category", async () => {
+  const id = randomUUID();
+  await fixture.pool.query(
+    "INSERT INTO categories(id,name,color,icon,system_key) VALUES($1,'Renamed bread','blue','bank','bakery')",
+    [id],
+  );
+  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(null);
+  expect(await resolveCategory(createDb(), "SUPERMERCADO PANADERIA SYNTHETIC")).toMatchObject({
+    categoryId: id,
+    source: "generic_rule",
+    needsReview: false,
+  });
+  expect(model).not.toHaveBeenCalled();
+});
+test("missing insurance category still requests review when another matching policy is longer", async () => {
+  await fixture.pool.query(
+    "INSERT INTO categories(name,color,icon,system_key) VALUES('Renamed fuel','blue','bank','service_station')",
+  );
+  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(null);
+  expect(
+    await resolveCategory(createDb(), "ASEGURADORA ESTACION DE SERVICIO SYNTHETIC"),
+  ).toMatchObject({ source: "fallback", needsReview: true, reason: "missing_insurance_category" });
+  expect(model).not.toHaveBeenCalled();
+});

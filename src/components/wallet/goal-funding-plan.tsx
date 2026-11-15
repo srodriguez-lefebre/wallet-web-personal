@@ -1,4 +1,4 @@
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { calculateGoalFundingPlan } from "@shared/planning";
 
 import type { GoalProgress } from "@shared/types";
@@ -15,7 +15,7 @@ const messages = {
 
 export function GoalFundingPlan({ progress }: { progress: GoalProgress }) {
   if (progress.goal.status === "completed") return null;
-  const plan = calculateGoalFundingPlan(progress);
+  const plan = calculateGoalFundingPlan(progress, new Date());
   return (
     <div className="mt-4 space-y-3 rounded-md border p-3 text-sm">
       <div className="flex items-center justify-between gap-2">

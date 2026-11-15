@@ -1,5 +1,7 @@
 import { differenceInCalendarDays, endOfMonth, isAfter, isBefore, parseISO } from "date-fns";
-import { calculateSavingsRate, formatMoney, monthKey } from "@shared/calculations";
+import { calculateSavingsRate } from "@shared/analytics";
+import { formatMoney } from "@shared/money";
+import { monthKey } from "@shared/dates";
 
 import type { AnalyticsResult } from "@shared/analytics-contract";
 import type { AccountBalanceMetric, GoalProgressMetric } from "@shared/read-model-contract";

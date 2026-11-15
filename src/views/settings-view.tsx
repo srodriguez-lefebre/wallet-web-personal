@@ -671,7 +671,7 @@ export function SettingsView() {
                 value={primaryCurrency}
                 onChange={(event) => setPrimaryCurrency(event.target.value as CurrencyCode)}
               >
-                {(currencySchema.options as CurrencyCode[]).map((currency) => (
+                {currencySchema.options.map((currency) => (
                   <option key={currency}>{currency}</option>
                 ))}
               </select>

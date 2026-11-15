@@ -1,4 +1,4 @@
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { CreditCard as CreditCardIcon, Plus } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";

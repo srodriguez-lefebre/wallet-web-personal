@@ -1,4 +1,4 @@
-import { formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/money";
 import { ArrowLeft, Sparkles, X } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
