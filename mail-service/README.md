@@ -1,6 +1,10 @@
 # Mail service (Google Apps Script)
 
-Copiar `Code.gs` y `EmailProcessors.gs` a un proyecto de Google Apps Script vinculado a la cuenta de Gmail.
+Ejecutar `npm run mail:build` y copiar `normalization.gs`, `EmailProcessors.gs` y
+`Code.gs` al proyecto de Google Apps Script vinculado a la cuenta de Gmail.
+`normalization.gs` se genera desde los parsers y normalizadores TypeScript compartidos;
+no se edita a mano. `npm run mail:check` verifica que esté actualizado y el sandbox
+ejecuta los tres archivos reales. Conservar las propiedades y los triggers existentes.
 
 Script Properties requeridas:
 
