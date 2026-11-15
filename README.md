@@ -591,6 +591,17 @@ Una versión anterior puede tratar las nuevas claves como categorías protegidas
 hasta volver al código actual. El checkpoint del paquete registra si la migración
 real y el despliegue ya fueron verificados.
 
+El comando de este rollout verifica el destino y aplica únicamente 0023 en un batch
+Neon HTTP, con lock, comprobación del predecesor y una entrada nueva de journal.
+Sin `--apply` sólo inspecciona metadatos. Una respuesta perdida se comprueba mediante
+el esquema y el journal antes de informar éxito; el comando repetido no reproduce
+el DDL ya confirmado. Las referencias históricas de deuda se conservan sin activar FK.
+
+```powershell
+npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada>
+npm run db:migrate:ingestion -- --env-file .env.local --expected-endpoint-sha256 <huella-verificada> --apply
+```
+
 Los cálculos viven en `dates`, `money`, `balances`, `cards`, `debts`, `analytics`,
 `categories`, `goals` y `budgets`; reciben un reloj explícito cuando lo necesitan.
 `calculateAccountBalances(dataset, now, cutoff?)` comparte el cálculo corriente e

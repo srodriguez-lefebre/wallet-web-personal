@@ -45,11 +45,11 @@
 
 **Interfaces:** `resolveCategory(db, merchantRaw, useCorrections)` preserves the existing resolution result. SQL returns only matching alias candidates; protected category identities use `systemKey`. New provider-state schema is operational, separate from financial history.
 
-- [ ] Add RED tests for rename stability, overlapping and exact aliases, generic processors, unmapped accounts, old payload/source compatibility and migration rollback/repetition.
-- [ ] Seed current generic rules and Uber/Taxi/insurance overrides as data, resolving categories by stable keys. Remove `genericMerchantCategoryRules` and name-dependent runtime rules; match candidate aliases and corrections in SQL.
-- [ ] Introduce typed ingestion sources without discarding historical backup values or breaking deployed clients. Preserve existing record/event deduplication and goal writes.
-- [ ] Verify migration on disposable PostgreSQL/PGlite, full category/mail/concurrency/backup tests, OpenAPI and types. Expected: old and new clients remain compatible, earlier journal untouched.
-- [ ] Commit and push the validated stage as a draft checkpoint. Apply and verify the compatible schema before authenticated preview testing or production activation.
+- [x] Add RED tests for rename stability, overlapping and exact aliases, generic processors, unmapped accounts, old payload/source compatibility and migration rollback/repetition.
+- [x] Seed current generic rules and Uber/Taxi/insurance overrides as data, resolving categories by stable keys. Remove `genericMerchantCategoryRules` and name-dependent runtime rules; match candidate aliases and corrections in SQL.
+- [x] Introduce typed ingestion sources without discarding historical backup values or breaking deployed clients. Preserve existing record/event deduplication and goal writes.
+- [x] Verify migration on disposable PostgreSQL/PGlite, full category/mail/concurrency/backup tests, OpenAPI and types. Expected: old and new clients remain compatible, earlier journal untouched.
+- [x] Commit and push the validated stage as a draft checkpoint. Apply and verify the compatible schema before authenticated preview testing or production activation.
 
 ## Task 3: Bounded providers, persistent circuits and hourly cleanup
 
@@ -57,11 +57,11 @@
 
 **Interfaces:** Provider `{name, call(input, {signal, budgetMs})}`; category maximum 10000 ms, FX maximum 4000 ms. Persistent circuit state uses name/open_until/failures, atomic failures and a bounded half-open probe. Stored/frozen rates are preferred; unavailable values lead to review, never invented 1:1.
 
-- [ ] Add RED fake-provider and real synthetic-DB tests for timeout, abort, threshold/open/half-open/reset, parallel failures and hourly cleanup claims.
-- [ ] Use three consecutive failures and a five-minute open interval; this fills unspecified N/M and is documented as an implementation choice. Keep total rate-provider work within its invocation budget.
-- [ ] Retain Frankfurter v2 after checking its official current currency catalog includes UYU and ARS; validate returned pair/date/finite-positive rate and remove the unused `fixed_fallback` type.
-- [ ] Make metadata pruning at most hourly through an atomic operational-state claim. Set a bounded function maxDuration without changing routing or security settings.
-- [ ] Run provider, mail integrity/concurrency, FX and sandbox failure tests; types/lint/spec. Expected: review fallback, no mutation retry, no real provider calls in tests. Commit/push.
+- [x] Add RED fake-provider and real synthetic-DB tests for timeout, abort, threshold/open/half-open/reset, parallel failures and hourly cleanup claims.
+- [x] Use three consecutive failures and a five-minute open interval; this fills unspecified N/M and is documented as an implementation choice. Keep total rate-provider work within its invocation budget.
+- [x] Retain Frankfurter v2 after checking its official current currency catalog includes UYU and ARS; validate returned pair/date/finite-positive rate and remove the unused `fixed_fallback` type.
+- [x] Make metadata pruning at most hourly through an atomic operational-state claim. Set a bounded function maxDuration without changing routing or security settings.
+- [x] Run provider, mail integrity/concurrency, FX and sandbox failure tests; types/lint/spec. Expected: review fallback, no mutation retry, no real provider calls in tests. Commit/push.
 
 ## Task 4: Shared domain, inferred schemas and safe import scripts
 
@@ -69,11 +69,11 @@
 
 **Interfaces:** Existing exported function names keep their financial behavior in focused modules. Clock-dependent calculations receive an explicit `now`. Types derive from Zod; patch nullability/defaults retain current contracts. Script modules expose pure preparation and atomic execution functions for synthetic testing.
 
-- [ ] Pin equal-salary/different-date identity, deterministic clock/cutoff behavior, legacy schema/default/patch/nullability and importer rollback with RED tests where behavior is missing.
-- [ ] Split calculations and update all imports; delete `shared/calculations.ts`, unused constants fixtures and the one-line wallet-backup barrel. Consolidate date/money helpers without changing persistence arithmetic.
-- [ ] Split schemas by entity, modernize UUID/ISO Zod calls and infer domain types without manually duplicating interfaces. Preserve backup compatibility and generated OpenAPI.
-- [ ] Use `process.loadEnvFile` in the wallet importer and one atomic batch; merchant catalog path comes from argument/env with no personal WSL default or fixed rule count. Never execute either importer against a real database.
-- [ ] Run shared/schema/importer regressions, frontend financial parity, types/lint/build/spec and sandbox. Expected: no calculations source file or rule table in TS; all checks pass. Commit/push.
+- [x] Pin equal-salary/different-date identity, deterministic clock/cutoff behavior, legacy schema/default/patch/nullability and importer rollback with RED tests where behavior is missing.
+- [x] Split calculations and update all imports; delete `shared/calculations.ts`, unused constants fixtures and the one-line wallet-backup barrel. Consolidate date/money helpers without changing persistence arithmetic.
+- [x] Split schemas by entity, modernize UUID/ISO Zod calls and infer domain types without manually duplicating interfaces. Preserve backup compatibility and generated OpenAPI.
+- [x] Use `process.loadEnvFile` in the wallet importer and one atomic batch; merchant catalog path comes from argument/env with no personal WSL default or fixed rule count. Never execute either importer against a real database.
+- [x] Run shared/schema/importer regressions, frontend financial parity, types/lint/build/spec and sandbox. Expected: no calculations source file or rule table in TS; all checks pass. Commit/push.
 
 ## Task 5: Single final release and conditional live Apps Script update
 

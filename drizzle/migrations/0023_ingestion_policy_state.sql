@@ -16,6 +16,7 @@ CREATE TABLE "provider_state" (
 	"generation" integer DEFAULT 0 NOT NULL
 );
 
+--> statement-breakpoint
 -- Data policies are separate from unique user/learned merchant aliases: seeding a
 -- fallback must never steal an alias, change its canonical identity or block learning.
 -- Existing categories receive keys only for an unambiguous canonical-name match.

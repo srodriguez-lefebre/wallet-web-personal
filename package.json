@@ -23,6 +23,7 @@
     "db:preflight": "tsx scripts/db-preflight.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
+    "db:migrate:ingestion": "tsx scripts/migrate-ingestion.ts",
     "db:studio": "drizzle-kit studio",
     "db:import-wallet-records": "tsx scripts/import-wallet-records.mjs",
     "db:import-merchant-rules": "tsx scripts/import-merchant-rules.mjs",
