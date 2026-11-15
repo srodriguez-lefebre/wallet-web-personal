@@ -90,7 +90,9 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
       throw new Error("Offline");
   });
   await edit();
-  const names = tree!.root.findAllByProps({ placeholder: "Account name" });
+  const names = tree!.root
+    .findAllByType("input")
+    .filter((input) => input.props.placeholder === "Account name");
   await act(async () => {
     names[0]!.props.onChange({ target: { value: "First edited" } });
     names[1]!.props.onChange({ target: { value: "Second edited" } });
@@ -99,7 +101,10 @@ test("save failure retains drafts and retries only the unfinished changes", asyn
     save().props.onClick();
   });
   expect(
-    tree!.root.findAllByProps({ placeholder: "Account name" }).map((input) => input.props.value),
+    tree!.root
+      .findAllByType("input")
+      .filter((input) => input.props.placeholder === "Account name")
+      .map((input) => input.props.value),
   ).toEqual(["First edited", "Second edited"]);
   await act(async () => {
     save().props.onClick();

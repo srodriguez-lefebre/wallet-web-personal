@@ -41,7 +41,7 @@ const snapshot = walletDatasetSchema.parse({
   creditCardPaymentAllocations: [],
 });
 const caches: ReturnType<typeof createWalletQueryClient>[] = [];
-function setup() {
+function setup(waitForWrites = () => Promise.resolve()) {
   const cache = createWalletQueryClient();
   caches.push(cache);
   cache.setQueryData(referenceKey, refs);
@@ -51,7 +51,7 @@ function setup() {
   const actions = createWalletActions(
     client,
     createWalletMutations(client, cache, { signal: controller.signal }),
-    { signal: controller.signal, getReference: () => refs, onArchived: archived },
+    { signal: controller.signal, getReference: () => refs, onArchived: archived, waitForWrites },
   );
   return { actions, cache, controller, archived };
 }
@@ -134,6 +134,30 @@ test("complete and backup reads are explicit and never replace the active refere
   controller.abort();
   await expect(actions.getCompleteDataset()).rejects.toMatchObject({ name: "AbortError" });
   expect(snapshots).toBe(1);
+});
+
+test("explicit backup waits for pending writes before requesting its independent snapshot", async () => {
+  let release!: () => void,
+    backups = 0;
+  const waitForWrites = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  server.use(
+    http.get("http://test.local/api/wallet/backup", () => {
+      backups++;
+      return response(walletBackupSchema.parse(snapshot));
+    }),
+  );
+  const { actions } = setup(waitForWrites);
+  const read = actions.getBackupDataset();
+  await vi.waitFor(() => expect(waitForWrites).toHaveBeenCalledTimes(1));
+  expect(backups).toBe(0);
+  release();
+  await read;
+  expect(backups).toBe(1);
 });
 
 test("locking during an import prevents later batches from using another session", async () => {

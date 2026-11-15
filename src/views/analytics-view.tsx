@@ -18,6 +18,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { walletMessages } from "@/lib/i18n";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { Badge } from "@/components/ui/badge";
@@ -661,14 +662,14 @@ export function AnalyticsView() {
                     <p className="text-sm text-muted-foreground">
                       {Number.isFinite(budget.spent)
                         ? formatMoney(budget.spent, budget.budget.currency)
-                        : "Falta cotización"}{" "}
+                        : walletMessages.missingExchangeRate}{" "}
                       of {formatMoney(budget.budget.limitAmount, budget.budget.currency)}
                     </p>
                   </div>
                   <p className="font-semibold">
                     {Number.isFinite(budget.percentage)
                       ? `${budget.percentage.toFixed(0)}%`
-                      : "Falta cotización"}
+                      : walletMessages.missingExchangeRate}
                   </p>
                 </div>
                 <Progress

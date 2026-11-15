@@ -1,3 +1,4 @@
+import { currencySchema } from "@shared/schemas";
 import { formatMoney } from "@shared/calculations";
 import { goalStatusLabels } from "@shared/constants";
 import {
@@ -12,11 +13,27 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import type { ActionToastOptions } from "@/lib/action-toast-runner";
 import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
+import {
+  controlClassName as inputClassName,
+  textareaClassName,
+  colorControlClassName as colorInputClassName,
+  Input,
+  ColorInput,
+  DateInput,
+} from "@/components/ui/form/controls";
+import { readableForeground } from "@/lib/palette";
+import { useDraftFields } from "@/hooks/use-draft-fields";
+import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
+import { ConfirmDialog } from "@/components/ui/form/dialogs";
+import { ActionToast } from "@/components/ui/action-toast";
+import { useActionToast } from "@/lib/use-action-toast";
+import { historicalGoalPatches } from "@/lib/historical-goals";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +51,7 @@ import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
 import { useAccounts, useGoals } from "@/hooks/wallet-entities";
 import { finishAction } from "@/lib/async-event";
+import { commitDraftRows, draftBaseline } from "@/lib/draft-list";
 import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { formatCalendarDate, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
@@ -84,6 +102,11 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
 }
 
 export function GoalsView() {
+  const savedDrafts = useRef(new Map<string, string>());
+  const working = useRef(false);
+  const [isWorking, setIsWorking] = useState(false);
+  const { confirm, confirmationProps, isActive } = useConfirmDialog();
+  const { toast, runAction } = useActionToast();
   const navigate = useNavigate();
   const {
     dataset,
@@ -99,20 +122,44 @@ export function GoalsView() {
   const accountReads = useAccounts();
   const goals = goalReads.progress;
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
-  const [preferredGoalId, setGoalId] = useState("");
+  const [
+    { preferredGoalId, accountId, reserveAmount },
+    { preferredGoalId: setGoalId, accountId: setAccountId, reserveAmount: setReserveAmount },
+  ] = useDraftFields(() => ({
+    preferredGoalId: "",
+    accountId: dataset.accounts[0]?.id ?? "",
+    reserveAmount: "",
+  }));
   const reservationGoals = dataset.goals.filter(
     (goal) => goal.isVisible && goal.status === "active",
   );
   const goalId = preferredGoalId
     ? (reservationGoals.find((goal) => goal.id === preferredGoalId)?.id ?? "")
     : (reservationGoals[0]?.id ?? "");
-  const [accountId, setAccountId] = useState(dataset.accounts[0]?.id ?? "");
-  const [reserveAmount, setReserveAmount] = useState("");
-  const [name, setName] = useState("");
-  const [targetAmount, setTargetAmount] = useState("");
-  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [color, setColor] = useState("#2563EB");
-  const [deadline, setDeadline] = useState("");
+
+  const [
+    { name, targetAmount, currency, color, deadline },
+    {
+      name: setName,
+      targetAmount: setTargetAmount,
+      currency: setCurrency,
+      color: setColor,
+      deadline: setDeadline,
+    },
+  ] = useDraftFields<{
+    name: string;
+    targetAmount: string;
+    currency: CurrencyCode;
+    color: string;
+    deadline: string;
+  }>(() => ({
+    name: "",
+    targetAmount: "",
+    currency: "UYU",
+    color: "#2563EB",
+    deadline: "",
+  }));
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editError, setEditError] = useState("");
@@ -120,14 +167,9 @@ export function GoalsView() {
   const visibleGoalDrafts = goalDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
-  const inputClassName =
-    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const textareaClassName =
-    "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const colorInputClassName =
-    "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
 
   function startEditingGoals() {
+    savedDrafts.current = draftBaseline(buildGoalDrafts(dataset.goals));
     setGoalDrafts(buildGoalDrafts(dataset.goals));
     setShowHidden(false);
     setEditError("");
@@ -167,7 +209,28 @@ export function GoalsView() {
     );
   }
 
+  async function performGoalAction<T>(work: () => Promise<T>, options: ActionToastOptions) {
+    if (working.current) return;
+    working.current = true;
+    setIsWorking(true);
+    setEditError("");
+    try {
+      const result = await runAction(work, options);
+      if (!result.ok) setEditError(result.error.message);
+      return result;
+    } finally {
+      working.current = false;
+      setIsWorking(false);
+    }
+  }
   async function saveGoalEdits() {
+    await performGoalAction(saveGoalDrafts, {
+      processing: "Saving goals...",
+      success: "Goals saved",
+      error: "Could not save goals",
+    });
+  }
+  async function saveGoalDrafts() {
     const activeDrafts = goalDrafts.filter((draft) => !draft.isDeleted);
     const invalidDraft = activeDrafts.find(
       (draft) =>
@@ -180,8 +243,7 @@ export function GoalsView() {
     );
 
     if (invalidDraft) {
-      setEditError("Make sure every goal has a name and an amount greater than zero.");
-      return;
+      throw new Error("Make sure every goal has a name and an amount greater than zero.");
     }
 
     const needsHistory = activeDrafts.some(
@@ -211,44 +273,28 @@ export function GoalsView() {
         .map((record) => record.id);
       if (
         recordIds.length &&
-        window.confirm(
-          `Se encontraron ${recordIds.length} gastos históricos para ${draft.name}. ¿Querés asociarlos ahora?`,
-        )
+        (await confirm({
+          title: "Associate historical expenses?",
+          description: `${recordIds.length} historical expenses match ${draft.name}. Associate them now?`,
+          confirmLabel: "Associate expenses",
+        }))
       )
         historicalAssociations.push({ goalId: draft.id, recordIds });
     }
 
-    await Promise.all(
-      goalDrafts.filter((draft) => draft.isDeleted).map((draft) => deleteGoal(draft.id)),
-    );
-
-    for (const group of historicalAssociations) {
-      for (const recordId of group.recordIds) {
-        const record = historyRecords.find((item) => item.id === recordId);
-        if (!record) continue;
-        await updateRecord(recordId, {
-          goalIds: [...(record.goalIds ?? []), group.goalId],
-          goalAssociations: [
-            ...(record.goalAssociations ?? []),
-            {
-              goalId: group.goalId,
-              assignmentSource: "date_rule",
-              useReserved: false,
-              reserveIncome: true,
-            },
-          ],
-        });
-      }
+    for (const { id, patch } of historicalGoalPatches(historyRecords, historicalAssociations)) {
+      if (!isActive()) return;
+      await updateRecord(id, patch);
     }
 
-    await Promise.all(
-      activeDrafts.map((draft) => {
-        const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
-        if (!currentGoal) return Promise.resolve();
+    await commitDraftRows(goalDrafts, savedDrafts.current, async (draft) => {
+      if (!isActive()) throw new DOMException("Goal view closed", "AbortError");
+      if (draft.isDeleted) return deleteGoal(draft.id);
+      const currentGoal = dataset.goals.find((goal) => goal.id === draft.id);
+      if (!currentGoal) throw new Error("Goal no longer available. Reload before continuing.");
 
-        return updateGoal(draft.id, buildGoalUpdatePayload(draft, currentGoal.icon));
-      }),
-    );
+      return updateGoal(draft.id, buildGoalUpdatePayload(draft, currentGoal.icon));
+    });
 
     const selectedDraft = goalDrafts.find((draft) => draft.id === goalId);
     if (!selectedDraft || selectedDraft.isDeleted || !selectedDraft.isVisible) {
@@ -265,22 +311,28 @@ export function GoalsView() {
     const numericTarget = Number(targetAmount);
     if (!name.trim() || numericTarget <= 0) return;
 
-    const id = await addGoal({
-      name: name.trim(),
-      targetAmount: numericTarget,
-      currency,
-      color,
-      icon: "flag",
-      isVisible: true,
-      deadline: deadline || undefined,
-      status: "active",
-      accountId,
-      autoCaptureEnabled: false,
-      autoCaptureStart: undefined,
-      autoCaptureEnd: undefined,
-      autoReservationAccountId: accountId || undefined,
-      note: undefined,
-    });
+    const result = await performGoalAction(
+      () =>
+        addGoal({
+          name: name.trim(),
+          targetAmount: numericTarget,
+          currency,
+          color,
+          icon: "flag",
+          isVisible: true,
+          deadline: deadline || undefined,
+          status: "active",
+          accountId,
+          autoCaptureEnabled: false,
+          autoCaptureStart: undefined,
+          autoCaptureEnd: undefined,
+          autoReservationAccountId: accountId || undefined,
+          note: undefined,
+        }),
+      { processing: "Creating goal...", success: "Goal created", error: "Could not create goal" },
+    );
+    if (!result?.ok || !isActive()) return;
+    const id = result.value;
 
     setName("");
     setTargetAmount("");
@@ -298,27 +350,44 @@ export function GoalsView() {
     if (
       balance &&
       numericAmount > balance.freeBalance &&
-      !window.confirm(
-        `La reserva supera el saldo disponible (${formatMoney(balance.freeBalance, account.currency)}). ¿Continuar?`,
-      )
+      !(await confirm({
+        title: "Reserve more than the available balance?",
+        description: `The available balance is ${formatMoney(balance.freeBalance, account.currency)}. Continue with this reservation?`,
+        confirmLabel: "Reserve funds",
+      }))
     )
       return;
 
-    await addGoalReservation({
-      goalId,
-      accountId,
-      amount: numericAmount,
-      currency: account.currency,
-      createdAt: new Date().toISOString(),
-      note: "Reserva manual",
-    });
-    setReserveAmount("");
+    const result = await performGoalAction(
+      () =>
+        addGoalReservation({
+          goalId,
+          accountId,
+          amount: numericAmount,
+          currency: account.currency,
+          createdAt: new Date().toISOString(),
+          note: "Reserva manual",
+        }),
+      {
+        processing: "Reserving funds...",
+        success: "Funds reserved",
+        error: "Could not reserve funds",
+      },
+    );
+    if (result?.ok) setReserveAmount("");
   }
 
   if (goalReads.metrics.data === undefined)
     return <ReadState label="goals" error={goalReads.isError} />;
   return (
     <div>
+      <ActionToast toast={toast} />
+      <ConfirmDialog {...confirmationProps} />
+      {editError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {editError}
+        </p>
+      )}
       <PageHeader
         eyebrow="Goals"
         title="Goals"
@@ -334,11 +403,12 @@ export function GoalsView() {
             >
               {showHidden ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </Button>
-            <Button variant="outline" onClick={cancelEditingGoals}>
+            <Button variant="outline" disabled={isWorking} onClick={cancelEditingGoals}>
               <X className="h-4 w-4" />
               Cancel
             </Button>
             <Button
+              disabled={isWorking}
               onClick={() => {
                 finishAction(saveGoalEdits());
               }}
@@ -377,66 +447,68 @@ export function GoalsView() {
                     finishAction(handleCreateGoal(event));
                   }}
                 >
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Name</span>
-                    <input
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      className={inputClassName}
-                      placeholder="Viaje, emergencia, notebook..."
-                    />
-                  </label>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <fieldset disabled={isWorking} className="contents">
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Target</span>
-                      <input
-                        value={targetAmount}
-                        onChange={(event) =>
-                          setTargetAmount(limitDecimalPlaces(event.target.value))
-                        }
-                        type="number"
+                      <span className="text-sm font-medium">Name</span>
+                      <Input
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
                         className={inputClassName}
-                        placeholder="50000"
-                        step="0.01"
+                        placeholder="Viaje, emergencia, notebook..."
                       />
                     </label>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Target</span>
+                        <Input
+                          value={targetAmount}
+                          onChange={(event) =>
+                            setTargetAmount(limitDecimalPlaces(event.target.value))
+                          }
+                          type="number"
+                          className={inputClassName}
+                          placeholder="50000"
+                          step="0.01"
+                        />
+                      </label>
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Currency</span>
+                        <select
+                          value={currency}
+                          onChange={(event) =>
+                            setCurrency(currencySchema.parse(event.target.value))
+                          }
+                          className={inputClassName}
+                        >
+                          <option value="UYU">UYU</option>
+                          <option value="USD">USD</option>
+                          <option value="BRL">BRL</option>
+                        </select>
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block space-y-2">
+                        <span className="text-sm font-medium">Color</span>
+                        <ColorInput
+                          value={color}
+                          onChange={(event) => setColor(event.target.value)}
+                          className={colorInputClassName}
+                        />
+                      </label>
+                    </div>
                     <label className="block space-y-2">
-                      <span className="text-sm font-medium">Currency</span>
-                      <select
-                        value={currency}
-                        onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                      <span className="text-sm font-medium">Deadline</span>
+                      <DateInput
+                        value={deadline}
+                        onChange={(event) => setDeadline(event.target.value)}
                         className={inputClassName}
-                      >
-                        <option value="UYU">UYU</option>
-                        <option value="USD">USD</option>
-                        <option value="BRL">BRL</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Color</span>
-                      <input
-                        value={color}
-                        onChange={(event) => setColor(event.target.value)}
-                        type="color"
-                        className={colorInputClassName}
                       />
                     </label>
-                  </div>
-                  <label className="block space-y-2">
-                    <span className="text-sm font-medium">Deadline</span>
-                    <input
-                      value={deadline}
-                      onChange={(event) => setDeadline(event.target.value)}
-                      type="date"
-                      className={inputClassName}
-                    />
-                  </label>
-                  <Button className="w-full" type="submit">
-                    <Plus className="h-4 w-4" />
-                    Crear y abrir detalle
-                  </Button>
+                    <Button className="w-full" type="submit" disabled={isWorking}>
+                      <Plus className="h-4 w-4" />
+                      Crear y abrir detalle
+                    </Button>
+                  </fieldset>
                 </form>
               </DialogContent>
             </Dialog>
@@ -455,21 +527,20 @@ export function GoalsView() {
                       <div className="flex flex-1 items-start gap-3">
                         <label className="block space-y-2">
                           <span className="sr-only">Color</span>
-                          <input
+                          <ColorInput
                             value={draft.color}
                             onChange={(event) =>
                               updateGoalDraft(draft.id, {
                                 color: event.target.value,
                               })
                             }
-                            type="color"
                             className={colorInputClassName}
                             aria-label={`${draft.name || "Goal"} color`}
                           />
                         </label>
                         <label className="block flex-1 space-y-2">
                           <span className="text-sm font-medium">Name</span>
-                          <input
+                          <Input
                             value={draft.name}
                             onChange={(event) =>
                               updateGoalDraft(draft.id, {
@@ -517,7 +588,7 @@ export function GoalsView() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block space-y-2">
                         <span className="text-sm font-medium">Target</span>
-                        <input
+                        <Input
                           value={draft.targetAmount}
                           onChange={(event) =>
                             updateGoalDraft(draft.id, {
@@ -570,14 +641,13 @@ export function GoalsView() {
                       </label>
                       <label className="block space-y-2">
                         <span className="text-sm font-medium">Deadline</span>
-                        <input
+                        <DateInput
                           value={draft.deadline}
                           onChange={(event) =>
                             updateGoalDraft(draft.id, {
                               deadline: event.target.value,
                             })
                           }
-                          type="date"
                           className={inputClassName}
                         />
                       </label>
@@ -628,8 +698,7 @@ export function GoalsView() {
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
                           <label className="space-y-2">
                             <span className="text-sm font-medium">Desde</span>
-                            <input
-                              type="date"
+                            <DateInput
                               className={inputClassName}
                               value={draft.autoCaptureStart}
                               onChange={(event) =>
@@ -641,8 +710,7 @@ export function GoalsView() {
                           </label>
                           <label className="space-y-2">
                             <span className="text-sm font-medium">Hasta</span>
-                            <input
-                              type="date"
+                            <DateInput
                               className={inputClassName}
                               value={draft.autoCaptureEnd}
                               onChange={(event) =>
@@ -720,7 +788,10 @@ export function GoalsView() {
                     <div className="flex items-center gap-2">
                       <span
                         className="grid h-9 w-9 place-items-center rounded-md text-white"
-                        style={{ backgroundColor: item.goal.color }}
+                        style={{
+                          backgroundColor: item.goal.color,
+                          color: readableForeground(item.goal.color),
+                        }}
                       >
                         <Flag className="h-4 w-4" />
                       </span>
@@ -815,59 +886,61 @@ export function GoalsView() {
                   finishAction(handleReserve(event));
                 }}
               >
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Goal</span>
-                  <select
-                    value={goalId}
-                    disabled={reservationGoals.length === 0}
-                    onChange={(event) => setGoalId(event.target.value)}
-                    className={inputClassName}
+                <fieldset disabled={isWorking} className="contents">
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Goal</span>
+                    <select
+                      value={goalId}
+                      disabled={reservationGoals.length === 0}
+                      onChange={(event) => setGoalId(event.target.value)}
+                      className={inputClassName}
+                    >
+                      {!goalId && (
+                        <option value="" disabled>
+                          {reservationGoals.length ? "Choose an active goal" : "No active goals"}
+                        </option>
+                      )}
+                      {reservationGoals.map((goal) => (
+                        <option key={goal.id} value={goal.id}>
+                          {goal.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Account</span>
+                    <select
+                      value={accountId}
+                      onChange={(event) => setAccountId(event.target.value)}
+                      className={inputClassName}
+                    >
+                      {dataset.accounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium">Amount</span>
+                    <Input
+                      value={reserveAmount}
+                      onChange={(event) => setReserveAmount(limitDecimalPlaces(event.target.value))}
+                      type="number"
+                      className={inputClassName}
+                      placeholder="0"
+                      step="0.01"
+                    />
+                  </label>
+                  <Button
+                    className="w-full"
+                    type="submit"
+                    disabled={isWorking || !goalId || !accountId || !(Number(reserveAmount) > 0)}
                   >
-                    {!goalId && (
-                      <option value="" disabled>
-                        {reservationGoals.length ? "Choose an active goal" : "No active goals"}
-                      </option>
-                    )}
-                    {reservationGoals.map((goal) => (
-                      <option key={goal.id} value={goal.id}>
-                        {goal.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Account</span>
-                  <select
-                    value={accountId}
-                    onChange={(event) => setAccountId(event.target.value)}
-                    className={inputClassName}
-                  >
-                    {dataset.accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium">Amount</span>
-                  <input
-                    value={reserveAmount}
-                    onChange={(event) => setReserveAmount(limitDecimalPlaces(event.target.value))}
-                    type="number"
-                    className={inputClassName}
-                    placeholder="0"
-                    step="0.01"
-                  />
-                </label>
-                <Button
-                  className="w-full"
-                  type="submit"
-                  disabled={!goalId || !accountId || !(Number(reserveAmount) > 0)}
-                >
-                  <Plus className="h-4 w-4" />
-                  Reserve
-                </Button>
+                    <Plus className="h-4 w-4" />
+                    Reserve
+                  </Button>
+                </fieldset>
               </form>
             </CardContent>
           </Card>

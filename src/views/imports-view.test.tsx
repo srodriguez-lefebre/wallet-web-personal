@@ -4,6 +4,7 @@ import { mockWalletData } from "@shared/mock-data";
 
 import { ImportsView } from "./imports-view";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 const state = vi.hoisted(() => ({
   dataset: ((): unknown => undefined)() as typeof mockWalletData,
@@ -30,7 +31,7 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (work: () => Promise<unknown>) => work(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 let tree: ReactTestRenderer | undefined;

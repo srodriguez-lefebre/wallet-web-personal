@@ -523,3 +523,27 @@ confirmaciones accesibles, estado por entidad, revisión completa y smoke
 full-stack sintético antes del único PR draft, CI, merge y verificación del alias.
 No se inició el bloque 5 ni se modificaron Apps Script, secretos, permisos,
 migraciones, datos reales o producción.
+
+## G14: formularios y comprobación sintética
+
+Se incorporaron resultados explícitos de acciones, drafts agrupados, reintento
+por fila confirmada, navegación por entidad y defaults derivados de Query.
+ConfirmDialog reemplaza window.confirm; los controles y monedas se comparten,
+con contraste calculado para fondos de usuario. Ninguna vista supera 8 useState.
+Las pruebas reprodujeron primero los fallos de navegación, defaults, doble envío,
+filas repetidas, espera de escrituras y cancelación al desmontar.
+
+`WALLET_TEST_WORKERS=1 npm run check` terminó con exit 0: 124 archivos,
+857 aprobadas y 1 omitida por plataforma; formato, lint, tipos/build y OpenAPI
+verdes (`../g14-final-check.log`). El aviso de chunk permanece visible.
+
+QA desechable en localhost4175: 108 movimientos iniciales, incluidos gastos de
+la meta fuera de la primera página. Chrome verificó creación 20, edición a 40,
+recarga y reversión: saldo 9695 → 9675 → 9655 → 9695; meta 20,5% → 24,5% →
+20,5%. HTTP confirmó paginación, pago de deuda idempotente, edición de tarjeta
+y backup/restore sin alterar su saldo inicial. También se creó y pagó una deuda
+desde UI y se comprobó cerrada tras recarga. Sólo datos sintéticos en memoria.
+
+La revisión fresca del bloque completo está en curso. Sus hallazgos importantes
+se resolverán antes del único PR; este avance validado todavía no autoriza el
+merge. Quedan correcciones de revisión, check/sandbox finales, CI y Vercel.

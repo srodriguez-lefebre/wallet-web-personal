@@ -98,6 +98,39 @@ export const mutationDefinitions = {
 export type WalletMutations = {
   [Id in MutationOperationId]: (input: ClientInput<Id>) => Promise<OperationResponse<Id>>;
 };
+
+export function waitForWalletMutations(cache: QueryClient, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  const mutations = cache.getMutationCache();
+  return new Promise((resolve, reject) => {
+    let unsubscribe = () => {};
+    const cleanup = () => {
+      unsubscribe();
+      signal.removeEventListener("abort", abort);
+    };
+    const abort = () => {
+      cleanup();
+      reject(new DOMException("Session ended", "AbortError"));
+    };
+    const check = () => {
+      if (
+        !mutations
+          .getAll()
+          .some(
+            (mutation) =>
+              mutation.state.status === "pending" &&
+              mutation.options.mutationKey?.[0] === "wallet-mutation",
+          )
+      ) {
+        cleanup();
+        resolve();
+      }
+    };
+    unsubscribe = mutations.subscribe(check);
+    signal.addEventListener("abort", abort, { once: true });
+    check();
+  });
+}
 export function createWalletMutations(
   client: WalletClient,
   cache: QueryClient,

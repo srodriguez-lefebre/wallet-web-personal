@@ -18,6 +18,7 @@ import {
 
 import type { CreditCard } from "@shared/types";
 
+import { readableForeground } from "@/lib/palette";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -114,25 +115,37 @@ export function CardsView() {
     setError("");
     try {
       if (editingId) {
-        await runAction(() => updateCreditCard(editingId, payload), {
-          singleFlight: "save-card",
-          processing: "Saving card...",
-          success: "Card saved",
-          error: "Could not save card",
-        });
+        {
+          const actionResult = await runAction(() => updateCreditCard(editingId, payload), {
+            singleFlight: "save-card",
+            processing: "Saving card...",
+            success: "Card saved",
+            error: "Could not save card",
+          });
+          if (!actionResult.ok) {
+            const nextError = actionResult.error;
+            setError(nextError instanceof Error ? nextError.message : "Could not save card");
+            return;
+          }
+        }
       } else {
-        await runAction(() => addCreditCard(payload), {
-          singleFlight: "save-card",
-          processing: "Creating card...",
-          success: "Card created",
-          error: "Could not create card",
-        });
+        {
+          const actionResult = await runAction(() => addCreditCard(payload), {
+            singleFlight: "save-card",
+            processing: "Creating card...",
+            success: "Card created",
+            error: "Could not create card",
+          });
+          if (!actionResult.ok) {
+            const nextError = actionResult.error;
+            setError(nextError instanceof Error ? nextError.message : "Could not save card");
+            return;
+          }
+        }
       }
       setShowForm(false);
       setEditingId(null);
       setDraft(emptyDraft());
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not save card");
     } finally {
       setIsSaving(false);
     }
@@ -206,7 +219,10 @@ export function CardsView() {
                   <div className="flex items-center gap-3">
                     <div
                       className="grid h-10 w-10 place-items-center rounded-md text-white"
-                      style={{ backgroundColor: summary.card.color }}
+                      style={{
+                        backgroundColor: summary.card.color,
+                        color: readableForeground(summary.card.color),
+                      }}
                     >
                       <CreditCardIcon className="h-5 w-5" />
                     </div>
@@ -276,7 +292,10 @@ export function CardsView() {
                           <div key={item.id} className="flex min-w-0 items-center gap-2">
                             <span
                               className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: item.color }}
+                              style={{
+                                backgroundColor: item.color,
+                                color: readableForeground(item.color),
+                              }}
                             />
                             <span className="truncate text-muted-foreground">{item.name}</span>
                             <span className="ml-auto font-medium">
@@ -338,7 +357,10 @@ export function CardsView() {
                   <div className="flex gap-2">
                     <Button
                       className="border-transparent text-white hover:opacity-90"
-                      style={{ backgroundColor: summary.card.color }}
+                      style={{
+                        backgroundColor: summary.card.color,
+                        color: readableForeground(summary.card.color),
+                      }}
                       onClick={(event) => {
                         event.stopPropagation();
                         void navigate(`/cards/${summary.card.id}`);

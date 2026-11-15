@@ -1,5 +1,6 @@
 import { createElement } from "react";
 
+import { readableForeground } from "@/lib/palette";
 import { getCategoryIcon } from "@/components/wallet/category-icons";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +15,6 @@ const iconSizeClasses = {
   md: "h-4 w-4",
   lg: "h-5 w-5",
 };
-
-function readableForeground(hexColor: string) {
-  const hex = hexColor.replace("#", "");
-  if (!/^[0-9a-fA-F]{6}$/.test(hex)) return "#FFFFFF";
-
-  const red = parseInt(hex.slice(0, 2), 16);
-  const green = parseInt(hex.slice(2, 4), 16);
-  const blue = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * red + 0.587 * green + 0.114 * blue) / 255;
-
-  return luminance > 0.72 ? "#0F172A" : "#FFFFFF";
-}
 
 export function CategoryIcon({
   icon,

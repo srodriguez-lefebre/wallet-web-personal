@@ -6,6 +6,7 @@ import { SettingsView } from "./settings-view";
 
 import type { SettingsPatch } from "@shared/schemas";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const auth = vi.hoisted(() => ({
@@ -30,7 +31,7 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 afterEach(() => {
@@ -38,6 +39,27 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+});
+
+test("untouched defaults follow refreshed reference settings", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const previous = mockWalletData.settings.primaryCurrency;
+  let tree!: ReturnType<typeof create>;
+  await act(async () => {
+    tree = create(<SettingsView />);
+  });
+  try {
+    mockWalletData.settings.primaryCurrency = previous === "USD" ? "UYU" : "USD";
+    await act(async () => tree.update(<SettingsView />));
+    expect(
+      tree.root
+        .findAllByType("select")
+        .some((select) => select.props.value === mockWalletData.settings.primaryCurrency),
+    ).toBe(true);
+  } finally {
+    mockWalletData.settings.primaryCurrency = previous;
+    await act(async () => tree.unmount());
+  }
 });
 
 test("settings provide the template management section", async () => {
@@ -66,7 +88,11 @@ test("failed tag creation preserves the draft and handles the rejected request",
         .findByProps({ placeholder: "New tag" })
         .props.onChange({ target: { value: "Retain draft" } });
     });
-    const form = tree.root.findByProps({ placeholder: "New tag" }).parent!;
+    const form = tree.root
+      .findAllByType("form")
+      .find((form) =>
+        form.findAllByType("input").some((input) => input.props.placeholder === "New tag"),
+      )!;
     await act(async () => {
       expect(form.props.onSubmit({ preventDefault: vi.fn() })).toBeUndefined();
     });

@@ -7,6 +7,7 @@ import { RecordTemplateManager } from "./record-template-manager";
 import type { RecordTemplate, WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 const actions = vi.hoisted(() => ({
   add: vi.fn(),
@@ -37,7 +38,7 @@ vi.mock("react-router-dom", () => ({ useNavigate: () => actions.navigate }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (work: () => Promise<unknown>) => work(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {

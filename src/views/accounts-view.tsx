@@ -1,3 +1,4 @@
+import { currencySchema, accountSchema } from "@shared/schemas";
 import { formatMoney } from "@shared/calculations";
 import { accountTypeLabels } from "@shared/constants";
 import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
@@ -6,6 +7,15 @@ import { useNavigate } from "react-router-dom";
 
 import type { Account, AccountType, CurrencyCode } from "@shared/types";
 
+import {
+  controlClassName as inputClassName,
+  textareaClassName,
+  colorControlClassName as colorInputClassName,
+  Input,
+  ColorInput,
+} from "@/components/ui/form/controls";
+import { useDraftFields } from "@/hooks/use-draft-fields";
+import { readableForeground } from "@/lib/palette";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -83,14 +93,38 @@ export function AccountsView() {
   const [accountDrafts, setAccountDrafts] = useState<AccountDraft[]>(() =>
     buildAccountDrafts(dataset.accounts, dataset.settings.primaryAccountId),
   );
-  const [name, setName] = useState("");
-  const [type, setType] = useState<AccountType>("bank");
-  const [currency, setCurrency] = useState<CurrencyCode>("UYU");
-  const [initialBalance, setInitialBalance] = useState("");
-  const [color, setColor] = useState("#2563EB");
-  const [isVisible, setIsVisible] = useState(true);
-  const [isActive, setIsActive] = useState(true);
-  const [note, setNote] = useState("");
+  const [
+    { name, type, currency, initialBalance, color, isVisible, isActive, note },
+    {
+      name: setName,
+      type: setType,
+      currency: setCurrency,
+      initialBalance: setInitialBalance,
+      color: setColor,
+      isVisible: setIsVisible,
+      isActive: setIsActive,
+      note: setNote,
+    },
+  ] = useDraftFields<{
+    name: string;
+    type: AccountType;
+    currency: CurrencyCode;
+    initialBalance: string;
+    color: string;
+    isVisible: boolean;
+    isActive: boolean;
+    note: string;
+  }>(() => ({
+    name: "",
+    type: "bank",
+    currency: "UYU",
+    initialBalance: "",
+    color: "#2563EB",
+    isVisible: true,
+    isActive: true,
+    note: "",
+  }));
+
   const accountReads = useAccounts();
   const balances = accountReads.balances;
   const hasBalances = accountReads.metrics.data !== undefined;
@@ -98,12 +132,6 @@ export function AccountsView() {
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
   );
-  const inputClassName =
-    "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const textareaClassName =
-    "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
-  const colorInputClassName =
-    "h-10 w-10 cursor-pointer rounded-full border bg-background p-1 [appearance:none] [&::-moz-color-swatch]:rounded-full [&::-moz-color-swatch]:border-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0";
 
   function openAccountRecords(accountId: string) {
     setRecordFilters({ accountId, type: "all" });
@@ -181,70 +209,75 @@ export function AccountsView() {
     setIsWorking(true);
     setEditError("");
     try {
-      await runAction(
-        async () => {
-          const failures: string[] = [];
-          for (const draft of accountDrafts) {
-            const baseline = editBaseline.current.find((item) => item.id === draft.id);
-            const payload = (item: AccountDraft) => ({
-              name: item.name.trim(),
-              type: item.type,
-              currency: item.currency,
-              initialBalance: Number(item.initialBalance),
-              color: item.color,
-              isVisible: item.isVisible,
-              isActive: item.isActive,
-              note: item.note.trim() || undefined,
-            });
-            if (
-              baseline?.isDeleted ||
-              (!draft.isDeleted &&
-                baseline &&
-                JSON.stringify(payload(draft)) === JSON.stringify(payload(baseline)))
-            )
-              continue;
-            const currentAccount = dataset.accounts.find((account) => account.id === draft.id);
-            if (!currentAccount) continue;
-            try {
-              if (draft.isDeleted) await deleteAccount(draft.id);
-              else
-                await updateAccount(draft.id, {
-                  ...payload(draft),
-                  icon: currentAccount.icon,
-                });
-              editBaseline.current = editBaseline.current.map((item) =>
-                item.id === draft.id ? { ...draft } : item,
-              );
-            } catch (error) {
-              failures.push(
-                `${draft.name}: ${error instanceof Error ? error.message : "Could not save"}`,
-              );
+      {
+        const actionResult = await runAction(
+          async () => {
+            const failures: string[] = [];
+            for (const draft of accountDrafts) {
+              const baseline = editBaseline.current.find((item) => item.id === draft.id);
+              const payload = (item: AccountDraft) => ({
+                name: item.name.trim(),
+                type: item.type,
+                currency: item.currency,
+                initialBalance: Number(item.initialBalance),
+                color: item.color,
+                isVisible: item.isVisible,
+                isActive: item.isActive,
+                note: item.note.trim() || undefined,
+              });
+              if (
+                baseline?.isDeleted ||
+                (!draft.isDeleted &&
+                  baseline &&
+                  JSON.stringify(payload(draft)) === JSON.stringify(payload(baseline)))
+              )
+                continue;
+              const currentAccount = dataset.accounts.find((account) => account.id === draft.id);
+              if (!currentAccount) continue;
+              try {
+                if (draft.isDeleted) await deleteAccount(draft.id);
+                else
+                  await updateAccount(draft.id, {
+                    ...payload(draft),
+                    icon: currentAccount.icon,
+                  });
+                editBaseline.current = editBaseline.current.map((item) =>
+                  item.id === draft.id ? { ...draft } : item,
+                );
+              } catch (error) {
+                failures.push(
+                  `${draft.name}: ${error instanceof Error ? error.message : "Could not save"}`,
+                );
+              }
             }
-          }
-          if (failures.length)
-            throw new Error(
-              `Some changes could not be saved. Your drafts are retained; retry saves only unfinished changes. ${failures.join("; ")}`,
-            );
-          const primaryDraft =
-            activeDrafts.find((draft) => draft.isPrimary && draft.isActive) ??
-            activeDrafts.find((draft) => draft.isActive && draft.isVisible) ??
-            activeDrafts.find((draft) => draft.isActive);
-          if (primaryDraft && primaryDraft.id !== savedPrimary.current) {
-            await setPrimaryAccount(primaryDraft.id);
-            savedPrimary.current = primaryDraft.id;
-          }
-        },
-        {
-          singleFlight: "save-accounts",
-          processing: "Saving account changes...",
-          success: "Account changes saved",
-          error: "Some changes could not be saved. Retry the retained drafts.",
-        },
-      );
+            if (failures.length)
+              throw new Error(
+                `Some changes could not be saved. Your drafts are retained; retry saves only unfinished changes. ${failures.join("; ")}`,
+              );
+            const primaryDraft =
+              activeDrafts.find((draft) => draft.isPrimary && draft.isActive) ??
+              activeDrafts.find((draft) => draft.isActive && draft.isVisible) ??
+              activeDrafts.find((draft) => draft.isActive);
+            if (primaryDraft && primaryDraft.id !== savedPrimary.current) {
+              await setPrimaryAccount(primaryDraft.id);
+              savedPrimary.current = primaryDraft.id;
+            }
+          },
+          {
+            singleFlight: "save-accounts",
+            processing: "Saving account changes...",
+            success: "Account changes saved",
+            error: "Some changes could not be saved. Retry the retained drafts.",
+          },
+        );
+        if (!actionResult.ok) {
+          const error = actionResult.error;
+          setEditError(error instanceof Error ? error.message : "Could not save account changes");
+          return;
+        }
+      }
       setShowHidden(false);
       setIsEditing(false);
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Could not save account changes");
     } finally {
       mutationPending.current = false;
       setIsWorking(false);
@@ -258,36 +291,47 @@ export function AccountsView() {
     setIsWorking(true);
     setEditError("");
     try {
-      await runAction(
-        async () => {
-          const id =
-            createdAccount.current ??
-            (await addAccount({
-              name: name.trim(),
-              type,
-              currency,
-              initialBalance: Number(initialBalance),
-              color,
-              icon: type === "credit_card" ? "credit-card" : "wallet",
-              isVisible,
-              isActive,
-              note: note.trim() || undefined,
-            }));
-          createdAccount.current = id;
-          setCreatedAccountId(id);
-          if (!dataset.settings.primaryAccountId) {
-            await setPrimaryAccount(id);
-          }
-        },
-        {
-          singleFlight: "create-account",
-          processing: createdAccount.current ? "Setting primary account..." : "Creating account...",
-          success: "Account created",
-          error: createdAccount.current
-            ? "Account exists; retry setting it as primary."
-            : "Could not complete account creation",
-        },
-      );
+      {
+        const actionResult = await runAction(
+          async () => {
+            const id =
+              createdAccount.current ??
+              (await addAccount({
+                name: name.trim(),
+                type,
+                currency,
+                initialBalance: Number(initialBalance),
+                color,
+                icon: type === "credit_card" ? "credit-card" : "wallet",
+                isVisible,
+                isActive,
+                note: note.trim() || undefined,
+              }));
+            createdAccount.current = id;
+            setCreatedAccountId(id);
+            if (!dataset.settings.primaryAccountId) {
+              await setPrimaryAccount(id);
+            }
+          },
+          {
+            singleFlight: "create-account",
+            processing: createdAccount.current
+              ? "Setting primary account..."
+              : "Creating account...",
+            success: "Account created",
+            error: createdAccount.current
+              ? "Account exists; retry setting it as primary."
+              : "Could not complete account creation",
+          },
+        );
+        if (!actionResult.ok) {
+          const error = actionResult.error;
+          setEditError(
+            `${createdAccount.current ? "Account created. Retry to finish selecting it as primary. " : ""}${error instanceof Error ? error.message : "Could not create account"}`,
+          );
+          return;
+        }
+      }
       createdAccount.current = null;
       setCreatedAccountId(null);
       setName("");
@@ -297,10 +341,6 @@ export function AccountsView() {
       setIsActive(true);
       setNote("");
       setIsCreateOpen(false);
-    } catch (error) {
-      setEditError(
-        `${createdAccount.current ? "Account created. Retry to finish selecting it as primary. " : ""}${error instanceof Error ? error.message : "Could not create account"}`,
-      );
     } finally {
       mutationPending.current = false;
       setIsWorking(false);
@@ -313,14 +353,19 @@ export function AccountsView() {
     setIsWorking(true);
     setEditError("");
     try {
-      await runAction(() => setPrimaryAccount(accountId), {
-        singleFlight: "primary-account",
-        processing: "Selecting primary account...",
-        success: "Primary account selected",
-        error: "Could not select primary account",
-      });
-    } catch (error) {
-      setEditError(error instanceof Error ? error.message : "Could not select primary account");
+      {
+        const actionResult = await runAction(() => setPrimaryAccount(accountId), {
+          singleFlight: "primary-account",
+          processing: "Selecting primary account...",
+          success: "Primary account selected",
+          error: "Could not select primary account",
+        });
+        if (!actionResult.ok) {
+          const error = actionResult.error;
+          setEditError(error instanceof Error ? error.message : "Could not select primary account");
+          return;
+        }
+      }
     } finally {
       mutationPending.current = false;
       setIsWorking(false);
@@ -404,115 +449,123 @@ export function AccountsView() {
                     finishAction(handleCreateAccount(event));
                   }}
                 >
-                  <fieldset disabled={isWorking || Boolean(createdAccountId)} className="space-y-4">
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Name</span>
-                      <input
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        className={inputClassName}
-                        placeholder="Banco, efectivo, tarjeta..."
-                      />
-                    </label>
-                    <div className="grid gap-3 sm:grid-cols-2">
+                  <fieldset disabled={isWorking} className="contents">
+                    <fieldset
+                      disabled={isWorking || Boolean(createdAccountId)}
+                      className="space-y-4"
+                    >
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Type</span>
-                        <select
-                          value={type}
-                          onChange={(event) => setType(event.target.value as AccountType)}
+                        <span className="text-sm font-medium">Name</span>
+                        <Input
+                          value={name}
+                          onChange={(event) => setName(event.target.value)}
                           className={inputClassName}
-                        >
-                          {accountTypeOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Currency</span>
-                        <select
-                          value={currency}
-                          onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
-                          className={inputClassName}
-                        >
-                          <option value="UYU">UYU</option>
-                          <option value="USD">USD</option>
-                          <option value="EUR">EUR</option>
-                          <option value="BRL">BRL</option>
-                          <option value="ARS">ARS</option>
-                        </select>
-                      </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Initial balance</span>
-                        <input
-                          value={initialBalance}
-                          onChange={(event) => setInitialBalance(event.target.value)}
-                          type="number"
-                          className={inputClassName}
-                          placeholder="0"
+                          placeholder="Banco, efectivo, tarjeta..."
                         />
                       </label>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Type</span>
+                          <select
+                            value={type}
+                            onChange={(event) =>
+                              setType(accountSchema.shape.type.parse(event.target.value))
+                            }
+                            className={inputClassName}
+                          >
+                            {accountTypeOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Currency</span>
+                          <select
+                            value={currency}
+                            onChange={(event) =>
+                              setCurrency(currencySchema.parse(event.target.value))
+                            }
+                            className={inputClassName}
+                          >
+                            <option value="UYU">UYU</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="BRL">BRL</option>
+                            <option value="ARS">ARS</option>
+                          </select>
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Initial balance</span>
+                          <Input
+                            value={initialBalance}
+                            onChange={(event) => setInitialBalance(event.target.value)}
+                            type="number"
+                            className={inputClassName}
+                            placeholder="0"
+                          />
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Color</span>
+                          <ColorInput
+                            value={color}
+                            onChange={(event) => setColor(event.target.value)}
+                            className={colorInputClassName}
+                          />
+                        </label>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Visibility</span>
+                          <select
+                            value={isVisible ? "visible" : "hidden"}
+                            onChange={(event) => setIsVisible(event.target.value === "visible")}
+                            className={inputClassName}
+                          >
+                            <option value="visible">Visible</option>
+                            <option value="hidden">Hidden</option>
+                          </select>
+                        </label>
+                        <label className="block space-y-2">
+                          <span className="text-sm font-medium">Status</span>
+                          <select
+                            value={isActive ? "active" : "inactive"}
+                            onChange={(event) => setIsActive(event.target.value === "active")}
+                            className={inputClassName}
+                          >
+                            <option value="active">Active</option>
+                            <option value="inactive">Inactive</option>
+                          </select>
+                        </label>
+                      </div>
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium">Color</span>
-                        <input
-                          value={color}
-                          onChange={(event) => setColor(event.target.value)}
-                          type="color"
-                          className={colorInputClassName}
+                        <span className="text-sm font-medium">Note</span>
+                        <textarea
+                          value={note}
+                          onChange={(event) => setNote(event.target.value)}
+                          className={textareaClassName}
+                          placeholder="Optional context"
                         />
                       </label>
-                    </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Visibility</span>
-                        <select
-                          value={isVisible ? "visible" : "hidden"}
-                          onChange={(event) => setIsVisible(event.target.value === "visible")}
-                          className={inputClassName}
-                        >
-                          <option value="visible">Visible</option>
-                          <option value="hidden">Hidden</option>
-                        </select>
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Status</span>
-                        <select
-                          value={isActive ? "active" : "inactive"}
-                          onChange={(event) => setIsActive(event.target.value === "active")}
-                          className={inputClassName}
-                        >
-                          <option value="active">Active</option>
-                          <option value="inactive">Inactive</option>
-                        </select>
-                      </label>
-                    </div>
-                    <label className="block space-y-2">
-                      <span className="text-sm font-medium">Note</span>
-                      <textarea
-                        value={note}
-                        onChange={(event) => setNote(event.target.value)}
-                        className={textareaClassName}
-                        placeholder="Optional context"
-                      />
-                    </label>
+                    </fieldset>
+                    {createdAccountId && (
+                      <p className="text-sm text-muted-foreground">
+                        The account has been created. Only primary selection remains; retry below.
+                      </p>
+                    )}
+                    {editError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {editError}
+                      </p>
+                    )}
+                    <Button disabled={isWorking} className="w-full" type="submit">
+                      <Plus className="h-4 w-4" />
+                      {createdAccountId ? "Retry primary selection" : "Create account"}
+                    </Button>
                   </fieldset>
-                  {createdAccountId && (
-                    <p className="text-sm text-muted-foreground">
-                      The account has been created. Only primary selection remains; retry below.
-                    </p>
-                  )}
-                  {editError && (
-                    <p role="alert" className="text-sm text-destructive">
-                      {editError}
-                    </p>
-                  )}
-                  <Button disabled={isWorking} className="w-full" type="submit">
-                    <Plus className="h-4 w-4" />
-                    {createdAccountId ? "Retry primary selection" : "Create account"}
-                  </Button>
                 </form>
               </DialogContent>
             </Dialog>
@@ -529,21 +582,20 @@ export function AccountsView() {
                   <div className="flex flex-1 items-start gap-3">
                     <label className="block space-y-2">
                       <span className="sr-only">Color</span>
-                      <input
+                      <ColorInput
                         value={draft.color}
                         onChange={(event) =>
                           updateAccountDraft(draft.id, {
                             color: event.target.value,
                           })
                         }
-                        type="color"
                         className={colorInputClassName}
                         aria-label={`${draft.name || "Account"} color`}
                       />
                     </label>
                     <label className="block flex-1 space-y-2">
                       <span className="text-sm font-medium">Name</span>
-                      <input
+                      <Input
                         value={draft.name}
                         onChange={(event) =>
                           updateAccountDraft(draft.id, {
@@ -629,7 +681,7 @@ export function AccountsView() {
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block space-y-2">
                     <span className="text-sm font-medium">Initial balance</span>
-                    <input
+                    <Input
                       value={draft.initialBalance}
                       onChange={(event) =>
                         updateAccountDraft(draft.id, {
@@ -749,7 +801,10 @@ export function AccountsView() {
                   <div className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
                     <span
                       className="h-3 w-3 rounded-full"
-                      style={{ backgroundColor: account.color }}
+                      style={{
+                        backgroundColor: account.color,
+                        color: readableForeground(account.color),
+                      }}
                     />
                     {account.currency} · {account.isActive ? "Active" : "Inactive"}
                   </div>

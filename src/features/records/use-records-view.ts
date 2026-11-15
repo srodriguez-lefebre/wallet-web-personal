@@ -137,22 +137,25 @@ export function useRecordsView() {
     reviewWriteLock.current = true;
     setReviewWrite(record.id);
     try {
-      await runAction(
-        async () => {
-          const saved = await updateRecord(record.id, {
-            ...patch,
-            expectedUpdatedAt: record.updatedAt,
-          });
-          setReviewUndo({ before: record, saved });
-        },
-        {
-          processing: "Saving review…",
-          success: "Review saved",
-          error: "Could not save review",
-        },
-      );
-    } catch {
-      // The toast reports the failure and the row retains its selection.
+      {
+        const actionResult = await runAction(
+          async () => {
+            const saved = await updateRecord(record.id, {
+              ...patch,
+              expectedUpdatedAt: record.updatedAt,
+            });
+            setReviewUndo({ before: record, saved });
+          },
+          {
+            processing: "Saving review…",
+            success: "Review saved",
+            error: "Could not save review",
+          },
+        );
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } finally {
       reviewWriteLock.current = false;
       setReviewWrite(undefined);
@@ -165,26 +168,29 @@ export function useRecordsView() {
     reviewWriteLock.current = true;
     setReviewWrite(before.id);
     try {
-      await runAction(
-        async () => {
-          await updateRecord(before.id, {
-            categoryId: before.categoryId ?? null,
-            paymentStatus: before.paymentStatus,
-            expectedUpdatedAt: saved.updatedAt,
-            ...(before.importMerchant
-              ? { restoreMerchantCorrection: before.merchantCorrection ?? null }
-              : {}),
-          });
-          setReviewUndo(undefined);
-        },
-        {
-          processing: "Undoing review…",
-          success: "Review undone",
-          error: "Could not undo review",
-        },
-      );
-    } catch {
-      // Keep the action visible so the user can see what failed.
+      {
+        const actionResult = await runAction(
+          async () => {
+            await updateRecord(before.id, {
+              categoryId: before.categoryId ?? null,
+              paymentStatus: before.paymentStatus,
+              expectedUpdatedAt: saved.updatedAt,
+              ...(before.importMerchant
+                ? { restoreMerchantCorrection: before.merchantCorrection ?? null }
+                : {}),
+            });
+            setReviewUndo(undefined);
+          },
+          {
+            processing: "Undoing review…",
+            success: "Review undone",
+            error: "Could not undo review",
+          },
+        );
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } finally {
       reviewWriteLock.current = false;
       setReviewWrite(undefined);

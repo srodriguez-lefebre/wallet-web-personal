@@ -69,7 +69,9 @@ export function FormDialog({
             if (!busy && canSubmit) finishAction(Promise.resolve(onSubmit(event)));
           }}
         >
-          <div className={fieldsClassName}>{children}</div>
+          <fieldset disabled={busy} className={fieldsClassName}>
+            {children}
+          </fieldset>
           {error && (
             <div role="alert" className="text-sm text-destructive">
               {error}

@@ -1,3 +1,4 @@
+import { currencySchema } from "@shared/schemas";
 import { formatMoney } from "@shared/calculations";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ArrowLeft, Pencil, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
@@ -6,6 +7,8 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 
 import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
+import { controlClassName as field, Input, DateInput } from "@/components/ui/form/controls";
+import { useDraftFields } from "@/hooks/use-draft-fields";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -29,9 +32,7 @@ import { localDateInput } from "@/lib/date-input";
 import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 
-const field =
-  "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-const currencies: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
+const currencies = currencySchema.options;
 
 function formatCategoryName(categories: Category[], category: Category) {
   const parent = category.parentId
@@ -42,6 +43,10 @@ function formatCategoryName(categories: Category[], category: Category) {
 
 export function CardDetailView() {
   const { cardId = "" } = useParams();
+  return <CardDetail key={cardId} cardId={cardId} />;
+}
+
+function CardDetail({ cardId }: { cardId: string }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
@@ -77,16 +82,44 @@ export function CardDetailView() {
   );
   const [showMovement, setShowMovement] = useState(false);
   const [editingMovementId, setEditingMovementId] = useState<string | null>(null);
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<CurrencyCode>(card?.limitCurrency ?? "UYU");
-  const [rate, setRate] = useState("1");
-  const [categoryId, setCategoryId] = useState("");
-  const [counterparty, setCounterparty] = useState("");
-  const [note, setNote] = useState("");
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
-  const [impactAccount, setImpactAccount] = useState(false);
-  const [accountId, setAccountId] = useState("");
-  const [accountAmount, setAccountAmount] = useState("");
+  const [
+    {
+      amount,
+      currency,
+      rate,
+      categoryId,
+      counterparty,
+      note,
+      date,
+      impactAccount,
+      accountId,
+      accountAmount,
+    },
+    {
+      amount: setAmount,
+      currency: setCurrency,
+      rate: setRate,
+      categoryId: setCategoryId,
+      counterparty: setCounterparty,
+      note: setNote,
+      date: setDate,
+      impactAccount: setImpactAccount,
+      accountId: setAccountId,
+      accountAmount: setAccountAmount,
+    },
+  ] = useDraftFields(() => ({
+    amount: "",
+    currency: card?.limitCurrency ?? "UYU",
+    rate: "1",
+    categoryId: "",
+    counterparty: "",
+    note: "",
+    date: format(new Date(), "yyyy-MM-dd"),
+    impactAccount: false,
+    accountId: "",
+    accountAmount: "",
+  }));
+
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentAccountId, setPaymentAccountId] = useState("");
   const [paymentAccountAmount, setPaymentAccountAmount] = useState("");
@@ -173,18 +206,23 @@ export function CardDetailView() {
           ? original.occurredAt
           : new Date(`${date}T12:00:00`).toISOString(),
     };
-    await runAction(
-      () =>
-        editingMovementId
-          ? updateCreditCardRecord(cardId, editingMovementId, payload)
-          : addCreditCardRecord(cardId, payload),
-      {
-        singleFlight: "save-card-movement",
-        processing: "Saving movement...",
-        success: "Movement saved",
-        error: "Could not save movement",
-      },
-    );
+    {
+      const actionResult = await runAction(
+        () =>
+          editingMovementId
+            ? updateCreditCardRecord(cardId, editingMovementId, payload)
+            : addCreditCardRecord(cardId, payload),
+        {
+          singleFlight: "save-card-movement",
+          processing: "Saving movement...",
+          success: "Movement saved",
+          error: "Could not save movement",
+        },
+      );
+      if (!actionResult.ok) {
+        return;
+      }
+    }
     resetMovement();
     setShowMovement(false);
   }
@@ -192,30 +230,35 @@ export function CardDetailView() {
   async function refund(movementId: string) {
     const original = movements.find((item) => item.id === movementId);
     if (!original) return;
-    await runAction(
-      () =>
-        addCreditCardRefund(cardId, {
-          kind: "refund",
-          originalRecordId: original.id,
-          amount: original.amount,
-          currency: original.currency,
-          amountInLimitCurrency: original.amountInLimitCurrency,
-          exchangeRateToLimitCurrency: original.exchangeRateToLimitCurrency,
-          categoryId: original.categoryId,
-          counterpartyName: original.counterpartyName,
-          note: `Refund: ${original.note ?? original.counterpartyName ?? "movement"}`,
-          accountId: original.accountId,
-          accountAmount: original.accountAmount,
-          accountImpactAtCreation: original.accountImpactAtCreation,
-          occurredAt: new Date().toISOString(),
-        }),
-      {
-        singleFlight: `refund:${movementId}`,
-        processing: "Saving refund...",
-        success: "Refund saved",
-        error: "Could not save refund",
-      },
-    );
+    {
+      const actionResult = await runAction(
+        () =>
+          addCreditCardRefund(cardId, {
+            kind: "refund",
+            originalRecordId: original.id,
+            amount: original.amount,
+            currency: original.currency,
+            amountInLimitCurrency: original.amountInLimitCurrency,
+            exchangeRateToLimitCurrency: original.exchangeRateToLimitCurrency,
+            categoryId: original.categoryId,
+            counterpartyName: original.counterpartyName,
+            note: `Refund: ${original.note ?? original.counterpartyName ?? "movement"}`,
+            accountId: original.accountId,
+            accountAmount: original.accountAmount,
+            accountImpactAtCreation: original.accountImpactAtCreation,
+            occurredAt: new Date().toISOString(),
+          }),
+        {
+          singleFlight: `refund:${movementId}`,
+          processing: "Saving refund...",
+          success: "Refund saved",
+          error: "Could not save refund",
+        },
+      );
+      if (!actionResult.ok) {
+        return;
+      }
+    }
   }
 
   async function submitPayment(event: FormEvent) {
@@ -241,24 +284,29 @@ export function CardDetailView() {
         occurredAt: new Date().toISOString(),
       };
     const request = paymentRequest.current;
-    await runAction(
-      () =>
-        payCreditCardStatement(cardId, payableStatement.id, {
-          amount: Number(paymentAmount),
-          currency: card!.limitCurrency,
-          amountInLimitCurrency: Number(paymentAmount),
-          accountId: paymentAccountId || undefined,
-          accountAmount: paymentAccountId ? Number(paymentAccountAmount) : undefined,
-          idempotencyKey: request.idempotencyKey,
-          occurredAt: request.occurredAt,
-        }),
-      {
-        singleFlight: `pay:${payableStatement.id}`,
-        processing: "Paying statement...",
-        success: "Payment saved",
-        error: "Could not save payment",
-      },
-    );
+    {
+      const actionResult = await runAction(
+        () =>
+          payCreditCardStatement(cardId, payableStatement.id, {
+            amount: Number(paymentAmount),
+            currency: card!.limitCurrency,
+            amountInLimitCurrency: Number(paymentAmount),
+            accountId: paymentAccountId || undefined,
+            accountAmount: paymentAccountId ? Number(paymentAccountAmount) : undefined,
+            idempotencyKey: request.idempotencyKey,
+            occurredAt: request.occurredAt,
+          }),
+        {
+          singleFlight: `pay:${payableStatement.id}`,
+          processing: "Paying statement...",
+          success: "Payment saved",
+          error: "Could not save payment",
+        },
+      );
+      if (!actionResult.ok) {
+        return;
+      }
+    }
     paymentRequest.current = null;
     setPaymentAmount("");
     setPaymentAccountAmount("");
@@ -311,119 +359,120 @@ export function CardDetailView() {
               finishAction(submitMovement(event));
             }}
           >
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Amount</span>
-              <input
-                className={field}
-                type="number"
-                step="0.01"
-                value={amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Currency</span>
-              <select
-                className={field}
-                value={currency}
-                onChange={(event) => {
-                  const next = event.target.value as CurrencyCode;
-                  setCurrency(next);
-                  if (next === card.limitCurrency) setRate("1");
-                }}
-              >
-                {currencies.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Rate to {card.limitCurrency}</span>
-              <input
-                className={field}
-                type="number"
-                step="0.000001"
-                value={rate}
-                onChange={(event) => setRate(event.target.value)}
-              />
-            </label>
-            <div className="space-y-2">
-              <span className="text-sm font-medium">Category</span>
-              <CategoryPicker
-                categories={dataset.categories}
-                value={categoryId}
-                onChange={setCategoryId}
-                inputClassName={field}
-                getLabel={(category) => formatCategoryName(dataset.categories, category)}
-              />
-            </div>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Counterparty</span>
-              <input
-                className={field}
-                value={counterparty}
-                onChange={(event) => setCounterparty(event.target.value)}
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-medium">Date</span>
-              <input
-                className={field}
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-              />
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={impactAccount}
-                onChange={(event) => setImpactAccount(event.target.checked)}
-              />{" "}
-              Affect an account now
-            </label>
-            {impactAccount ? (
-              <>
-                <select
-                  className={field}
-                  value={accountId}
-                  onChange={(event) => setAccountId(event.target.value)}
-                >
-                  <option value="">Account</option>
-                  {dataset.accounts
-                    .filter((item) => item.isActive)
-                    .map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                </select>
-                <input
+            <fieldset disabled={toast?.status === "processing"} className="contents">
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Amount</span>
+                <Input
                   className={field}
                   type="number"
                   step="0.01"
-                  placeholder="Account amount"
-                  value={accountAmount}
-                  onChange={(event) => setAccountAmount(event.target.value)}
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
                 />
-              </>
-            ) : null}
-            <label className="space-y-2 md:col-span-2">
-              <span className="text-sm font-medium">Note</span>
-              <input
-                className={field}
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-              />
-            </label>
-            <div className="flex items-end gap-2">
-              <Button type="submit" disabled={toast?.status === "processing"}>
-                Save movement
-              </Button>
-              <Button type="button" variant="outline" onClick={() => setShowMovement(false)}>
-                Cancel
-              </Button>
-            </div>
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Currency</span>
+                <select
+                  className={field}
+                  value={currency}
+                  onChange={(event) => {
+                    const next = event.target.value as CurrencyCode;
+                    setCurrency(next);
+                    if (next === card.limitCurrency) setRate("1");
+                  }}
+                >
+                  {currencies.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Rate to {card.limitCurrency}</span>
+                <Input
+                  className={field}
+                  type="number"
+                  step="0.000001"
+                  value={rate}
+                  onChange={(event) => setRate(event.target.value)}
+                />
+              </label>
+              <div className="space-y-2">
+                <span className="text-sm font-medium">Category</span>
+                <CategoryPicker
+                  categories={dataset.categories}
+                  value={categoryId}
+                  onChange={setCategoryId}
+                  inputClassName={field}
+                  getLabel={(category) => formatCategoryName(dataset.categories, category)}
+                />
+              </div>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Counterparty</span>
+                <Input
+                  className={field}
+                  value={counterparty}
+                  onChange={(event) => setCounterparty(event.target.value)}
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="text-sm font-medium">Date</span>
+                <DateInput
+                  className={field}
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                />
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={impactAccount}
+                  onChange={(event) => setImpactAccount(event.target.checked)}
+                />{" "}
+                Affect an account now
+              </label>
+              {impactAccount ? (
+                <>
+                  <select
+                    className={field}
+                    value={accountId}
+                    onChange={(event) => setAccountId(event.target.value)}
+                  >
+                    <option value="">Account</option>
+                    {dataset.accounts
+                      .filter((item) => item.isActive)
+                      .map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                  </select>
+                  <Input
+                    className={field}
+                    type="number"
+                    step="0.01"
+                    placeholder="Account amount"
+                    value={accountAmount}
+                    onChange={(event) => setAccountAmount(event.target.value)}
+                  />
+                </>
+              ) : null}
+              <label className="space-y-2 md:col-span-2">
+                <span className="text-sm font-medium">Note</span>
+                <Input
+                  className={field}
+                  value={note}
+                  onChange={(event) => setNote(event.target.value)}
+                />
+              </label>
+              <div className="flex items-end gap-2">
+                <Button type="submit" disabled={toast?.status === "processing"}>
+                  Save movement
+                </Button>
+                <Button type="button" variant="outline" onClick={() => setShowMovement(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>
@@ -573,63 +622,65 @@ export function CardDetailView() {
                 finishAction(submitPayment(event));
               }}
             >
-              <div className="flex gap-2">
-                <input
+              <fieldset disabled={toast?.status === "processing"} className="contents">
+                <div className="flex gap-2">
+                  <Input
+                    className={field}
+                    type="number"
+                    step="0.01"
+                    placeholder={`Amount in ${card.limitCurrency}`}
+                    value={paymentAmount}
+                    onChange={(event) => setPaymentAmount(event.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={fillFullPaymentAmount}
+                    disabled={
+                      !payableStatementBalance ||
+                      payableStatementBalance.dueAmountInLimitCurrency <= 0
+                    }
+                  >
+                    Full
+                  </Button>
+                </div>
+                <select
                   className={field}
-                  type="number"
-                  step="0.01"
-                  placeholder={`Amount in ${card.limitCurrency}`}
-                  value={paymentAmount}
-                  onChange={(event) => setPaymentAmount(event.target.value)}
-                />
+                  value={paymentAccountId}
+                  onChange={(event) => setPaymentAccountId(event.target.value)}
+                >
+                  <option value="">External payment</option>
+                  {dataset.accounts
+                    .filter((item) => item.isActive)
+                    .map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                </select>
+                {paymentAccountId ? (
+                  <Input
+                    className={field}
+                    type="number"
+                    step="0.01"
+                    placeholder="Amount debited"
+                    value={paymentAccountAmount}
+                    onChange={(event) => setPaymentAccountAmount(event.target.value)}
+                  />
+                ) : (
+                  <div />
+                )}
                 <Button
-                  type="button"
-                  variant="outline"
-                  onClick={fillFullPaymentAmount}
+                  type="submit"
                   disabled={
-                    !payableStatementBalance ||
-                    payableStatementBalance.dueAmountInLimitCurrency <= 0
+                    toast?.status === "processing" ||
+                    !(Number(paymentAmount) > 0) ||
+                    Boolean(paymentAccountId && !(Number(paymentAccountAmount) > 0))
                   }
                 >
-                  Full
+                  Pay
                 </Button>
-              </div>
-              <select
-                className={field}
-                value={paymentAccountId}
-                onChange={(event) => setPaymentAccountId(event.target.value)}
-              >
-                <option value="">External payment</option>
-                {dataset.accounts
-                  .filter((item) => item.isActive)
-                  .map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-              </select>
-              {paymentAccountId ? (
-                <input
-                  className={field}
-                  type="number"
-                  step="0.01"
-                  placeholder="Amount debited"
-                  value={paymentAccountAmount}
-                  onChange={(event) => setPaymentAccountAmount(event.target.value)}
-                />
-              ) : (
-                <div />
-              )}
-              <Button
-                type="submit"
-                disabled={
-                  toast?.status === "processing" ||
-                  !(Number(paymentAmount) > 0) ||
-                  Boolean(paymentAccountId && !(Number(paymentAccountAmount) > 0))
-                }
-              >
-                Pay
-              </Button>
+              </fieldset>
             </form>
           </CardContent>
         </Card>
@@ -688,7 +739,14 @@ export function CardDetailView() {
                         size="icon"
                         variant="ghost"
                         title="Delete"
-                        onClick={() => void deleteCreditCardRecord(cardId, movement.id)}
+                        onClick={() =>
+                          void runAction(() => deleteCreditCardRecord(cardId, movement.id), {
+                            singleFlight: `delete-movement:${movement.id}`,
+                            processing: "Deleting movement...",
+                            success: "Movement deleted",
+                            error: "Could not delete movement",
+                          })
+                        }
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -721,7 +779,14 @@ export function CardDetailView() {
                 <Button
                   size="icon"
                   variant="ghost"
-                  onClick={() => void deleteCreditCardPayment(cardId, payment.id)}
+                  onClick={() =>
+                    void runAction(() => deleteCreditCardPayment(cardId, payment.id), {
+                      singleFlight: `delete-payment:${payment.id}`,
+                      processing: "Deleting payment...",
+                      success: "Payment deleted",
+                      error: "Could not delete payment",
+                    })
+                  }
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

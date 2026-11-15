@@ -3,6 +3,7 @@ import { currencySchema, goalPatchSchema, goalSchema, type GoalPatch } from "@sh
 
 import type { Account, CurrencyCode, Goal } from "@shared/types";
 
+import { Input, DateInput, ColorInput } from "@/components/ui/form/controls";
 import { finishAction } from "@/lib/async-event";
 import { Button } from "@/components/ui/button";
 import {
@@ -103,173 +104,171 @@ export function GoalEditDialog({
             finishAction(submit(event));
           }}
         >
-          <fieldset disabled={pending} className="space-y-4">
-            <label className="block space-y-1">
-              <span>Name</span>
-              <input
-                aria-label="Goal name"
-                className={inputClass}
-                value={draft.name}
-                onChange={(event) => change({ name: event.target.value })}
-                required
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span>Target amount</span>
-                <input
-                  aria-label="Goal target amount"
+          <fieldset disabled={pending} className="contents">
+            <fieldset disabled={pending} className="space-y-4">
+              <label className="block space-y-1">
+                <span>Name</span>
+                <Input
+                  aria-label="Goal name"
                   className={inputClass}
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={draft.targetAmount}
-                  onChange={(event) => change({ targetAmount: event.target.value })}
+                  value={draft.name}
+                  onChange={(event) => change({ name: event.target.value })}
                   required
                 />
               </label>
-              <label className="space-y-1">
-                <span>Currency</span>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span>Target amount</span>
+                  <Input
+                    aria-label="Goal target amount"
+                    className={inputClass}
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={draft.targetAmount}
+                    onChange={(event) => change({ targetAmount: event.target.value })}
+                    required
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>Currency</span>
+                  <select
+                    aria-label="Goal currency"
+                    className={inputClass}
+                    value={draft.currency}
+                    onChange={(event) => change({ currency: event.target.value as CurrencyCode })}
+                  >
+                    {currencySchema.options.map((currency) => (
+                      <option key={currency}>{currency}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="space-y-1">
+                  <span>Deadline</span>
+                  <DateInput
+                    aria-label="Goal deadline"
+                    className={inputClass}
+                    value={draft.deadline}
+                    onChange={(event) => change({ deadline: event.target.value })}
+                  />
+                </label>
+                <label className="space-y-1">
+                  <span>Color</span>
+                  <ColorInput
+                    aria-label="Goal color"
+                    className={inputClass}
+                    value={draft.color}
+                    onChange={(event) => change({ color: event.target.value })}
+                  />
+                </label>
+              </div>
+              <label className="block space-y-1">
+                <span>Account</span>
                 <select
-                  aria-label="Goal currency"
+                  aria-label="Goal account"
                   className={inputClass}
-                  value={draft.currency}
-                  onChange={(event) => change({ currency: event.target.value as CurrencyCode })}
+                  value={draft.accountId}
+                  onChange={(event) => change({ accountId: event.target.value })}
                 >
-                  {currencySchema.options.map((currency) => (
-                    <option key={currency}>{currency}</option>
+                  <option value="">No account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
                   ))}
                 </select>
               </label>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="space-y-1">
-                <span>Deadline</span>
+              <label className="flex items-center gap-2">
                 <input
-                  aria-label="Goal deadline"
-                  className={inputClass}
-                  type="date"
-                  value={draft.deadline}
-                  onChange={(event) => change({ deadline: event.target.value })}
+                  type="checkbox"
+                  checked={draft.isVisible}
+                  onChange={(event) => change({ isVisible: event.target.checked })}
+                />
+                Visible goal
+              </label>
+              <label className="block space-y-1">
+                <span>Note</span>
+                <textarea
+                  aria-label="Goal note"
+                  className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={draft.note}
+                  onChange={(event) => change({ note: event.target.value })}
                 />
               </label>
-              <label className="space-y-1">
-                <span>Color</span>
-                <input
-                  aria-label="Goal color"
-                  className={inputClass}
-                  type="color"
-                  value={draft.color}
-                  onChange={(event) => change({ color: event.target.value })}
-                />
-              </label>
-            </div>
-            <label className="block space-y-1">
-              <span>Account</span>
-              <select
-                aria-label="Goal account"
-                className={inputClass}
-                value={draft.accountId}
-                onChange={(event) => change({ accountId: event.target.value })}
-              >
-                <option value="">No account</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={draft.isVisible}
-                onChange={(event) => change({ isVisible: event.target.checked })}
-              />
-              Visible goal
-            </label>
-            <label className="block space-y-1">
-              <span>Note</span>
-              <textarea
-                aria-label="Goal note"
-                className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                value={draft.note}
-                onChange={(event) => change({ note: event.target.value })}
-              />
-            </label>
-            {goal.status !== "completed" ? (
-              <>
-                <label className="flex items-center gap-2">
-                  <input
-                    aria-label="Automatic goal capture"
-                    type="checkbox"
-                    checked={draft.autoCaptureEnabled}
-                    onChange={(event) => change({ autoCaptureEnabled: event.target.checked })}
-                  />
-                  Automatically capture expenses in a date range
-                </label>
-                {draft.autoCaptureEnabled ? (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <label className="space-y-1">
-                        <span>From</span>
-                        <input
-                          aria-label="Goal capture from"
+              {goal.status !== "completed" ? (
+                <>
+                  <label className="flex items-center gap-2">
+                    <input
+                      aria-label="Automatic goal capture"
+                      type="checkbox"
+                      checked={draft.autoCaptureEnabled}
+                      onChange={(event) => change({ autoCaptureEnabled: event.target.checked })}
+                    />
+                    Automatically capture expenses in a date range
+                  </label>
+                  {draft.autoCaptureEnabled ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="space-y-1">
+                          <span>From</span>
+                          <DateInput
+                            aria-label="Goal capture from"
+                            className={inputClass}
+                            value={draft.autoCaptureStart}
+                            onChange={(event) => change({ autoCaptureStart: event.target.value })}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <span>Until</span>
+                          <DateInput
+                            aria-label="Goal capture until"
+                            className={inputClass}
+                            value={draft.autoCaptureEnd}
+                            onChange={(event) => change({ autoCaptureEnd: event.target.value })}
+                          />
+                        </label>
+                      </div>
+                      <label className="block space-y-1">
+                        <span>Fallback reservation account</span>
+                        <select
+                          aria-label="Goal reservation account"
                           className={inputClass}
-                          type="date"
-                          value={draft.autoCaptureStart}
-                          onChange={(event) => change({ autoCaptureStart: event.target.value })}
-                        />
+                          value={draft.autoReservationAccountId}
+                          onChange={(event) =>
+                            change({
+                              autoReservationAccountId: event.target.value,
+                            })
+                          }
+                        >
+                          <option value="">No fallback</option>
+                          {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.name}
+                            </option>
+                          ))}
+                        </select>
                       </label>
-                      <label className="space-y-1">
-                        <span>Until</span>
-                        <input
-                          aria-label="Goal capture until"
-                          className={inputClass}
-                          type="date"
-                          value={draft.autoCaptureEnd}
-                          onChange={(event) => change({ autoCaptureEnd: event.target.value })}
-                        />
-                      </label>
-                    </div>
-                    <label className="block space-y-1">
-                      <span>Fallback reservation account</span>
-                      <select
-                        aria-label="Goal reservation account"
-                        className={inputClass}
-                        value={draft.autoReservationAccountId}
-                        onChange={(event) =>
-                          change({
-                            autoReservationAccountId: event.target.value,
-                          })
-                        }
-                      >
-                        <option value="">No fallback</option>
-                        {accounts.map((account) => (
-                          <option key={account.id} value={account.id}>
-                            {account.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </>
-                ) : null}
-              </>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </fieldset>
+            {error ? (
+              <p role="alert" className="text-sm text-red-600">
+                {error}
+              </p>
             ) : null}
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
+                Cancel
+              </Button>
+              <Button aria-label="Save goal details" type="submit" disabled={pending}>
+                {pending ? "Saving..." : "Save changes"}
+              </Button>
+            </div>
           </fieldset>
-          {error ? (
-            <p role="alert" className="text-sm text-red-600">
-              {error}
-            </p>
-          ) : null}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" disabled={pending} onClick={onClose}>
-              Cancel
-            </Button>
-            <Button aria-label="Save goal details" type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save changes"}
-            </Button>
-          </div>
         </form>
       </DialogContent>
     </Dialog>

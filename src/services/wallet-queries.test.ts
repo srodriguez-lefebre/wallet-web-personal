@@ -6,7 +6,7 @@ import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { recordCreateSchema } from "@shared/schemas";
 
 import { createWalletClient } from "./api-client";
-import { createWalletMutations } from "./mutations";
+import { createWalletMutations, waitForWalletMutations } from "./mutations";
 import {
   createWalletQueryClient,
   cardLedgerQueryOptions,
@@ -39,6 +39,42 @@ function observe(cache: ReturnType<typeof createWalletQueryClient>) {
     new InfiniteQueryObserver(cache, recordsQueryOptions(client)).subscribe(() => {}),
   );
 }
+
+test("the explicit-read barrier waits for a pending canonical write and is cancelled with its session", async () => {
+  let arrived!: () => void, release!: () => void;
+  const started = new Promise<void>((resolve) => {
+    arrived = resolve;
+  });
+  server.use(
+    http.patch("http://test.local/api/settings", async () => {
+      arrived();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return response(reference.settings);
+    }),
+  );
+  const value = cache();
+  const writing = createWalletMutations(client, value)["settings.patch"]({
+    body: { theme: "dark" },
+  });
+  await started;
+  const controller = new AbortController();
+  let settled = false;
+  const waiting = waitForWalletMutations(value, controller.signal).then(() => {
+    settled = true;
+  });
+  await Promise.resolve();
+  expect(settled).toBe(false);
+  const cancelled = new AbortController();
+  const stopped = waitForWalletMutations(value, cancelled.signal);
+  cancelled.abort();
+  await expect(stopped).rejects.toMatchObject({ name: "AbortError" });
+  release();
+  await writing;
+  await waiting;
+  expect(settled).toBe(true);
+});
 
 test("a failed import still reconciles canonical pages containing earlier committed rows", async () => {
   server.use(

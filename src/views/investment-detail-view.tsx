@@ -5,6 +5,7 @@ import { formatMoney } from "@shared/calculations";
 import { investmentTypeLabels } from "@shared/constants";
 import { investmentPatchSchema } from "@shared/schemas";
 
+import { Input } from "@/components/ui/form/controls";
 import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -71,16 +72,21 @@ export function InvestmentDetailView() {
     setIsSavingValue(true);
     setValueError("");
     try {
-      await runAction(() => updateInvestment(investment.id, parsed.data), {
-        processing: "Updating current value...",
-        success: "Current value updated",
-        error: "Could not update current value",
-      });
+      {
+        const actionResult = await runAction(() => updateInvestment(investment.id, parsed.data), {
+          processing: "Updating current value...",
+          success: "Current value updated",
+          error: "Could not update current value",
+        });
+        if (!actionResult.ok) {
+          const error = actionResult.error;
+          setValueError(
+            error instanceof Error ? error.message : "Could not update current value. Try again.",
+          );
+          return;
+        }
+      }
       setValueDialogOpen(false);
-    } catch (error) {
-      setValueError(
-        error instanceof Error ? error.message : "Could not update current value. Try again.",
-      );
     } finally {
       savingValue.current = false;
       setIsSavingValue(false);
@@ -236,37 +242,39 @@ export function InvestmentDetailView() {
               finishAction(saveCurrentValue(event));
             }}
           >
-            <label className="block space-y-2">
-              <span className="text-sm font-medium">Current value ({investment.currency})</span>
-              <input
-                aria-label="Current investment value"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                type="number"
-                min="0"
-                step="0.01"
-                disabled={isSavingValue}
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              />
-            </label>
-            {valueError ? (
-              <p role="alert" className="text-sm text-destructive">
-                {valueError}
-              </p>
-            ) : null}
-            <div className="flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSavingValue}
-                onClick={() => setValueDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit" aria-label="Save current value" disabled={isSavingValue}>
-                {isSavingValue ? "Saving..." : "Save current value"}
-              </Button>
-            </div>
+            <fieldset disabled={isSavingValue} className="contents">
+              <label className="block space-y-2">
+                <span className="text-sm font-medium">Current value ({investment.currency})</span>
+                <Input
+                  aria-label="Current investment value"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  disabled={isSavingValue}
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                />
+              </label>
+              {valueError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {valueError}
+                </p>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isSavingValue}
+                  onClick={() => setValueDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" aria-label="Save current value" disabled={isSavingValue}>
+                  {isSavingValue ? "Saving..." : "Save current value"}
+                </Button>
+              </div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>

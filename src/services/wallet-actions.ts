@@ -5,6 +5,7 @@ import type { ClientInput, WalletClient } from "./api-client";
 import type { WalletMutations } from "./mutations";
 
 import { importRecordBatches } from "@/lib/record-import";
+import { createDebtSettlement } from "@/lib/debt-settlement";
 
 const crud = {
   Account: ["accounts.create", "accounts.patch", "accounts.delete"],
@@ -38,6 +39,7 @@ interface ActionOptions {
   signal: AbortSignal;
   getReference: () => WalletReference;
   onArchived: (entity: ArchivedEntity, id: string) => void;
+  waitForWrites: () => Promise<void>;
 }
 
 /** Compatibility names are generated once; Query owns their invalidation and session lifecycle. */
@@ -77,10 +79,17 @@ export function createWalletActions(
       ];
     }),
   ) as unknown as CrudActions;
-  const getCompleteDataset = () => client["wallet.get"]({ signal: options.signal });
-  const getBackupDataset = () => client["wallet.backup"]({ signal: options.signal });
+  const getCompleteDataset = async () => {
+    await options.waitForWrites();
+    return client["wallet.get"]({ signal: options.signal });
+  };
+  const getBackupDataset = async () => {
+    await options.waitForWrites();
+    return client["wallet.backup"]({ signal: options.signal });
+  };
   return {
     ...aliases,
+    settleDebt: createDebtSettlement(mutations["debts.pay"]),
     getCompleteDataset,
     getBackupDataset,
     restoreBackup: async (body: Body<"wallet.restore">) => {

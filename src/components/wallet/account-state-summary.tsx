@@ -3,6 +3,7 @@ import { formatMoney } from "@shared/calculations";
 
 import type { AccountBalance } from "@shared/types";
 
+import { readableForeground } from "@/lib/palette";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -19,7 +20,7 @@ export function AccountStateSummary({ balance }: AccountStateSummaryProps) {
         <div className="flex items-start gap-3">
           <span
             className="mt-1 h-3.5 w-3.5 rounded-full"
-            style={{ backgroundColor: account.color }}
+            style={{ backgroundColor: account.color, color: readableForeground(account.color) }}
           />
           <div>
             <div className="flex flex-wrap items-center gap-2">

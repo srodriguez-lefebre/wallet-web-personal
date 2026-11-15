@@ -1,3 +1,4 @@
+import { currencySchema } from "@shared/schemas";
 import { FormEvent, useMemo, useState, useRef } from "react";
 import {
   Banknote,
@@ -17,6 +18,13 @@ import { debtDueState, selectDebtsByDueDate, type DebtDueWindow } from "@shared/
 
 import type { CurrencyCode, Debt, DebtDirection, DebtStatus, RecurringDebt } from "@shared/types";
 
+import {
+  controlClassName as inputClassName,
+  textareaClassName,
+  Input,
+  DateInput,
+} from "@/components/ui/form/controls";
+import { useDraftFields } from "@/hooks/use-draft-fields";
 import { finishAction } from "@/lib/async-event";
 import { localDateInput, dateInputToIso } from "@/lib/date-input";
 import { PageHeader } from "@/components/page/page-header";
@@ -70,11 +78,7 @@ interface RecurringDebtFormState {
   note: string;
 }
 
-const currencyOptions: CurrencyCode[] = ["UYU", "USD", "EUR", "BRL", "ARS"];
-const inputClassName =
-  "h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring";
-const textareaClassName =
-  "min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring";
+const currencyOptions = currencySchema.options;
 
 function todayDate() {
   return localDateInput();
@@ -238,27 +242,76 @@ export function DebtsView() {
     updateDebt,
     deleteDebt,
     recordDebtPayment,
+    settleDebt: settleDebtPayment,
     addRecurringDebt,
     updateRecurringDebt,
     deleteRecurringDebt,
   } = useWallet();
   const [tab, setTab] = useState<DebtTab>("open");
-  const [debtDialogOpen, setDebtDialogOpen] = useState(false);
-  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false);
-  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [editingDebtId, setEditingDebtId] = useState("");
-  const [editingRecurringDebtId, setEditingRecurringDebtId] = useState("");
-  const [paymentDebtId, setPaymentDebtId] = useState("");
-  const [formError, setFormError] = useState("");
-  const [showDebtMore, setShowDebtMore] = useState(false);
+  const [
+    {
+      debtDialogOpen,
+      recurringDialogOpen,
+      paymentDialogOpen,
+      editingDebtId,
+      editingRecurringDebtId,
+      paymentDebtId,
+      formError,
+      showDebtMore,
+    },
+    {
+      debtDialogOpen: setDebtDialogOpen,
+      recurringDialogOpen: setRecurringDialogOpen,
+      paymentDialogOpen: setPaymentDialogOpen,
+      editingDebtId: setEditingDebtId,
+      editingRecurringDebtId: setEditingRecurringDebtId,
+      paymentDebtId: setPaymentDebtId,
+      formError: setFormError,
+      showDebtMore: setShowDebtMore,
+    },
+  ] = useDraftFields(() => ({
+    debtDialogOpen: false,
+    recurringDialogOpen: false,
+    paymentDialogOpen: false,
+    editingDebtId: "",
+    editingRecurringDebtId: "",
+    paymentDebtId: "",
+    formError: "",
+    showDebtMore: false,
+  }));
+
   const [debtForm, setDebtForm] = useState<DebtFormState>(() =>
     defaultDebtForm("", defaultAccountId(dataset)),
   );
   const [recurringForm, setRecurringForm] = useState<RecurringDebtFormState>(() =>
     defaultRecurringForm("", defaultAccountId(dataset)),
   );
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentAccountAmount, setPaymentAccountAmount] = useState("");
+  const [
+    {
+      paymentAmount,
+      paymentAccountAmount,
+      paymentAccountId,
+      paymentDate,
+      paymentNote,
+      saveAccountToDebt,
+    },
+    {
+      paymentAmount: setPaymentAmount,
+      paymentAccountAmount: setPaymentAccountAmount,
+      paymentAccountId: setPaymentAccountId,
+      paymentDate: setPaymentDate,
+      paymentNote: setPaymentNote,
+      saveAccountToDebt: setSaveAccountToDebt,
+    },
+  ] = useDraftFields(() => ({
+    paymentAmount: "",
+    paymentAccountAmount: "",
+    paymentAccountId: "",
+    paymentDate: todayDate(),
+    paymentNote: "",
+    saveAccountToDebt: true,
+  }));
+
   const paymentRequests = useRef(new Map<string, string>());
   function paymentKey(fingerprint: string) {
     let key = paymentRequests.current.get(fingerprint);
@@ -268,10 +321,7 @@ export function DebtsView() {
     }
     return key;
   }
-  const [paymentAccountId, setPaymentAccountId] = useState("");
-  const [paymentDate, setPaymentDate] = useState(todayDate());
-  const [paymentNote, setPaymentNote] = useState("");
-  const [saveAccountToDebt, setSaveAccountToDebt] = useState(true);
+
   const { toast, runAction } = useActionToast();
   const [dueWindow, setDueWindow] = useState<DebtDueWindow>("all");
   const openDebts = useMemo(() => selectDebtsByDueDate(dataset.debts), [dataset.debts]);
@@ -367,25 +417,37 @@ export function DebtsView() {
 
     if (editingDebtId) {
       const currentDebt = dataset.debts.find((debt) => debt.id === editingDebtId);
-      await runAction(
-        () =>
-          updateDebt(editingDebtId, {
-            ...payload,
-            recurringDebtId: currentDebt?.recurringDebtId,
-            recurringMonth: currentDebt?.recurringMonth,
-          }),
-        {
-          processing: "Saving debt...",
-          success: "Debt saved",
-          error: "Could not save debt",
-        },
-      );
+      {
+        const actionResult = await runAction(
+          () =>
+            updateDebt(editingDebtId, {
+              ...payload,
+              recurringDebtId: currentDebt?.recurringDebtId,
+              recurringMonth: currentDebt?.recurringMonth,
+            }),
+          {
+            processing: "Saving debt...",
+            singleFlight: "save-debt",
+            success: "Debt saved",
+            error: "Could not save debt",
+          },
+        );
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } else {
-      await runAction(() => addDebt(payload), {
-        processing: "Creating debt...",
-        success: "Debt created",
-        error: "Could not create debt",
-      });
+      {
+        const actionResult = await runAction(() => addDebt(payload), {
+          processing: "Creating debt...",
+          singleFlight: "save-debt",
+          success: "Debt created",
+          error: "Could not create debt",
+        });
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     }
 
     setDebtDialogOpen(false);
@@ -430,17 +492,32 @@ export function DebtsView() {
     if (!payload) return;
 
     if (editingRecurringDebtId) {
-      await runAction(() => updateRecurringDebt(editingRecurringDebtId, payload), {
-        processing: "Saving recurring debt...",
-        success: "Recurring debt saved",
-        error: "Could not save recurring debt",
-      });
+      {
+        const actionResult = await runAction(
+          () => updateRecurringDebt(editingRecurringDebtId, payload),
+          {
+            processing: "Saving recurring debt...",
+            singleFlight: "save-recurring-debt",
+            success: "Recurring debt saved",
+            error: "Could not save recurring debt",
+          },
+        );
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } else {
-      await runAction(() => addRecurringDebt(payload), {
-        processing: "Creating recurring debt...",
-        success: "Recurring debt created",
-        error: "Could not create recurring debt",
-      });
+      {
+        const actionResult = await runAction(() => addRecurringDebt(payload), {
+          processing: "Creating recurring debt...",
+          singleFlight: "save-recurring-debt",
+          success: "Recurring debt created",
+          error: "Could not create recurring debt",
+        });
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     }
 
     setRecurringDialogOpen(false);
@@ -480,47 +557,26 @@ export function DebtsView() {
         return true;
       },
       {
+        singleFlight: `debt-payment:${fingerprint}`,
         processing:
           activePaymentDebt.direction === "receivable" ? "Collecting debt..." : "Paying debt...",
         success: activePaymentDebt.direction === "receivable" ? "Debt collected" : "Debt paid",
         error: "Could not save payment",
       },
     );
-    if (succeeded) {
+    if (succeeded.ok) {
       paymentRequests.current.delete(fingerprint);
       setPaymentDialogOpen(false);
     }
   }
 
   async function settleDebt(debt: Debt) {
-    if (!debt.accountId || debt.pendingAmount === undefined) return;
-
-    const fingerprint = JSON.stringify([
-      debt.id,
-      [debt.pendingAmount, debt.accountId, todayDate(), "settle"],
-    ]);
-    const succeeded = await runAction(
-      async () => {
-        await recordDebtPayment(debt.id, {
-          amount: debt.pendingAmount ?? 0,
-          accountId: debt.accountId ?? "",
-          occurredAt: dateToIso(todayDate()),
-          note:
-            debt.direction === "receivable"
-              ? `Full debt received: ${debt.name}`
-              : `Full debt paid: ${debt.name}`,
-          saveAccountToDebt: true,
-          idempotencyKey: paymentKey(fingerprint),
-        });
-        return true;
-      },
-      {
-        processing: debt.direction === "receivable" ? "Receiving debt..." : "Paying debt...",
-        success: debt.direction === "receivable" ? "Debt received" : "Debt paid",
-        error: "Could not close debt",
-      },
-    );
-    if (succeeded) paymentRequests.current.delete(fingerprint);
+    await runAction(() => settleDebtPayment(debt, dateToIso(todayDate())), {
+      singleFlight: `settle:${debt.id}`,
+      processing: debt.direction === "receivable" ? "Receiving debt..." : "Paying debt...",
+      success: debt.direction === "receivable" ? "Debt received" : "Debt paid",
+      error: "Could not close debt",
+    });
   }
 
   function renderDebtList(debts: Debt[]) {
@@ -883,204 +939,204 @@ export function DebtsView() {
               finishAction(handleDebtSubmit(event));
             }}
           >
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span>Name</span>
-                <input
-                  value={debtForm.name}
-                  onChange={(event) => setDebtForm({ ...debtForm, name: event.target.value })}
-                  className={inputClassName}
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Counterparty</span>
-                <input
-                  value={debtForm.counterpartyName}
-                  onChange={(event) =>
-                    setDebtForm({
-                      ...debtForm,
-                      counterpartyName: event.target.value,
-                    })
-                  }
-                  className={inputClassName}
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Original amount</span>
-                <input
-                  value={debtForm.originalAmount}
-                  onChange={(event) =>
-                    setDebtForm({
-                      ...debtForm,
-                      originalAmount: limitDecimalPlaces(event.target.value),
-                    })
-                  }
-                  className={inputClassName}
-                  inputMode="decimal"
-                  placeholder="Required"
-                />
-              </label>
-              <div className="space-y-1 text-sm">
-                <span>Category</span>
-                <CategoryPicker
-                  categories={dataset.categories}
-                  value={debtForm.categoryId}
-                  inputClassName={inputClassName}
-                  onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
-                />
-              </div>
-              <div className="space-y-1 text-sm md:col-span-2">
-                <span>Direction</span>
-                <DirectionToggle
-                  value={debtForm.direction}
-                  onChange={(direction) =>
-                    setDebtForm({
-                      ...debtForm,
-                      direction,
-                    })
-                  }
-                />
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowDebtMore((current) => !current)}
-              className="flex w-full items-center justify-between rounded-md border bg-secondary px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground"
-            >
-              <span>More</span>
-              {showDebtMore ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </button>
-
-            {showDebtMore ? (
+            <fieldset disabled={toast?.status === "processing"} className="contents">
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="space-y-1 text-sm">
-                  <span>Pending amount</span>
-                  <input
-                    value={debtForm.pendingAmount}
+                  <span>Name</span>
+                  <Input
+                    value={debtForm.name}
+                    onChange={(event) => setDebtForm({ ...debtForm, name: event.target.value })}
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Counterparty</span>
+                  <Input
+                    value={debtForm.counterpartyName}
                     onChange={(event) =>
                       setDebtForm({
                         ...debtForm,
-                        pendingAmount: limitDecimalPlaces(event.target.value),
+                        counterpartyName: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Original amount</span>
+                  <Input
+                    value={debtForm.originalAmount}
+                    onChange={(event) =>
+                      setDebtForm({
+                        ...debtForm,
+                        originalAmount: limitDecimalPlaces(event.target.value),
                       })
                     }
                     className={inputClassName}
                     inputMode="decimal"
-                    placeholder="Defaults to original"
+                    placeholder="Required"
                   />
                 </label>
-                <label className="space-y-1 text-sm">
-                  <span>Currency</span>
-                  <select
-                    value={debtForm.currency}
-                    onChange={(event) =>
-                      setDebtForm({
-                        ...debtForm,
-                        currency: event.target.value as CurrencyCode,
-                      })
-                    }
-                    className={inputClassName}
-                  >
-                    {currencyOptions.map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span>Account</span>
-                  <select
-                    value={debtForm.accountId}
-                    onChange={(event) =>
-                      setDebtForm({ ...debtForm, accountId: event.target.value })
-                    }
-                    className={inputClassName}
-                  >
-                    <option value="">No account yet</option>
-                    {dataset.accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span>Status</span>
-                  <select
-                    value={debtForm.status}
-                    onChange={(event) =>
-                      setDebtForm({
-                        ...debtForm,
-                        status: event.target.value as DebtStatus,
-                      })
-                    }
-                    className={inputClassName}
-                  >
-                    <option value="active">Active</option>
-                    <option value="paused">Paused</option>
-                    <option value="paid">Paid</option>
-                  </select>
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span>Started</span>
-                  <input
-                    type="date"
-                    value={debtForm.startedAt}
-                    onChange={(event) =>
-                      setDebtForm({ ...debtForm, startedAt: event.target.value })
-                    }
-                    className={inputClassName}
+                <div className="space-y-1 text-sm">
+                  <span>Category</span>
+                  <CategoryPicker
+                    categories={dataset.categories}
+                    value={debtForm.categoryId}
+                    inputClassName={inputClassName}
+                    onChange={(categoryId) => setDebtForm({ ...debtForm, categoryId })}
                   />
-                </label>
-                <label className="space-y-1 text-sm">
-                  <span>Due</span>
-                  <input
-                    type="date"
-                    value={debtForm.dueAt}
-                    onChange={(event) => setDebtForm({ ...debtForm, dueAt: event.target.value })}
-                    className={inputClassName}
-                  />
-                </label>
-                <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={debtForm.isVisible}
-                    onChange={(event) =>
+                </div>
+                <div className="space-y-1 text-sm md:col-span-2">
+                  <span>Direction</span>
+                  <DirectionToggle
+                    value={debtForm.direction}
+                    onChange={(direction) =>
                       setDebtForm({
                         ...debtForm,
-                        isVisible: event.target.checked,
+                        direction,
                       })
                     }
                   />
-                  Show on Home
-                </label>
-                <label className="space-y-1 text-sm md:col-span-2">
-                  <span>Note</span>
-                  <textarea
-                    value={debtForm.note}
-                    onChange={(event) => setDebtForm({ ...debtForm, note: event.target.value })}
-                    className={textareaClassName}
-                  />
-                </label>
+                </div>
               </div>
-            ) : null}
 
-            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDebtDialogOpen(false)}>
-                <X className="h-4 w-4" />
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Save className="h-4 w-4" />
-                Save
-              </Button>
-            </div>
+              <button
+                type="button"
+                onClick={() => setShowDebtMore((current) => !current)}
+                className="flex w-full items-center justify-between rounded-md border bg-secondary px-3 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                <span>More</span>
+                {showDebtMore ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+              </button>
+
+              {showDebtMore ? (
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span>Pending amount</span>
+                    <Input
+                      value={debtForm.pendingAmount}
+                      onChange={(event) =>
+                        setDebtForm({
+                          ...debtForm,
+                          pendingAmount: limitDecimalPlaces(event.target.value),
+                        })
+                      }
+                      className={inputClassName}
+                      inputMode="decimal"
+                      placeholder="Defaults to original"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Currency</span>
+                    <select
+                      value={debtForm.currency}
+                      onChange={(event) =>
+                        setDebtForm({
+                          ...debtForm,
+                          currency: event.target.value as CurrencyCode,
+                        })
+                      }
+                      className={inputClassName}
+                    >
+                      {currencyOptions.map((currency) => (
+                        <option key={currency} value={currency}>
+                          {currency}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Account</span>
+                    <select
+                      value={debtForm.accountId}
+                      onChange={(event) =>
+                        setDebtForm({ ...debtForm, accountId: event.target.value })
+                      }
+                      className={inputClassName}
+                    >
+                      <option value="">No account yet</option>
+                      {dataset.accounts.map((account) => (
+                        <option key={account.id} value={account.id}>
+                          {account.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Status</span>
+                    <select
+                      value={debtForm.status}
+                      onChange={(event) =>
+                        setDebtForm({
+                          ...debtForm,
+                          status: event.target.value as DebtStatus,
+                        })
+                      }
+                      className={inputClassName}
+                    >
+                      <option value="active">Active</option>
+                      <option value="paused">Paused</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Started</span>
+                    <DateInput
+                      value={debtForm.startedAt}
+                      onChange={(event) =>
+                        setDebtForm({ ...debtForm, startedAt: event.target.value })
+                      }
+                      className={inputClassName}
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Due</span>
+                    <DateInput
+                      value={debtForm.dueAt}
+                      onChange={(event) => setDebtForm({ ...debtForm, dueAt: event.target.value })}
+                      className={inputClassName}
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={debtForm.isVisible}
+                      onChange={(event) =>
+                        setDebtForm({
+                          ...debtForm,
+                          isVisible: event.target.checked,
+                        })
+                      }
+                    />
+                    Show on Home
+                  </label>
+                  <label className="space-y-1 text-sm md:col-span-2">
+                    <span>Note</span>
+                    <textarea
+                      value={debtForm.note}
+                      onChange={(event) => setDebtForm({ ...debtForm, note: event.target.value })}
+                      className={textareaClassName}
+                    />
+                  </label>
+                </div>
+              ) : null}
+
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setDebtDialogOpen(false)}>
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>
@@ -1099,183 +1155,188 @@ export function DebtsView() {
               finishAction(handleRecurringSubmit(event));
             }}
           >
-            <div className="grid gap-3 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span>Name</span>
-                <input
-                  value={recurringForm.name}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      name: event.target.value,
-                    })
-                  }
-                  className={inputClassName}
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Counterparty</span>
-                <input
-                  value={recurringForm.counterpartyName}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      counterpartyName: event.target.value,
-                    })
-                  }
-                  className={inputClassName}
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Direction</span>
-                <select
-                  value={recurringForm.direction}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      direction: event.target.value as DebtDirection,
-                    })
-                  }
-                  className={inputClassName}
-                >
-                  <option value="payable">I owe</option>
-                  <option value="receivable">They owe me</option>
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Amount</span>
-                <input
-                  value={recurringForm.amount}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      amount: limitDecimalPlaces(event.target.value),
-                    })
-                  }
-                  className={inputClassName}
-                  inputMode="decimal"
-                  placeholder="Optional"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Currency</span>
-                <select
-                  value={recurringForm.currency}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      currency: event.target.value as CurrencyCode,
-                    })
-                  }
-                  className={inputClassName}
-                >
-                  {currencyOptions.map((currency) => (
-                    <option key={currency} value={currency}>
-                      {currency}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Day of month</span>
-                <input
-                  value={recurringForm.dayOfMonth}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      dayOfMonth: event.target.value,
-                    })
-                  }
-                  className={inputClassName}
-                  inputMode="numeric"
-                />
-              </label>
-              <div className="space-y-1 text-sm md:col-span-2">
-                <span>Category</span>
-                <CategoryPicker
-                  categories={dataset.categories}
-                  value={recurringForm.categoryId}
-                  inputClassName={inputClassName}
-                  onChange={(categoryId) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      categoryId,
-                    })
-                  }
-                />
+            <fieldset disabled={toast?.status === "processing"} className="contents">
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="space-y-1 text-sm">
+                  <span>Name</span>
+                  <Input
+                    value={recurringForm.name}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        name: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Counterparty</span>
+                  <Input
+                    value={recurringForm.counterpartyName}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        counterpartyName: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Direction</span>
+                  <select
+                    value={recurringForm.direction}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        direction: event.target.value as DebtDirection,
+                      })
+                    }
+                    className={inputClassName}
+                  >
+                    <option value="payable">I owe</option>
+                    <option value="receivable">They owe me</option>
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Amount</span>
+                  <Input
+                    value={recurringForm.amount}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        amount: limitDecimalPlaces(event.target.value),
+                      })
+                    }
+                    className={inputClassName}
+                    inputMode="decimal"
+                    placeholder="Optional"
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Currency</span>
+                  <select
+                    value={recurringForm.currency}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        currency: event.target.value as CurrencyCode,
+                      })
+                    }
+                    className={inputClassName}
+                  >
+                    {currencyOptions.map((currency) => (
+                      <option key={currency} value={currency}>
+                        {currency}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Day of month</span>
+                  <Input
+                    value={recurringForm.dayOfMonth}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        dayOfMonth: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                    inputMode="numeric"
+                  />
+                </label>
+                <div className="space-y-1 text-sm md:col-span-2">
+                  <span>Category</span>
+                  <CategoryPicker
+                    categories={dataset.categories}
+                    value={recurringForm.categoryId}
+                    inputClassName={inputClassName}
+                    onChange={(categoryId) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        categoryId,
+                      })
+                    }
+                  />
+                </div>
+                <label className="space-y-1 text-sm">
+                  <span>Account</span>
+                  <select
+                    value={recurringForm.accountId}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        accountId: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                  >
+                    <option value="">No account yet</option>
+                    {dataset.accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span>Starts</span>
+                  <DateInput
+                    value={recurringForm.startedAt}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        startedAt: event.target.value,
+                      })
+                    }
+                    className={inputClassName}
+                  />
+                </label>
+                <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={recurringForm.isActive}
+                    onChange={(event) =>
+                      setRecurringForm({
+                        ...recurringForm,
+                        isActive: event.target.checked,
+                      })
+                    }
+                  />
+                  Active
+                </label>
               </div>
               <label className="space-y-1 text-sm">
-                <span>Account</span>
-                <select
-                  value={recurringForm.accountId}
+                <span>Note</span>
+                <textarea
+                  value={recurringForm.note}
                   onChange={(event) =>
                     setRecurringForm({
                       ...recurringForm,
-                      accountId: event.target.value,
+                      note: event.target.value,
                     })
                   }
-                  className={inputClassName}
+                  className={textareaClassName}
+                />
+              </label>
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRecurringDialogOpen(false)}
                 >
-                  <option value="">No account yet</option>
-                  {dataset.accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Starts</span>
-                <input
-                  type="date"
-                  value={recurringForm.startedAt}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      startedAt: event.target.value,
-                    })
-                  }
-                  className={inputClassName}
-                />
-              </label>
-              <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={recurringForm.isActive}
-                  onChange={(event) =>
-                    setRecurringForm({
-                      ...recurringForm,
-                      isActive: event.target.checked,
-                    })
-                  }
-                />
-                Active
-              </label>
-            </div>
-            <label className="space-y-1 text-sm">
-              <span>Note</span>
-              <textarea
-                value={recurringForm.note}
-                onChange={(event) =>
-                  setRecurringForm({
-                    ...recurringForm,
-                    note: event.target.value,
-                  })
-                }
-                className={textareaClassName}
-              />
-            </label>
-            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setRecurringDialogOpen(false)}>
-                <X className="h-4 w-4" />
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Save className="h-4 w-4" />
-                Save
-              </Button>
-            </div>
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  <Save className="h-4 w-4" />
+                  Save
+                </Button>
+              </div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>
@@ -1296,84 +1357,89 @@ export function DebtsView() {
               finishAction(handlePaymentSubmit(event));
             }}
           >
-            <label className="space-y-1 text-sm">
-              <span>Amount</span>
-              <input
-                value={paymentAmount}
-                onChange={(event) => setPaymentAmount(limitDecimalPlaces(event.target.value))}
-                className={inputClassName}
-                inputMode="decimal"
-              />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>Account</span>
-              <select
-                value={paymentAccountId}
-                onChange={(event) => setPaymentAccountId(event.target.value)}
-                className={inputClassName}
-              >
-                {dataset.accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="space-y-1 text-sm">
-              <span>Date</span>
-              <input
-                type="date"
-                value={paymentDate}
-                onChange={(event) => setPaymentDate(event.target.value)}
-                className={inputClassName}
-              />
-            </label>
-            {activePaymentDebt &&
-              dataset.accounts.find((account) => account.id === paymentAccountId)?.currency !==
-                activePaymentDebt.currency && (
-                <label className="space-y-1 text-sm">
-                  <span>
-                    Importe en cuenta (
-                    {dataset.accounts.find((account) => account.id === paymentAccountId)?.currency})
-                  </span>
-                  <input
-                    value={paymentAccountAmount}
-                    onChange={(event) =>
-                      setPaymentAccountAmount(limitDecimalPlaces(event.target.value))
-                    }
-                    className={inputClassName}
-                    inputMode="decimal"
-                    placeholder="Calculado con cotización histórica"
-                  />
-                </label>
-              )}
-            <label className="space-y-1 text-sm">
-              <span>Note</span>
-              <textarea
-                value={paymentNote}
-                onChange={(event) => setPaymentNote(event.target.value)}
-                className={textareaClassName}
-              />
-            </label>
-            <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-              <input
-                type="checkbox"
-                checked={saveAccountToDebt}
-                onChange={(event) => setSaveAccountToDebt(event.target.checked)}
-              />
-              Save account on this debt
-            </label>
-            {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)}>
-                <X className="h-4 w-4" />
-                Cancel
-              </Button>
-              <Button type="submit">
-                <Banknote className="h-4 w-4" />
-                Save payment
-              </Button>
-            </div>
+            <fieldset disabled={toast?.status === "processing"} className="contents">
+              <label className="space-y-1 text-sm">
+                <span>Amount</span>
+                <Input
+                  value={paymentAmount}
+                  onChange={(event) => setPaymentAmount(limitDecimalPlaces(event.target.value))}
+                  className={inputClassName}
+                  inputMode="decimal"
+                />
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Account</span>
+                <select
+                  value={paymentAccountId}
+                  onChange={(event) => setPaymentAccountId(event.target.value)}
+                  className={inputClassName}
+                >
+                  {dataset.accounts.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">
+                <span>Date</span>
+                <DateInput
+                  value={paymentDate}
+                  onChange={(event) => setPaymentDate(event.target.value)}
+                  className={inputClassName}
+                />
+              </label>
+              {activePaymentDebt &&
+                dataset.accounts.find((account) => account.id === paymentAccountId)?.currency !==
+                  activePaymentDebt.currency && (
+                  <label className="space-y-1 text-sm">
+                    <span>
+                      Importe en cuenta (
+                      {
+                        dataset.accounts.find((account) => account.id === paymentAccountId)
+                          ?.currency
+                      }
+                      )
+                    </span>
+                    <Input
+                      value={paymentAccountAmount}
+                      onChange={(event) =>
+                        setPaymentAccountAmount(limitDecimalPlaces(event.target.value))
+                      }
+                      className={inputClassName}
+                      inputMode="decimal"
+                      placeholder="Calculado con cotización histórica"
+                    />
+                  </label>
+                )}
+              <label className="space-y-1 text-sm">
+                <span>Note</span>
+                <textarea
+                  value={paymentNote}
+                  onChange={(event) => setPaymentNote(event.target.value)}
+                  className={textareaClassName}
+                />
+              </label>
+              <label className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={saveAccountToDebt}
+                  onChange={(event) => setSaveAccountToDebt(event.target.checked)}
+                />
+                Save account on this debt
+              </label>
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <div className="flex justify-end gap-2">
+                <Button type="button" variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+                  <X className="h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button type="submit">
+                  <Banknote className="h-4 w-4" />
+                  Save payment
+                </Button>
+              </div>
+            </fieldset>
           </form>
         </DialogContent>
       </Dialog>

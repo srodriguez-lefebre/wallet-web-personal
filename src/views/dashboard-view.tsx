@@ -24,6 +24,8 @@ import {
   YAxis,
 } from "recharts";
 
+import { readableForeground } from "@/lib/palette";
+import { walletMessages } from "@/lib/i18n";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -51,7 +53,7 @@ export function DashboardView() {
     selectedPeriodMode,
     selectedDateRange,
     setRecordFilters,
-    recordDebtPayment,
+    settleDebt: settleDebtPayment,
   } = useWallet();
   const accounts = useAccounts();
   const goals = useGoals();
@@ -95,26 +97,12 @@ export function DashboardView() {
   }
 
   async function settleDebt(debt: (typeof dataset.debts)[number]) {
-    if (!debt.accountId || debt.pendingAmount === undefined) return;
-
-    await runAction(
-      () =>
-        recordDebtPayment(debt.id, {
-          amount: debt.pendingAmount ?? 0,
-          accountId: debt.accountId ?? "",
-          occurredAt: new Date().toISOString(),
-          note:
-            debt.direction === "receivable"
-              ? `Full debt received: ${debt.name}`
-              : `Full debt paid: ${debt.name}`,
-          saveAccountToDebt: true,
-        }),
-      {
-        processing: debt.direction === "receivable" ? "Receiving debt..." : "Paying debt...",
-        success: debt.direction === "receivable" ? "Debt received" : "Debt paid",
-        error: "Could not close debt",
-      },
-    );
+    await runAction(() => settleDebtPayment(debt), {
+      singleFlight: `settle:${debt.id}`,
+      processing: debt.direction === "receivable" ? "Receiving debt..." : "Paying debt...",
+      success: debt.direction === "receivable" ? "Debt received" : "Debt paid",
+      error: "Could not close debt",
+    });
   }
 
   return (
@@ -325,7 +313,10 @@ export function DashboardView() {
                 <div className="flex items-center gap-3">
                   <span
                     className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: account.color }}
+                    style={{
+                      backgroundColor: account.color,
+                      color: readableForeground(account.color),
+                    }}
                   />
                   <div>
                     <p className="font-medium">{account.name}</p>
@@ -362,7 +353,10 @@ export function DashboardView() {
                         <div className="flex min-w-0 items-center gap-3">
                           <span
                             className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-white"
-                            style={{ backgroundColor: item.goal.color }}
+                            style={{
+                              backgroundColor: item.goal.color,
+                              color: readableForeground(item.goal.color),
+                            }}
                           >
                             <Flag className="h-4 w-4" />
                           </span>
@@ -371,7 +365,7 @@ export function DashboardView() {
                             <p className="text-xs text-muted-foreground">
                               {goalStatusLabels[item.goal.status]} - Reserved{" "}
                               {item.hasMissingExchangeRate
-                                ? "Falta cotización"
+                                ? walletMessages.missingExchangeRate
                                 : formatMoney(item.reserved, item.goal.currency)}
                             </p>
                           </div>

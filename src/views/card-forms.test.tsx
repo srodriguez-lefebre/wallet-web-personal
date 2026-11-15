@@ -6,6 +6,7 @@ import { mockWalletData } from "@shared/mock-data";
 
 import { CardsView } from "./cards-view";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const actions = vi.hoisted(() => ({
@@ -26,7 +27,7 @@ vi.mock("@/providers/wallet-provider", () => ({
     }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
-  useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }),
+  useActionToast: () => ({ toast: null, runAction: createActionToastRunner(() => {}) }),
 }));
 vi.mock("recharts", () =>
   Object.fromEntries(
@@ -157,7 +158,7 @@ test("a pending card save prevents a second submit", async () => {
   fireEvent.click(save);
   expect(screen.getByRole<HTMLButtonElement>("button", { name: "Saving..." }).disabled).toBe(true);
   fireEvent.submit(save.closest("form")!);
-  expect(actions.addCreditCard).toHaveBeenCalledTimes(1);
+  await waitFor(() => expect(actions.addCreditCard).toHaveBeenCalledTimes(1));
   release("synthetic-new-card");
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
 });

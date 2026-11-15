@@ -66,11 +66,12 @@ comportamiento desplegado.
 Las mejoras se verifican en el sandbox local. Publicarlas y aplicar migraciones
 en producción son pasos operativos separados.
 
-El navegador persiste sólo una caché de referencia validada (hasta 128 KiB):
-ajustes, cuentas, categorías, tags, tarjetas, metas, presupuestos, tasas y
-plantillas. No persiste records, consumos, pagos ni deudas. Las cachés antiguas se
-eliminan y el historial se obtiene nuevamente de la API; bloquear limpia también
-la caché de referencia. Una caché no representa un historial completo.
+Query mantiene las lecturas por entidad en memoria y dentro de la sesión actual.
+No se guarda información financiera en localStorage. El arranque siembra la
+referencia y la primera página de Records; saldos, metas, reportes y tarjetas
+consumen agregados completos del servidor. Una página nunca representa todo el
+historial. Bloquear aborta solicitudes y elimina las cachés; una respuesta de la
+sesión anterior no puede repoblarlas.
 
 El repositorio está organizado por agregado bajo `server/db/`; las operaciones
 reciben la DB como primer argumento. El router crea como máximo un cliente por
@@ -86,7 +87,8 @@ activar según `REFACTOR-CHECKPOINT.md`.
 - Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,
   tarjetas, categorías, metas, deudas, inversiones y movimientos, o abrir acciones
   rápidas. Buscar movimientos limpia filtros anteriores y abre todo el historial.
-  La búsqueda ignora mayúsculas y acentos; indica si el historial aún se está cargando.
+  La búsqueda ignora mayúsculas y acentos; los movimientos se buscan en Records
+  mediante filtros paginados del servidor.
 - Plantillas: gestión en Configuración para guardar, editar, reutilizar y quitar
   configuraciones sin modificar el historial financiero. Los nombres son únicos
   sin distinguir mayúsculas ni espacios exteriores y se admiten hasta 100 plantillas.
@@ -151,7 +153,8 @@ npx tsx scripts/sandbox/qa.ts
 Abrir http://127.0.0.1:4175 y usar `wallet-local-test`. Este entorno aplica las
 migraciones a PostgreSQL en memoria y usa la API real. No carga `.env`, no toca
 `.local-wallet/` y bloquea conexiones externas. Incluye cuentas, categorías con
-scroll, pendientes nuevos/anteriores y tarjetas con/sin estado pendiente. Sus
+scroll, pendientes nuevos/anteriores, tarjetas con/sin estado pendiente y una
+meta con gastos fuera de la primera página de Records. Sus
 cambios sobreviven a una recarga del navegador y desaparecen al detenerlo:
 
 ```powershell
@@ -298,22 +301,24 @@ Todas las respuestas usan `{ data, error }`. Salvo `POST /api/auth/unlock` y la
 ingesta con token dedicado, las rutas requieren la sesión en
 `Authorization: Bearer <token>`.
 
-| Método | Ruta                    | Uso                                                  |
-| ------ | ----------------------- | ---------------------------------------------------- |
-| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión            |
-| `GET`  | `/api/health`           | smoke check autenticado                              |
-| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado      |
-| `GET`  | `/api/records`          | pagina records por cursor y filtros                  |
-| `GET`  | `/api/wallet`           | snapshot completo para sincronización y exportación  |
-| `GET`  | `/api/wallet/backup`    | respaldo consistente, incluyendo historial archivado |
-| `POST` | `/api/records/import`   | hasta 200 records por transacción                    |
-| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente  |
+| Método | Ruta                    | Uso                                                              |
+| ------ | ----------------------- | ---------------------------------------------------------------- |
+| `POST` | `/api/auth/unlock`      | valida el token maestro y crea una sesión                        |
+| `GET`  | `/api/health`           | smoke check autenticado                                          |
+| `POST` | `/api/wallet/bootstrap` | genera recurrentes y carga el snapshot paginado                  |
+| `GET`  | `/api/records`          | pagina records por cursor y filtros                              |
+| `GET`  | `/api/wallet`           | snapshot completo para acciones explícitas y clientes anteriores |
+| `GET`  | `/api/wallet/backup`    | respaldo consistente, incluyendo historial archivado             |
+| `POST` | `/api/records/import`   | hasta 200 records por transacción                                |
+| `POST` | `/api/wallet/restore`   | valida y restaura un respaldo completo atómicamente              |
 
 `GET /api/records` acepta `limit`, `cursor`, `from` y `to`; devuelve
 `{ items, nextCursor, hasMore }` dentro de `data`. El bootstrap genera las
-recurrentes pendientes y devuelve una primera página. El frontend obtiene además
-el snapshot completo para reportes/exportaciones e invalida lecturas anteriores
-cuando hay una mutación. `PATCH` modifica únicamente los campos enviados;
+recurrentes pendientes y devuelve una primera página. El frontend usa
+bootstrap-reference y consultas por entidad; las mutaciones invalidan sólo las
+lecturas afectadas. El snapshot completo se solicita explícitamente para CSV,
+asistente o asociación histórica, sin publicarlo en la caché activa. `PATCH`
+modifica únicamente los campos enviados;
 los campos opcionales que admiten limpieza se envían como `null`.
 
 En `/data`, CSV conserva la moneda y los importes/tasas congelados, admite
@@ -438,7 +443,8 @@ son inclusivas en esa zona. Respeta cuentas ocultas y las cotizaciones congelada
 `needs_review` conserva su impacto y cancelados/eliminados se excluyen. Una
 conversión pendiente aparece en `unresolvedRecords`; los presupuestos sin
 conversión congelada disponible devuelven importes `null` y estado warning.
-El snapshot completo continúa disponible hasta migrar todos sus consumidores.
+El snapshot completo conserva su contrato para clientes anteriores y acciones
+explícitas; los reportes actuales consumen los agregados del servidor.
 
 La migración `0022_repository_baseline` agrega índices, singleton de settings,
 metadatos y columnas de archivo. No borra ni transforma importes y conserva
@@ -512,15 +518,18 @@ entidad retira esa persistencia.
 AuthProvider comparte una instancia estable: el callback de un 401 identifica
 la sesión que hizo la llamada y no cierra una sesión posterior. GET reintenta
 una vez ante fallos transitorios; las mutaciones no se reintentan. Los backups
-conservan su tipo y metadata propios. WalletSync aún recarga el snapshot canónico
-hasta completar la migración de caché por entidad.
+conservan su tipo y metadata propios. Las lecturas explícitas de snapshot y
+respaldo esperan las escrituras en curso y se abortan al bloquear la sesión.
 
 El contrato también ofrece `GET /api/wallet/reference` y
 `POST /api/wallet/bootstrap-reference`: diccionarios sin movimientos y una primera
 página separada para sembrar la caché. Las rutas anteriores conservan su payload
 para pestañas existentes. Las opciones de Query y las políticas de invalidación
-están en `src/services/wallet-queries.ts` y `src/services/mutations.ts`; la app
-continúa con WalletSync hasta completar sus consumidores y agregados.
+están en `src/services/wallet-queries.ts` y `src/services/mutations.ts`. AppShell
+muestra carga, refresco y errores de lectura, con reintento de lectura. Las
+escrituras devuelven un resultado explícito; ante fallo los formularios conservan
+sus drafts y los lotes reintentan sólo las filas sin confirmar. Los pagos de
+deuda comparten claves de idempotencia por contenido dentro de la sesión.
 
 `GET /api/analytics/accounts` devuelve saldos y reservas agregados, con corte local
 opcional; `GET /api/analytics/goals` devuelve el progreso de las metas. Ambas

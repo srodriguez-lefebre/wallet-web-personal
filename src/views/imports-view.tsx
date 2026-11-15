@@ -6,6 +6,8 @@ import { walletBackupSchema } from "@shared/wallet-backup-schema";
 
 import type { WalletBackup } from "@shared/types";
 
+import { useDraftFields } from "@/hooks/use-draft-fields";
+import { Input } from "@/components/ui/form/controls";
 import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
 import { DataHealthPanel } from "@/components/wallet/data-health-panel";
@@ -47,10 +49,11 @@ export function ImportsView() {
     setAllPeriod,
   } = useWallet();
   const { toast, runAction } = useActionToast();
-  const [csv, setCsv] = useState(sample);
-  const [accountId, setAccountId] = useState("");
-  const [expenseId, setExpenseId] = useState("");
-  const [incomeId, setIncomeId] = useState("");
+  const [
+    { csv, accountId, expenseId, incomeId },
+    { csv: setCsv, accountId: setAccountId, expenseId: setExpenseId, incomeId: setIncomeId },
+  ] = useDraftFields(() => ({ csv: sample, accountId: "", expenseId: "", incomeId: "" }));
+
   const [busy, setBusy] = useState(false);
   const running = useRef(false);
   const [receipt, setReceipt] = useState(readBackupReceipt);
@@ -90,23 +93,26 @@ export function ImportsView() {
     setBusy(true);
     setMessage("");
     try {
-      await runAction(
-        async () => {
-          try {
-            await work();
-          } catch (error) {
-            setMessage(error instanceof Error ? error.message : "Operation failed");
-            throw error;
-          }
-        },
-        {
-          processing: `${label}...`,
-          success: `${label} complete`,
-          error: `${label} failed`,
-        },
-      );
-    } catch {
-      /* Feedback is retained in the toast and message. */
+      {
+        const actionResult = await runAction(
+          async () => {
+            try {
+              await work();
+            } catch (error) {
+              setMessage(error instanceof Error ? error.message : "Operation failed");
+              throw error;
+            }
+          },
+          {
+            processing: `${label}...`,
+            success: `${label} complete`,
+            error: `${label} failed`,
+          },
+        );
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } finally {
       running.current = false;
       setBusy(false);
@@ -218,132 +224,134 @@ export function ImportsView() {
         </p>
       ) : null}
       <form className="grid gap-4 xl:grid-cols-2" onSubmit={(event) => void handleImport(event)}>
-        <Card>
-          <CardHeader>
-            <CardTitle>CSV input</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <label className="block">
-              CSV file
-              <input
-                disabled={busy}
-                type="file"
-                accept=".csv,text/csv"
-                className="block w-full"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) void action(async () => setCsv(await file.text()), "Load CSV");
-                }}
-              />
-            </label>
-            <label className="block">
-              Default account
-              <select
-                disabled={busy}
-                className="block w-full rounded border bg-background p-2"
-                value={activeAccountId}
-                onChange={(event) => setAccountId(event.target.value)}
-              >
-                {dataset.accounts
-                  .filter((a) => a.isActive)
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.currency})
+        <fieldset disabled={busy} className="contents">
+          <Card>
+            <CardHeader>
+              <CardTitle>CSV input</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <label className="block">
+                CSV file
+                <Input
+                  disabled={busy}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="block w-full"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void action(async () => setCsv(await file.text()), "Load CSV");
+                  }}
+                />
+              </label>
+              <label className="block">
+                Default account
+                <select
+                  disabled={busy}
+                  className="block w-full rounded border bg-background p-2"
+                  value={activeAccountId}
+                  onChange={(event) => setAccountId(event.target.value)}
+                >
+                  {dataset.accounts
+                    .filter((a) => a.isActive)
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.currency})
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block">
+                Default expense category
+                <select
+                  disabled={busy}
+                  className="block w-full rounded border bg-background p-2"
+                  value={expenseCategoryId}
+                  onChange={(event) => setExpenseId(event.target.value)}
+                >
+                  {dataset.categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
-              </select>
-            </label>
-            <label className="block">
-              Default expense category
-              <select
-                disabled={busy}
-                className="block w-full rounded border bg-background p-2"
-                value={expenseCategoryId}
-                onChange={(event) => setExpenseId(event.target.value)}
-              >
-                {dataset.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block">
-              Default income category
-              <select
-                disabled={busy}
-                className="block w-full rounded border bg-background p-2"
-                value={incomeCategoryId}
-                onChange={(event) => setIncomeId(event.target.value)}
-              >
-                {dataset.categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <p className="text-sm text-muted-foreground">
-              CSV currency, exchangeRateToPrimary and accountAmount are preserved. Supply missing
-              conversion values when no historical rate is available. Exported account/category IDs
-              override defaults.
-            </p>
-            <textarea
-              aria-label="CSV records"
-              disabled={busy}
-              value={csv}
-              onChange={(event) => setCsv(event.target.value)}
-              className="min-h-72 w-full rounded-md border bg-background p-3 font-mono text-sm"
-            />
-            {preview.error ? <p role="alert">{preview.error}</p> : null}
-            <Button disabled={busy || !preview.rows.some((row) => row.record)} type="submit">
-              <Upload className="h-4 w-4" />
-              {busy ? "Working..." : "Import valid rows"}
-            </Button>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Preview</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="mb-3 text-sm">
-              {previewSummary.ready} ready · {previewSummary.skipped} invalid or duplicate rows
-              {" (preliminary until complete history is checked)"}
-            </p>
-            {previewSummary.totals.map((total) => (
-              <p key={total.currency} className="mb-2 text-sm text-muted-foreground">
-                {total.currency}: income {formatMoney(total.income, total.currency)} · expenses{" "}
-                {formatMoney(total.expenses, total.currency)} · transfers{" "}
-                {formatMoney(total.transfers, total.currency)}
-              </p>
-            ))}
-            <div className="overflow-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr>
-                    <th>Row</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.rows.map((row) => (
-                    <tr className="border-t" key={row.rowNumber}>
-                      <td className="p-2">{row.rowNumber}</td>
-                      <td>{row.record?.occurredAt.slice(0, 10)}</td>
-                      <td>
-                        {row.record?.amount} {row.record?.currency}
-                      </td>
-                      <td>{row.error || "Ready"}</td>
-                    </tr>
+                </select>
+              </label>
+              <label className="block">
+                Default income category
+                <select
+                  disabled={busy}
+                  className="block w-full rounded border bg-background p-2"
+                  value={incomeCategoryId}
+                  onChange={(event) => setIncomeId(event.target.value)}
+                >
+                  {dataset.categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                </select>
+              </label>
+              <p className="text-sm text-muted-foreground">
+                CSV currency, exchangeRateToPrimary and accountAmount are preserved. Supply missing
+                conversion values when no historical rate is available. Exported account/category
+                IDs override defaults.
+              </p>
+              <textarea
+                aria-label="CSV records"
+                disabled={busy}
+                value={csv}
+                onChange={(event) => setCsv(event.target.value)}
+                className="min-h-72 w-full rounded-md border bg-background p-3 font-mono text-sm"
+              />
+              {preview.error ? <p role="alert">{preview.error}</p> : null}
+              <Button disabled={busy || !preview.rows.some((row) => row.record)} type="submit">
+                <Upload className="h-4 w-4" />
+                {busy ? "Working..." : "Import valid rows"}
+              </Button>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Preview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="mb-3 text-sm">
+                {previewSummary.ready} ready · {previewSummary.skipped} invalid or duplicate rows
+                {" (preliminary until complete history is checked)"}
+              </p>
+              {previewSummary.totals.map((total) => (
+                <p key={total.currency} className="mb-2 text-sm text-muted-foreground">
+                  {total.currency}: income {formatMoney(total.income, total.currency)} · expenses{" "}
+                  {formatMoney(total.expenses, total.currency)} · transfers{" "}
+                  {formatMoney(total.transfers, total.currency)}
+                </p>
+              ))}
+              <div className="overflow-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th>Row</th>
+                      <th>Date</th>
+                      <th>Amount</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map((row) => (
+                      <tr className="border-t" key={row.rowNumber}>
+                        <td className="p-2">{row.rowNumber}</td>
+                        <td>{row.record?.occurredAt.slice(0, 10)}</td>
+                        <td>
+                          {row.record?.amount} {row.record?.currency}
+                        </td>
+                        <td>{row.error || "Ready"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </fieldset>
       </form>
       <Card className="mt-4">
         <CardHeader>
@@ -356,7 +364,7 @@ export function ImportsView() {
           </p>
           <label className="block">
             Backup file
-            <input
+            <Input
               disabled={busy}
               className="block"
               type="file"

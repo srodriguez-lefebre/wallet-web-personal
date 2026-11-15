@@ -8,6 +8,7 @@ import { createDb } from "../../server/db/client.js";
 import type { RecordFilters, WalletDataset } from "@shared/types";
 import type { ReactNode } from "react";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { RecordsView } from "@/features/records/RecordsView";
 const update = vi.hoisted(() => vi.fn());
@@ -55,7 +56,7 @@ vi.mock("@/providers/wallet-provider", () => ({
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/ui/dialog", () => {

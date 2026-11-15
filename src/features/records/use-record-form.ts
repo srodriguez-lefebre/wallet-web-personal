@@ -256,8 +256,8 @@ export function useRecordForm() {
     recordSubmission.current = true;
     const revision = recordDraftRevision.current;
     try {
-      if (editingId && patch?.ok)
-        await runAction(
+      if (editingId && patch?.ok) {
+        const actionResult = await runAction(
           () =>
             updateRecord(editingId, {
               ...patch.patch,
@@ -269,14 +269,19 @@ export function useRecordForm() {
             error: "Could not save record",
           },
         );
-      else if (created?.ok)
-        await runAction(() => addRecord(created.value), {
+        if (!actionResult.ok) {
+          return;
+        }
+      } else if (created?.ok) {
+        const actionResult = await runAction(() => addRecord(created.value), {
           processing: "Creating record...",
           success: "Record created",
           error: "Could not create record",
         });
-    } catch {
-      return;
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     } finally {
       recordSubmission.current = false;
     }
@@ -284,14 +289,17 @@ export function useRecordForm() {
   }
   async function handleDeleteEditingRecord() {
     if (!editingId) return;
-    try {
-      await runAction(() => deleteRecord(editingId), {
-        processing: "Deleting record...",
-        success: "Record deleted",
-        error: "Could not delete record",
-      });
-    } catch {
-      return;
+    {
+      {
+        const actionResult = await runAction(() => deleteRecord(editingId), {
+          processing: "Deleting record...",
+          success: "Record deleted",
+          error: "Could not delete record",
+        });
+        if (!actionResult.ok) {
+          return;
+        }
+      }
     }
 
     closeRecordDialog();

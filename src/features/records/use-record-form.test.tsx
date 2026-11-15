@@ -8,6 +8,7 @@ import { useRecordForm } from "./use-record-form";
 import type { FormEvent } from "react";
 import type { WalletDataset } from "@shared/types";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 
 const update = vi.hoisted(() => vi.fn());
@@ -25,7 +26,7 @@ vi.mock("@/providers/wallet-provider", () => ({
     }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
-  useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }),
+  useActionToast: () => ({ toast: null, runAction: createActionToastRunner(() => {}) }),
 }));
 beforeEach(() => {
   dataset = structuredClone(mockWalletData);

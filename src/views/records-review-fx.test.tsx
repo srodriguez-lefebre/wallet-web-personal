@@ -5,6 +5,7 @@ import { mockWalletData } from "@shared/mock-data";
 import type { WalletDataset } from "@shared/types";
 import type { PropsWithChildren } from "react";
 
+import { createActionToastRunner } from "@/lib/action-toast-runner";
 import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { RecordsView } from "@/features/records/RecordsView";
 
@@ -33,7 +34,7 @@ vi.mock("@/providers/wallet-provider", () => ({
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
     toast: null,
-    runAction: (action: () => Promise<unknown>) => action(),
+    runAction: createActionToastRunner(() => {}),
   }),
 }));
 vi.mock("@/components/wallet/category-picker", () => ({

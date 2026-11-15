@@ -173,11 +173,11 @@ test("a budget with missing FX displays a missing-rate placeholder for spent and
   const spent = budget.findAllByType("p")[1]!;
   expect(
     spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
-  ).toContain("Falta cotización");
+  ).toContain("Exchange rate unavailable");
   expect(
     spent.children.map((child) => (typeof child === "object" ? "" : String(child))).join(""),
   ).not.toContain("NaN");
-  expect(budget.findAllByType("p")[2]!.children).toEqual(["Falta cotización"]);
+  expect(budget.findAllByType("p")[2]!.children).toEqual(["Exchange rate unavailable"]);
 });
 
 test("opens budget creation from analytics using the selected month and fresh full history", async () => {

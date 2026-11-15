@@ -11,6 +11,7 @@ import { defaultRecordAccountId } from "@/lib/record-draft";
 import { useWalletData } from "@/providers/wallet-query-provider";
 import { useWalletUIActions, useWalletUIState } from "@/providers/wallet-ui-provider";
 import { createWalletActions } from "@/services/wallet-actions";
+import { waitForWalletMutations } from "@/services/mutations";
 import { referenceKey } from "@/services/wallet-queries";
 
 const archivedFilters = { Account: "accountId", Category: "categoryId", Tag: "tagId" } as const;
@@ -26,6 +27,7 @@ export function useWallet() {
     () =>
       createWalletActions(client, mutations, {
         signal,
+        waitForWrites: () => waitForWalletMutations(cache, signal),
         getReference: () => {
           signal.throwIfAborted();
           const current = cache.getQueryData<WalletReference>(referenceKey);

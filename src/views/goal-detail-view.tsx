@@ -7,6 +7,8 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import type { GoalPatch } from "@shared/schemas";
 
+import { readableForeground } from "@/lib/palette";
+import { Input } from "@/components/ui/form/controls";
 import { PageHeader } from "@/components/page/page-header";
 import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
@@ -30,7 +32,11 @@ import { formatCalendarDate } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 
 export function GoalDetailView() {
-  const { goalId } = useParams();
+  const { goalId = "" } = useParams();
+  return <GoalDetail key={goalId} goalId={goalId} />;
+}
+
+function GoalDetail({ goalId }: { goalId: string }) {
   const navigate = useNavigate();
   const { dataset, setRecordFilters, releaseGoalReservation, updateGoal } = useWallet();
   const [releaseAmounts, setReleaseAmounts] = useState<Record<string, string>>({});
@@ -74,16 +80,19 @@ export function GoalDetailView() {
     mutationPending.current = true;
     setPending(true);
     try {
-      await runAction(() => updateGoal(goalProgress.goal.id, patch), {
-        processing: closing ? "Closing goal..." : "Saving goal...",
-        success: closing ? "Goal completed and reservations released" : "Goal updated",
-        error: closing ? "Could not close goal" : "Could not update goal",
-      });
+      {
+        const actionResult = await runAction(() => updateGoal(goalProgress.goal.id, patch), {
+          processing: closing ? "Closing goal..." : "Saving goal...",
+          success: closing ? "Goal completed and reservations released" : "Goal updated",
+          error: closing ? "Could not close goal" : "Could not update goal",
+        });
+        if (!actionResult.ok) {
+          return false;
+        }
+      }
       setIsEditing(false);
       setIsClosing(false);
       return true;
-    } catch {
-      return false;
     } finally {
       mutationPending.current = false;
       setPending(false);
@@ -204,7 +213,10 @@ export function GoalDetailView() {
                 <div className="flex items-center gap-3">
                   <span
                     className="grid h-12 w-12 place-items-center rounded-lg text-white"
-                    style={{ backgroundColor: goalProgress.goal.color }}
+                    style={{
+                      backgroundColor: goalProgress.goal.color,
+                      color: readableForeground(goalProgress.goal.color),
+                    }}
                   >
                     <Flag className="h-5 w-5" />
                   </span>
@@ -383,7 +395,7 @@ export function GoalDetailView() {
                           <p className="font-semibold">
                             {formatMoney(reservation.amount, reservation.currency)}
                           </p>
-                          <input
+                          <Input
                             aria-label="Amount to release"
                             className="h-9 w-28 rounded-md border bg-background px-2 text-sm"
                             type="number"

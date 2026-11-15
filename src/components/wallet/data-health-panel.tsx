@@ -29,22 +29,26 @@ export function DataHealthPanel({ getSnapshot, onReview, onRecords, onCards }: P
     setBusy(true);
     setError("");
     try {
-      await runAction(
-        async () => {
-          const snapshot = await getSnapshot();
-          setResult({
-            counts: walletDataHealth(snapshot),
-            checkedAt: new Date().toISOString(),
-          });
-        },
-        {
-          processing: "Checking complete history...",
-          success: "Data check complete",
-          error: "Could not check data",
-        },
-      );
-    } catch {
-      setError("Could not load complete history. Retry the check.");
+      {
+        const actionResult = await runAction(
+          async () => {
+            const snapshot = await getSnapshot();
+            setResult({
+              counts: walletDataHealth(snapshot),
+              checkedAt: new Date().toISOString(),
+            });
+          },
+          {
+            processing: "Checking complete history...",
+            success: "Data check complete",
+            error: "Could not check data",
+          },
+        );
+        if (!actionResult.ok) {
+          setError("Could not load complete history. Retry the check.");
+          return;
+        }
+      }
     } finally {
       running.current = false;
       setBusy(false);
