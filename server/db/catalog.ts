@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, isNull, ne, sql } from "drizzle-orm";
 
+import { lockCategoryReferences } from "./category-references.js";
 import {
   type AccountPatch,
   accountSchema,
@@ -74,8 +75,9 @@ export async function saveRecordTemplate<T>(write: PromiseLike<T>): Promise<T> {
 export async function createRecordTemplate(db: Db, value: Omit<RecordTemplate, "id">) {
   const input = recordTemplateSchema.parse(value);
   const id = randomUUID();
-  const [, result] = await saveRecordTemplate(
+  const [, , result] = await saveRecordTemplate(
     db.batch([
+      lockCategoryReferences(db),
       // A separate statement obtains the lock before the insertion's READ COMMITTED snapshot.
       db.execute(sql`SELECT pg_advisory_xact_lock(1791000018)`),
       db.execute(sql`INSERT INTO ${recordTemplates} (id,name,type,amount,currency,account_id,credit_card_id,destination_account_id,category_id,tag_id,counterparty_name,note,payment_type)
@@ -96,12 +98,15 @@ export async function createRecordTemplate(db: Db, value: Omit<RecordTemplate, "
 export async function updateRecordTemplate(db: Db, id: string, value: RecordTemplatePatch) {
   const input = recordTemplatePatchSchema.parse(value);
   const { amount, ...fields } = input;
-  const [row] = await saveRecordTemplate(
-    db
-      .update(recordTemplates)
-      .set({ ...fields, ...(amount === undefined ? {} : { amount: toNumeric(amount) }) })
-      .where(and(eq(recordTemplates.id, id), templateReferenceConditions(input, true)))
-      .returning(),
+  const [, [row]] = await saveRecordTemplate(
+    db.batch([
+      lockCategoryReferences(db),
+      db
+        .update(recordTemplates)
+        .set({ ...fields, ...(amount === undefined ? {} : { amount: toNumeric(amount) }) })
+        .where(and(eq(recordTemplates.id, id), templateReferenceConditions(input, true)))
+        .returning(),
+    ]),
   );
   if (row) return mapRecordTemplate(row);
   const [existing] = await db

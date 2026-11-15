@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 
+import { lockCategoryWrites } from "./category-references.js";
 import { protectedCategoryKeys, selectableCategory } from "../../shared/categories.js";
 import { conflictError, notFoundError, validationError } from "../api/errors.js";
 import { mapCategory } from "./mappers.js";
@@ -27,9 +28,6 @@ const protectedKeys = sql.join(
   protectedCategoryKeys.map((key) => sql`${key}`),
   sql`, `,
 );
-
-// Acquire before taking the snapshot for the next statement, including concurrent inserts.
-const lockCategoryWrites = (db: Db) => db.execute(sql`SELECT pg_advisory_xact_lock(1791000024)`);
 
 function categoryTree(root: string) {
   return sql`SELECT id FROM ${categories} WHERE id = ${root}::uuid AND deleted_at IS NULL

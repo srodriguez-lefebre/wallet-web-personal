@@ -806,3 +806,21 @@ test("local date pagination includes both ends of a 25-hour daylight-saving day"
     ).items.map((row) => row.id),
   ).toEqual([early.id]);
 });
+
+test("a record racing a category merge either follows the merge or rejects the archived reference", async () => {
+  const db = createDb();
+  const target = await repository.createCategory(db, {
+    name: "Other category",
+    color: "blue",
+    icon: "tag",
+  });
+  const [write, merge] = await Promise.allSettled([
+    repository.createRecord(db, recordInput()),
+    repository.mergeCategory(db, categoryId, target.id),
+  ]);
+  expect(merge.status).toBe("fulfilled");
+  const page = await repository.listRecords(db);
+  expect(page.items.every((record) => record.categoryId === target.id)).toBe(true);
+  expect(page.items).toHaveLength(write.status === "fulfilled" ? 1 : 0);
+  await expect(repository.createRecord(db, recordInput())).rejects.toMatchObject({ status: 422 });
+});

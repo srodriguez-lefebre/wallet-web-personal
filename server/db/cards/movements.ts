@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
+import { categoryReferenceQueries, rejectUnavailableCategories } from "../category-references.js";
 import {
   type CreditCardPatch,
   type CreditCardRecordPatch,
@@ -235,6 +236,7 @@ export async function createCreditCardRecord(
       : {};
   try {
     await db.batch([
+      ...categoryReferenceQueries(db, [input.categoryId]),
       lockCreditCard(db, creditCardId),
       creditCardRecordGuard(db, creditCardId, input),
       // Bank and FX metadata was read before entering the batch. Reject a stale
@@ -263,6 +265,7 @@ export async function createCreditCardRecord(
       ...cardStatementSyncQueries(db, creditCardId),
     ]);
   } catch (error) {
+    await rejectUnavailableCategories(db, [input.categoryId], error);
     if (refundBankRateMissing && isPgError(error, "22012"))
       throw validationError("Exchange rate is required for the bank refund");
     cardMutationError(error);
@@ -335,6 +338,7 @@ export async function updateCreditCardRecord(
     : {};
   try {
     await db.batch([
+      ...categoryReferenceQueries(db, [input.categoryId]),
       lockCreditCard(db, creditCardId),
       creditCardRecordGuard(db, creditCardId, merged, id),
       db
@@ -351,6 +355,7 @@ export async function updateCreditCardRecord(
       ...cardStatementSyncQueries(db, creditCardId),
     ]);
   } catch (error) {
+    await rejectUnavailableCategories(db, [input.categoryId], error);
     cardMutationError(error);
   }
   const [row] = await db.select().from(creditCardRecords).where(eq(creditCardRecords.id, id));

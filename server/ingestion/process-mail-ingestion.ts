@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { and, eq, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
+import { categoryReferenceQueries } from "../db/category-references.js";
 import { categoryImportWarning } from "../../shared/record-review.js";
 import { type DbClient } from "../db/client.js";
 import { prepareRecordGoalWrites } from "../db/index.js";
@@ -513,6 +514,7 @@ export async function processMailIngestion(
     );
     try {
       await db.batch([
+        ...categoryReferenceQueries(db, [category.categoryId]),
         fingerprintLock,
         ...cardLocks,
         ...bankReferences,

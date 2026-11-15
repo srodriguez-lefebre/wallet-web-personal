@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
+import { lockCategoryReferences, writeCategoryReferences } from "./category-references.js";
 import {
   type DebtPatch,
   debtSchema,
@@ -55,9 +56,11 @@ export async function createDebt(db: Db, input: NewDebt) {
 export async function createDebts(db: Db, inputs: NewDebt[], options = { ignoreConflicts: true }) {
   if (!inputs.length) return [];
   const insert = db.insert(debts).values(inputs.map(debtInsertValues));
-  const rows = options.ignoreConflicts
-    ? await insert.onConflictDoNothing().returning()
-    : await insert.returning();
+  const rows = await writeCategoryReferences(
+    db,
+    inputs.map((input) => input.categoryId),
+    (options.ignoreConflicts ? insert.onConflictDoNothing() : insert).returning(),
+  );
   return rows.map(mapDebt);
 }
 
@@ -67,44 +70,47 @@ export async function generateDueRecurringDebts(db: Db, currentDate = new Date()
     EXTRACT(day FROM ${month} + interval '1 month' - interval '1 day')::int) - 1))::timestamp
     + interval '12 hours') AT TIME ZONE 'UTC')`;
   const monthKey = sql<string>`to_char(${month}, 'YYYY-MM')`;
-  const rows = await db
-    .insert(debts)
-    .select(
-      db
-        .select({
-          createdAt: sql<Date>`now()`.as("created_at"),
-          updatedAt: sql<Date>`now()`.as("updated_at"),
-          deletedAt: sql<Date | null>`NULL::timestamptz`.as("deleted_at"),
-          id: sql<string>`gen_random_uuid()`.as("id"),
-          name: sql<string>`${recurringDebts.name} || ' - ' || ${monthKey}`.as("name"),
-          direction: recurringDebts.direction,
-          originalAmount: recurringDebts.amount,
-          pendingAmount: recurringDebts.amount,
-          currency: recurringDebts.currency,
-          counterpartyName: recurringDebts.counterpartyName,
-          accountId: recurringDebts.accountId,
-          categoryId: recurringDebts.categoryId,
-          status: sql<"active">`'active'::debt_status`.as("status"),
-          isVisible: sql<boolean>`true`.as("is_visible"),
-          startedAt: dueAt.as("started_at"),
-          dueAt: dueAt.as("due_at"),
-          note: recurringDebts.note,
-          recurringDebtId: recurringDebts.id,
-          recurringMonth: monthKey.as("recurring_month"),
-        })
-        .from(recurringDebts)
-        .innerJoin(
-          sql`LATERAL generate_series(
+  const [, rows] = await db.batch([
+    lockCategoryReferences(db),
+    db
+      .insert(debts)
+      .select(
+        db
+          .select({
+            createdAt: sql<Date>`now()`.as("created_at"),
+            updatedAt: sql<Date>`now()`.as("updated_at"),
+            deletedAt: sql<Date | null>`NULL::timestamptz`.as("deleted_at"),
+            id: sql<string>`gen_random_uuid()`.as("id"),
+            name: sql<string>`${recurringDebts.name} || ' - ' || ${monthKey}`.as("name"),
+            direction: recurringDebts.direction,
+            originalAmount: recurringDebts.amount,
+            pendingAmount: recurringDebts.amount,
+            currency: recurringDebts.currency,
+            counterpartyName: recurringDebts.counterpartyName,
+            accountId: recurringDebts.accountId,
+            categoryId: recurringDebts.categoryId,
+            status: sql<"active">`'active'::debt_status`.as("status"),
+            isVisible: sql<boolean>`true`.as("is_visible"),
+            startedAt: dueAt.as("started_at"),
+            dueAt: dueAt.as("due_at"),
+            note: recurringDebts.note,
+            recurringDebtId: recurringDebts.id,
+            recurringMonth: monthKey.as("recurring_month"),
+          })
+          .from(recurringDebts)
+          .innerJoin(
+            sql`LATERAL generate_series(
     date_trunc('month', ${recurringDebts.startedAt} AT TIME ZONE 'UTC'),
     date_trunc('month', ${currentDate.toISOString()}::timestamptz AT TIME ZONE 'UTC'),
     interval '1 month') AS generated(month_start)`,
-          sql`true`,
-        )
-        .where(sql`${recurringDebts.isActive} = true AND ${recurringDebts.deletedAt} IS NULL AND ${dueAt} >= ${recurringDebts.startedAt}
+            sql`true`,
+          )
+          .where(sql`${recurringDebts.isActive} = true AND ${recurringDebts.deletedAt} IS NULL AND ${dueAt} >= ${recurringDebts.startedAt}
       AND ${dueAt} <= ${currentDate.toISOString()}::timestamptz`),
-    )
-    .onConflictDoNothing({ target: [debts.recurringDebtId, debts.recurringMonth] })
-    .returning();
+      )
+      .onConflictDoNothing({ target: [debts.recurringDebtId, debts.recurringMonth] })
+      .returning(),
+  ]);
   return rows.map(mapDebt);
 }
 
@@ -148,11 +154,15 @@ export async function updateDebt(db: Db, id: string, input: DebtPatch) {
   if (hasOwn(input, "note")) values.note = merged.note ?? null;
   if (hasOwn(input, "recurringDebtId")) values.recurringDebtId = merged.recurringDebtId ?? null;
   if (hasOwn(input, "recurringMonth")) values.recurringMonth = merged.recurringMonth ?? null;
-  const [row] = await db
-    .update(debts)
-    .set(values)
-    .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .update(debts)
+      .set(values)
+      .where(and(eq(debts.id, id), isNull(debts.deletedAt)))
+      .returning(),
+  );
   return row ? mapDebt(row) : null;
 }
 
@@ -174,22 +184,26 @@ export async function listRecurringDebts(db: Db) {
 }
 
 export async function createRecurringDebt(db: Db, input: NewRecurringDebt) {
-  const [row] = await db
-    .insert(recurringDebts)
-    .values({
-      name: input.name,
-      direction: input.direction,
-      amount: input.amount === undefined ? null : toNumeric(input.amount),
-      currency: input.currency,
-      counterpartyName: input.counterpartyName,
-      accountId: input.accountId ?? null,
-      categoryId: input.categoryId,
-      dayOfMonth: toNumeric(input.dayOfMonth),
-      isActive: input.isActive,
-      startedAt: new Date(input.startedAt ?? new Date().toISOString()),
-      note: input.note ?? null,
-    })
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .insert(recurringDebts)
+      .values({
+        name: input.name,
+        direction: input.direction,
+        amount: input.amount === undefined ? null : toNumeric(input.amount),
+        currency: input.currency,
+        counterpartyName: input.counterpartyName,
+        accountId: input.accountId ?? null,
+        categoryId: input.categoryId,
+        dayOfMonth: toNumeric(input.dayOfMonth),
+        isActive: input.isActive,
+        startedAt: new Date(input.startedAt ?? new Date().toISOString()),
+        note: input.note ?? null,
+      })
+      .returning(),
+  );
   return mapRecurringDebt(row);
 }
 
@@ -218,11 +232,15 @@ export async function updateRecurringDebt(db: Db, id: string, input: RecurringDe
   if (hasOwn(input, "dayOfMonth")) values.dayOfMonth = toNumeric(merged.dayOfMonth);
   if (hasOwn(input, "startedAt")) values.startedAt = new Date(merged.startedAt);
   if (hasOwn(input, "note")) values.note = merged.note ?? null;
-  const [row] = await db
-    .update(recurringDebts)
-    .set(values)
-    .where(and(eq(recurringDebts.id, id), isNull(recurringDebts.deletedAt)))
-    .returning();
+  const [row] = await writeCategoryReferences(
+    db,
+    [input.categoryId],
+    db
+      .update(recurringDebts)
+      .set(values)
+      .where(and(eq(recurringDebts.id, id), isNull(recurringDebts.deletedAt)))
+      .returning(),
+  );
   return row ? mapRecurringDebt(row) : null;
 }
 
@@ -304,7 +322,9 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       : sql`${toNumeric(input.accountAmount)}::numeric`;
   const recordId = randomUUID();
   try {
-    await db.execute(sql`
+    await db.batch([
+      lockCategoryReferences(db),
+      db.execute(sql`
       WITH updated_debt AS (
         UPDATE ${debts}
         SET updated_at=now(), pending_amount = pending_amount - ${toNumeric(input.amount)}::numeric,
@@ -327,7 +347,8 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
         'transfer'::payment_type, 'cleared'::payment_status, ${toNumeric(primaryRate)}, ${new Date(input.occurredAt)},
         COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
       FROM updated_debt
-    `);
+    `),
+    ]);
   } catch (error) {
     const [raced] = await db
       .select()
