@@ -14,6 +14,7 @@ import {
 } from "../../shared/schemas.js";
 import { createDb } from "./client.js";
 import * as repository from "./index.js";
+import { resolveCategory } from "../ingestion/category-resolution.js";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 let accountId: string,
   otherAccountId: string,
@@ -150,6 +151,69 @@ const recurringInput = () =>
     dayOfMonth: 12,
     startedAt: occurredAt,
   });
+test("normalized sibling names conflict even when created concurrently", async () => {
+  const db = createDb();
+  const input = { color: "blue", icon: "tag", parentId: categoryId };
+  const results = await Promise.allSettled(
+    ["Café", "CAFE"].map((name) => repository.createCategory(db, { ...input, name })),
+  );
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(results.find((result) => result.status === "rejected")).toMatchObject({
+    reason: { status: 409 },
+  });
+  await expect(repository.updateCategory(db, childId, { name: "cafe" })).rejects.toMatchObject({
+    status: 409,
+  });
+  await repository.createCategory(db, { ...input, parentId: childId, name: "CAFE" });
+});
+
+test("merging moves subtree usage, templates and the active learned merchant rule", async () => {
+  const db = createDb();
+  const target = await repository.createCategory(db, {
+    name: "Destination",
+    color: "blue",
+    icon: "tag",
+  });
+  await repository.createRecord(db, recordInput());
+  await repository.createRecordTemplate(db, {
+    name: "Merge template",
+    type: "expense",
+    amount: 10,
+    currency: "UYU",
+    accountId,
+    categoryId: grandchildId,
+    paymentType: "debit",
+  });
+  await fixture.pool.query(
+    "WITH learned AS (INSERT INTO merchants(name,category_id,match_mode) VALUES('Canonical kiosk',$1,'exact') RETURNING id) INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) SELECT id,'Synthetic learned kiosk','SYNTHETIC LEARNED KIOSK' FROM learned",
+    [grandchildId],
+  );
+  expect(await repository.categoryUsage(db, [grandchildId])).toEqual({
+    [grandchildId]: expect.objectContaining({
+      records: 1,
+      templates: 1,
+      merchants: 1,
+      lastUsedAt: occurredAt,
+    }),
+  });
+  await expect(repository.mergeCategory(db, categoryId, grandchildId)).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(await repository.mergeCategory(db, categoryId, target.id)).toMatchObject({
+    targetId: target.id,
+    reassigned: { records: 1, templates: 1, merchants: 1 },
+  });
+  expect(await resolveCategory(db, "Synthetic learned kiosk")).toMatchObject({
+    categoryId: target.id,
+    merchantName: "Canonical kiosk",
+    needsReview: false,
+  });
+  await repository.deleteCategory(db, target.id);
+  expect(await resolveCategory(db, "Synthetic learned kiosk")).toMatchObject({
+    merchantName: "Canonical kiosk",
+    needsReview: true,
+  });
+});
 test("category deletion archives the entire tree and reassigns every existing financial reference", async () => {
   const record = await repository.createRecord(createDb(), recordInput());
   await repository.createCreditCardRecord(

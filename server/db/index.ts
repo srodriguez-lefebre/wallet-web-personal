@@ -16,22 +16,26 @@ export {
 } from "./cards/payments.js";
 export {
   createAccount,
-  createCategory,
   createRecordTemplate,
   createTag,
   deleteAccount,
-  deleteCategory,
   deleteRecordTemplate,
   deleteTag,
   listAccounts,
-  listCategories,
   listRecordTemplates,
   listTags,
   updateAccount,
-  updateCategory,
   updateRecordTemplate,
   updateTag,
 } from "./catalog.js";
+export {
+  categoryUsage,
+  createCategory,
+  deleteCategory,
+  listCategories,
+  mergeCategory,
+  updateCategory,
+} from "./categories.js";
 export { bootstrapWallet, getWalletBackup, getWalletDataset } from "./dataset.js";
 export {
   createDebt,

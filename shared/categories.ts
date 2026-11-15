@@ -1,5 +1,11 @@
 import type { Category } from "./types.js";
 
+export const protectedCategoryKeys = ["unknown_expense", "others", "category_eliminated"] as const;
+
+export function selectableCategory(category: Pick<Category, "systemKey">) {
+  return category.systemKey !== "unknown_expense" && category.systemKey !== "category_eliminated";
+}
+
 export function isCategoryOrDescendant(
   categories: Category[],
   categoryId: string,

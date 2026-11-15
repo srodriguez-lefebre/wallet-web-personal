@@ -335,7 +335,14 @@ test("renaming a category or tag refreshes active record search results", async 
       return response(page);
     }),
     http.patch(`http://test.local/api/categories/${id}`, () =>
-      response({ id, name: "Synthetic renamed category", color: "blue", icon: "tag" }),
+      response({
+        id,
+        name: "Synthetic renamed category",
+        color: "blue",
+        icon: "tag",
+        isSystem: false,
+        isSelectable: true,
+      }),
     ),
     http.patch(`http://test.local/api/tags/${id}`, () =>
       response({ id, name: "Synthetic renamed tag", color: "blue", isActive: true }),

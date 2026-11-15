@@ -4611,6 +4611,10 @@ paths:
                           format: uuid
                           pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                           type: string
+                        isSelectable:
+                          type: boolean
+                        isSystem:
+                          type: boolean
                         name:
                           minLength: 1
                           type: string
@@ -4618,11 +4622,15 @@ paths:
                           format: uuid
                           pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                           type: string
+                        systemKey:
+                          type: string
                       required:
                         - name
                         - color
                         - icon
                         - id
+                        - isSystem
+                        - isSelectable
                       type: object
                     type: array
                   error:
@@ -4698,6 +4706,10 @@ paths:
                         format: uuid
                         pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
+                      isSelectable:
+                        type: boolean
+                      isSystem:
+                        type: boolean
                       name:
                         minLength: 1
                         type: string
@@ -4705,11 +4717,15 @@ paths:
                         format: uuid
                         pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
+                      systemKey:
+                        type: string
                     required:
                       - name
                       - color
                       - icon
                       - id
+                      - isSystem
+                      - isSelectable
                     type: object
                   error:
                     type: "null"
@@ -4751,6 +4767,110 @@ paths:
       security:
         - sessionBearer: []
       summary: Create a category
+      tags:
+        - categories
+      x-stability: stable
+  /api/categories/usage:
+    get:
+      operationId: categories.usage
+      parameters:
+        - in: query
+          name: ids
+          schema:
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties:
+                      additionalProperties: false
+                      properties:
+                        budgets:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        cardRecords:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        debts:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        installmentPlans:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        lastUsedAt:
+                          anyOf:
+                            - format: date-time
+                              pattern: ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d+)?)?(?:Z))$
+                              type: string
+                            - type: "null"
+                        merchants:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        records:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        recurringDebts:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                        templates:
+                          maximum: 9007199254740991
+                          minimum: 0
+                          type: integer
+                      required:
+                        - records
+                        - cardRecords
+                        - budgets
+                        - debts
+                        - recurringDebts
+                        - installmentPlans
+                        - templates
+                        - merchants
+                        - lastUsedAt
+                      type: object
+                    propertyNames:
+                      format: uuid
+                      pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                      type: string
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Count references and find the latest transaction for each category
       tags:
         - categories
       x-stability: stable
@@ -4899,6 +5019,10 @@ paths:
                         format: uuid
                         pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
+                      isSelectable:
+                        type: boolean
+                      isSystem:
+                        type: boolean
                       name:
                         minLength: 1
                         type: string
@@ -4906,11 +5030,15 @@ paths:
                         format: uuid
                         pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
+                      systemKey:
+                        type: string
                     required:
                       - name
                       - color
                       - icon
                       - id
+                      - isSystem
+                      - isSelectable
                     type: object
                   error:
                     type: "null"
@@ -4958,6 +5086,145 @@ paths:
       security:
         - sessionBearer: []
       summary: Update a category
+      tags:
+        - categories
+      x-stability: stable
+  /api/categories/{id}/merge:
+    post:
+      operationId: categories.merge
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                targetId:
+                  format: uuid
+                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                  type: string
+              required:
+                - targetId
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      archivedCategoryIds:
+                        items:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                          type: string
+                        type: array
+                      reassigned:
+                        additionalProperties: false
+                        properties:
+                          budgets:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          cardRecords:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          debts:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          installmentPlans:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          merchants:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          records:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          recurringDebts:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                          templates:
+                            maximum: 9007199254740991
+                            minimum: 0
+                            type: integer
+                        required:
+                          - records
+                          - cardRecords
+                          - budgets
+                          - debts
+                          - recurringDebts
+                          - installmentPlans
+                          - templates
+                          - merchants
+                        type: object
+                      targetId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                    required:
+                      - targetId
+                      - archivedCategoryIds
+                      - reassigned
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 404
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 409
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Move references to another category and archive the source tree
       tags:
         - categories
       x-stability: stable

@@ -58,6 +58,32 @@ afterAll(async () => {
   if (directory) await rm(directory, { recursive: true, force: true });
 });
 
+test("category usage and merge use the authenticated contract", async () => {
+  token = (await client["auth.unlock"]({ body: { token: LOCAL_ACCESS_CODE } })).token;
+  const categories = await client["categories.list"]();
+  expect(categories).toContainEqual(
+    expect.objectContaining({
+      systemKey: "category_eliminated",
+      isSystem: true,
+      isSelectable: false,
+    }),
+  );
+  const base = { color: "#123456", icon: "tag" };
+  const source = await client["categories.create"]({ body: { ...base, name: "Mérge source" } });
+  const target = await client["categories.create"]({ body: { ...base, name: "Merge target" } });
+  await expect(
+    client["categories.create"]({ body: { ...base, name: "MERGE SOURCE" } }),
+  ).rejects.toMatchObject({
+    status: 409,
+  });
+  expect(await client["categories.usage"]({ query: { ids: source.id } })).toEqual({
+    [source.id]: expect.objectContaining({ records: 0, lastUsedAt: null }),
+  });
+  expect(
+    await client["categories.merge"]({ params: { id: source.id }, body: { targetId: target.id } }),
+  ).toMatchObject({ targetId: target.id, archivedCategoryIds: [source.id] });
+});
+
 test("contract client preserves records, debt retry, card movements and backup restore through real sandbox HTTP", async () => {
   token = (await client["auth.unlock"]({ body: { token: LOCAL_ACCESS_CODE } })).token;
   await client["wallet.bootstrap"]({ body: { recordsLimit: 5, recordsCursor: null } });
