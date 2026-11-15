@@ -2,8 +2,6 @@ import { currencySchema } from "@shared/schemas";
 import {
   ArrowRight,
   Banknote,
-  ChevronDown,
-  ChevronRight,
   Eye,
   Plus,
   Save,
@@ -18,33 +16,20 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import type { ActionToastOptions } from "@/lib/action-toast-runner";
-import type { Category, CurrencyCode, Tag } from "@shared/types";
+import type { CurrencyCode, Tag } from "@shared/types";
 
 import { CategoryCombobox } from "@/components/ui/form/category-combobox";
 import {
   controlClassName as fieldClassName,
-  inlineControlClassName as inlineFieldClassName,
   colorControlClassName as colorInputClassName,
   ColorInput,
   Input,
 } from "@/components/ui/form/controls";
-import { ConfirmDialog } from "@/components/ui/form/dialogs";
-import { useConfirmDialog } from "@/hooks/use-confirm-dialog";
 import { useDraftFields } from "@/hooks/use-draft-fields";
 import { PageHeader } from "@/components/page/page-header";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { CategoryIcon } from "@/components/wallet/category-icon";
-import { categoryIconOptions } from "@/components/wallet/category-icons";
 import { RecordTemplateManager } from "@/components/wallet/record-template-manager";
 import { finishAction } from "@/lib/async-event";
 import { paymentDefaults } from "@/lib/preferences";
@@ -53,23 +38,11 @@ import { useAuth } from "@/providers/auth-provider";
 import { useWallet } from "@/providers/wallet-provider";
 
 type TagDraft = Omit<Tag, "id">;
-type CategoryDraft = Omit<Category, "id">;
-
-function childCategories(categories: Category[], parentId: string) {
-  return categories
-    .filter((category) => category.parentId === parentId)
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
 export function SettingsView() {
-  const { confirm, confirmationProps } = useConfirmDialog();
   const navigate = useNavigate();
   const {
     dataset,
     setRecordFilters,
-    addCategory,
-    updateCategory,
-    deleteCategory,
     addTag,
     updateTag,
     deleteTag,
@@ -109,34 +82,6 @@ export function SettingsView() {
   async function runSettingAction(work: () => Promise<unknown>, options: ActionToastOptions) {
     return (await runAction(work, options)).ok;
   }
-  const [
-    {
-      isCategoryDialogOpen,
-      newCategoryName,
-      newCategoryParentId,
-      newCategoryColor,
-      newCategoryIcon,
-      editingCategoryIconId,
-    },
-    {
-      isCategoryDialogOpen: setIsCategoryDialogOpen,
-      newCategoryName: setNewCategoryName,
-      newCategoryParentId: setNewCategoryParentId,
-      newCategoryColor: setNewCategoryColor,
-      newCategoryIcon: setNewCategoryIcon,
-      editingCategoryIconId: setEditingCategoryIconId,
-    },
-  ] = useDraftFields(() => ({
-    isCategoryDialogOpen: false,
-    newCategoryName: "",
-    newCategoryParentId: "",
-    newCategoryColor: "#2563EB",
-    newCategoryIcon: "tag",
-    editingCategoryIconId: null as string | null,
-  }));
-
-  const [expandedCategoryIds, setExpandedCategoryIds] = useState<Record<string, boolean>>({});
-  const [categoryDrafts, setCategoryDrafts] = useState<Record<string, CategoryDraft>>({});
   const [{ newTagName, newTagColor }, { newTagName: setNewTagName, newTagColor: setNewTagColor }] =
     useDraftFields(() => ({ newTagName: "", newTagColor: "#2563EB" }));
 
@@ -232,132 +177,6 @@ export function SettingsView() {
       },
     );
     if (saved) setDefaultsDraft({});
-  }
-
-  function getCategoryDraft(category: Category): CategoryDraft {
-    return (
-      categoryDrafts[category.id] ?? {
-        name: category.name,
-        parentId: category.parentId,
-        color: category.color,
-        icon: category.icon,
-      }
-    );
-  }
-
-  function updateCategoryDraft(categoryId: string, patch: Partial<CategoryDraft>) {
-    const currentCategory = dataset.categories.find((category) => category.id === categoryId);
-    if (!currentCategory) return;
-
-    setCategoryDrafts((current) => {
-      const currentDraft =
-        current[categoryId] ??
-        ({
-          name: currentCategory.name,
-          parentId: currentCategory.parentId,
-          color: currentCategory.color,
-          icon: currentCategory.icon,
-        } satisfies CategoryDraft);
-      const nextDraft = {
-        ...currentDraft,
-        ...patch,
-      };
-
-      return {
-        ...current,
-        [categoryId]: nextDraft,
-      };
-    });
-  }
-
-  function clearCategoryDraft(categoryId: string) {
-    setCategoryDrafts((current) => {
-      const next = { ...current };
-      delete next[categoryId];
-      return next;
-    });
-  }
-
-  function toggleCategoryExpansion(categoryId: string) {
-    setExpandedCategoryIds((current) => ({
-      ...current,
-      [categoryId]: !current[categoryId],
-    }));
-  }
-
-  async function handleAddCategory(event: FormEvent) {
-    event.preventDefault();
-    const name = newCategoryName.trim();
-    if (!name) return;
-
-    if (
-      !(await runSettingAction(
-        () =>
-          addCategory({
-            name,
-            parentId: newCategoryParentId || undefined,
-            color: newCategoryColor,
-            icon: newCategoryIcon.trim() || "tag",
-          }),
-        {
-          singleFlight: "category-create",
-          processing: "Creating category...",
-          success: "Category created",
-          error: "Could not create category",
-        },
-      ))
-    )
-      return;
-    setNewCategoryName("");
-    setNewCategoryParentId("");
-    setNewCategoryColor("#2563EB");
-    setNewCategoryIcon("tag");
-    setIsCategoryDialogOpen(false);
-  }
-
-  async function handleSaveCategory(category: Category) {
-    const draft = getCategoryDraft(category);
-    const name = draft.name.trim();
-    if (!name) return;
-
-    if (
-      !(await runSettingAction(
-        () =>
-          updateCategory(category.id, {
-            ...draft,
-            name,
-          }),
-        {
-          singleFlight: `category-save:${category.id}`,
-          processing: "Saving category...",
-          success: "Category saved",
-          error: "Could not save category",
-        },
-      ))
-    )
-      return;
-    clearCategoryDraft(category.id);
-  }
-
-  async function handleDeleteCategory(categoryId: string) {
-    if (
-      !(await confirm({
-        title: "Eliminate category tree?",
-        description: "Delete this category tree and reassign its history to Category eliminated?",
-        confirmLabel: "Eliminate category",
-      }))
-    )
-      return;
-    if (
-      !(await runSettingAction(() => deleteCategory(categoryId), {
-        singleFlight: `category-delete:${categoryId}`,
-        processing: "Reassigning category history...",
-        success: "Category eliminated and history reassigned",
-        error: "Could not eliminate category",
-      }))
-    )
-      return;
-    clearCategoryDraft(categoryId);
   }
 
   function getTagDraft(tag: Tag): TagDraft {
@@ -464,138 +283,13 @@ export function SettingsView() {
     clearTagDraft(tagId);
   }
 
-  function renderCategoryIconGrid({
-    selectedIcon,
-    color,
-    onSelect,
-  }: {
-    selectedIcon: string;
-    color: string;
-    onSelect: (icon: string) => void;
-  }) {
-    return (
-      <div className="grid max-h-44 grid-cols-7 gap-2 overflow-y-auto rounded-md border p-2">
-        {categoryIconOptions.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            className={`flex h-10 w-10 items-center justify-center rounded-full border transition hover:border-primary ${
-              selectedIcon === option.value ? "border-primary bg-secondary" : "border-transparent"
-            }`}
-            title={option.label}
-            aria-label={`Use ${option.label} icon`}
-            onClick={() => onSelect(option.value)}
-          >
-            <CategoryIcon icon={option.value} color={color} size="sm" />
-          </button>
-        ))}
-      </div>
-    );
-  }
-
-  function renderCategoryEditor(category: Category, level = 0) {
-    const draft = getCategoryDraft(category);
-    const children = childCategories(dataset.categories, category.id);
-    const hasChildren = children.length > 0;
-    const isExpanded = Boolean(expandedCategoryIds[category.id]);
-    const isDirty =
-      draft.name !== category.name ||
-      draft.color !== category.color ||
-      draft.icon !== category.icon;
-
-    return (
-      <div key={category.id} className={level > 0 ? "ml-4 border-l pl-4" : ""}>
-        <div className="flex flex-wrap items-center gap-2 rounded-md border p-2">
-          {hasChildren && level === 0 ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              aria-label={
-                isExpanded
-                  ? `Hide children for ${category.name}`
-                  : `Show children for ${category.name}`
-              }
-              title={isExpanded ? "Hide children" : "Show children"}
-              onClick={() => toggleCategoryExpansion(category.id)}
-            >
-              {isExpanded ? (
-                <ChevronDown className="h-4 w-4" />
-              ) : (
-                <ChevronRight className="h-4 w-4" />
-              )}
-            </Button>
-          ) : (
-            <span className="hidden h-10 w-10 md:block" aria-hidden="true" />
-          )}
-          <button
-            type="button"
-            className="rounded-full outline-none ring-offset-background transition hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            aria-label={`Change icon for ${category.name}`}
-            title="Change icon"
-            onClick={() => setEditingCategoryIconId(category.id)}
-          >
-            <CategoryIcon icon={draft.icon} color={draft.color} />
-          </button>
-          <ColorInput
-            value={draft.color}
-            onChange={(event) => updateCategoryDraft(category.id, { color: event.target.value })}
-            className={colorInputClassName}
-            aria-label={`${category.name} color`}
-          />
-          <Input
-            value={draft.name}
-            onChange={(event) => updateCategoryDraft(category.id, { name: event.target.value })}
-            className={`${inlineFieldClassName} min-w-40 flex-1`}
-            placeholder="Name"
-          />
-          <Button
-            type="button"
-            size="icon"
-            aria-label={`Save ${category.name}`}
-            title="Save"
-            disabled={!isDirty}
-            onClick={() => {
-              finishAction(handleSaveCategory(category));
-            }}
-          >
-            <Save className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="destructive"
-            size="icon"
-            disabled={Boolean(category.systemKey)}
-            aria-label={`Delete ${category.name}`}
-            title={
-              category.systemKey
-                ? "System category"
-                : hasChildren
-                  ? "Delete category and children"
-                  : "Delete"
-            }
-            onClick={() => {
-              finishAction(handleDeleteCategory(category.id));
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        {hasChildren && level === 0 && isExpanded ? (
-          <div className="mt-2 space-y-2">
-            {children.map((child) => renderCategoryEditor(child, level + 1))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  const editingCategoryIcon = editingCategoryIconId
-    ? dataset.categories.find((category) => category.id === editingCategoryIconId)
-    : undefined;
-  const editingCategoryIconDraft = editingCategoryIcon
-    ? getCategoryDraft(editingCategoryIcon)
-    : undefined;
+  const recentCategories = dataset.categories
+    .filter((category) => category.createdAt)
+    .sort(
+      (a, b) =>
+        (b.createdAt ?? "").localeCompare(a.createdAt ?? "") || a.name.localeCompare(b.name),
+    )
+    .slice(0, 3);
 
   return (
     <div>
@@ -754,142 +448,25 @@ export function SettingsView() {
 
         <Card>
           <CardHeader>
-            <div className="flex items-center justify-between gap-3">
-              <CardTitle className="flex items-center gap-2">
-                <WalletCards className="h-4 w-4" />
-                Categories
-              </CardTitle>
-              <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button size="icon" aria-label="New category">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>New category</DialogTitle>
-                    <DialogDescription>
-                      Create a parent category or select a parent to create a child.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form
-                    className="space-y-4"
-                    onSubmit={(event) => {
-                      finishAction(handleAddCategory(event));
-                    }}
-                  >
-                    <fieldset disabled={toast?.status === "processing"} className="contents">
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Name</span>
-                        <Input
-                          value={newCategoryName}
-                          onChange={(event) => setNewCategoryName(event.target.value)}
-                          className={fieldClassName}
-                          placeholder="Groceries, Butcher, Rent..."
-                        />
-                      </label>
-                      <label className="block space-y-2">
-                        <span className="text-sm font-medium">Parent</span>
-                        <select
-                          value={newCategoryParentId}
-                          onChange={(event) => setNewCategoryParentId(event.target.value)}
-                          className={fieldClassName}
-                        >
-                          <option value="">No parent</option>
-                          {dataset.categories
-                            .filter((category) => !category.parentId)
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map((category) => (
-                              <option key={category.id} value={category.id}>
-                                {category.name}
-                              </option>
-                            ))}
-                        </select>
-                      </label>
-                      <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
-                        <label className="block space-y-2">
-                          <span className="text-sm font-medium">Color</span>
-                          <div className="flex items-center gap-2">
-                            <CategoryIcon icon={newCategoryIcon} color={newCategoryColor} />
-                            <ColorInput
-                              value={newCategoryColor}
-                              onChange={(event) => setNewCategoryColor(event.target.value)}
-                              className={colorInputClassName}
-                              aria-label="New category color"
-                            />
-                          </div>
-                        </label>
-                        <div className="space-y-2">
-                          <span className="text-sm font-medium">Icon</span>
-                          {renderCategoryIconGrid({
-                            selectedIcon: newCategoryIcon,
-                            color: newCategoryColor,
-                            onSelect: setNewCategoryIcon,
-                          })}
-                        </div>
-                      </div>
-                      <Button className="w-full" type="submit">
-                        <Plus className="h-4 w-4" />
-                        Add category
-                      </Button>
-                    </fieldset>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
+            <CardTitle className="flex items-center gap-2">
+              <WalletCards className="h-4 w-4" />
+              Categories
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              <div className="space-y-3">
-                {dataset.categories
-                  .filter((category) => !category.parentId)
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((category) => renderCategoryEditor(category))}
-              </div>
-            </div>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {dataset.categories.length} active categories
+            </p>
+            {recentCategories.length > 0 && (
+              <p className="text-sm">
+                Recently added · {recentCategories.map(({ name }) => name).join(", ")}
+              </p>
+            )}
+            <Button variant="outline" onClick={() => void navigate("/settings/categories")}>
+              Manage categories <ArrowRight className="h-4 w-4" />
+            </Button>
           </CardContent>
         </Card>
-
-        <Dialog
-          open={Boolean(editingCategoryIcon)}
-          onOpenChange={(open) => {
-            if (!open) setEditingCategoryIconId(null);
-          }}
-        >
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Icon for {editingCategoryIcon?.name ?? "category"}</DialogTitle>
-              <DialogDescription>
-                Choose an icon to combine with the current category color.
-              </DialogDescription>
-            </DialogHeader>
-            {editingCategoryIcon && editingCategoryIconDraft ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 rounded-md border p-3">
-                  <CategoryIcon
-                    icon={editingCategoryIconDraft.icon}
-                    color={editingCategoryIconDraft.color}
-                    size="lg"
-                  />
-                  <div>
-                    <p className="font-medium">{editingCategoryIcon.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      After choosing, use Save in the row to confirm.
-                    </p>
-                  </div>
-                </div>
-                {renderCategoryIconGrid({
-                  selectedIcon: editingCategoryIconDraft.icon,
-                  color: editingCategoryIconDraft.color,
-                  onSelect: (icon) => {
-                    updateCategoryDraft(editingCategoryIcon.id, { icon });
-                    setEditingCategoryIconId(null);
-                  },
-                })}
-              </div>
-            ) : null}
-          </DialogContent>
-        </Dialog>
 
         <Card>
           <CardHeader>
@@ -1037,6 +614,7 @@ export function SettingsView() {
                 />
                 <CategoryCombobox
                   label="Budget category"
+                  enableCreation
                   categories={dataset.categories}
                   value={newBudgetCategoryId}
                   onChange={setNewBudgetCategoryId}
@@ -1155,7 +733,6 @@ export function SettingsView() {
         </Card>
       </div>
       <RecordTemplateManager />
-      <ConfirmDialog {...confirmationProps} />
     </div>
   );
 }

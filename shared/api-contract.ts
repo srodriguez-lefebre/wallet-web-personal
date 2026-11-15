@@ -537,8 +537,9 @@ export const apiOperations = [
     auth: "session",
     stability: "stable",
     successStatus: 200,
-    errors: [401, 500],
-    summary: "List active categories",
+    errors: [400, 401, 500],
+    query: z.object({ includeArchived: z.enum(["true", "false"]).optional() }),
+    summary: "List categories, optionally including archived trees",
   }),
   op({
     operationId: "categories.create",

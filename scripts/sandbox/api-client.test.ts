@@ -82,6 +82,12 @@ test("category usage and merge use the authenticated contract", async () => {
   expect(
     await client["categories.merge"]({ params: { id: source.id }, body: { targetId: target.id } }),
   ).toMatchObject({ targetId: target.id, archivedCategoryIds: [source.id] });
+  expect(await client["categories.list"]()).not.toContainEqual(
+    expect.objectContaining({ id: source.id }),
+  );
+  expect(await client["categories.list"]({ query: { includeArchived: "true" } })).toContainEqual(
+    expect.objectContaining({ id: source.id, archivedAt: expect.any(String) }),
+  );
 });
 
 test("contract client preserves records, debt retry, card movements and backup restore through real sandbox HTTP", async () => {

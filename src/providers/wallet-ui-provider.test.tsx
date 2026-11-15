@@ -106,7 +106,7 @@ test("state changes do not rerender consumers subscribed only to stable UI actio
   expect(renders).toBe(1);
 });
 
-test("archiving only clears matching account/tag filters and clears category-tree selection", () => {
+test("archiving clears only matching filters, including a category in the archived tree", () => {
   mount();
   act(() =>
     actions.setRecordFilters({
@@ -120,5 +120,7 @@ test("archiving only clears matching account/tag filters and clears category-tre
   act(() => actions.clearArchivedFilter("tagId", "keep-tag"));
   expect(state.recordFilters.tagId).toBeUndefined();
   act(() => actions.clearArchivedFilter("categoryId", "parent-category"));
+  expect(state.recordFilters.categoryId).toBe("child-category");
+  act(() => actions.clearArchivedFilter("categoryId", "child-category"));
   expect(state.recordFilters.categoryId).toBeUndefined();
 });

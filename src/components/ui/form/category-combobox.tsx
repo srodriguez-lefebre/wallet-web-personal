@@ -1,6 +1,6 @@
 import * as Popover from "@radix-ui/react-popover";
 import { Check, ChevronDown, Plus } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useContext, useId, useRef, useState } from "react";
 import { selectableCategory } from "@shared/categories";
 
 import { useRecentCategoryPage } from "./use-recent-category-page";
@@ -9,6 +9,7 @@ import { Input, controlClassName } from "./controls";
 import type { Category } from "@shared/types";
 import type { KeyboardEvent } from "react";
 
+import { CategoryCreationContext } from "@/features/categories/category-creation-context";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { categoryPaths, normalizeCategoryName } from "@/lib/category-options";
 import { cn } from "@/lib/utils";
@@ -33,7 +34,7 @@ export interface CategoryComboboxProps {
   showRecent?: boolean;
   disabled?: boolean;
   filter?: (category: Category) => boolean;
-  onCreate?: (name: string) => void;
+  enableCreation?: boolean;
 }
 
 export function CategoryCombobox({
@@ -48,8 +49,10 @@ export function CategoryCombobox({
   showRecent = true,
   disabled,
   filter = selectableCategory,
-  onCreate,
+  enableCreation = false,
 }: CategoryComboboxProps) {
+  const requestCreation = useContext(CategoryCreationContext);
+  const handoff = useRef(false);
   const listId = useId();
   const searchInput = useRef<HTMLInputElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -87,9 +90,10 @@ export function CategoryCombobox({
     group.choices.push({ key: category.id, label: path, category, depth });
   }
   const empty = allowEmpty && !term ? [{ key: "empty", label: emptyLabel }] : [];
-  const create: Choice[] = onCreate
-    ? [{ key: "create", label: "New category…", create: true }]
-    : [];
+  const create: Choice[] =
+    enableCreation && requestCreation
+      ? [{ key: "create", label: "New category…", create: true }]
+      : [];
   const choices = [
     ...empty,
     ...recents,
@@ -107,8 +111,12 @@ export function CategoryCombobox({
 
   function choose(choice: Choice) {
     changeOpen(false);
-    if (choice.create) onCreate?.(query.trim());
-    else onChange(choice.category?.id ?? "");
+    if (choice.create) {
+      handoff.current = true;
+      requestCreation?.(query.trim(), onChange, () => trigger.current?.focus());
+    } else {
+      onChange(choice.category?.id ?? "");
+    }
   }
 
   function focusAdjacentControl() {
@@ -233,6 +241,11 @@ export function CategoryCombobox({
             changeOpen(false);
           }}
           onCloseAutoFocus={(event) => {
+            if (handoff.current) {
+              handoff.current = false;
+              event.preventDefault();
+              return;
+            }
             if (tabDirection.current === undefined) return;
             event.preventDefault();
             focusAdjacentControl();

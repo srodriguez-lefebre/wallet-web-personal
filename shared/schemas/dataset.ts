@@ -4,7 +4,7 @@ import { recordTemplateSchema } from "./templates.js";
 import { id, currencySchema, uuidSchema } from "./common.js";
 import { settingsSchema } from "./settings.js";
 import { accountSchema } from "./accounts.js";
-import { categorySchema } from "./categories.js";
+import { categoryEntitySchema } from "./categories.js";
 import { tagSchema } from "./tags.js";
 import { walletRecordResponseSchema } from "./records.js";
 import {
@@ -30,7 +30,7 @@ export const walletDatasetSchema = z.object({
   recordTemplates: z.array(recordTemplateSchema.extend(id)).max(100).optional().default([]),
   settings: settingsSchema,
   accounts: z.array(accountSchema.extend(id)),
-  categories: z.array(categorySchema.extend({ ...id, systemKey: z.string().optional() })),
+  categories: z.array(categoryEntitySchema),
   tags: z.array(tagSchema.extend(id)),
   records: z.array(walletRecordResponseSchema),
   creditCards: z.array(creditCardSchema.extend(id)),
@@ -117,9 +117,7 @@ export const walletBackupSchema = walletDatasetSchema
       .optional(),
     settings: settingsSchema.extend({ ...backupMetadata, id: uuidSchema.optional() }),
     accounts: z.array(accountSchema.extend({ ...id, ...backupMetadata })),
-    categories: z.array(
-      categorySchema.extend({ ...id, ...backupMetadata, systemKey: z.string().optional() }),
-    ),
+    categories: z.array(categoryEntitySchema.extend(backupMetadata)),
     tags: z.array(tagSchema.extend({ ...id, ...backupMetadata })),
     records: z.array(
       walletRecordResponseSchema.safeExtend({ ...backupMetadata, ...backupRetryMetadata }),

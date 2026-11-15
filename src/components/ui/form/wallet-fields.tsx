@@ -56,13 +56,14 @@ export function CategoryField({
   label = "Category",
   id,
   className,
+  enableCreation = true,
   ...props
 }: CategoryComboboxProps & { className?: string }) {
   const generated = useId();
   const inputId = id ?? generated;
   return (
     <Field label={label} htmlFor={inputId} className={className}>
-      <CategoryCombobox {...props} id={inputId} label={label} />
+      <CategoryCombobox {...props} id={inputId} label={label} enableCreation={enableCreation} />
     </Field>
   );
 }

@@ -15,6 +15,7 @@ export type MutationOperationId = Exclude<
 const financial = [
   "reference",
   "category-usage",
+  "categories",
   "records",
   "analytics",
   "account-balances",
@@ -46,8 +47,8 @@ export const mutationDefinitions = {
   "accounts.create": catalog,
   "accounts.patch": catalog,
   "accounts.delete": financial,
-  "categories.create": ["reference", "analytics", "category-usage"],
-  "categories.patch": ["reference", "analytics", "records", "card-summary"],
+  "categories.create": ["reference", "analytics", "category-usage", "categories"],
+  "categories.patch": ["reference", "analytics", "records", "card-summary", "categories"],
   "categories.delete": financial,
   "categories.merge": financial,
   "tags.create": ["reference", "analytics"],

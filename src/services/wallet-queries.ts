@@ -35,6 +35,16 @@ function normalizeRecordFilters(filters: RecordQueryFilters): RecordQueryFilters
   if (!normalized.note) delete normalized.note;
   return normalized;
 }
+export function categoriesQueryOptions(client: WalletClient, includeArchived = false) {
+  return queryOptions({
+    queryKey: ["categories", includeArchived] as const,
+    queryFn: ({ signal }) =>
+      client["categories.list"]({
+        query: { includeArchived: includeArchived ? "true" : undefined },
+        signal,
+      }),
+  });
+}
 export function categoryUsageQueryOptions(client: WalletClient, ids?: string) {
   return queryOptions({
     queryKey: ["category-usage", ids] as const,

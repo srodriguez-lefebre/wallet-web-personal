@@ -89,9 +89,15 @@ export function createWalletActions(
         [
           `delete${name}`,
           async (id: string) => {
+            if (name === "Category") {
+              const result = await mutations["categories.delete"]({ params: { id } });
+              result.archivedCategoryIds.forEach((archivedId) =>
+                options.onArchived("Category", archivedId),
+              );
+              return;
+            }
             await remove({ params: { id } });
-            if (name === "Account" || name === "Category" || name === "Tag")
-              options.onArchived(name, id);
+            if (name === "Account" || name === "Tag") options.onArchived(name, id);
           },
         ],
       ];

@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, type PropsWithChildren } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { monthKey } from "@shared/dates";
 
+import { CategoryCreationProvider } from "@/features/categories/CategoryCreationProvider";
 import { AppShell } from "@/components/layout/app-shell";
 import { AuthProvider, useAuth } from "@/providers/auth-provider";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,11 @@ const RecordsView = lazy(() =>
     default: module.RecordsView,
   })),
 );
+const CategoriesView = lazy(() =>
+  import("@/features/categories/CategoriesView").then((module) => ({
+    default: module.CategoriesView,
+  })),
+);
 const SettingsView = lazy(() =>
   import("@/views/settings-view").then((module) => ({
     default: module.SettingsView,
@@ -137,27 +143,30 @@ function ProtectedApp() {
   return (
     <WalletQueryProvider>
       <WalletReady>
-        <AppShell>
-          <Suspense fallback={<RouteFallback />}>
-            <Routes>
-              <Route path="/" element={<DashboardView />} />
-              <Route path="/accounts" element={<AccountsView />} />
-              <Route path="/cards" element={<CardsView />} />
-              <Route path="/cards/:cardId" element={<CardDetailView />} />
-              <Route path="/records" element={<RecordsView />} />
-              <Route path="/analytics" element={<AnalyticsView />} />
-              <Route path="/goals" element={<GoalsView />} />
-              <Route path="/goals/:goalId" element={<GoalDetailView />} />
-              <Route path="/debts" element={<DebtsView />} />
-              <Route path="/investments" element={<InvestmentsView />} />
-              <Route path="/investments/:investmentId" element={<InvestmentDetailView />} />
-              <Route path="/data" element={<ImportsView />} />
-              <Route path="/imports" element={<Navigate to="/data" replace />} />
-              <Route path="/settings" element={<SettingsView />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </Suspense>
-        </AppShell>
+        <CategoryCreationProvider>
+          <AppShell>
+            <Suspense fallback={<RouteFallback />}>
+              <Routes>
+                <Route path="/" element={<DashboardView />} />
+                <Route path="/accounts" element={<AccountsView />} />
+                <Route path="/cards" element={<CardsView />} />
+                <Route path="/cards/:cardId" element={<CardDetailView />} />
+                <Route path="/records" element={<RecordsView />} />
+                <Route path="/analytics" element={<AnalyticsView />} />
+                <Route path="/goals" element={<GoalsView />} />
+                <Route path="/goals/:goalId" element={<GoalDetailView />} />
+                <Route path="/debts" element={<DebtsView />} />
+                <Route path="/investments" element={<InvestmentsView />} />
+                <Route path="/investments/:investmentId" element={<InvestmentDetailView />} />
+                <Route path="/data" element={<ImportsView />} />
+                <Route path="/imports" element={<Navigate to="/data" replace />} />
+                <Route path="/settings" element={<SettingsView />} />
+                <Route path="/settings/categories" element={<CategoriesView />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
+          </AppShell>
+        </CategoryCreationProvider>
       </WalletReady>
     </WalletQueryProvider>
   );

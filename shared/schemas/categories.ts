@@ -18,9 +18,13 @@ export const categoryPatchSchema = nonEmptyPatch({
 
 export type CategoryPatch = z.infer<typeof categoryPatchSchema>;
 
-export const categoryDetailsSchema = categorySchema.extend({
+export const categoryEntitySchema = categorySchema.extend({
   id: uuidSchema,
   systemKey: z.string().optional(),
+  createdAt: z.iso.datetime().optional(),
+});
+export const categoryDetailsSchema = categoryEntitySchema.extend({
+  archivedAt: z.iso.datetime().nullable(),
   isSystem: z.boolean(),
   isSelectable: z.boolean(),
 });
