@@ -1,6 +1,8 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
-import { forwardRef } from "react";
+import { forwardRef, useState } from "react";
+
+import { DialogPortalContainerContext } from "./dialog-portal-context";
 
 import type { ComponentPropsWithoutRef, ElementRef } from "react";
 
@@ -32,25 +34,33 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 export const DialogContent = forwardRef<
   ElementRef<typeof DialogPrimitive.Content>,
   ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid max-h-[88vh] w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg border bg-card p-5 text-card-foreground shadow-xl outline-none",
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground">
-        <X className="h-4 w-4" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(({ className, children, ...props }, ref) => {
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
+
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={ref}
+        className={cn(
+          "fixed inset-0 z-50 m-auto grid h-fit max-h-[88vh] w-[calc(100vw-2rem)] max-w-xl gap-4 overflow-y-auto rounded-lg border bg-card p-5 text-card-foreground shadow-xl outline-none",
+          className,
+        )}
+        {...props}
+      >
+        <DialogPortalContainerContext.Provider value={portalContainer}>
+          {children}
+        </DialogPortalContainerContext.Provider>
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-md p-1 text-muted-foreground transition hover:bg-secondary hover:text-foreground">
+          <X className="h-4 w-4" />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+        {/* Nested popovers must stay within Radix's modal scroll boundary. */}
+        <div ref={setPortalContainer} className="contents" />
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 export function DialogHeader({ className, ...props }: ComponentPropsWithoutRef<"div">) {

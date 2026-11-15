@@ -14,6 +14,7 @@ import type { Category } from "@shared/types";
 import type { KeyboardEvent } from "react";
 
 import { CategoryCreationContext } from "@/features/categories/category-creation-context";
+import { DialogPortalContainerContext } from "@/components/ui/dialog-portal-context";
 import { CategoryIcon } from "@/components/wallet/category-icon";
 import { categoryPaths, normalizeCategoryName } from "@/lib/category-options";
 import { cn } from "@/lib/utils";
@@ -58,6 +59,7 @@ export function CategoryCombobox({
   kind,
 }: CategoryComboboxProps) {
   const requestCreation = useContext(CategoryCreationContext);
+  const portalContainer = useContext(DialogPortalContainerContext);
   const handoff = useRef(false);
   const listId = useId();
   const searchInput = useRef<HTMLInputElement>(null);
@@ -236,7 +238,7 @@ export function CategoryCombobox({
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </Popover.Trigger>
-      <Popover.Portal>
+      <Popover.Portal container={portalContainer}>
         <Popover.Content
           aria-label={label + " options"}
           align="start"
