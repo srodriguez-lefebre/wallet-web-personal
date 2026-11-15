@@ -5,7 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { CategoryCombobox } from "./category-combobox";
 
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { recordsKey } from "@/services/wallet-queries";
 
 const root = { id: "root", name: "Café", color: "#2563eb", icon: "tag" };
@@ -65,17 +65,20 @@ test("uses first-page recent categories and supports an empty option and a custo
   expect(onChange).toHaveBeenCalledWith("");
 });
 
-test("Tab leaves the picker and advances in a modal form", async () => {
+test("the picker stays inside the modal scroll boundary and Tab advances in the form", async () => {
   render(
     <Dialog open>
       <DialogContent>
         <DialogTitle>Movement</DialogTitle>
+        <DialogDescription>Edit a movement.</DialogDescription>
         <CategoryCombobox categories={categories} onChange={vi.fn()} />
         <input aria-label="Note" />
       </DialogContent>
     </Dialog>,
   );
   fireEvent.click(screen.getByRole("button", { name: "Category" }));
+  const dialog = screen.getByRole("dialog", { name: "Movement" });
+  expect(within(dialog).getByRole("listbox", { name: "Category" })).toBeTruthy();
   fireEvent.keyDown(screen.getByRole("combobox"), { key: "Tab" });
   await vi.waitFor(() =>
     expect(document.activeElement).toBe(screen.getByRole("textbox", { name: "Note" })),
