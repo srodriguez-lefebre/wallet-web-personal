@@ -25,6 +25,7 @@ export type WalletUIAction =
   | { type: "custom"; range: DateRange }
   | { type: "filters"; filters: RecordFilters }
   | { type: "clear-filters" }
+  | { type: "archive-filter"; key: "accountId" | "categoryId" | "tagId"; id: string }
   | { type: "open-review" }
   | { type: "close-review" }
   | { type: "new-record"; requestId: number; accountId?: string; templateId?: string }
@@ -70,6 +71,10 @@ export function walletUIReducer(state: WalletUIState, action: WalletUIAction): W
       };
     case "clear-filters":
       return { ...state, recordFilters: { type: "all" }, reviewReturnContext: null };
+    case "archive-filter":
+      return action.key === "categoryId" || state.recordFilters[action.key] === action.id
+        ? { ...state, recordFilters: { ...state.recordFilters, [action.key]: undefined } }
+        : state;
     case "open-review":
       return {
         ...state,

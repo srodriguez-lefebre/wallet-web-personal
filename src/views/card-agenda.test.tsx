@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -14,16 +15,17 @@ const refreshStatements = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 const payment = vi.hoisted(() => vi.fn());
 const updateMovement = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    refreshCardStatements: refreshStatements,
-    isAllHistoryComplete: true,
-    payCreditCardStatement: payment,
-    updateCreditCardRecord: updateMovement,
-    selectedMonth: "2026-11",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      refreshCardStatements: refreshStatements,
+      isAllHistoryComplete: true,
+      payCreditCardStatement: payment,
+      updateCreditCardRecord: updateMovement,
+      selectedMonth: "2026-11",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -315,4 +317,16 @@ test("opening Cards refreshes statements once without repeating after a render",
     );
   });
   expect(refreshStatements).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});
+
+vi.mock("@/features/cards/use-card-reads", async () => {
+  const { legacyCardReads } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyCardReads(useWallet);
 });

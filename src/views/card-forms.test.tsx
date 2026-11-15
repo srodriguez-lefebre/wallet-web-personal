@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
@@ -13,14 +14,15 @@ const actions = vi.hoisted(() => ({
 }));
 let dataset = structuredClone(mockWalletData);
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    ...actions,
-    isAllHistoryComplete: true,
-    selectedMonth: "2026-11",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      ...actions,
+      isAllHistoryComplete: true,
+      selectedMonth: "2026-11",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-11-01", to: "2026-11-30" },
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }),
@@ -157,4 +159,16 @@ test("a pending card save prevents a second submit", async () => {
   expect(actions.addCreditCard).toHaveBeenCalledTimes(1);
   release("synthetic-new-card");
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});
+
+vi.mock("@/features/cards/use-card-reads", async () => {
+  const { legacyCardReads } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyCardReads(useWallet);
 });

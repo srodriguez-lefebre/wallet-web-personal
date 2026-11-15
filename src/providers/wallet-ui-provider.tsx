@@ -11,6 +11,7 @@ interface WalletUIActions {
   setCustomDateRange: (range: DateRange) => void;
   setRecordFilters: (filters: RecordFilters) => void;
   clearRecordFilters: () => void;
+  clearArchivedFilter: (key: "accountId" | "categoryId" | "tagId", id: string) => void;
   openReviewQueue: () => void;
   closeReviewQueue: () => void;
   requestNewRecord: (options?: { templateId?: string; accountId?: string }) => void;
@@ -31,6 +32,7 @@ export function WalletUIProvider({ children, ...initial }: PropsWithChildren<Wal
       setCustomDateRange: (range) => dispatch({ type: "custom", range }),
       setRecordFilters: (filters) => dispatch({ type: "filters", filters }),
       clearRecordFilters: () => dispatch({ type: "clear-filters" }),
+      clearArchivedFilter: (key, id) => dispatch({ type: "archive-filter", key, id }),
       openReviewQueue: () => dispatch({ type: "open-review" }),
       closeReviewQueue: () => dispatch({ type: "close-review" }),
       requestNewRecord: (options = {}) =>

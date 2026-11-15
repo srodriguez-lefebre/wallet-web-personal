@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -18,7 +19,7 @@ let dataset = structuredClone(mockWalletData);
 let complete = true;
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset, ...actions, isAllHistoryComplete: complete }),
+  useWallet: () => withWalletMetadata({ dataset, ...actions, isAllHistoryComplete: complete }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -226,4 +227,10 @@ test("revealing a hidden account preserves the existing account cards and their 
       .children.map((child) => (typeof child === "object" ? "" : String(child)))
       .join(""),
   ).toBe(originalBalance);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

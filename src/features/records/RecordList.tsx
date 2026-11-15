@@ -17,7 +17,9 @@ export function RecordList({
   model: Pick<
     ReturnType<typeof useRecordsView>,
     | "filteredRecords"
-    | "isSelectedRangeComplete"
+    | "isRecordsPending"
+    | "isRecordsFetching"
+    | "isRecordsError"
     | "selectedPeriodMode"
     | "selectedDateRange"
     | "selectedMonth"
@@ -38,13 +40,15 @@ export function RecordList({
     | "reviewWrite"
     | "saveReview"
     | "recordsPage"
-    | "isLoadingMoreRecords"
+    | "isFetchingNextPage"
     | "loadMoreRecords"
   >;
 }) {
   const {
     filteredRecords,
-    isSelectedRangeComplete,
+    isRecordsPending,
+    isRecordsFetching,
+    isRecordsError,
     selectedPeriodMode,
     selectedDateRange,
     selectedMonth,
@@ -57,7 +61,7 @@ export function RecordList({
     grouped,
     dataset,
     recordsPage,
-    isLoadingMoreRecords,
+    isFetchingNextPage,
     loadMoreRecords,
   } = model;
   const { accounts, categories, creditCards, tags } = dataset;
@@ -71,10 +75,13 @@ export function RecordList({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <CardTitle>
             {filteredRecords.length} {filteredRecords.length === 1 ? "record" : "records"}
+            {recordsPage.hasMore ? " loaded" : ""}
           </CardTitle>
           <div className="flex flex-wrap gap-2">
-            {!isSelectedRangeComplete ? (
-              <Badge variant="warning">Loading complete range...</Badge>
+            {isRecordsFetching ? (
+              <Badge variant="warning">
+                {isRecordsPending ? "Loading records..." : "Refreshing records..."}
+              </Badge>
             ) : null}
             <Badge variant="muted">
               {selectedPeriodMode === "all"
@@ -123,13 +130,15 @@ export function RecordList({
         {!filteredRecords.length && (
           <div className="space-y-2 py-4 text-sm text-muted-foreground" role="status">
             <p>
-              {!isSelectedRangeComplete
-                ? "Loading records for this period…"
-                : appliedFilters.length
-                  ? "No records match the active filters in this period."
-                  : "No records in this period."}
+              {isRecordsError
+                ? "Could not load records. Retry refresh to continue."
+                : isRecordsPending
+                  ? "Loading records for this period…"
+                  : appliedFilters.length
+                    ? "No records match the active filters in this period."
+                    : "No records in this period."}
             </p>
-            {isSelectedRangeComplete && appliedFilters.length > 0 && (
+            {!isRecordsPending && !isRecordsError && appliedFilters.length > 0 && (
               <ul className="list-disc space-y-1 pl-5 [overflow-wrap:anywhere]">
                 {appliedFilters.map(([key, label, value]) => (
                   <li key={key}>
@@ -147,10 +156,10 @@ export function RecordList({
           <div className="flex justify-center pt-2">
             <Button
               variant="outline"
-              disabled={isLoadingMoreRecords}
+              disabled={isFetchingNextPage}
               onClick={() => void loadMoreRecords()}
             >
-              {isLoadingMoreRecords ? "Loading records..." : "Load older records"}
+              {isFetchingNextPage ? "Loading records..." : "Load older records"}
             </Button>
           </div>
         ) : null}

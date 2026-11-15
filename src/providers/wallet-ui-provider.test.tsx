@@ -105,3 +105,20 @@ test("state changes do not rerender consumers subscribed only to stable UI actio
   expect(screen.getByText("2026-10:month")).toBeDefined();
   expect(renders).toBe(1);
 });
+
+test("archiving only clears matching account/tag filters and clears category-tree selection", () => {
+  mount();
+  act(() =>
+    actions.setRecordFilters({
+      accountId: "keep-account",
+      tagId: "keep-tag",
+      categoryId: "child-category",
+    }),
+  );
+  act(() => actions.clearArchivedFilter("accountId", "another-account"));
+  expect(state.recordFilters.accountId).toBe("keep-account");
+  act(() => actions.clearArchivedFilter("tagId", "keep-tag"));
+  expect(state.recordFilters.tagId).toBeUndefined();
+  act(() => actions.clearArchivedFilter("categoryId", "parent-category"));
+  expect(state.recordFilters.categoryId).toBeUndefined();
+});

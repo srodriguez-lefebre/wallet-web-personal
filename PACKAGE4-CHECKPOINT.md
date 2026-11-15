@@ -474,3 +474,16 @@ pruebas, formato/lint/build/OpenAPI verdes en
 Sandbox exit 0, 11 archivos / 109 pruebas, en
 `/tmp/wallet-package4-entity-readers-sandbox.log` y `.status`.
 No se modificaron App, producción, migraciones, secretos o Apps Script.
+
+
+## Pausa y traspaso a G14 · integración parcial de Query
+
+Por instrucción de Santiago se pausa la implementación en la HP y se conserva
+todo el árbol parcial en la misma rama, sin PR ni merge. Ver
+[PACKAGE4-HANDOFF.md](PACKAGE4-HANDOFF.md) para alcance, copia del plan ignorado,
+pruebas y pasos restantes. La última base validada es
+`ac92edb7d6e33b48f5d44446754f70706c64a4cc`; el checkpoint posterior **no está
+validado para merge**: última selección de vistas 73 aprobadas / 3 fallidas,
+check completo y sandbox pendientes después de la activación parcial.
+No se tocó main, producción, migraciones ni Apps Script. Bloque 5 y Apps Script
+se harán también en la G14.

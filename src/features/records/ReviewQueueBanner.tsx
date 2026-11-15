@@ -12,7 +12,6 @@ export function ReviewQueueBanner({
     ReturnType<typeof useRecordsView>,
     | "selectedPeriodMode"
     | "isReviewQueueOpen"
-    | "isAllHistoryComplete"
     | "newReviewCount"
     | "reviewCount"
     | "markReviewQueueSeen"
@@ -28,7 +27,6 @@ export function ReviewQueueBanner({
   const {
     selectedPeriodMode,
     isReviewQueueOpen,
-    isAllHistoryComplete,
     newReviewCount,
     reviewCount,
     markReviewQueueSeen,
@@ -46,13 +44,12 @@ export function ReviewQueueBanner({
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <p className="text-sm text-muted-foreground" role="status">
             Review queue · All dates
-            {isAllHistoryComplete &&
-              ` · ${newReviewCount} new · ${reviewCount - newReviewCount} seen, still pending`}
+            {` · ${newReviewCount} new · ${reviewCount - newReviewCount} seen, still pending`}
           </p>
           <Button
             variant="outline"
             size="sm"
-            disabled={!isAllHistoryComplete || !newReviewCount}
+            disabled={!newReviewCount}
             onClick={markReviewQueueSeen}
           >
             Mark queue as seen

@@ -1,4 +1,5 @@
-import { FormEvent, useState } from "react";
+import { formatMoney } from "@shared/calculations";
+import { goalStatusLabels } from "@shared/constants";
 import {
   CalendarDays,
   Edit3,
@@ -11,14 +12,13 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { calculateAccountBalances, calculateGoalProgress, formatMoney } from "@shared/calculations";
-import { goalStatusLabels } from "@shared/constants";
 
 import type { CurrencyCode, Goal, GoalStatus } from "@shared/types";
 
-import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
+import { ReadState } from "@/components/page/read-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,9 +30,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { GoalFundingPlan } from "@/components/wallet/goal-funding-plan";
 import { GoalProgressBar } from "@/components/wallet/goal-progress-bar";
+import { useAccounts, useGoals } from "@/hooks/wallet-entities";
+import { finishAction } from "@/lib/async-event";
+import { buildGoalUpdatePayload } from "@/lib/goal-update";
 import { formatCalendarDate, limitDecimalPlaces } from "@/lib/utils";
 import { useWallet } from "@/providers/wallet-provider";
 
@@ -83,10 +85,19 @@ function buildGoalDrafts(goals: Goal[]): GoalDraft[] {
 
 export function GoalsView() {
   const navigate = useNavigate();
-  const { dataset, addGoal, updateGoal, updateRecord, deleteGoal, addGoalReservation } =
-    useWallet();
+  const {
+    dataset,
+    addGoal,
+    updateGoal,
+    updateRecord,
+    deleteGoal,
+    addGoalReservation,
+    getCompleteDataset,
+  } = useWallet();
   const [showHidden, setShowHidden] = useState(false);
-  const goals = calculateGoalProgress(dataset);
+  const goalReads = useGoals();
+  const accountReads = useAccounts();
+  const goals = goalReads.progress;
   const visibleGoals = goals.filter((item) => item.goal.isVisible);
   const [preferredGoalId, setGoalId] = useState("");
   const reservationGoals = dataset.goals.filter(
@@ -173,6 +184,13 @@ export function GoalsView() {
       return;
     }
 
+    const needsHistory = activeDrafts.some(
+      (draft) =>
+        draft.autoCaptureEnabled &&
+        draft.autoCaptureStart &&
+        draft.autoCaptureStart <= new Date().toISOString().slice(0, 10),
+    );
+    const historyRecords = needsHistory ? (await getCompleteDataset()).records : [];
     const historicalAssociations: Array<{ goalId: string; recordIds: string[] }> = [];
     for (const draft of activeDrafts) {
       if (
@@ -181,7 +199,7 @@ export function GoalsView() {
         draft.autoCaptureStart > new Date().toISOString().slice(0, 10)
       )
         continue;
-      const recordIds = dataset.records
+      const recordIds = historyRecords
         .filter(
           (record) =>
             record.type === "expense" &&
@@ -206,10 +224,9 @@ export function GoalsView() {
 
     for (const group of historicalAssociations) {
       for (const recordId of group.recordIds) {
-        const record = dataset.records.find((item) => item.id === recordId);
+        const record = historyRecords.find((item) => item.id === recordId);
         if (!record) continue;
         await updateRecord(recordId, {
-          ...record,
           goalIds: [...(record.goalIds ?? []), group.goalId],
           goalAssociations: [
             ...(record.goalAssociations ?? []),
@@ -257,7 +274,6 @@ export function GoalsView() {
       isVisible: true,
       deadline: deadline || undefined,
       status: "active",
-      tagIds: [],
       accountId,
       autoCaptureEnabled: false,
       autoCaptureStart: undefined,
@@ -278,7 +294,7 @@ export function GoalsView() {
     const account = dataset.accounts.find((item) => item.id === accountId);
     const numericAmount = Number(reserveAmount);
     if (!account || !goalId || !Number.isFinite(numericAmount) || numericAmount <= 0) return;
-    const balance = calculateAccountBalances(dataset).find((item) => item.account.id === accountId);
+    const balance = accountReads.balances.find((item) => item.account.id === accountId);
     if (
       balance &&
       numericAmount > balance.freeBalance &&
@@ -299,6 +315,8 @@ export function GoalsView() {
     setReserveAmount("");
   }
 
+  if (goalReads.metrics.data === undefined)
+    return <ReadState label="goals" error={goalReads.isError} />;
   return (
     <div>
       <PageHeader

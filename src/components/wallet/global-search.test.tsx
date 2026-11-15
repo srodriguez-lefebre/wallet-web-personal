@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -17,32 +18,33 @@ const state = vi.hoisted(() => ({
   draft: vi.fn(),
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    selectedMonth: "2026-10",
-    selectedPeriodMode: state.period,
-    customDateRange: { from: "2026-10-01", to: "2026-10-03" },
-    setSelectedMonth: vi.fn(),
-    setCustomDateRange: vi.fn(),
-    isAllHistoryComplete: false,
-    clearRecordFilters: () => {
-      state.filters = { type: "all" };
-    },
-    setRecordFilters: (filters: RecordFilters) => {
-      state.filters = { ...state.filters, ...filters };
-    },
-    setAllPeriod: () => {
-      state.period = "all";
-    },
-    openReviewQueue: () => {
-      state.filters = { type: "all", paymentStatus: "needs_review" };
-      state.period = "all";
-    },
-    requestNewRecord: state.draft,
-    addRecord: state.writes,
-    payDebt: state.writes,
-    addCreditCardPayment: state.writes,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      selectedMonth: "2026-10",
+      selectedPeriodMode: state.period,
+      customDateRange: { from: "2026-10-01", to: "2026-10-03" },
+      setSelectedMonth: vi.fn(),
+      setCustomDateRange: vi.fn(),
+      isAllHistoryComplete: false,
+      clearRecordFilters: () => {
+        state.filters = { type: "all" };
+      },
+      setRecordFilters: (filters: RecordFilters) => {
+        state.filters = { ...state.filters, ...filters };
+      },
+      setAllPeriod: () => {
+        state.period = "all";
+      },
+      openReviewQueue: () => {
+        state.filters = { type: "all", paymentStatus: "needs_review" };
+        state.period = "all";
+      },
+      requestNewRecord: state.draft,
+      addRecord: state.writes,
+      payDebt: state.writes,
+      addCreditCardPayment: state.writes,
+    }),
 }));
 // React test renderer has no DOM portal. Keep component state and handlers real;
 // exercise the Dialog focus callbacks at the boundary owned by this component.
@@ -265,4 +267,10 @@ test("dialog focus callbacks focus its input and restore prior focus on closure"
   );
   content.onCloseAutoFocus(event);
   expect(priorFocus.focus).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

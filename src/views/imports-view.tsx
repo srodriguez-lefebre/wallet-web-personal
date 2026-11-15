@@ -42,7 +42,6 @@ export function ImportsView() {
     restoreBackup,
     selectedDateRange,
     selectedPeriodMode,
-    isAllHistoryComplete,
     clearRecordFilters,
     setRecordFilters,
     setAllPeriod,
@@ -208,11 +207,11 @@ export function ImportsView() {
           void navigate("/cards");
         }}
       />
-      {!isAllHistoryComplete ? (
+      {
         <p className="mb-4 text-sm text-muted-foreground">
           Complete history will be fetched before import, export, or duplicate checking.
         </p>
-      ) : null}
+      }
       {message ? (
         <p role="status" className="mb-4 rounded-md border p-3 text-sm">
           {message}
@@ -310,7 +309,7 @@ export function ImportsView() {
           <CardContent>
             <p className="mb-3 text-sm">
               {previewSummary.ready} ready · {previewSummary.skipped} invalid or duplicate rows
-              {!isAllHistoryComplete ? " (preliminary until complete history is checked)" : ""}
+              {" (preliminary until complete history is checked)"}
             </p>
             {previewSummary.totals.map((total) => (
               <p key={total.currency} className="mb-2 text-sm text-muted-foreground">

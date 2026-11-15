@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -10,20 +11,21 @@ import type { ReactNode } from "react";
 
 let dataset: WalletDataset, historyComplete: boolean, assistantReads: number;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2026-02",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
-    recordFilters: {},
-    setRecordFilters: vi.fn(),
-    isAllHistoryComplete: historyComplete,
-    getCompleteDataset: async () => {
-      assistantReads += 1;
-      return structuredClone(dataset);
-    },
-    addBudget: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2026-02",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
+      recordFilters: {},
+      setRecordFilters: vi.fn(),
+      isAllHistoryComplete: historyComplete,
+      getCompleteDataset: async () => {
+        assistantReads += 1;
+        return structuredClone(dataset);
+      },
+      addBudget: vi.fn(),
+    }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("recharts", () => {
@@ -191,4 +193,10 @@ test("opens budget creation from analytics using the selected month and fresh fu
   });
   expect(assistantReads).toBe(1);
   expect(tree!.root.findByProps({ "aria-label": "Target month" }).props.value).toBe("2026-02");
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

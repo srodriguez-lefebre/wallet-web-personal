@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -18,26 +19,28 @@ let commitBeforeFailure: boolean;
 let holdWrite: (() => Promise<void>) | undefined;
 
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    getCompleteDataset: async () => {
-      reads += 1;
-      if (failRead) throw new Error("Refresh unavailable");
-      const snapshot = structuredClone(server);
-      Object.freeze(snapshot.budgets);
-      return snapshot;
-    },
-    addBudget: async (value: Omit<Budget, "id">) => {
-      const valid = budgetSchema.parse(value);
-      writes.push(valid);
-      if (holdWrite) await holdWrite();
-      if (failCategory === valid.categoryId) {
-        if (commitBeforeFailure) server.budgets.push({ ...valid, id: `saved-${valid.categoryId}` });
-        throw new Error("Budget save interrupted");
-      }
-      server.budgets.push({ ...valid, id: `saved-${valid.categoryId}` });
-      return `saved-${valid.categoryId}`;
-    },
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      getCompleteDataset: async () => {
+        reads += 1;
+        if (failRead) throw new Error("Refresh unavailable");
+        const snapshot = structuredClone(server);
+        Object.freeze(snapshot.budgets);
+        return snapshot;
+      },
+      addBudget: async (value: Omit<Budget, "id">) => {
+        const valid = budgetSchema.parse(value);
+        writes.push(valid);
+        if (holdWrite) await holdWrite();
+        if (failCategory === valid.categoryId) {
+          if (commitBeforeFailure)
+            server.budgets.push({ ...valid, id: `saved-${valid.categoryId}` });
+          throw new Error("Budget save interrupted");
+        }
+        server.budgets.push({ ...valid, id: `saved-${valid.categoryId}` });
+        return `saved-${valid.categoryId}`;
+      },
+    }),
 }));
 let tree: ReactTestRenderer | undefined;
 const text = () =>
@@ -289,4 +292,10 @@ test("caps the target month at the current month and explains excluded direct ca
   expect(tree!.root.findAllByProps({ "aria-label": "Limit for Food" })).toHaveLength(0);
   expect(text()).toContain("complete");
   expect(button("Create selected budgets").props.disabled).toBe(true);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

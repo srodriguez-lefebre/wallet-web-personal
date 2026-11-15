@@ -16,7 +16,6 @@ export function RecordsView() {
   const {
     toggleReviewQueue,
     isReviewQueueOpen,
-    isAllHistoryComplete,
     reviewCount,
     newReviewCount,
     openNewRecordDialog,
@@ -38,10 +37,8 @@ export function RecordsView() {
           aria-label="Open review queue"
           aria-pressed={isReviewQueueOpen}
         >
-          Needs review {isAllHistoryComplete ? `(${reviewCount})` : "· Loading…"}
-          {isAllHistoryComplete && newReviewCount > 0 && (
-            <Badge variant="warning">{newReviewCount} new</Badge>
-          )}
+          Needs review ({reviewCount})
+          {newReviewCount > 0 && <Badge variant="warning">{newReviewCount} new</Badge>}
         </Button>
         <Button onClick={openNewRecordDialog}>
           <Plus className="h-4 w-4" />

@@ -59,10 +59,10 @@ function useReferenceQuery<T = WalletReference>(select?: (reference: WalletRefer
 export function useWalletReferenceQuery() {
   return useReferenceQuery();
 }
-export function useAccounts() {
+export function useAccounts(readBalances = true) {
   const { client } = useWalletData();
   const reference = useReferenceQuery(selectAccounts);
-  const metrics = useQuery(accountBalancesQueryOptions(client));
+  const metrics = useQuery({ ...accountBalancesQueryOptions(client), enabled: readBalances });
   const mutations = useEntityMutations("accounts");
   const balances = useMemo(
     () =>
@@ -77,7 +77,7 @@ export function useAccounts() {
     metrics,
     reference,
     mutations,
-    isPending: reference.isPending || metrics.isPending,
+    isPending: reference.isPending || (readBalances && metrics.isPending),
     isError: reference.isError || metrics.isError,
   };
 }
@@ -101,9 +101,9 @@ export function useGoals() {
     isError: reference.isError || metrics.isError,
   };
 }
-export function useRecords(filters: RecordQueryFilters = {}) {
+export function useRecords(filters: RecordQueryFilters = {}, enabled = true) {
   const { client } = useWalletData();
-  const query = useInfiniteQuery(recordsQueryOptions(client, filters));
+  const query = useInfiniteQuery({ ...recordsQueryOptions(client, filters), enabled });
   const mutations = useEntityMutations("records");
   const records = useMemo(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],

@@ -16,10 +16,11 @@ import {
   X,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { monthKey, recentMonthKeys } from "@shared/calculations";
+import { monthKey } from "@shared/calculations";
 
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/wallet/global-search";
+import { WalletQueryStatus } from "./wallet-query-status";
 import { WalletNotifications } from "@/components/wallet/wallet-notifications";
 import { useWallet } from "@/providers/wallet-provider";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function AppShell({ children }: PropsWithChildren) {
   const navigate = useNavigate();
   const {
     dataset,
+    availableMonths,
     selectedMonth,
     selectedPeriodMode,
     customDateRange,
@@ -51,8 +53,8 @@ export function AppShell({ children }: PropsWithChildren) {
   } = useWallet();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const monthOptions = useMemo(
-    () => recentMonthKeys(dataset.records, monthKey(new Date()), 12),
-    [dataset.records],
+    () => (availableMonths.length ? availableMonths.slice(0, 12) : [monthKey(new Date())]),
+    [availableMonths],
   );
   const periodSelectValue =
     selectedPeriodMode === "custom"
@@ -228,7 +230,10 @@ export function AppShell({ children }: PropsWithChildren) {
           <WalletNotifications />
         </header>
 
-        <main className="px-4 py-5 lg:px-6">{children}</main>
+        <main className="px-4 py-5 lg:px-6">
+          <WalletQueryStatus />
+          {children}
+        </main>
       </div>
     </div>
   );

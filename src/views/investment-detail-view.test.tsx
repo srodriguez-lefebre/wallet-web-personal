@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -13,7 +14,7 @@ const state = vi.hoisted(() => ({
   messages: [] as Array<{ status: string; message: string }>,
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset: state.dataset, updateInvestment: state.update }),
+  useWallet: () => withWalletMetadata({ dataset: state.dataset, updateInvestment: state.update }),
 }));
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
@@ -147,3 +148,9 @@ test.each(["", "-1", "NaN", "Infinity"])(
     ).toHaveLength(1);
   },
 );
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});

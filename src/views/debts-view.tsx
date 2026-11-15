@@ -233,6 +233,7 @@ function DirectionToggle({
 export function DebtsView() {
   const {
     dataset,
+    debtRecordCounts,
     addDebt,
     updateDebt,
     deleteDebt,
@@ -638,9 +639,7 @@ export function DebtsView() {
                   <p className="text-xs font-medium uppercase text-muted-foreground">
                     Linked records
                   </p>
-                  <p className="mt-1 font-semibold">
-                    {dataset.records.filter((record) => record.debtId === debt.id).length}
-                  </p>
+                  <p className="mt-1 font-semibold">{debtRecordCounts[debt.id] ?? 0}</p>
                 </div>
               </div>
 

@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer, type ReactTestInstance } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -10,23 +11,24 @@ import { RecordsView } from "@/features/records/RecordsView";
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2026-02",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
-    recordFilters: {},
-    setRecordFilters: vi.fn(),
-    clearRecordFilters: vi.fn(),
-    addRecord: vi.fn(),
-    updateRecord: update,
-    deleteRecord: vi.fn(),
-    newRecordRequestId: 0,
-    consumeNewRecordRequest: vi.fn(),
-    recordsPage: {},
-    isSelectedRangeComplete: true,
-    loadMoreRecords: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2026-02",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-02-01", to: "2026-02-28" },
+      recordFilters: {},
+      setRecordFilters: vi.fn(),
+      clearRecordFilters: vi.fn(),
+      addRecord: vi.fn(),
+      updateRecord: update,
+      deleteRecord: vi.fn(),
+      newRecordRequestId: 0,
+      consumeNewRecordRequest: vi.fn(),
+      recordsPage: {},
+      isSelectedRangeComplete: true,
+      loadMoreRecords: vi.fn(),
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -343,4 +345,10 @@ test("changing goal allocations requires primary FX", async () => {
   );
   await submit();
   expect(update).not.toHaveBeenCalled();
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

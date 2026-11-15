@@ -1,25 +1,16 @@
-import {
-  calculateAccountBalances,
-  groupRecordsByDay,
-  isCategoryOrDescendant,
-  recordsForDateRange,
-} from "@shared/calculations";
+import { groupRecordsByDay } from "@shared/calculations";
 import { paymentStatusLabels, recordTypeLabels } from "@shared/constants";
-import {
-  countNewReviews,
-  getMerchantCorrections,
-  isReviewCategory,
-  recordReviewDate,
-} from "@shared/record-review";
+import { selectMerchantCorrections, isReviewCategory } from "@shared/record-review";
 import { useMemo, useRef, useState } from "react";
 
 import { useRecordForm } from "./use-record-form";
 
+import type { RecordReviewBaseline } from "@shared/reference-contract";
 import type { RecordPatch } from "@shared/schemas";
 import type { RecordFilters, WalletRecord } from "@shared/types";
 
 import { useWallet } from "@/providers/wallet-provider";
-import { normalizeGlobalSearch } from "@/lib/global-search";
+import { useAccounts, useRecords } from "@/hooks/wallet-entities";
 import { formatCategoryName } from "@/lib/category-options";
 export function useRecordsView() {
   const form = useRecordForm();
@@ -36,91 +27,51 @@ export function useRecordsView() {
     updateRecord,
     updateWalletSettings,
     setRecordFilters,
-    isAllHistoryComplete,
+    recordSummary,
+    merchantCorrections: correctionBaselines,
     clearRecordFilters,
-    isSelectedRangeComplete,
     deleteRecord,
-    recordsPage,
-    isLoadingMoreRecords,
-    loadMoreRecords,
   } = useWallet();
   const [showNoteFilter, setShowNoteFilter] = useState(false);
   const focusNoteOnOpen = useRef(false);
   const [reviewUndo, setReviewUndo] = useState<{
-    before: WalletRecord;
+    before: RecordReviewBaseline;
     saved: WalletRecord;
   }>();
   const [reviewWrite, setReviewWrite] = useState<string>();
   const reviewWriteLock = useRef(false);
-  const reviewCount = dataset.records.filter(
-    (record) => record.paymentStatus === "needs_review",
-  ).length;
-  const newReviewCount = countNewReviews(dataset);
+  const reviewCount = recordSummary.review;
+  const newReviewCount = recordSummary.newReviews;
   const reviewSeenThrough = Date.parse(dataset.settings.reviewSeenThrough ?? "") || 0;
-  const merchantCorrections = useMemo(() => getMerchantCorrections(dataset), [dataset]);
+  const merchantCorrections = useMemo(
+    () => selectMerchantCorrections(correctionBaselines, dataset.categories),
+    [correctionBaselines, dataset.categories],
+  );
   const reviewCategories = useMemo(
     () => categories.filter((category) => isReviewCategory(category)),
     [categories],
   );
+  const accounts = useAccounts(Boolean(recordFilters.accountId));
   const selectedAccountBalance = recordFilters.accountId
-    ? calculateAccountBalances(dataset).find(
-        (balance) => balance.account.id === recordFilters.accountId,
-      )
+    ? accounts.balances.find((balance) => balance.account.id === recordFilters.accountId)
     : undefined;
-  const filteredRecords = useMemo(() => {
-    const periodRecords =
-      selectedPeriodMode !== "month"
-        ? recordsForDateRange(dataset.records, selectedDateRange)
-        : dataset.records.filter((record) => record.occurredAt.startsWith(selectedMonth));
-
-    return periodRecords
-      .filter((record) =>
-        !recordFilters.type || recordFilters.type === "all"
-          ? true
-          : record.type === recordFilters.type,
-      )
-      .filter((record) =>
-        !recordFilters.paymentStatus || recordFilters.paymentStatus === "all"
-          ? true
-          : record.paymentStatus === recordFilters.paymentStatus,
-      )
-      .filter((record) =>
-        recordFilters.creditCardId ? record.creditCardId === recordFilters.creditCardId : true,
-      )
-      .filter((record) =>
-        recordFilters.accountId
-          ? record.accountId === recordFilters.accountId ||
-            record.destinationAccountId === recordFilters.accountId
-          : true,
-      )
-      .filter((record) =>
-        recordFilters.categoryId
-          ? record.categoryId &&
-            isCategoryOrDescendant(dataset.categories, record.categoryId, recordFilters.categoryId)
-          : true,
-      )
-      .filter((record) =>
-        recordFilters.tagId ? record.tagIds.includes(recordFilters.tagId) : true,
-      )
-      .filter((record) =>
-        recordFilters.goalId ? (record.goalIds ?? []).includes(recordFilters.goalId) : true,
-      )
-      .filter((record) =>
-        (record.note ?? "").toLowerCase().includes((recordFilters.note ?? "").trim().toLowerCase()),
-      )
-      .filter((record) => {
-        const category = dataset.categories.find((item) => item.id === record.categoryId);
-        const tags = record.tagIds
-          .map((id) => dataset.tags.find((tag) => tag.id === id)?.name ?? "")
-          .join(" ");
-        const categoryName = category ? formatCategoryName(dataset.categories, category) : "";
-        const haystack = `${categoryName} ${record.counterpartyName ?? ""} ${record.importMerchant ?? ""} ${tags} ${record.note ?? ""}`;
-        return normalizeGlobalSearch(haystack).includes(
-          normalizeGlobalSearch(recordFilters.search ?? ""),
-        );
-      })
-      .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime());
-  }, [dataset, recordFilters, selectedDateRange, selectedMonth, selectedPeriodMode]);
+  const page = useRecords({
+    ...recordFilters,
+    ...(selectedPeriodMode === "all" ? {} : selectedDateRange),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    categoryMode: "descendants",
+    searchMode: "wallet",
+  });
+  const filteredRecords = page.records;
+  const recordsPage = {
+    hasMore: page.hasMore,
+    nextCursor: page.query.data?.pages.at(-1)?.nextCursor ?? null,
+  };
+  const isRecordsPending = page.query.isPending;
+  const isRecordsFetching = page.query.isFetching;
+  const isRecordsError = page.query.isError;
+  const isFetchingNextPage = page.query.isFetchingNextPage;
+  const loadMoreRecords = page.loadMore;
   const grouped = useMemo(() => groupRecordsByDay(filteredRecords), [filteredRecords]);
   const filterCategory = categories.find((category) => category.id === recordFilters.categoryId);
   const activeFilters: Array<[keyof RecordFilters, string, string | undefined]> = [
@@ -181,7 +132,7 @@ export function useRecordsView() {
     }
     openReviewQueue();
   }
-  async function saveReview(record: WalletRecord, patch: RecordPatch) {
+  async function saveReview(record: RecordReviewBaseline, patch: RecordPatch) {
     if (reviewWriteLock.current) return;
     reviewWriteLock.current = true;
     setReviewWrite(record.id);
@@ -240,9 +191,7 @@ export function useRecordsView() {
     }
   }
   function markReviewQueueSeen() {
-    const newest = dataset.records
-      .filter((record) => record.paymentStatus === "needs_review")
-      .reduce((latest, record) => Math.max(latest, Date.parse(recordReviewDate(record)) || 0), 0);
+    const newest = Date.parse(recordSummary.latestReviewAt ?? "") || 0;
     if (newest > 0) {
       void runAction(
         () =>
@@ -274,7 +223,6 @@ export function useRecordsView() {
     toast,
     toggleReviewQueue,
     isReviewQueueOpen,
-    isAllHistoryComplete,
     reviewCount,
     newReviewCount,
     openNewRecordDialog,
@@ -298,7 +246,12 @@ export function useRecordsView() {
     setShowNoteFilter,
     clearRecordFilters,
     filteredRecords,
-    isSelectedRangeComplete,
+    recordsPage,
+    isFetchingNextPage,
+    loadMoreRecords,
+    isRecordsPending,
+    isRecordsFetching,
+    isRecordsError,
     selectedDateRange,
     selectedMonth,
     appliedFilters,
@@ -308,9 +261,6 @@ export function useRecordsView() {
     runAction,
     deleteRecord,
     reviewCategories,
-    recordsPage,
-    isLoadingMoreRecords,
-    loadMoreRecords,
     focusNoteInput,
     openNoteFilter,
   };

@@ -1,15 +1,15 @@
-import { FormEvent, useRef, useState } from "react";
-import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { calculateAccountBalances, formatMoney } from "@shared/calculations";
+import { formatMoney } from "@shared/calculations";
 import { accountTypeLabels } from "@shared/constants";
+import { BarChart3, Edit3, Eye, EyeOff, Plus, Save, Star, Trash2, X } from "lucide-react";
+import { FormEvent, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { Account, AccountType, CurrencyCode } from "@shared/types";
 
-import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
-import { Badge } from "@/components/ui/badge";
+import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -20,8 +20,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { useWallet } from "@/providers/wallet-provider";
+import { useAccounts } from "@/hooks/wallet-entities";
+import { finishAction } from "@/lib/async-event";
 import { useActionToast } from "@/lib/use-action-toast";
+import { useWallet } from "@/providers/wallet-provider";
 
 interface AccountDraft {
   id: string;
@@ -65,15 +67,8 @@ function buildAccountDrafts(accounts: Account[], primaryAccountId?: string): Acc
 
 export function AccountsView() {
   const navigate = useNavigate();
-  const {
-    dataset,
-    addAccount,
-    updateAccount,
-    deleteAccount,
-    setRecordFilters,
-    setPrimaryAccount,
-    isAllHistoryComplete,
-  } = useWallet();
+  const { dataset, addAccount, updateAccount, deleteAccount, setRecordFilters, setPrimaryAccount } =
+    useWallet();
   const [showHidden, setShowHidden] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -96,7 +91,9 @@ export function AccountsView() {
   const [isVisible, setIsVisible] = useState(true);
   const [isActive, setIsActive] = useState(true);
   const [note, setNote] = useState("");
-  const balances = isAllHistoryComplete ? calculateAccountBalances(dataset) : [];
+  const accountReads = useAccounts();
+  const balances = accountReads.balances;
+  const hasBalances = accountReads.metrics.data !== undefined;
   const visibleBalances = balances.filter((item) => showHidden || item.account.isVisible);
   const visibleAccountDrafts = accountDrafts.filter(
     (draft) => !draft.isDeleted && (showHidden || draft.isVisible),
@@ -330,6 +327,8 @@ export function AccountsView() {
     }
   }
 
+  if (accountReads.metrics.data === undefined)
+    return <ReadState label="accounts" error={accountReads.isError} />;
   return (
     <div>
       <ActionToast toast={toast} />
@@ -690,7 +689,7 @@ export function AccountsView() {
         </fieldset>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {!isAllHistoryComplete ? (
+          {!hasBalances ? (
             <p className="text-sm text-muted-foreground">
               Loading complete history to calculate current balances...
             </p>

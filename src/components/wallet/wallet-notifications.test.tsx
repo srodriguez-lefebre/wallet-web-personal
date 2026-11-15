@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -16,26 +17,27 @@ const state = vi.hoisted(() => ({
   writes: vi.fn(),
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    isAllHistoryComplete: state.complete,
-    clearRecordFilters: () => {
-      state.filters = { type: "all" };
-    },
-    setRecordFilters: (filters: RecordFilters) => {
-      state.filters = { ...state.filters, ...filters };
-    },
-    setAllPeriod: () => {
-      state.period = "all";
-    },
-    openReviewQueue: () => {
-      state.filters = { type: "all", paymentStatus: "needs_review" };
-      state.period = "all";
-    },
-    addRecord: state.writes,
-    recordDebtPayment: state.writes,
-    addCreditCardPayment: state.writes,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      isAllHistoryComplete: state.complete,
+      clearRecordFilters: () => {
+        state.filters = { type: "all" };
+      },
+      setRecordFilters: (filters: RecordFilters) => {
+        state.filters = { ...state.filters, ...filters };
+      },
+      setAllPeriod: () => {
+        state.period = "all";
+      },
+      openReviewQueue: () => {
+        state.filters = { type: "all", paymentStatus: "needs_review" };
+        state.period = "all";
+      },
+      addRecord: state.writes,
+      recordDebtPayment: state.writes,
+      addCreditCardPayment: state.writes,
+    }),
 }));
 // Test renderer cannot mount a DOM portal. Keep notification state and actions
 // real while replacing the popover's DOM boundary.
@@ -225,4 +227,10 @@ test("settled and empty information appears only inside the opened popover", asy
   await open();
   expect(JSON.stringify(tree!.toJSON())).toContain("No pending reviews or debts due soon");
   expect(JSON.stringify(tree!.toJSON())).toContain("All closed statements are settled");
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

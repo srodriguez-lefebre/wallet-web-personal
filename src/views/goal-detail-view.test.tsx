@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -14,12 +15,13 @@ const state = vi.hoisted(() => ({
   messages: [] as string[],
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    updateGoal: state.update,
-    setRecordFilters: vi.fn(),
-    releaseGoalReservation: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      updateGoal: state.update,
+      setRecordFilters: vi.fn(),
+      releaseGoalReservation: vi.fn(),
+    }),
 }));
 vi.mock("react-router-dom", () => ({
   useNavigate: () => vi.fn(),
@@ -183,4 +185,10 @@ test("a completed goal cannot be closed again from the detail action", async () 
     tree = create(<GoalDetailView />);
   });
   expect(tree!.root.findByProps({ "aria-label": "Close goal" }).props.disabled).toBe(true);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

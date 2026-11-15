@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { act, create } from "react-test-renderer";
 import { afterEach, expect, test, vi } from "vitest";
@@ -14,11 +15,12 @@ const auth = vi.hoisted(() => ({
 const update = vi.hoisted(() => vi.fn());
 const addTag = vi.hoisted(() => vi.fn());
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: mockWalletData,
-    updateWalletSettings: update,
-    addTag,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: mockWalletData,
+      updateWalletSettings: update,
+      addTag,
+    }),
 }));
 vi.mock("@/providers/auth-provider", () => ({
   useAuth: () => auth,
@@ -145,4 +147,10 @@ test("disabled revocation never renders the lock-all action", async () => {
   } finally {
     await act(async () => tree.unmount());
   }
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

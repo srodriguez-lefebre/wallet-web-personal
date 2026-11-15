@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -10,18 +11,19 @@ const state = vi.hoisted(() => ({
   importRecords: vi.fn(),
 }));
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset: state.dataset,
-    getBackupDataset: state.backup,
-    getCompleteDataset: state.complete,
-    importRecords: state.importRecords,
-    selectedDateRange: { from: "2026-06-01", to: "2026-06-30" },
-    selectedPeriodMode: "month",
-    isAllHistoryComplete: true,
-    clearRecordFilters: vi.fn(),
-    setRecordFilters: vi.fn(),
-    setAllPeriod: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset: state.dataset,
+      getBackupDataset: state.backup,
+      getCompleteDataset: state.complete,
+      importRecords: state.importRecords,
+      selectedDateRange: { from: "2026-06-01", to: "2026-06-30" },
+      selectedPeriodMode: "month",
+      isAllHistoryComplete: true,
+      clearRecordFilters: vi.fn(),
+      setRecordFilters: vi.fn(),
+      setAllPeriod: vi.fn(),
+    }),
 }));
 vi.mock("react-router-dom", () => ({ useNavigate: () => vi.fn() }));
 vi.mock("@/lib/use-action-toast", () => ({
@@ -123,4 +125,10 @@ test("two import clicks do not submit two financial batches", async () => {
   expect(state.complete).toHaveBeenCalledTimes(1);
   await act(async () => release(state.dataset));
   expect(state.importRecords).toHaveBeenCalledTimes(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

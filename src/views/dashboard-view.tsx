@@ -1,3 +1,15 @@
+import { calculateVisibleDebtSummary, formatMoney, isOpenDebt } from "@shared/calculations";
+import { debtDirectionLabels, goalStatusLabels } from "@shared/constants";
+import {
+  ArrowDownRight,
+  ArrowUpRight,
+  Banknote,
+  CheckCircle2,
+  Flag,
+  Landmark,
+  WalletCards,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import {
   CartesianGrid,
   Cell,
@@ -11,46 +23,25 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  ArrowDownRight,
-  ArrowUpRight,
-  Banknote,
-  CheckCircle2,
-  Flag,
-  Landmark,
-  WalletCards,
-} from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import {
-  calculateAccountBalanceAtDate,
-  calculateAccountBalances,
-  calculateCategoryExpenses,
-  calculateCategoryExpensesForDateRange,
-  calculateGoalProgress,
-  calculateSummary,
-  calculateSummaryForDateRange,
-  calculateVisibleDebtSummary,
-  dateKeysForRange,
-  dateRangeForMonth,
-  formatMoney,
-  isOpenDebt,
-  relativeDateRanges,
-  relativeMonthKeys,
-} from "@shared/calculations";
-import { debtDirectionLabels, goalStatusLabels } from "@shared/constants";
-
-import type { DateRange } from "@shared/types";
 
 import { PageHeader } from "@/components/page/page-header";
+import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { CategoryIcon } from "@/components/wallet/category-icon";
-import { MetricCard } from "@/components/wallet/metric-card";
 import { DebtNetBadge } from "@/components/wallet/debt-net-badge";
+import { MetricCard } from "@/components/wallet/metric-card";
+import {
+  useAccountBalanceTrend,
+  useAccounts,
+  useAnalytics,
+  useGoals,
+  useRecords,
+} from "@/hooks/wallet-entities";
 import { useActionToast } from "@/lib/use-action-toast";
+import { categoryBreakdown } from "@/lib/wallet-read-model";
 import { useWallet } from "@/providers/wallet-provider";
-import { reportDataset } from "@/lib/preferences";
 
 export function DashboardView() {
   const navigate = useNavigate();
@@ -61,44 +52,42 @@ export function DashboardView() {
     selectedDateRange,
     setRecordFilters,
     recordDebtPayment,
-    isAllHistoryComplete,
   } = useWallet();
-  const reportingDataset = reportDataset(dataset);
-  const summary =
-    selectedPeriodMode !== "month"
-      ? calculateSummaryForDateRange(reportingDataset, selectedDateRange)
-      : calculateSummary(reportingDataset, selectedMonth);
-  const accountBalances = isAllHistoryComplete ? calculateAccountBalances(dataset) : [];
+  const accounts = useAccounts();
+  const goals = useGoals();
+  const recent = useRecords();
+  const selection = {
+    ...selectedDateRange,
+    selectedMonth,
+    periodMode: selectedPeriodMode,
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+  const report = useAnalytics(selection, new Date());
+  const accountBalances = accounts.balances;
   const visibleBalances = accountBalances.filter((item) => item.account.isVisible);
   const primaryBalance =
     accountBalances.find((item) => item.account.id === dataset.settings.primaryAccountId) ??
     visibleBalances[0];
-  const categories =
-    selectedPeriodMode !== "month"
-      ? calculateCategoryExpensesForDateRange(reportingDataset, selectedDateRange)
-      : calculateCategoryExpenses(reportingDataset, selectedMonth);
-  const visibleGoals = calculateGoalProgress(dataset).filter(
+  const balanceCurrency = primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
+  const trend = useAccountBalanceTrend(
+    { ...selection, accountId: primaryBalance?.account.id ?? "" },
+    Boolean(primaryBalance),
+  );
+  const balanceTrend = trend.data ?? [];
+  const balanceTooltipFormatter = (value: unknown) =>
+    formatMoney(Number(value ?? 0), balanceCurrency);
+  const visibleGoals = goals.progress.filter(
     (item) => item.goal.isVisible && item.goal.status !== "completed",
   );
   const visibleOpenDebts = dataset.debts.filter((debt) => debt.isVisible && isOpenDebt(debt));
   const debtSummary = calculateVisibleDebtSummary(dataset);
-  const balanceCurrency = primaryBalance?.account.currency ?? dataset.settings.primaryCurrency;
-  const balancePeriods =
-    selectedPeriodMode === "custom"
-      ? relativeDateRanges(selectedDateRange, 3)
-      : relativeMonthKeys(selectedMonth, 3).map(dateRangeForMonth);
-  const balanceTrend = buildBalanceComparisonSeries(
-    dataset,
-    primaryBalance?.account.id,
-    balancePeriods,
-  );
-  const balanceTooltipFormatter = (value: unknown) =>
-    formatMoney(Number(value ?? 0), balanceCurrency);
-  const recentRecords = dataset.records
-    .slice()
-    .sort((a, b) => new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime())
-    .slice(0, 5);
+  const recentRecords = recent.records.slice(0, 5);
+  const hasBalances = accounts.metrics.data !== undefined;
   const { toast, runAction } = useActionToast();
+  if (!report.model || !report.totals.data || goals.metrics.data === undefined)
+    return <ReadState label="dashboard" error={report.isError || goals.isError} />;
+  const summary = report.model.summary;
+  const categories = categoryBreakdown(report.totals.data, "expense");
 
   function goToRecords(filters: Parameters<typeof setRecordFilters>[0]) {
     setRecordFilters(filters);
@@ -141,14 +130,14 @@ export function DashboardView() {
         <MetricCard
           label="Balance"
           value={
-            !isAllHistoryComplete
+            !hasBalances
               ? "Loading history..."
               : primaryBalance
                 ? formatMoney(primaryBalance.balance, primaryBalance.account.currency)
                 : formatMoney(summary.balance, dataset.settings.primaryCurrency)
           }
           detail={
-            !isAllHistoryComplete
+            !hasBalances
               ? "Calculating the current balance"
               : primaryBalance
                 ? `Available in ${primaryBalance.account.name}`
@@ -156,14 +145,14 @@ export function DashboardView() {
           }
           icon={<WalletCards className="h-4 w-4" />}
           tone={
-            !isAllHistoryComplete
+            !hasBalances
               ? "default"
               : (primaryBalance?.balance ?? summary.balance) >= 0
                 ? "success"
                 : "danger"
           }
           onClick={
-            isAllHistoryComplete
+            hasBalances
               ? () =>
                   primaryBalance
                     ? goToRecords({
@@ -209,7 +198,7 @@ export function DashboardView() {
           </CardHeader>
           <CardContent className="h-80 min-w-0">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={isAllHistoryComplete ? balanceTrend : []}>
+              <LineChart data={hasBalances ? balanceTrend : []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="day" tickLine={false} axisLine={false} />
                 <YAxis
@@ -610,26 +599,6 @@ export function DashboardView() {
       </div>
     </div>
   );
-}
-
-function buildBalanceComparisonSeries(
-  dataset: Parameters<typeof calculateAccountBalanceAtDate>[0],
-  accountId: string | undefined,
-  ranges: DateRange[],
-) {
-  const [twoPeriodsAgo, previous, current] = ranges.map((range) =>
-    dateKeysForRange(range).map((date) =>
-      accountId ? calculateAccountBalanceAtDate(dataset, accountId, date) : null,
-    ),
-  );
-  const maxDays = Math.max(twoPeriodsAgo?.length ?? 0, previous?.length ?? 0, current?.length ?? 0);
-
-  return Array.from({ length: maxDays }, (_, index) => ({
-    day: `Day ${index + 1}`,
-    previousPrevious: twoPeriodsAgo?.[index] ?? null,
-    previous: previous?.[index] ?? null,
-    current: current?.[index] ?? null,
-  }));
 }
 
 function formatRecordDateTime(value: string) {

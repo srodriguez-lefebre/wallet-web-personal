@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -20,31 +21,32 @@ let dataset: WalletDataset,
   newRecordRequestId = 0,
   newRecordTemplateId: string | null = null;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2026-10",
-    selectedPeriodMode: "month",
-    selectedDateRange: { from: "2026-10-01", to: "2026-10-31" },
-    recordFilters: {},
-    setRecordFilters: vi.fn(),
-    clearRecordFilters: vi.fn(),
-    setAllPeriod: vi.fn(),
-    addRecord: actions.addRecord,
-    updateRecord: actions.updateRecord,
-    deleteRecord: vi.fn(),
-    newRecordRequestId,
-    newRecordTemplateId,
-    consumeNewRecordRequest: actions.consume,
-    recordsPage: { hasMore: false },
-    isLoadingMoreRecords: false,
-    isSelectedRangeComplete: true,
-    isAllHistoryComplete: true,
-    loadMoreRecords: vi.fn(),
-    getCompleteDataset: actions.read,
-    addRecordTemplate: actions.addTemplate,
-    updateRecordTemplate: actions.updateTemplate,
-    deleteRecordTemplate: actions.removeTemplate,
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2026-10",
+      selectedPeriodMode: "month",
+      selectedDateRange: { from: "2026-10-01", to: "2026-10-31" },
+      recordFilters: {},
+      setRecordFilters: vi.fn(),
+      clearRecordFilters: vi.fn(),
+      setAllPeriod: vi.fn(),
+      addRecord: actions.addRecord,
+      updateRecord: actions.updateRecord,
+      deleteRecord: vi.fn(),
+      newRecordRequestId,
+      newRecordTemplateId,
+      consumeNewRecordRequest: actions.consume,
+      recordsPage: { hasMore: false },
+      isLoadingMoreRecords: false,
+      isSelectedRangeComplete: true,
+      isAllHistoryComplete: true,
+      loadMoreRecords: vi.fn(),
+      getCompleteDataset: actions.read,
+      addRecordTemplate: actions.addTemplate,
+      updateRecordTemplate: actions.updateTemplate,
+      deleteRecordTemplate: actions.removeTemplate,
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -252,4 +254,10 @@ test("needs-review records display an amber status label", async () => {
     .findAllByType("span")
     .filter((span) => span.children.includes("Needs review"));
   expect(labels.some((label) => label.props.className.includes("bg-amber"))).toBe(true);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

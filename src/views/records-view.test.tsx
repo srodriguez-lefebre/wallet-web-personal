@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { mockWalletData } from "@shared/mock-data";
 import { recordCreateSchema } from "@shared/schemas";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
@@ -22,31 +23,32 @@ let periodMode: "month" | "all";
 let historyComplete: boolean;
 let isReviewQueueOpen: boolean;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    selectedMonth: "2020-06",
-    selectedPeriodMode: periodMode,
-    selectedDateRange:
-      periodMode === "all"
-        ? { from: "2019-01-01", to: "2026-12-31" }
-        : { from: "2020-06-01", to: "2020-06-30" },
-    recordFilters: filters,
-    setRecordFilters: setFilters,
-    clearRecordFilters: clearFilters,
-    setAllPeriod,
-    openReviewQueue,
-    closeReviewQueue,
-    isReviewQueueOpen,
-    addRecord: add,
-    updateRecord: update,
-    deleteRecord: vi.fn(),
-    newRecordRequestId: 0,
-    consumeNewRecordRequest: vi.fn(),
-    recordsPage: {},
-    isAllHistoryComplete: historyComplete,
-    isSelectedRangeComplete: historyComplete,
-    loadMoreRecords: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      selectedMonth: "2020-06",
+      selectedPeriodMode: periodMode,
+      selectedDateRange:
+        periodMode === "all"
+          ? { from: "2019-01-01", to: "2026-12-31" }
+          : { from: "2020-06-01", to: "2020-06-30" },
+      recordFilters: filters,
+      setRecordFilters: setFilters,
+      clearRecordFilters: clearFilters,
+      setAllPeriod,
+      openReviewQueue,
+      closeReviewQueue,
+      isReviewQueueOpen,
+      addRecord: add,
+      updateRecord: update,
+      deleteRecord: vi.fn(),
+      newRecordRequestId: 0,
+      consumeNewRecordRequest: vi.fn(),
+      recordsPage: {},
+      isAllHistoryComplete: historyComplete,
+      isSelectedRangeComplete: historyComplete,
+      loadMoreRecords: vi.fn(),
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -682,4 +684,10 @@ test("editing an existing card-only purchase retains Card only", async () => {
   expect(
     tree!.root.findAllByType("option").filter((option) => option.children.includes("Card only")),
   ).toHaveLength(1);
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

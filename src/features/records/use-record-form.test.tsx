@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 // @vitest-environment jsdom
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { mockWalletData } from "@shared/mock-data";
@@ -11,15 +12,16 @@ import type { WalletDataset } from "@shared/types";
 const update = vi.hoisted(() => vi.fn());
 let dataset: WalletDataset;
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({
-    dataset,
-    recordFilters: {},
-    updateRecord: update,
-    addRecord: vi.fn(),
-    deleteRecord: vi.fn(),
-    newRecordRequestId: 0,
-    consumeNewRecordRequest: vi.fn(),
-  }),
+  useWallet: () =>
+    withWalletMetadata({
+      dataset,
+      recordFilters: {},
+      updateRecord: update,
+      addRecord: vi.fn(),
+      deleteRecord: vi.fn(),
+      newRecordRequestId: 0,
+      consumeNewRecordRequest: vi.fn(),
+    }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({ toast: null, runAction: (action: () => Promise<unknown>) => action() }),
@@ -105,4 +107,10 @@ test("duplicate uses the open snapshot after the source leaves the active page",
   expect(result.current.amount).toBe("100");
   expect(result.current.currency).toBe("EUR");
   expect(result.current.accountAmount).toBe("");
+});
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
 });

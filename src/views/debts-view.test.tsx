@@ -1,3 +1,4 @@
+import { withWalletMetadata } from "@/test/legacy-wallet-view";
 import { act, create, type ReactTestRenderer } from "react-test-renderer";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -12,7 +13,7 @@ const reportedToast = vi.hoisted(() => vi.fn());
 const runnerState = vi.hoisted(() => ({ returnFalseOnFailure: false }));
 let dataset = structuredClone(mockWalletData);
 vi.mock("@/providers/wallet-provider", () => ({
-  useWallet: () => ({ dataset, recordDebtPayment: payment }),
+  useWallet: () => withWalletMetadata({ dataset, recordDebtPayment: payment }),
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({
@@ -117,3 +118,9 @@ test.each(["partial", "settle"] as const)(
     expect(payment.mock.calls[1]![1].idempotencyKey).toBe(firstKey);
   },
 );
+
+vi.mock("@/hooks/wallet-entities", async () => {
+  const { legacyEntityHooks } = await import("@/test/legacy-wallet-view");
+  const { useWallet } = await import("@/providers/wallet-provider");
+  return legacyEntityHooks(useWallet);
+});

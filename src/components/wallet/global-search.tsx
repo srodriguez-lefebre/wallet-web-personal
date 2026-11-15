@@ -23,7 +23,6 @@ export function GlobalSearch() {
     setAllPeriod,
     openReviewQueue,
     requestNewRecord,
-    isAllHistoryComplete,
   } = useWallet();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -123,12 +122,7 @@ export function GlobalSearch() {
           <p className="text-xs text-muted-foreground">
             Tab to a result and press Enter. Escape closes search. Up to 20 results.
           </p>
-          {!isAllHistoryComplete ? (
-            <p className="text-xs text-muted-foreground">
-              Record history may be incomplete. Record shortcuts open all history; check the loading
-              status in Records.
-            </p>
-          ) : null}
+          <p className="text-xs text-muted-foreground">Record shortcuts search all dates.</p>
           <ul aria-label="Search results" className="max-h-[50vh] space-y-1 overflow-y-auto">
             {results.map((result) => (
               <li key={result.id}>

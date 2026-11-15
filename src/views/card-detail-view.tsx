@@ -1,16 +1,13 @@
-import { type FormEvent, useMemo, useRef, useState } from "react";
+import { formatMoney } from "@shared/calculations";
 import { differenceInCalendarDays, format, parseISO } from "date-fns";
 import { ArrowLeft, Pencil, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
+import { type FormEvent, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { calculateCreditCardSummary, formatMoney } from "@shared/calculations";
 
 import type { Category, CreditCardRecord, CurrencyCode } from "@shared/types";
 
-import { finishAction } from "@/lib/async-event";
 import { PageHeader } from "@/components/page/page-header";
-import { CategoryPicker } from "@/components/wallet/category-picker";
-import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
-import { cardStatementBalanceAsOf, selectCardStatement } from "@/lib/cards-presentation";
+import { ReadState } from "@/components/page/read-state";
 import { ActionToast } from "@/components/ui/action-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -23,8 +20,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
-import { useActionToast } from "@/lib/use-action-toast";
+import { CategoryPicker } from "@/components/wallet/category-picker";
+import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
+import { useCard } from "@/hooks/wallet-entities";
+import { finishAction } from "@/lib/async-event";
+import { cardStatementBalanceAsOf, selectCardStatement } from "@/lib/cards-presentation";
 import { localDateInput } from "@/lib/date-input";
+import { useActionToast } from "@/lib/use-action-toast";
 import { useWallet } from "@/providers/wallet-provider";
 
 const field =
@@ -43,24 +45,30 @@ export function CardDetailView() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const {
-    dataset,
+    dataset: reference,
     addCreditCardRecord,
     updateCreditCardRecord,
     addCreditCardRefund,
     deleteCreditCardRecord,
     payCreditCardStatement,
     deleteCreditCardPayment,
-    isAllHistoryComplete,
   } = useWallet();
-  const card = dataset.creditCards.find((item) => item.id === cardId);
-  const summary = useMemo(
-    () => (card ? calculateCreditCardSummary(dataset, card) : null),
-    [card, dataset],
+  const reads = useCard(cardId);
+  const dataset = useMemo(
+    () => ({ ...reference, ...reads.ledger.data }),
+    [reference, reads.ledger.data],
   );
+  const card = reads.card;
+  const summary = reads.summary.data;
+  const isCardReady =
+    Boolean(reads.ledger.data && reads.summary.data) &&
+    !reads.ledger.isFetching &&
+    !reads.summary.isFetching &&
+    !reads.isError;
   const movements = dataset.creditCardRecords.filter((item) => item.creditCardId === cardId);
   const statements = dataset.creditCardStatements.filter((item) => item.creditCardId === cardId);
   const payments = dataset.creditCardPayments.filter((item) => item.creditCardId === cardId);
-  const payableStatement = isAllHistoryComplete
+  const payableStatement = isCardReady
     ? selectCardStatement(dataset, cardId, searchParams.get("statementId"))
     : undefined;
   const payableStatementBalance = useMemo(
@@ -89,6 +97,8 @@ export function CardDetailView() {
     occurredAt: string;
   } | null>(null);
 
+  if (card && (!summary || !reads.ledger.data))
+    return <ReadState label="card" error={reads.isError} />;
   if (!card || !summary) {
     return (
       <Card>
@@ -428,9 +438,7 @@ export function CardDetailView() {
               {formatMoney(summary.usedLimit, card.limitCurrency)}
             </p>
             <Progress value={Math.min(100, summary.utilizationPercent)} />
-            {isAllHistoryComplete && (
-              <LimitUsageAlert utilizationPercent={summary.utilizationPercent} />
-            )}
+            {isCardReady && <LimitUsageAlert utilizationPercent={summary.utilizationPercent} />}
             <p className="text-sm text-muted-foreground">
               {formatMoney(summary.availableLimit, card.limitCurrency)} available
             </p>
@@ -454,7 +462,7 @@ export function CardDetailView() {
         <Card>
           <CardHeader>
             <CardTitle>Statement</CardTitle>
-            {isAllHistoryComplete && statements.length > 0 && (
+            {isCardReady && statements.length > 0 && (
               <label className="block space-y-1 text-sm">
                 Select statement
                 <select
@@ -494,7 +502,7 @@ export function CardDetailView() {
                     : "warning"
               }
             >
-              {!isAllHistoryComplete
+              {!isCardReady
                 ? "Loading history..."
                 : !payableStatementBalance || payableStatementBalance.dueAmountInLimitCurrency <= 0
                   ? "Settled"
@@ -543,7 +551,7 @@ export function CardDetailView() {
             <p className="text-sm text-muted-foreground">
               {payableStatement
                 ? `Due ${payableStatement.dueAt.slice(0, 10)}`
-                : isAllHistoryComplete
+                : isCardReady
                   ? "No closed statement pending"
                   : "Loading complete history..."}
             </p>
