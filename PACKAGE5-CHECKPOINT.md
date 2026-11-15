@@ -1,4 +1,4 @@
-# Paquete 5 — implementación validada, revisión y release pendientes
+# Paquete 5 - revisión corregida, release pendiente
 
 Base: `2b393e60a57cb79b77e7713d2b023eef01dd0fb4` (PR #12 ya desplegado).
 Rama única: `refactor/05-ingestion-shared`. Queda un solo PR autorizado.
@@ -22,6 +22,15 @@ Checks locales completos: 135 archivos, 914 pruebas aprobadas, una omisión de
 plataforma Windows; formato, lint, `mail:check`, tipos, build y OpenAPI aprobados.
 Sandbox: 11 archivos, 108 aprobadas y la misma omisión. Se usaron datos sintéticos.
 La revisión independiente de toda la rama y sus correcciones preceden al merge.
+
+La única revisión independiente detectó cuatro hallazgos Important y uno Minor,
+recalificado como Important por el riesgo de repetir un reemplazo ya confirmado
+en la base. Se corrigieron en una sola pasada RED→GREEN: importes completos en
+TS/GS, claves por encima de nombres y categorías eliminadas, procesadores con
+sufijos bancarios, claves en backups antiguos con IDs distintos o base nueva y
+resultado incierto de importadores tras perder la respuesta. El primer conjunto
+de regresiones dirigido terminó con 37 pruebas aprobadas; los checks completos
+posteriores se registran en la evidencia de release. No quedaron menores diferidos.
 
 El destino Neon fue cotejado con su consola autenticada y la configuración local.
 El preflight de sólo lectura confirmó 23 entradas anteriores, hashes históricos
@@ -56,6 +65,21 @@ La migración, CI, preview, merge y alias productivo requieren sus evidencias po
 10. Usar verificaciones y ledger equivalentes en Windows para los helpers POSIX del
     workflow, y conservar este worktree/evidencia para el traspaso pedido. Costo:
     bookkeeping manual y archivos locales de evidencia que permanecen disponibles.
+11. Reutilizar el backfill SQL dentro del restore y rechazar identidades ambiguas.
+    Costo: un backup ambiguo requiere claves explícitas o nombres inequívocos;
+    no se adivinan asignaciones ni se modifica la base parcialmente.
+12. Informar resultado sin confirmar ante cualquier fallo del CLI de importación.
+    Costo: exige inspección antes de repetir incluso si el fallo fue previo al batch;
+    evita asegurar falsamente un rollback después de un commit sin respuesta.
+
+La revisión declinó juzgar los gates remotos, Apps Script vivo, disponibilidad/calidad
+real de proveedores, el archivo original no materializado y las referencias de
+deuda históricas. Resolución: comprobar los gates con evidencia de release; mantener
+Apps Script sin cambios mientras falte respaldo aprobado; usar contratos oficiales
+y fallos sintéticos para proveedores; conservar la lectura directa de Library y
+no reparar historia fuera del alcance. Los circuitos que sobreviven al restore y
+la protección adicional durante rollback son costos aceptados arriba. No se pidió
+una segunda revisión ni se delegó la implementación.
 
 `AGENTS.md` del worktree se actualizó localmente con la arquitectura actual; sigue
 ignorado y no se fuerza a Git. El archivo del checkout original permanece intacto.

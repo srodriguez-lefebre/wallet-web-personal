@@ -123,3 +123,14 @@ test("equal amounts on different dates preserve both original timestamps", () =>
   expect(first.amount).toBe(second.amount);
   expect(first.date.toISOString()).not.toBe(second.date.toISOString());
 });
+
+test.each(["1 234,56", "1e3", "123,45oops"])(
+  "Automation Wallet validates the complete amount field in TS and generated GS: %s",
+  (amount) => {
+    const input = { ...message(cases[4]), plainBody: cases[4].body.replace("$ 80", `$ ${amount}`) };
+    for (const parse of [parseEmail, gs.parseEmail]) {
+      if (amount === "1 234,56") expect(parse(input)?.amount).toBe(1234.56);
+      else expect(() => parse(input)).toThrow();
+    }
+  },
+);

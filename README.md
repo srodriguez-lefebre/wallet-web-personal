@@ -568,6 +568,15 @@ El backfill asigna claves sólo a categorías canónicas no ambiguas, sin cambia
 nombres, padres, asignaciones manuales ni movimientos. Renombrar una categoría
 conserva la clasificación. Un procesador sin comercio identificable y una cuenta
 bancaria sin mapear quedan en Needs review.
+La identidad por clave prevalece sobre el nombre visible, incluso si una categoría
+válida se renombra como «Others»; las claves de revisión o eliminación nunca
+confirman una clasificación. Los sufijos bancarios conocidos de procesadores se
+guardan como políticas SQL y no inventan el comercio subyacente.
+
+Al restaurar un backup antiguo sin claves se conservan primero las identidades
+existentes por ID o nombre inequívoco; la misma rutina SQL del backfill completa
+las correspondencias canónicas. Las claves explícitas prevalecen. Una identidad
+ambigua rechaza toda la restauración y conserva la base anterior.
 
 OpenAI dispone de 10 segundos por llamada y Frankfurter v2 de 4, incluida la lectura
 de la respuesta. Tres fallos consecutivos abren un circuito persistente durante
@@ -627,3 +636,6 @@ origen y destino explícitas. Las referencias de otros módulos que impidan un r
 provocan rollback; no se borran para forzar la importación. Respaldar antes de una
 importación solicitada expresamente; estos scripts no se ejecutan como parte del
 despliegue ni de las pruebas contra producción.
+Si se pierde la respuesta HTTP, el resultado del importador queda sin confirmar:
+inspeccionar la base antes de repetir el reemplazo. Un error de transporte no
+demuestra que la transacción haya revertido.

@@ -77,8 +77,8 @@
 
 ## Task 5: Single final release and conditional live Apps Script update
 
-- [ ] Update README, mail instructions, operational checkpoint and generated artifacts. Run `mail:check`, full `npm run check`, sandbox and synthetic full-stack smoke including ingestion retries, equal salaries, generic/unmapped review and backup/restore. Stop own servers.
-- [ ] One fresh whole-branch reviewer; fix Important/Critical findings with RED→GREEN and a green suite, record rulings and deferred minors.
+- [x] Update README, mail instructions, operational checkpoint and generated artifacts. Run `mail:check`, full `npm run check`, sandbox and synthetic full-stack smoke including ingestion retries, equal salaries, generic/unmapped review and backup/restore. Stop own servers.
+- [x] One fresh whole-branch reviewer; fix Important/Critical findings with RED→GREEN and a green suite, record rulings and deferred minors.
 - [ ] Validate additive migration target and rollback evidence before authenticated preview testing or release. Draft branch pushes and build verification preserve the checkpoint while that gate is pending; they do not authorize requests against real financial data. Open one draft PR, require exact-head CI and READY preview, then ready/normal merge without bypass. Verify main CI, merged SHA, production READY/alias and unauthenticated GET smoke.
 - [ ] Reverify Chrome identity/project, save a prior-code backup, compare versioned GS artifacts with the deployed backend contract, then apply through the authorized browser workflow only. No triggers/scopes/properties/credentials/real batches. If a precondition fails, leave the tested versioned code and report the exact blocker.
 - [ ] Record final evidence and stop; no sixth PR or unrelated work.

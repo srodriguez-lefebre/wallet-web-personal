@@ -70,16 +70,12 @@ export async function resolveCategory(
   const allCategories = await db.select().from(categories).where(isNull(categories.deletedAt));
   const fallback =
     allCategories.find((item) => item.systemKey === "unknown_expense") ??
-    allCategories.find((item) => item.name.toLowerCase() === "unknown expense") ??
-    allCategories.find((item) => item.name.toLowerCase() === "others");
-  const isUnknown = (id: string) => {
-    const category = allCategories.find((item) => item.id === id);
-    return (
-      !category ||
-      category.systemKey === "unknown_expense" ||
-      ["unknown expense", "others"].includes(category.name.toLowerCase())
-    );
-  };
+    allCategories.find(
+      (item) => !item.systemKey && item.name.toLowerCase() === "unknown expense",
+    ) ??
+    allCategories.find((item) => item.systemKey === "others") ??
+    allCategories.find((item) => !item.systemKey && item.name.toLowerCase() === "others");
+  const isUnknown = (id: string) => !isReviewCategory(allCategories.find((item) => item.id === id));
   if (useCorrections) {
     const correctedRecords = await db
       .select({
@@ -126,11 +122,20 @@ export async function resolveCategory(
         };
     }
   }
+  const descriptorWithoutReferences = normalizeMerchantTerm(merchantRaw)
+    .split(" ")
+    .filter((token) => !/^\d+$/.test(token))
+    .join(" ");
+  // Numeric terminal references may interrupt a processor's location suffix.
+  // Only policy candidates use this alternate descriptor; merchant identity does not.
+  const policyTerms = [
+    ...new Set([...merchantTerms, ...matchingMerchantTerms(descriptorWithoutReferences)]),
+  ];
   const policies = await db
     .select()
     .from(merchantCategoryRules)
     .where(
-      sql`${merchantCategoryRules.normalizedAlias} IN (SELECT value FROM jsonb_array_elements_text(${JSON.stringify(merchantTerms)}::jsonb))`,
+      sql`${merchantCategoryRules.normalizedAlias} IN (SELECT value FROM jsonb_array_elements_text(${JSON.stringify(policyTerms)}::jsonb))`,
     );
   const policy = pickLongestMerchantMatch(
     merchantRaw,
@@ -138,10 +143,6 @@ export async function resolveCategory(
       allCategories.some((category) => category.systemKey === rule.categorySystemKey),
     ),
   );
-  const descriptorWithoutReferences = normalizeMerchantTerm(merchantRaw)
-    .split(" ")
-    .filter((token) => !/^\d+$/.test(token))
-    .join(" ");
   const processorPolicy = policies.find(
     (rule) =>
       rule.reviewWhenMissing &&

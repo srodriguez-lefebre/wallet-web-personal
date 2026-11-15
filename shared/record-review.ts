@@ -8,9 +8,11 @@ export function isReviewCategory<T extends Pick<Category, "name"> & { systemKey?
 ): category is T {
   return Boolean(
     category &&
-    category.systemKey !== "unknown_expense" &&
-    category.systemKey !== "category_eliminated" &&
-    !["unknown expense", "others", "category eliminated"].includes(category.name.toLowerCase()),
+    (category.systemKey
+      ? !["unknown_expense", "category_eliminated", "others"].includes(category.systemKey)
+      : !["unknown expense", "others", "category eliminated"].includes(
+          category.name.trim().toLowerCase(),
+        )),
   );
 }
 

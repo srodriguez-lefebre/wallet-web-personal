@@ -7,6 +7,7 @@ import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.
 import { createDb } from "./client.js";
 import { getWalletBackup, getWalletDataset } from "./index.js";
 import { restoreWalletBackup } from "./wallet-restore.js";
+import { resolveCategory } from "../ingestion/category-resolution.js";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 const accountId = randomUUID(),
   categoryId = randomUUID(),
@@ -156,4 +157,60 @@ test("legacy restore prunes ingestion references and all duplicate descendants o
     );
   await restoreWalletBackup(createDb(), backup);
   expect((await fixture.pool.query("SELECT id FROM ingestion_events")).rows).toEqual([]);
+});
+
+test("fresh legacy restore assigns canonical keys before ingestion without changing explicit keys", async () => {
+  const backup = await getWalletBackup(createDb());
+  backup.categories.find((c) => c.id === categoryId)!.name = "Taxi";
+  const explicit = randomUUID();
+  backup.categories.push({
+    ...backup.categories[0]!,
+    id: explicit,
+    name: "Bakery",
+    systemKey: "custom_preserved",
+  });
+  await fixture.pool.query("TRUNCATE merchants,categories CASCADE");
+  await restoreWalletBackup(createDb(), backup);
+  expect(
+    (await fixture.pool.query("SELECT system_key FROM categories WHERE id=$1", [categoryId])).rows,
+  ).toEqual([{ system_key: "taxi" }]);
+  expect(
+    (await fixture.pool.query("SELECT system_key FROM categories WHERE id=$1", [explicit])).rows,
+  ).toEqual([{ system_key: "custom_preserved" }]);
+  expect(await resolveCategory(createDb(), "UBER SYNTHETIC RESTORED")).toMatchObject({
+    categoryId,
+    source: "generic_rule",
+    needsReview: false,
+  });
+});
+
+test("legacy backup with changed category IDs preserves keyed current merchant mappings", async () => {
+  await fixture.pool.query("UPDATE categories SET system_key='custom_restore_key' WHERE id=$1", [
+    categoryId,
+  ]);
+  const backup = await getWalletBackup(createDb());
+  const nextId = randomUUID();
+  backup.categories.find((c) => c.id === categoryId)!.id = nextId;
+  backup.categories.find((c) => c.id === nextId)!.systemKey = undefined;
+  const legacy = { ...backup } as Record<string, unknown>;
+  delete legacy.merchants;
+  delete legacy.merchantAliases;
+  await restoreWalletBackup(createDb(), legacy);
+  expect(
+    (await fixture.pool.query("SELECT category_id FROM merchants WHERE id=$1", [merchantId])).rows,
+  ).toEqual([{ category_id: nextId }]);
+  expect(
+    (await fixture.pool.query("SELECT system_key FROM categories WHERE id=$1", [nextId])).rows,
+  ).toEqual([{ system_key: "custom_restore_key" }]);
+});
+
+test("ambiguous canonical key in a legacy backup rejects the complete replacement", async () => {
+  const backup = await getWalletBackup(createDb());
+  backup.categories.find((c) => c.id === categoryId)!.name = "Taxi";
+  backup.categories.push({ ...backup.categories[0]!, id: randomUUID(), name: "taxi" });
+  await expect(restoreWalletBackup(createDb(), backup)).rejects.toThrow(/ambiguous/i);
+  expect(
+    (await fixture.pool.query("SELECT name FROM categories WHERE id=$1", [categoryId])).rows,
+  ).toEqual([{ name: "Restore category" }]);
+  expect((await fixture.pool.query("SELECT id FROM merchants")).rows).toEqual([{ id: merchantId }]);
 });

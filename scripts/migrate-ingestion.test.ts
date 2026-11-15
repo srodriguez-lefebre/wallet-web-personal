@@ -10,7 +10,7 @@ let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>;
 beforeAll(async () => {
   fixture = await createPostgresTestDatabase();
   await fixture.pool.query(
-    "DROP INDEX merchant_aliases_search_idx; DROP INDEX record_merchant_correction_search_idx; DROP FUNCTION wallet_normalize_merchant(text); DROP TABLE merchant_category_rules,provider_state; CREATE SCHEMA drizzle; CREATE TABLE drizzle.__drizzle_migrations(id serial PRIMARY KEY,hash text NOT NULL,created_at bigint)",
+    "DROP INDEX merchant_aliases_search_idx; DROP INDEX record_merchant_correction_search_idx; DROP FUNCTION wallet_normalize_merchant(text); DROP FUNCTION wallet_assign_category_keys(boolean); DROP TABLE merchant_category_rules,provider_state; CREATE SCHEMA drizzle; CREATE TABLE drizzle.__drizzle_migrations(id serial PRIMARY KEY,hash text NOT NULL,created_at bigint)",
   );
   for (const entry of (await migrationManifest()).filter((entry) => entry.tag < "0023"))
     await fixture.pool.query(

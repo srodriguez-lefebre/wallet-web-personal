@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { isNull } from "drizzle-orm";
 import { createDb } from "../server/db/client.ts";
 import { categories } from "../server/db/schema.ts";
+import { runImportCli } from "./import/cli-outcome.ts";
 import {
   merchantSourcePath,
   prepareMerchantImport,
@@ -30,10 +31,5 @@ async function main() {
   );
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().catch(() => {
-    console.error(
-      "Merchant import failed. No replacement was committed; provide a valid catalog path and stable category keys.",
-    );
-    process.exitCode = 1;
-  });
+  process.exitCode = await runImportCli(main, "Merchant");
 }

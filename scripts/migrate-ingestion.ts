@@ -27,12 +27,17 @@ async function migrationPlan() {
   );
   if (createHash("sha256").update(source).digest("hex") !== entry.hash)
     throw new MigrationInputError("Migration source changed during preparation; stop for review");
-  const expectedNormalizer = source
-    .match(/CREATE FUNCTION wallet_normalize_merchant[\s\S]*?AS \$\$([\s\S]*?)\$\$;/)?.[1]
-    ?.trim();
-  if (!expectedNormalizer)
-    throw new MigrationInputError("Missing versioned normalization function");
-  return { entry, previous, source, expectedNormalizer, countBefore: manifest.length - 1 };
+  const expectedFunctions = new Map(
+    [...source.matchAll(/CREATE FUNCTION (wallet_\w+)\([\s\S]*?AS \$\$([\s\S]*?)\$\$;/g)].map(
+      (match) => [match[1]!, match[2]!.trim()],
+    ),
+  );
+  if (
+    !expectedFunctions.has("wallet_normalize_merchant") ||
+    !expectedFunctions.has("wallet_assign_category_keys")
+  )
+    throw new MigrationInputError("Missing versioned ingestion functions");
+  return { entry, previous, source, expectedFunctions, countBefore: manifest.length - 1 };
 }
 
 const expectedColumns: Record<string, { type: string; nullable: string; default?: string }> = {
@@ -77,7 +82,7 @@ export async function inspectIngestionMigration(db: DbClient) {
       )})`,
     ),
     db.execute(
-      sql`SELECT prosrc,provolatile,proisstrict,proparallel,format_type(prorettype,NULL) AS return_type FROM pg_proc WHERE oid=to_regprocedure('public.wallet_normalize_merchant(text)')`,
+      sql`SELECT proname,prosrc,provolatile,proisstrict,proparallel,format_type(prorettype,NULL) AS return_type FROM pg_proc WHERE oid IN (to_regprocedure('public.wallet_normalize_merchant(text)'),to_regprocedure('public.wallet_assign_category_keys(boolean)'))`,
     ),
     db.execute(
       sql`SELECT id,hash,created_at FROM drizzle.__drizzle_migrations ORDER BY created_at,id`,
@@ -111,17 +116,23 @@ export async function inspectIngestionMigration(db: DbClient) {
       );
     })
     .map(([name]) => name);
-  const normalizer = results[3].rows[0];
-  const normalizerReady =
-    normalizer?.prosrc === `\n${plan.expectedNormalizer}\n` ||
-    (typeof normalizer?.prosrc === "string" &&
-      normalizer.prosrc.trim() === plan.expectedNormalizer);
+  const normalizer = results[3].rows.find((row) => row.proname === "wallet_normalize_merchant");
+  const assigner = results[3].rows.find((row) => row.proname === "wallet_assign_category_keys");
   const functionReady =
-    normalizerReady &&
+    results[3].rows.length === 2 &&
+    results[3].rows.every(
+      (row) =>
+        typeof row.prosrc === "string" &&
+        row.prosrc.trim() === plan.expectedFunctions.get(String(row.proname)),
+    ) &&
     normalizer?.provolatile === "i" &&
     normalizer.proisstrict === true &&
     normalizer.proparallel === "s" &&
-    normalizer.return_type === "text";
+    normalizer.return_type === "text" &&
+    assigner?.provolatile === "v" &&
+    assigner.proisstrict === false &&
+    assigner.proparallel === "u" &&
+    assigner.return_type === "void";
   // Historical orphan debt references are deliberately supported; 0023 adds no FK or data repair.
   const saneBaseline =
     baseline.journalPresent &&

@@ -298,7 +298,7 @@ var WalletMail = (() => {
   function parseMatch5(message, body) {
     const alias = body.match(/Tarjeta\s*\/\s*Pase\s*:\s*([^\n|]+)/i);
     const merchant = body.match(/Nombre\s*\/\s*Contraparte\s*:\s*([^\n|]+)/i);
-    const amount = body.match(/Monto\s*:\s*(?:([A-Z]{3})\s*)?\$?\s*([0-9][0-9.,]*)/i);
+    const amount = body.match(/Monto\s*:\s*(?:([A-Z]{3})[ \t]*)?\$?[ \t]*([^\n|]+)/i);
     if (!alias || !merchant || !amount) throw new Error("Consumo Automation Wallet incompleto.");
     return {
       source: "automation_wallet",

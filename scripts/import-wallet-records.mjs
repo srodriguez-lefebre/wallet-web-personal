@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createDb } from "../server/db/client.ts";
 import { prepareWalletImport, importWalletRecords } from "./import/wallet-records.ts";
+import { runImportCli } from "./import/cli-outcome.ts";
 
 async function main() {
   try {
@@ -19,10 +20,5 @@ async function main() {
   console.log(JSON.stringify(prepared.counts, null, 2));
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  void main().catch(() => {
-    console.error(
-      "Wallet import failed. The replacement transaction was not committed; check the CSV and database configuration.",
-    );
-    process.exitCode = 1;
-  });
+  process.exitCode = await runImportCli(main, "Wallet");
 }
