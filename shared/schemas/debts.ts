@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import {
+  positiveMoneySchema,
+  nonnegativeMoneySchema,
   debtDirectionSchema,
   currencySchema,
   uuidSchema,
@@ -12,8 +14,8 @@ export const debtSchema = z
   .object({
     name: z.string().min(1),
     direction: debtDirectionSchema,
-    originalAmount: z.number().positive().optional(),
-    pendingAmount: z.number().nonnegative().optional(),
+    originalAmount: positiveMoneySchema.optional(),
+    pendingAmount: nonnegativeMoneySchema.optional(),
     currency: currencySchema,
     counterpartyName: z.string().min(1),
     accountId: uuidSchema.optional(),
@@ -43,7 +45,7 @@ export const debtSchema = z
 export const recurringDebtSchema = z.object({
   name: z.string().min(1),
   direction: debtDirectionSchema,
-  amount: z.number().positive().optional(),
+  amount: positiveMoneySchema.optional(),
   currency: currencySchema,
   counterpartyName: z.string().min(1),
   accountId: uuidSchema.optional(),
@@ -67,8 +69,8 @@ export const debtPaymentSchema = z.object({
 export const debtPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
   direction: debtDirectionSchema.optional(),
-  originalAmount: z.number().positive().nullable().optional(),
-  pendingAmount: z.number().nonnegative().nullable().optional(),
+  originalAmount: positiveMoneySchema.nullable().optional(),
+  pendingAmount: nonnegativeMoneySchema.nullable().optional(),
   currency: currencySchema.optional(),
   counterpartyName: z.string().min(1).optional(),
   accountId: uuidSchema.nullable().optional(),
@@ -85,7 +87,7 @@ export const debtPatchSchema = nonEmptyPatch({
 export const recurringDebtPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
   direction: debtDirectionSchema.optional(),
-  amount: z.number().positive().nullable().optional(),
+  amount: positiveMoneySchema.nullable().optional(),
   currency: currencySchema.optional(),
   counterpartyName: z.string().min(1).optional(),
   accountId: uuidSchema.nullable().optional(),

@@ -95,7 +95,8 @@ export async function inspectMigrationState(db: DbClient) {
       sql`SELECT current_database() AS database,to_regclass('drizzle.__drizzle_migrations')::text AS journal`,
     ),
     db.execute(
-      sql`SELECT table_name,column_name,data_type,is_nullable,column_default FROM information_schema.columns WHERE table_schema='public'`,
+      sql`SELECT table_name,column_name,data_type,is_nullable,column_default,numeric_precision,numeric_scale
+        FROM information_schema.columns WHERE table_schema='public'`,
     ),
     db.execute(sql`SELECT count(*)<=1 AS singleton_ready FROM settings`),
     db.execute(
@@ -114,6 +115,10 @@ export async function inspectMigrationState(db: DbClient) {
       sql`SELECT pg_get_constraintdef(oid) AS definition, convalidated
         FROM pg_constraint WHERE conrelid='categories'::regclass AND conname='categories_kind_check'`,
     ),
+    db.execute(sql`SELECT
+      count(*) FILTER(WHERE amount <> round(amount, 2))::int AS amounts_to_round,
+      count(*) FILTER(WHERE round(amount, 2) <= 0 OR round(amount, 2) >= 1000000000000)::int AS invalid_amounts
+      FROM record_templates`),
   ]);
   const columnDetails = new Map(
     results[2].rows.map((row) => [`${String(row.table_name)}.${String(row.column_name)}`, row]),
@@ -228,6 +233,28 @@ export async function inspectMigrationState(db: DbClient) {
     missingIndexes.length === 0 &&
     invalidIndexes.length === 0 &&
     singletonConstraintReady;
+  const templateAmount = columnDetails.get("record_templates.amount");
+  const moneyPrecisionSchemaReady =
+    templateAmount?.data_type === "numeric" &&
+    templateAmount.numeric_precision === 14 &&
+    templateAmount.numeric_scale === 2;
+  const templateAmountsToRound = Number(results[8].rows[0]?.amounts_to_round);
+  const moneyPrecisionReadyToApply =
+    hasJournal &&
+    !unknownHashes &&
+    singletonReady &&
+    columns.has("goal_reservations.id") &&
+    pending.length === 1 &&
+    pending[0] === "0025_money_precision" &&
+    categoryKindSchemaReady &&
+    templateAmount?.data_type === "numeric" &&
+    templateAmount.numeric_scale === null &&
+    results[8].rows[0]?.invalid_amounts === 0 &&
+    missingBaseline.length === 0 &&
+    invalidColumns.length === 0 &&
+    missingIndexes.length === 0 &&
+    invalidIndexes.length === 0 &&
+    singletonConstraintReady;
   const complete =
     hasJournal &&
     !unknownHashes &&
@@ -235,6 +262,7 @@ export async function inspectMigrationState(db: DbClient) {
     columns.has("goal_reservations.id") &&
     pending.length === 0 &&
     categoryKindSchemaReady &&
+    moneyPrecisionSchemaReady &&
     missingBaseline.length === 0 &&
     invalidColumns.length === 0 &&
     missingIndexes.length === 0 &&
@@ -258,6 +286,9 @@ export async function inspectMigrationState(db: DbClient) {
     hasOrphanDebts: results[4].rows[0]?.orphan_debts === true,
     categoryKindReadyToApply,
     categoryKindSchemaReady,
+    moneyPrecisionReadyToApply,
+    moneyPrecisionSchemaReady,
+    templateAmountsToRound,
     baselineReadyToApply: ready,
     baselineAlreadyApplied: complete,
   };
@@ -298,7 +329,8 @@ async function main() {
     database !== configured ||
     (!state.baselineReadyToApply &&
       !state.baselineAlreadyApplied &&
-      !state.categoryKindReadyToApply)
+      !state.categoryKindReadyToApply &&
+      !state.moneyPrecisionReadyToApply)
   )
     process.exitCode = 1;
 }

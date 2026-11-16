@@ -257,3 +257,37 @@ test("preflight detects category-kind constraint drift", async () => {
     );
   }
 });
+
+test("preflight reports template amounts that the money migration will round", async () => {
+  const entry = (await migrationManifest()).find(({ tag }) => tag === "0025_money_precision")!;
+  await fixture.pool.query("DELETE FROM drizzle.__drizzle_migrations WHERE hash=$1", [entry.hash]);
+  await fixture.pool.query("ALTER TABLE record_templates ALTER COLUMN amount TYPE numeric");
+  const name = "Precision preflight fixture";
+  try {
+    await fixture.pool.query(
+      "INSERT INTO record_templates(name,type,amount,currency,payment_type) VALUES($1,'expense',1.125,'UYU','cash')",
+      [name],
+    );
+    expect(await inspectMigrationState(createDb())).toMatchObject({
+      pendingMigrations: [entry.tag],
+      moneyPrecisionReadyToApply: true,
+      moneyPrecisionSchemaReady: false,
+      templateAmountsToRound: 1,
+    });
+  } finally {
+    await fixture.pool.query(
+      await readFile(new URL(`../drizzle/migrations/${entry.tag}.sql`, import.meta.url), "utf8"),
+    );
+    await fixture.pool.query(
+      "INSERT INTO drizzle.__drizzle_migrations(hash,created_at) VALUES($1,$2)",
+      [entry.hash, entry.when],
+    );
+    await fixture.pool.query("DELETE FROM record_templates WHERE name=$1 AND amount=1.13", [name]);
+  }
+  expect(await inspectMigrationState(createDb())).toMatchObject({
+    pendingMigrations: [],
+    moneyPrecisionReadyToApply: false,
+    moneyPrecisionSchemaReady: true,
+    templateAmountsToRound: 0,
+  });
+});

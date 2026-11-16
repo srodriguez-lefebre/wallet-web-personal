@@ -1,0 +1,1 @@
+ALTER TABLE "record_templates" ALTER COLUMN "amount" SET DATA TYPE numeric(14, 2);

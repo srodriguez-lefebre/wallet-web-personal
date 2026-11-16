@@ -95,7 +95,7 @@ export const recordTemplates = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     name: text("name").notNull(),
     type: recordTypeEnum("type").notNull(),
-    amount: numeric("amount").notNull(),
+    amount: numeric("amount", { precision: 14, scale: 2 }).notNull(),
     currency: text("currency").notNull(),
     accountId: uuid("account_id").references(() => accounts.id),
     creditCardId: uuid("credit_card_id").references(() => creditCards.id),

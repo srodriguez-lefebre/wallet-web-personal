@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+import { roundMoney } from "../money.js";
+
+export const moneySchema = z.number().overwrite(roundMoney);
+export const positiveMoneySchema = z
+  .number()
+  .positive()
+  .overwrite(roundMoney)
+  .refine((value) => value > 0, "Amount must round to at least 0.01");
+export const nonnegativeMoneySchema = z.number().nonnegative().overwrite(roundMoney);
+
 export const currencySchema = z.enum(["UYU", "USD", "EUR", "BRL", "ARS"]);
 
 export const uuidSchema = z.uuid("Invalid UUID");

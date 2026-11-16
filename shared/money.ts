@@ -1,9 +1,39 @@
 import type { CurrencyCode, ExchangeRate } from "./types.js";
 
 export const moneyTolerance = 0.005;
-/** Display/import rounding only; persistence arithmetic remains PostgreSQL numeric. */
+const centsFormat = new Intl.NumberFormat("en-US", {
+  useGrouping: false,
+  maximumFractionDigits: 2,
+});
+
+/** Rounds decimal amounts like PostgreSQL numeric, with half cents away from zero. */
 export function roundMoney(amount: number) {
-  return Number(amount.toFixed(2));
+  if (!Number.isFinite(amount)) return amount;
+  const rounded = Number(centsFormat.format(amount));
+  return rounded === 0 ? 0 : rounded;
+}
+
+function decimalInteger(value: number) {
+  const [mantissa = "", exponent = "0"] = value.toString().split("e");
+  const [whole = "", fraction = ""] = mantissa.split(".");
+  return { digits: BigInt(whole + fraction), power: Number(exponent) - fraction.length };
+}
+
+/** Apply a decimal ratio before rounding to cents, without floating-point half-cent drift. */
+export function scaleMoney(amount: number, multiplier: number, divisor = 1) {
+  if (![amount, multiplier, divisor].every(Number.isFinite) || divisor <= 0)
+    return roundMoney((amount * multiplier) / divisor);
+  const base = decimalInteger(amount);
+  const factor = decimalInteger(multiplier);
+  const scale = decimalInteger(divisor);
+  const centsPower = 2 + base.power + factor.power - scale.power;
+  let numerator = base.digits * factor.digits;
+  let denominator = scale.digits;
+  if (centsPower >= 0) numerator *= 10n ** BigInt(centsPower);
+  else denominator *= 10n ** BigInt(-centsPower);
+  const offset = denominator / 2n;
+  const cents = (numerator + (numerator < 0n ? -offset : offset)) / denominator;
+  return Number(cents) / 100;
 }
 
 /** Uses only quotes known at the requested instant; never invents a 1:1 quote. */

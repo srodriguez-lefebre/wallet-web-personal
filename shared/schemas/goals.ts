@@ -1,11 +1,18 @@
 import { z } from "zod";
 
-import { currencySchema, uuidSchema, calendarDateSchema, nonEmptyPatch, id } from "./common.js";
+import {
+  positiveMoneySchema,
+  currencySchema,
+  uuidSchema,
+  calendarDateSchema,
+  nonEmptyPatch,
+  id,
+} from "./common.js";
 
 export const goalSchema = z
   .object({
     name: z.string().min(1),
-    targetAmount: z.number().positive(),
+    targetAmount: positiveMoneySchema,
     currency: currencySchema,
     color: z.string().min(1),
     icon: z.string().min(1),
@@ -43,7 +50,7 @@ export const goalSchema = z
 export const goalReservationSchema = z.object({
   goalId: uuidSchema,
   accountId: uuidSchema,
-  amount: z.number().positive(),
+  amount: positiveMoneySchema,
   currency: currencySchema,
   createdAt: z.iso.datetime(),
   note: z.string().optional(),
@@ -52,13 +59,13 @@ export const goalReservationSchema = z.object({
 export const goalReservationReleaseSchema = z.object({
   goalId: uuidSchema,
   accountId: uuidSchema,
-  amount: z.number().positive(),
+  amount: positiveMoneySchema,
   note: z.string().optional(),
 });
 
 export const goalPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
-  targetAmount: z.number().positive().optional(),
+  targetAmount: positiveMoneySchema.optional(),
   currency: currencySchema.optional(),
   color: z.string().min(1).optional(),
   icon: z.string().min(1).optional(),

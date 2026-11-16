@@ -9,7 +9,7 @@ import {
   uuidSchema,
 } from "@shared/schemas";
 import { recordFingerprint } from "@shared/record-identity";
-import { findExchangeRate } from "@shared/money";
+import { findExchangeRate, roundMoney, scaleMoney } from "@shared/money";
 
 import type { WalletDataset, WalletRecord } from "@shared/types";
 
@@ -119,6 +119,15 @@ function positive(value: string | undefined, label: string): number | undefined 
     throw new Error(`${label} must be a positive finite number.`);
   return number;
 }
+
+function positiveAmount(value: string | undefined, label: string) {
+  const number = positive(value, label);
+  if (number === undefined) return undefined;
+  const rounded = roundMoney(number);
+  if (rounded <= 0) throw new Error(`${label} must round to at least 0.01.`);
+  return rounded;
+}
+
 export function prepareCsvRecords(
   csv: string,
   dataset: WalletDataset,
@@ -130,7 +139,7 @@ export function prepareCsvRecords(
   return parseCsv(csv).map((row, index) => {
     try {
       const type = recordTypeSchema.parse(row.type?.trim().toLowerCase());
-      const amount = positive(row.amount, "Amount");
+      const amount = positiveAmount(row.amount, "Amount");
       if (!amount) throw new Error("Amount is required.");
       const rawDate = (row.date || row.occurredat || "").trim();
       const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? `${rawDate}T12:00:00Z` : rawDate);
@@ -167,7 +176,7 @@ export function prepareCsvRecords(
         throw new Error(
           `Missing ${currency}/${dataset.settings.primaryCurrency} exchange rate. Supply exchangeRateToPrimary.`,
         );
-      let accountAmount = positive(row.accountamount, "Account amount");
+      let accountAmount = positiveAmount(row.accountamount, "Account amount");
       if (account && accountAmount === undefined && currency !== account.currency) {
         const rate =
           account.currency === dataset.settings.primaryCurrency
@@ -177,7 +186,7 @@ export function prepareCsvRecords(
           throw new Error(
             `Missing ${currency}/${account.currency} exchange rate. Supply accountAmount.`,
           );
-        accountAmount = Math.round(amount * rate * 100) / 100;
+        accountAmount = scaleMoney(amount, rate);
       }
       const categoryId =
         "categoryid" in row
@@ -210,7 +219,7 @@ export function prepareCsvRecords(
         paymentType: paymentTypeSchema.parse(row.paymenttype || "other"),
         paymentStatus,
         exchangeRateToPrimary: primaryRate,
-        amountInLimitCurrency: positive(row.amountinlimitcurrency, "Limit amount"),
+        amountInLimitCurrency: positiveAmount(row.amountinlimitcurrency, "Limit amount"),
         exchangeRateToLimitCurrency: positive(row.exchangeratetolimitcurrency, "Limit rate"),
         occurredAt,
         note: row.note || undefined,
@@ -235,7 +244,7 @@ export function prepareCsvRecords(
           throw new Error("New records can only be associated with active goals.");
       }
       if (destination) {
-        const amountInDestination = positive(row.destinationamount, "Destination amount");
+        const amountInDestination = positiveAmount(row.destinationamount, "Destination amount");
         const rate =
           destination.currency === dataset.settings.primaryCurrency
             ? primaryRate
@@ -243,7 +252,7 @@ export function prepareCsvRecords(
         if (!amountInDestination && !rate)
           throw new Error("Missing destination exchange rate. Supply destinationAmount.");
         Object.assign(record, {
-          destinationAmount: amountInDestination ?? Math.round(amount * rate! * 100) / 100,
+          destinationAmount: amountInDestination ?? scaleMoney(amount, rate!),
         });
       }
       // Invalid rows must not reserve a duplicate identity for later valid rows.

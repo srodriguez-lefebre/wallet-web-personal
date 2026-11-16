@@ -109,6 +109,19 @@ las opciones en los formularios. Los movimientos previos, los cálculos de
 reportes y la ingesta conservan sus reglas. Los respaldos nuevos incluyen
 el tipo y los anteriores se pueden restaurar con el valor por defecto.
 
+## Precisión de importes
+
+Los importes se redondean a centésimos antes de validar y guardar movimientos,
+pagos, transferencias y demás operaciones monetarias. Los medios centésimos se
+redondean alejándose de cero. Las cotizaciones y los cálculos intermedios
+conservan la precisión necesaria para obtener el importe final.
+
+`0025_money_precision` fija `record_templates.amount` en `numeric(14, 2)`,
+la misma escala usada para los importes históricos. Para aplicarla, verificá
+que `npm run db:preflight` liste solo esta migración pendiente y muestre
+`moneyPrecisionReadyToApply: true`. Después de `npm run db:migrate`,
+comprobá `moneyPrecisionSchemaReady: true` y que no queden migraciones pendientes.
+
 ## Funcionalidades nuevas
 
 - Búsqueda global: botón de búsqueda o `Ctrl/Cmd+K` para encontrar cuentas,

@@ -62,6 +62,15 @@ test("template CRUD changes only the library and partial patches preserve untouc
   expect(await repository.deleteRecordTemplate(createDb(), template.id)).toBe(false);
   expect(await repository.listRecordTemplates(createDb())).toEqual([]);
 });
+test("template writes and direct SQL use the same two-decimal precision", async () => {
+  const template = await repository.createRecordTemplate(createDb(), { ...input, amount: 1.005 });
+  expect(template.amount).toBe(1.01);
+  const updated = await repository.updateRecordTemplate(createDb(), template.id, { amount: 2.675 });
+  expect(updated?.amount).toBe(2.68);
+  await fixture.pool.query("UPDATE record_templates SET amount=3.125 WHERE id=$1", [template.id]);
+  expect((await repository.listRecordTemplates(createDb()))[0]?.amount).toBe(3.13);
+});
+
 test("templates reject malformed, inactive and archived references without mutating history", async () => {
   expect(schemas.recordTemplateSchema.safeParse({ ...input, name: " " }).success).toBe(false);
   expect(schemas.recordTemplateSchema.safeParse({ ...input, name: "x".repeat(81) }).success).toBe(
