@@ -2,6 +2,7 @@ import { getTableColumns, getTableName, sql, type Table } from "drizzle-orm";
 
 import { lockCategoryWrites } from "./category-references.js";
 import { categoryKindAvailable, categoryReadColumns } from "./category-metadata.js";
+import { cardMailSettingsAvailable } from "./cards/mail-settings.js";
 import { walletBackupSchema } from "../../shared/schemas.js";
 import { conflictError, validationError } from "../api/errors.js";
 import { type DbClient } from "./client.js";
@@ -74,13 +75,19 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
     throw conflictError("Category types are available after the database migration");
   const preserveIngestion = dataset.ingestionEvents === undefined;
   const preservePolicies = dataset.merchantCategoryRules === undefined;
+  const hasCardMailSettings = await cardMailSettingsAvailable(db);
+  if (!hasCardMailSettings && dataset.cardMailSettings?.length)
+    throw conflictError("Bank notice settings require the database migration");
+  const restoreCollections = [...collections];
+  if (hasCardMailSettings) restoreCollections.push(["cardMailSettings", schema.cardMailSettings]);
+  const preserveCardMailSettings = hasCardMailSettings && dataset.cardMailSettings === undefined;
   const tables = [
     schema.recordTags,
     schema.recordGoals,
     schema.goalTags,
     schema.settings,
     schema.goalReservations,
-    ...collections.map(([, table]) => table),
+    ...restoreCollections.map(([, table]) => table),
   ];
   const queries: unknown[] = [
     db.execute(
@@ -122,8 +129,18 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
       SELECT event.* FROM ingestion_events event WHERE NOT EXISTS (SELECT 1 FROM excluded WHERE excluded.id = event.id)`),
     );
   }
+  if (preserveCardMailSettings) {
+    const cardIds = JSON.stringify(dataset.creditCards.map((card) => card.id));
+    const accountIds = JSON.stringify(dataset.accounts.map((account) => account.id));
+    queries.push(
+      db.execute(sql`CREATE TEMP TABLE wallet_restore_card_mail ON COMMIT DROP AS
+      SELECT * FROM card_mail_settings
+      WHERE credit_card_id IN (SELECT value::uuid FROM jsonb_array_elements_text(${cardIds}::jsonb))
+      AND (account_id IS NULL OR account_id IN (SELECT value::uuid FROM jsonb_array_elements_text(${accountIds}::jsonb)))`),
+    );
+  }
   for (const table of tables.slice(0, 5)) queries.push(db.execute(sql`DELETE FROM ${table}`));
-  for (const [, table] of [...collections].reverse())
+  for (const [, table] of [...restoreCollections].reverse())
     queries.push(db.execute(sql`DELETE FROM ${table}`));
   const insert = (table: Table, row: Record<string, unknown>, defer?: string) => {
     const columns = getTableColumns(table);
@@ -145,7 +162,7 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
       ),
     );
   };
-  for (const [key, table, defer] of collections) {
+  for (const [key, table, defer] of restoreCollections) {
     let rows = (snapshot[key] ?? []) as Record<string, unknown>[];
     if (key === "goalReservationMovements" && !rows.length)
       rows = dataset.goalReservations.map((row) => ({ ...row, type: "reserve" }));
@@ -162,6 +179,10 @@ export async function restoreWalletBackup(db: DbClient, input: unknown) {
   if (preserveIngestion)
     queries.push(
       db.execute(sql`INSERT INTO ingestion_events SELECT * FROM wallet_restore_ingestion`),
+    );
+  if (preserveCardMailSettings)
+    queries.push(
+      db.execute(sql`INSERT INTO card_mail_settings SELECT * FROM wallet_restore_card_mail`),
     );
   if (preservePolicies)
     queries.push(

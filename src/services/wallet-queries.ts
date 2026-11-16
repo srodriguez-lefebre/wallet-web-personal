@@ -126,6 +126,12 @@ export function cardSummaryQueryOptions(client: WalletClient, id: string) {
     queryFn: ({ signal }) => client["cards.summary"]({ params: { id }, signal }),
   });
 }
+export function cardMailSettingsQueryOptions(client: WalletClient, id: string) {
+  return queryOptions({
+    queryKey: ["card-mail-settings", id] as const,
+    queryFn: ({ signal }) => client["cards.mailSettings"]({ params: { id }, signal }),
+  });
+}
 export function cardAgendaQueryOptions(client: WalletClient, zone = timeZone()) {
   return queryOptions({
     queryKey: ["attention", "cards", zone] as const,

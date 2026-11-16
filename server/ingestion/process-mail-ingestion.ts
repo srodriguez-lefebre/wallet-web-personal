@@ -16,12 +16,14 @@ import {
   settings,
 } from "../db/schema.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
-import { cardLastFour, normalizeMerchantTerm } from "./normalization.js";
+import { normalizeMerchantTerm } from "./normalization.js";
+import { routeCardNotice } from "./card-notice-routing.js";
 import { completeCategoryResolution, resolveCategoryRules } from "./category-resolution.js";
 import { pruneExpiredMetadata } from "./metadata.js";
 export { resolveCategory } from "./category-resolution.js";
 
 import type { MailIngestionInput } from "../../shared/schemas.js";
+import type { BankExchangeRateProfile } from "../../shared/schemas/card-mail-settings.js";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 export class IngestionInProgressError extends Error {}
 function money(value: number) {
@@ -53,13 +55,23 @@ async function convert(
   from: CurrencyCode,
   to: CurrencyCode,
   occurredAt: Date,
+  profile?: BankExchangeRateProfile,
 ) {
-  const frozen = await resolveFrozenRate(db, from, to, occurredAt);
+  const frozen = await resolveFrozenRate(
+    db,
+    from,
+    to,
+    occurredAt,
+    profile ? { profile, amount } : undefined,
+  );
   return frozen ? { amount: scaleMoney(amount, frozen.rate), frozen } : null;
 }
 function conversionNote(from: CurrencyCode, to: CurrencyCode, frozen: FrozenRate) {
   if (from === to) return undefined;
-  return `${from}/${to} ${frozen.rate.toFixed(6)} (${frozen.source}, ${frozen.date.toISOString().slice(0, 10)})`;
+  const provenance = frozen.side
+    ? `${frozen.source} ${frozen.side}, ${frozen.date.toISOString()}`
+    : `${frozen.source}, ${frozen.date.toISOString().slice(0, 10)}`;
+  return `${from}/${to} ${frozen.rate.toFixed(6)} (${provenance})`;
 }
 export async function processMailIngestion(
   db: DbClient,
@@ -129,13 +141,15 @@ export async function processMailIngestion(
     }
     const isCredit = input.transaction.paymentType === "credit_card";
     const isTransfer = input.transaction.paymentType === "transfer";
-    const [account] = input.destination.accountId
+    const routing = isCredit ? await routeCardNotice(db, input) : undefined;
+    const destination = routing?.destination ?? input.destination;
+    const [account] = destination.accountId
       ? await db
           .select()
           .from(accounts)
           .where(
             and(
-              eq(accounts.id, input.destination.accountId),
+              eq(accounts.id, destination.accountId),
               isNull(accounts.deletedAt),
               eq(accounts.isActive, true),
             ),
@@ -143,13 +157,13 @@ export async function processMailIngestion(
           .limit(1)
       : [];
     const [destinationAccount] =
-      isTransfer && input.destination.destinationAccountId
+      isTransfer && destination.destinationAccountId
         ? await db
             .select()
             .from(accounts)
             .where(
               and(
-                eq(accounts.id, input.destination.destinationAccountId),
+                eq(accounts.id, destination.destinationAccountId),
                 isNull(accounts.deletedAt),
                 eq(accounts.isActive, true),
               ),
@@ -158,7 +172,7 @@ export async function processMailIngestion(
         : [];
     if (
       isTransfer &&
-      input.destination.destinationAccountId &&
+      destination.destinationAccountId &&
       (!account || !destinationAccount || destinationAccount.id === account.id)
     ) {
       throw new Error("Invalid owned transfer destination or source account");
@@ -167,31 +181,16 @@ export async function processMailIngestion(
     const recordType = isOwnedTransfer ? "transfer" : "expense";
     const paymentType =
       input.transaction.paymentType === "credit_card" ? "credit" : input.transaction.paymentType;
-    let [card] =
-      isCredit && input.destination.creditCardId
+    const [card] =
+      isCredit && destination.creditCardId
         ? await db
             .select()
             .from(creditCards)
-            .where(
-              and(
-                eq(creditCards.id, input.destination.creditCardId),
-                isNull(creditCards.deletedAt),
-              ),
-            )
+            .where(and(eq(creditCards.id, destination.creditCardId), isNull(creditCards.deletedAt)))
             .limit(1)
         : [];
-    if (isCredit && !input.destination.creditCardId) {
-      const lastFour = cardLastFour(input.transaction.cardNumber);
-      if (lastFour) {
-        [card] = await db
-          .select()
-          .from(creditCards)
-          .where(and(eq(creditCards.lastFour, lastFour), isNull(creditCards.deletedAt)))
-          .limit(1);
-      }
-    }
-    const accountWasInvalid = Boolean(input.destination.accountId && !account);
-    const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
+    const accountWasInvalid = Boolean(destination.accountId && !account);
+    const cardWasInvalid = Boolean(isCredit && destination.creditCardId && !card);
     const merchantRaw = input.transaction.merchantRaw;
     const categoryLookup = isOwnedTransfer
       ? {
@@ -255,40 +254,27 @@ export async function processMailIngestion(
     );
     const [settingsRow] = await db.select().from(settings).limit(1);
     const primaryCurrency = (settingsRow?.primaryCurrency ?? "UYU") as CurrencyCode;
-    const warnings: string[] = [];
-    const primary = await convert(
-      db,
-      input.transaction.amount,
-      input.transaction.currency,
-      primaryCurrency,
-      occurredAt,
-    );
-    const accountConversion = account
-      ? await convert(
-          db,
-          input.transaction.amount,
-          input.transaction.currency,
-          account.currency as CurrencyCode,
-          occurredAt,
-        )
-      : null;
-    const cardConversion = card
-      ? await convert(
-          db,
-          input.transaction.amount,
-          input.transaction.currency,
-          card.limitCurrency as CurrencyCode,
-          occurredAt,
-        )
-      : null;
+    const warnings = routing?.warning ? [routing.warning] : [];
+    const conversions = new Map<CurrencyCode, ReturnType<typeof convert>>();
+    const convertTo = (currency: CurrencyCode) => {
+      const existing = conversions.get(currency);
+      if (existing) return existing;
+      const pending = convert(
+        db,
+        input.transaction.amount,
+        input.transaction.currency,
+        currency,
+        occurredAt,
+        routing?.rateProfile,
+      );
+      conversions.set(currency, pending);
+      return pending;
+    };
+    const primary = await convertTo(primaryCurrency);
+    const accountConversion = account ? await convertTo(account.currency as CurrencyCode) : null;
+    const cardConversion = card ? await convertTo(card.limitCurrency as CurrencyCode) : null;
     const destinationConversion = destinationAccount
-      ? await convert(
-          db,
-          input.transaction.amount,
-          input.transaction.currency,
-          destinationAccount.currency as CurrencyCode,
-          occurredAt,
-        )
+      ? await convertTo(destinationAccount.currency as CurrencyCode)
       : null;
     [
       primary?.frozen,
@@ -303,6 +289,10 @@ export async function processMailIngestion(
       (account && !accountConversion) ||
       (card && !cardConversion) ||
       (destinationAccount && !destinationConversion);
+    if (unavailableConversion && routing?.rateProfile)
+      warnings.push(
+        `No valid exchange rate for ${routing.rateProfile}; review the converted amounts.`,
+      );
     if (!isCredit && !account)
       warnings.push(
         "Bank account mapping unavailable; assign the correct account before confirming this notice.",
@@ -353,7 +343,7 @@ export async function processMailIngestion(
       isCredit && (cardWasInvalid || (!card && input.transaction.cardNumber))
         ? `Unknown card: ${input.transaction.cardAlias || input.transaction.cardNumber}`
         : undefined,
-      accountWasInvalid ? `Unknown account: ${input.destination.accountId}` : undefined,
+      accountWasInvalid ? `Unknown account: ${destination.accountId}` : undefined,
       unavailableConversion
         ? "Currency conversion unavailable; unresolved amounts remain under review."
         : undefined,

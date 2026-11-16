@@ -84,6 +84,107 @@ function input(): MailIngestionInput {
     destination: { accountId, creditCardId: cardId },
   };
 }
+
+async function configureNotice(profile: string, id = cardId) {
+  await fixture.pool.query(
+    "INSERT INTO card_mail_settings(credit_card_id,source,alias,account_id,rate_profile) VALUES($1,'itau_credit_card','Internacional',$2,$3)",
+    [id, accountId, profile],
+  );
+}
+
+function itauXml(date: string) {
+  return `<cotizaciones><fecha>${date}</fecha>
+    <cotizacion><moneda>US.D</moneda><compra>39,30</compra><venta>41,90</venta></cotizacion>
+    <cotizacion><moneda>LINK</moneda><compra>39,60</compra><venta>41,60</venta></cotizacion>
+    </cotizaciones>`;
+}
+
+test("a card's mail settings resolve an alias-only notice to the card and account", async () => {
+  await configureNotice("reference");
+  const event = input();
+  event.destination = {};
+  event.transaction.cardNumber = "";
+  event.transaction.cardAlias = "  INTERNACIONAL  ";
+
+  expect((await processMailIngestion(createDb(), event)).status).toBe("created");
+  const { records, creditCardRecords } = await getWalletDataset(createDb());
+  expect(records[0]).toMatchObject({ creditCardId: cardId, accountId, accountAmount: 50 });
+  expect(creditCardRecords[0]).toMatchObject({ creditCardId: cardId, accountId });
+});
+
+test("two matching card settings send the notice to review without charging either card", async () => {
+  const second = randomUUID();
+  await fixture.pool.query(
+    "INSERT INTO credit_cards(id,name,issuer,last_four,credit_limit,limit_currency,closing_day,due_day,color,icon) VALUES($1,'Second','Itaú','1234',1000,'UYU',3,12,'blue','bank')",
+    [second],
+  );
+  await configureNotice("reference");
+  await configureNotice("reference", second);
+  const event = input();
+  event.destination = {};
+
+  expect((await processMailIngestion(createDb(), event)).status).toBe("needs_review");
+  const { records, creditCardRecords } = await getWalletDataset(createDb());
+  expect(records[0]?.creditCardId).toBeUndefined();
+  expect(creditCardRecords).toHaveLength(0);
+});
+
+test("a notice from another source cannot fall through to a configured card with the same termination", async () => {
+  await configureNotice("reference");
+  const event = input();
+  event.destination = {};
+  event.transaction.source = "another_bank_credit_card";
+
+  expect((await processMailIngestion(createDb(), event)).status).toBe("needs_review");
+  expect((await getWalletDataset(createDb())).creditCardRecords).toHaveLength(0);
+});
+
+test("Itaú LINK sell is used once for the bank amount, the card limit and the frozen primary value", async () => {
+  await configureNotice("itau_link");
+  await fixture.pool.query(
+    "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',40.234,'2026-01-30')",
+  );
+  const quote = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response(itauXml("20260201083000")));
+  const event = input();
+  event.transaction.currency = "USD";
+  expect((await processMailIngestion(createDb(), event)).status).toBe("created");
+
+  expect(quote).toHaveBeenCalledTimes(1);
+  expect(quote.mock.calls[0]?.[0]).toBe("https://www.itau.com.uy/inst/aci/cotiz.xml");
+  const { records, creditCardRecords } = await getWalletDataset(createDb());
+  expect(records[0]).toMatchObject({
+    accountId,
+    creditCardId: cardId,
+    accountAmount: 2080,
+    exchangeRateToPrimary: 41.6,
+  });
+  expect(creditCardRecords[0]).toMatchObject({
+    amountInLimitCurrency: 2080,
+    exchangeRateToLimitCurrency: 41.6,
+  });
+  expect(records[0]?.note).toContain("itau_link sell");
+  expect(records[0]?.note).toContain("2026-02-01");
+});
+
+test.each(["20260125083000", "20260201100000"])(
+  "an out-of-window Itaú quote (%s) leaves a configured card in review without using a stored market rate",
+  async (date) => {
+    await configureNotice("itau_link");
+    await fixture.pool.query(
+      "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',40,'2026-01-30')",
+    );
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(itauXml(date)));
+    const event = input();
+    event.transaction.currency = "USD";
+    expect((await processMailIngestion(createDb(), event)).status).toBe("needs_review");
+    const { records } = await getWalletDataset(createDb());
+    expect(records[0]).toMatchObject({ currency: "USD", exchangeRateToPrimary: 0 });
+    expect(records[0]?.accountAmount).toBeUndefined();
+  },
+);
+
 test.each([true, false])(
   "Itau credit notes retain the original merchant after normalization (bank linked: %s)",
   async (bankLinked) => {

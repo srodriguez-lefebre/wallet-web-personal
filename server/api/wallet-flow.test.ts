@@ -74,6 +74,69 @@ async function request(path: string, method = "GET", input?: unknown) {
   }
   return { response, payload };
 }
+
+test("card mail settings persist through HTTP reload and backup, and clear independently of card details", async () => {
+  const created = await request("/api/cards", "POST", {
+    name: "Mail fixture card",
+    issuer: "Itaú",
+    lastFour: "4006",
+    creditLimit: 1000,
+    limitCurrency: "UYU",
+    closingDay: 3,
+    dueDay: 12,
+    color: "blue",
+    icon: "credit-card",
+    isActive: true,
+  });
+  expect(created.response.status).toBe(201);
+  const cardId = created.payload.data.id;
+  if (typeof cardId !== "string") throw new Error("Missing synthetic card ID");
+  const path = `/api/cards/${cardId}/mail-settings`;
+  expect((await request(path)).payload.data).toEqual({ available: true, settings: null });
+
+  const config = {
+    source: "itau_credit_card",
+    alias: "INTERNACIONAL",
+    accountId,
+    rateProfile: "itau_link",
+  };
+  const saved = await request(path, "PUT", { settings: config });
+  expect(saved.response.status).toBe(200);
+  expect((await request(path)).payload.data).toEqual({ available: true, settings: config });
+
+  const invalid = await request(path, "PUT", { settings: { ...config, accountId: randomUUID() } });
+  expect(invalid.response.status).toBe(400);
+  expect((await request(path)).payload.data.settings).toEqual(config);
+
+  const backup = await request("/api/wallet/backup");
+  expect(backup.payload.data.cardMailSettings).toContainEqual({ id: cardId, ...config });
+  expect((await request(path, "PUT", { settings: null })).payload.data.settings).toBeNull();
+  expect((await request("/api/wallet/restore", "POST", backup.payload.data)).response.status).toBe(
+    200,
+  );
+  expect((await request(path)).payload.data.settings).toEqual(config);
+  const legacy = { ...backup.payload.data };
+  delete legacy.cardMailSettings;
+  expect((await request("/api/wallet/restore", "POST", legacy)).response.status).toBe(200);
+  expect((await request(path)).payload.data.settings).toEqual(config);
+  expect((await request(path, "PUT", { settings: null })).payload.data.settings).toBeNull();
+  expect((await request("/api/cards")).payload.data).toContainEqual(
+    expect.objectContaining({ id: cardId, lastFour: "4006" }),
+  );
+  await fixture.pool.query(
+    "ALTER TABLE card_mail_settings RENAME TO unavailable_card_mail_settings",
+  );
+  try {
+    expect((await request(path)).payload.data).toEqual({ available: false, settings: null });
+    expect((await request(path, "PUT", { settings: config })).response.status).toBe(409);
+    expect((await request("/api/wallet/backup")).payload.data.cardMailSettings).toBeUndefined();
+  } finally {
+    await fixture.pool.query(
+      "ALTER TABLE unavailable_card_mail_settings RENAME TO card_mail_settings",
+    );
+  }
+});
+
 test("authenticated template CRUD persists through HTTP reload and never creates financial records", async () => {
   const before = (await getWalletDataset(createDb())).records.length;
   const template = {

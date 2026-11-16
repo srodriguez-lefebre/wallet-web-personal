@@ -1,4 +1,5 @@
 import { getCreditCardSummary } from "../../db/cards/summary.js";
+import { getCardMailSettings, replaceCardMailSettings } from "../../db/cards/mail-settings.js";
 import {
   getCardCategoryUsage,
   getCardLedger,
@@ -31,6 +32,9 @@ export const cardsHandlers = {
     return { refreshed: true };
   },
   "cards.list": (ctx) => listCreditCards(ctx.db),
+  "cards.mailSettings": (ctx, { params }) => getCardMailSettings(ctx.db, params.id),
+  "cards.replaceMailSettings": (ctx, { params, body }) =>
+    replaceCardMailSettings(ctx.db, params.id, body.settings),
   "cards.create": (ctx, { body }) => createCreditCard(ctx.db, body),
   "cards.patch": async (ctx, { params, body }) =>
     found(await updateCreditCard(ctx.db, params.id, body), "Credit card"),
@@ -62,6 +66,8 @@ export const cardsHandlers = {
   | "cards.categoryUsage"
   | "cards.ledger"
   | "cards.list"
+  | "cards.mailSettings"
+  | "cards.replaceMailSettings"
   | "cards.create"
   | "cards.patch"
   | "cards.delete"

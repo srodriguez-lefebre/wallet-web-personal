@@ -313,6 +313,11 @@ limite, los ultimos cuatro digitos ni las fechas necesarias.
 
 ## Deploy
 
+La migración `0026_card_mail_settings` habilita **Bank notices** en Cards. El
+backend puede servir la versión anterior de la base mientras la migración
+está pendiente. Para el alta de una tarjeta y la transición de un mapeo
+existente, ver [la guía de avisos](mail-service/README.md#configurar-avisos-de-crédito-en-wallet).
+
 Para Vercel:
 
 - Configurar `DATABASE_URL`.

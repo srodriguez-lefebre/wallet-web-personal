@@ -183,6 +183,13 @@
       "when": 1794787109777,
       "tag": "0025_money_precision",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1794795311910,
+      "tag": "0026_card_mail_settings",
+      "breakpoints": true
     }
   ]
 }

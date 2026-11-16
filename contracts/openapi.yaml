@@ -3033,6 +3033,261 @@ paths:
       tags:
         - cards
       x-stability: stable
+  /api/cards/{id}/mail-settings:
+    get:
+      operationId: cards.mailSettings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      available:
+                        type: boolean
+                      settings:
+                        anyOf:
+                          - additionalProperties: false
+                            properties:
+                              accountId:
+                                anyOf:
+                                  - format: uuid
+                                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                    type: string
+                                  - type: "null"
+                              alias:
+                                default: ""
+                                maxLength: 200
+                                type: string
+                              rateProfile:
+                                enum:
+                                  - reference
+                                  - itau_link
+                                  - itau_board
+                                  - brou_ebrou
+                                  - brou_board
+                                  - santander_supernet
+                                  - santander_board
+                                type: string
+                              source:
+                                maxLength: 100
+                                minLength: 1
+                                type: string
+                            required:
+                              - source
+                              - alias
+                              - accountId
+                              - rateProfile
+                            type: object
+                          - type: "null"
+                    required:
+                      - settings
+                      - available
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 404
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Read a card's notice routing and exchange rate preferences
+      tags:
+        - cards
+      x-stability: stable
+    put:
+      operationId: cards.replaceMailSettings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            format: uuid
+            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $schema: https://json-schema.org/draft/2020-12/schema
+              additionalProperties: false
+              properties:
+                settings:
+                  anyOf:
+                    - additionalProperties: false
+                      properties:
+                        accountId:
+                          anyOf:
+                            - format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            - type: "null"
+                        alias:
+                          default: ""
+                          maxLength: 200
+                          type: string
+                        rateProfile:
+                          enum:
+                            - reference
+                            - itau_link
+                            - itau_board
+                            - brou_ebrou
+                            - brou_board
+                            - santander_supernet
+                            - santander_board
+                          type: string
+                        source:
+                          maxLength: 100
+                          minLength: 1
+                          type: string
+                      required:
+                        - source
+                        - alias
+                        - accountId
+                        - rateProfile
+                      type: object
+                    - type: "null"
+              required:
+                - settings
+              type: object
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                properties:
+                  data:
+                    $schema: https://json-schema.org/draft/2020-12/schema
+                    additionalProperties: false
+                    properties:
+                      available:
+                        type: boolean
+                      settings:
+                        anyOf:
+                          - additionalProperties: false
+                            properties:
+                              accountId:
+                                anyOf:
+                                  - format: uuid
+                                    pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                    type: string
+                                  - type: "null"
+                              alias:
+                                default: ""
+                                maxLength: 200
+                                type: string
+                              rateProfile:
+                                enum:
+                                  - reference
+                                  - itau_link
+                                  - itau_board
+                                  - brou_ebrou
+                                  - brou_board
+                                  - santander_supernet
+                                  - santander_board
+                                type: string
+                              source:
+                                maxLength: 100
+                                minLength: 1
+                                type: string
+                            required:
+                              - source
+                              - alias
+                              - accountId
+                              - rateProfile
+                            type: object
+                          - type: "null"
+                    required:
+                      - settings
+                      - available
+                    type: object
+                  error:
+                    type: "null"
+                required:
+                  - data
+                  - error
+                type: object
+          description: Success
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 400
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 401
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 404
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 409
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 422
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+          description: Error 500
+      security:
+        - sessionBearer: []
+      summary: Replace or clear a card's notice routing and exchange rate preferences
+      tags:
+        - cards
+      x-stability: stable
   /api/cards/{id}/payments:
     post:
       operationId: cardPayments.create
@@ -13683,6 +13938,46 @@ paths:
                             - id
                           type: object
                         type: array
+                      cardMailSettings:
+                        items:
+                          additionalProperties: false
+                          properties:
+                            accountId:
+                              anyOf:
+                                - format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
+                                - type: "null"
+                            alias:
+                              default: ""
+                              maxLength: 200
+                              type: string
+                            id:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
+                            rateProfile:
+                              enum:
+                                - reference
+                                - itau_link
+                                - itau_board
+                                - brou_ebrou
+                                - brou_board
+                                - santander_supernet
+                                - santander_board
+                              type: string
+                            source:
+                              maxLength: 100
+                              minLength: 1
+                              type: string
+                          required:
+                            - source
+                            - alias
+                            - accountId
+                            - rateProfile
+                            - id
+                          type: object
+                        type: array
                       categories:
                         items:
                           additionalProperties: false
@@ -19255,6 +19550,46 @@ paths:
                       - period
                       - color
                       - isActive
+                      - id
+                    type: object
+                  type: array
+                cardMailSettings:
+                  items:
+                    additionalProperties: false
+                    properties:
+                      accountId:
+                        anyOf:
+                          - format: uuid
+                            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                            type: string
+                          - type: "null"
+                      alias:
+                        default: ""
+                        maxLength: 200
+                        type: string
+                      id:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
+                      rateProfile:
+                        enum:
+                          - reference
+                          - itau_link
+                          - itau_board
+                          - brou_ebrou
+                          - brou_board
+                          - santander_supernet
+                          - santander_board
+                        type: string
+                      source:
+                        maxLength: 100
+                        minLength: 1
+                        type: string
+                    required:
+                      - source
+                      - alias
+                      - accountId
+                      - rateProfile
                       - id
                     type: object
                   type: array

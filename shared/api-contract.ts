@@ -8,6 +8,10 @@ import {
   cardLedgerSchema,
 } from "./card-read-contract.js";
 import {
+  cardMailSettingsInputSchema,
+  cardMailSettingsResponseSchema,
+} from "./schemas/card-mail-settings.js";
+import {
   categoryDetailsSchema,
   categoryMergeInputSchema,
   categoryMergeResultSchema,
@@ -178,6 +182,8 @@ const specialResponses = {
   }),
   "categories.usage": z.record(uuidSchema, categoryUsageSchema),
   "categories.merge": categoryMergeResultSchema,
+  "cards.mailSettings": cardMailSettingsResponseSchema,
+  "cards.replaceMailSettings": cardMailSettingsResponseSchema,
   "cards.summary": z.object({
     card: entities.cards,
     usedLimit: z.number(),
@@ -732,6 +738,29 @@ export const apiOperations = [
     successStatus: 200,
     errors: [400, 401, 404, 500],
     summary: "Archive a credit card",
+  }),
+  op({
+    operationId: "cards.mailSettings",
+    method: "GET",
+    path: "/api/cards/{id}/mail-settings",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    successStatus: 200,
+    errors: [400, 401, 404, 500],
+    summary: "Read a card's notice routing and exchange rate preferences",
+  }),
+  op({
+    operationId: "cards.replaceMailSettings",
+    method: "PUT",
+    path: "/api/cards/{id}/mail-settings",
+    auth: "session",
+    stability: "stable",
+    params: idParams,
+    body: cardMailSettingsInputSchema,
+    successStatus: 200,
+    errors: [400, 401, 404, 409, 422, 500],
+    summary: "Replace or clear a card's notice routing and exchange rate preferences",
   }),
   op({
     operationId: "cards.summary",
