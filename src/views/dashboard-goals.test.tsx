@@ -1,6 +1,8 @@
 import { act, create } from "react-test-renderer";
+import { PieChart, Tooltip } from "recharts";
 import { expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
+import { formatMoney } from "@shared/money";
 
 import { DashboardView } from "./dashboard-view";
 
@@ -27,7 +29,7 @@ vi.mock("@/lib/use-action-toast", () => ({
 }));
 vi.mock("recharts", () => {
   const Part = ({ children }: PropsWithChildren) => <div>{children}</div>;
-  return Object.fromEntries(
+  const parts = Object.fromEntries(
     [
       "CartesianGrid",
       "Cell",
@@ -35,13 +37,16 @@ vi.mock("recharts", () => {
       "Line",
       "LineChart",
       "Pie",
-      "PieChart",
       "ResponsiveContainer",
-      "Tooltip",
       "XAxis",
       "YAxis",
     ].map((name) => [name, Part]),
   );
+  return {
+    ...parts,
+    PieChart: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    Tooltip: () => null,
+  };
 });
 
 test("dashboard excludes completed visible goals while keeping active goals", async () => {
@@ -75,6 +80,25 @@ test("dashboard excludes completed visible goals while keeping active goals", as
     expect(content).toContain("Upcoming trip");
   } finally {
     if (tree) await act(async () => tree.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+test("the expense pie formats converted totals in the primary currency", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  state.dataset = structuredClone(mockWalletData);
+  let tree: ReturnType<typeof create> | undefined;
+  try {
+    await act(async () => {
+      tree = create(<DashboardView />);
+    });
+    const tooltip = tree!.root.findByType(PieChart).findByType(Tooltip);
+    const format = tooltip.props.formatter as ((value: number) => string) | undefined;
+    expect(format?.(1234.56789)).toBe(
+      formatMoney(1234.57, mockWalletData.settings.primaryCurrency),
+    );
+  } finally {
+    if (tree) await act(async () => tree?.unmount());
     vi.unstubAllGlobals();
   }
 });
