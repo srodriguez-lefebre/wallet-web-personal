@@ -18,6 +18,8 @@ Creá o elegí una tarjeta en **Cards** y abrí **Bank notices**. Elegí **Itaú
 **Automation Wallet** según el tipo de aviso. Wallet usa la terminación de la ficha
 de la tarjeta o el alias configurado cuando el correo no trae dígitos. Si el consumo
 también se debe imputar a una cuenta, elegila por nombre.
+Cuando Apps Script manda el ID de una tarjeta configurada, Wallet aplica la cuenta
+y la cotización guardadas para esa tarjeta. Un conflicto entre dos tarjetas queda en revisión.
 
 En **Exchange rate** podés elegir Itaú LINK o pizarra, BROU eBROU o pizarra,
 Santander Supernet o pizarra, o la referencia de Frankfurter. El perfil se aplica a

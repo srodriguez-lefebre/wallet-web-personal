@@ -139,34 +139,43 @@ test("a notice from another source cannot fall through to a configured card with
   expect((await getWalletDataset(createDb())).creditCardRecords).toHaveLength(0);
 });
 
-test("Itaú LINK sell is used once for the bank amount, the card limit and the frozen primary value", async () => {
-  await configureNotice("itau_link");
-  await fixture.pool.query(
-    "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',40.234,'2026-01-30')",
-  );
-  const quote = vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(new Response(itauXml("20260201083000")));
-  const event = input();
-  event.transaction.currency = "USD";
-  expect((await processMailIngestion(createDb(), event)).status).toBe("created");
+test.each([false, true])(
+  "Itaú LINK sell applies to the selected card and account (legacy ID only: %s)",
+  async (legacyIdOnly) => {
+    await configureNotice("itau_link");
+    await fixture.pool.query(
+      "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',40.234,'2026-01-30')",
+    );
+    const quote = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(itauXml("20260201083000")));
+    const event = input();
+    event.transaction.currency = "USD";
+    if (legacyIdOnly) {
+      event.destination = { creditCardId: cardId };
+      event.transaction.source = "automation_wallet";
+      event.transaction.cardNumber = "";
+      event.transaction.cardAlias = "Old integration alias";
+    }
+    expect((await processMailIngestion(createDb(), event)).status).toBe("created");
 
-  expect(quote).toHaveBeenCalledTimes(1);
-  expect(quote.mock.calls[0]?.[0]).toBe("https://www.itau.com.uy/inst/aci/cotiz.xml");
-  const { records, creditCardRecords } = await getWalletDataset(createDb());
-  expect(records[0]).toMatchObject({
-    accountId,
-    creditCardId: cardId,
-    accountAmount: 2080,
-    exchangeRateToPrimary: 41.6,
-  });
-  expect(creditCardRecords[0]).toMatchObject({
-    amountInLimitCurrency: 2080,
-    exchangeRateToLimitCurrency: 41.6,
-  });
-  expect(records[0]?.note).toContain("itau_link sell");
-  expect(records[0]?.note).toContain("2026-02-01");
-});
+    expect(quote).toHaveBeenCalledTimes(1);
+    expect(quote.mock.calls[0]?.[0]).toBe("https://www.itau.com.uy/inst/aci/cotiz.xml");
+    const { records, creditCardRecords } = await getWalletDataset(createDb());
+    expect(records[0]).toMatchObject({
+      accountId,
+      creditCardId: cardId,
+      accountAmount: 2080,
+      exchangeRateToPrimary: 41.6,
+    });
+    expect(creditCardRecords[0]).toMatchObject({
+      amountInLimitCurrency: 2080,
+      exchangeRateToLimitCurrency: 41.6,
+    });
+    expect(records[0]?.note).toContain("itau_link sell");
+    expect(records[0]?.note).toContain("2026-02-01");
+  },
+);
 
 test.each(["20260125083000", "20260201100000"])(
   "an out-of-window Itaú quote (%s) leaves a configured card in review without using a stored market rate",

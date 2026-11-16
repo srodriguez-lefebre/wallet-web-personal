@@ -1,4 +1,4 @@
-import { and, eq, isNull, notExists } from "drizzle-orm";
+import { and, eq, isNull, notExists, or } from "drizzle-orm";
 
 import { normalizeCardAlias, cardLastFour } from "../../shared/mail-normalization.js";
 import { cardMailSettingsAvailable } from "../db/cards/mail-settings.js";
@@ -18,7 +18,7 @@ export async function routeCardNotice(db: DbClient, input: MailIngestionInput): 
   const legacy = input.destination;
   const lastFour = cardLastFour(input.transaction.cardNumber);
   const alias = normalizeCardAlias(input.transaction.cardAlias);
-  if (!lastFour && !alias) return { destination: legacy };
+  if (!lastFour && !alias && !legacy.creditCardId) return { destination: legacy };
 
   const available = await cardMailSettingsAvailable(db);
   const activeCard = and(isNull(creditCards.deletedAt), eq(creditCards.isActive, true));
@@ -28,6 +28,8 @@ export async function routeCardNotice(db: DbClient, input: MailIngestionInput): 
         id: cardMailSettings.id,
         accountId: cardMailSettings.accountId,
         alias: cardMailSettings.alias,
+        source: cardMailSettings.source,
+        lastFour: creditCards.lastFour,
         rateProfile: cardMailSettings.rateProfile,
       })
       .from(cardMailSettings)
@@ -35,19 +37,31 @@ export async function routeCardNotice(db: DbClient, input: MailIngestionInput): 
       .where(
         and(
           activeCard,
-          eq(cardMailSettings.source, input.transaction.source),
-          lastFour ? eq(creditCards.lastFour, lastFour) : undefined,
+          or(
+            legacy.creditCardId ? eq(cardMailSettings.id, legacy.creditCardId) : undefined,
+            lastFour || alias
+              ? and(
+                  eq(cardMailSettings.source, input.transaction.source),
+                  lastFour ? eq(creditCards.lastFour, lastFour) : undefined,
+                )
+              : undefined,
+          ),
         ),
       );
-    const matches = lastFour
-      ? candidates
-      : candidates.filter((rule) => normalizeCardAlias(rule.alias) === alias);
-    const [rule] = matches;
-    if (matches.length > 1 || (rule && legacy.creditCardId && legacy.creditCardId !== rule.id))
+    const matches = candidates.filter(
+      (rule) =>
+        rule.source === input.transaction.source &&
+        (lastFour
+          ? rule.lastFour === lastFour
+          : Boolean(alias) && normalizeCardAlias(rule.alias) === alias),
+    );
+    const [match] = matches;
+    if (matches.length > 1 || (match && legacy.creditCardId && legacy.creditCardId !== match.id))
       return {
         destination: {},
         warning: "Conflicting card assignments; select the correct card before confirming.",
       };
+    const rule = match ?? candidates.find(({ id }) => id === legacy.creditCardId);
     if (rule)
       return {
         destination: { creditCardId: rule.id, accountId: rule.accountId ?? undefined },
