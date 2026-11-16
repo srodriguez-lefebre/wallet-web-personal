@@ -28,6 +28,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { LimitUsageAlert } from "@/components/wallet/limit-usage-alert";
 import { CardFormDialog } from "@/features/cards/CardFormDialog";
+import { CardMailSettingsDialog } from "@/features/cards/CardMailSettingsDialog";
 import { useCardReads } from "@/features/cards/use-card-reads";
 import { draftFromCard, emptyDraft, type CardDraft } from "@/lib/card-draft";
 import { useActionToast } from "@/lib/use-action-toast";
@@ -48,6 +49,7 @@ export function CardsView() {
   const [draft, setDraft] = useState<CardDraft>(emptyDraft);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [noticeCard, setNoticeCard] = useState<CreditCard | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const { toast, runAction } = useActionToast();
@@ -174,6 +176,13 @@ export function CardsView() {
         onFieldChange={setField}
         onSubmit={submit}
       />
+      {noticeCard && (
+        <CardMailSettingsDialog
+          card={noticeCard}
+          accounts={dataset.accounts}
+          onClose={() => setNoticeCard(null)}
+        />
+      )}
 
       {hasCardData ? (
         <div className="grid gap-4 xl:grid-cols-2">
@@ -373,6 +382,11 @@ export function CardsView() {
                     >
                       Edit
                     </Button>
+                    {summary.card.isActive && (
+                      <Button variant="outline" onClick={() => setNoticeCard(summary.card)}>
+                        Bank notices
+                      </Button>
+                    )}
                     {summary.card.isActive ? (
                       <Button
                         variant="ghost"

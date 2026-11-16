@@ -2,6 +2,7 @@ import { desc, isNull, sql } from "drizzle-orm";
 
 import { categoryReadColumns } from "./category-metadata.js";
 import { namedBatch } from "./batch.js";
+import { cardMailSettingsAvailable } from "./cards/mail-settings.js";
 import { generateDueRecurringDebts } from "./debts.js";
 import { goalReservationBalancesQuery, mapGoalReservationBalance } from "./goals/ledger.js";
 import {
@@ -35,6 +36,7 @@ import { listRecords } from "./records/list.js";
 import {
   accounts,
   budgets,
+  cardMailSettings,
   categories,
   creditCardPaymentAllocations,
   creditCardPayments,
@@ -71,6 +73,7 @@ export async function getWalletDataset(
     includeArchived?: boolean;
   } = {},
 ): Promise<WalletDataset> {
+  const includeCardMailSettings = options.includeArchived && (await cardMailSettingsAvailable(db));
   const {
     settingsRows,
     accountRows,
@@ -99,6 +102,7 @@ export async function getWalletDataset(
     merchantCategoryRuleRows,
     ingestionRows,
     templateRows,
+    cardMailSettingsRows,
   } = await namedBatch(db, {
     isolation: db.execute(
       sql`SET TRANSACTION ISOLATION LEVEL ${sql.raw(options.includeArchived ? "REPEATABLE READ" : "READ COMMITTED")}`,
@@ -210,6 +214,9 @@ export async function getWalletDataset(
       .select()
       .from(recordTemplates)
       .orderBy(recordTemplates.name, recordTemplates.id),
+    ...(includeCardMailSettings
+      ? { cardMailSettingsRows: db.select().from(cardMailSettings).orderBy(cardMailSettings.id) }
+      : {}),
   });
   const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
   const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
@@ -225,6 +232,7 @@ export async function getWalletDataset(
   };
   return {
     recordTemplates: templateRows.map(mapRecordTemplate),
+    ...(cardMailSettingsRows ? { cardMailSettings: cardMailSettingsRows } : {}),
     ...(options.includeArchived
       ? {
           merchantCategoryRules: merchantCategoryRuleRows,

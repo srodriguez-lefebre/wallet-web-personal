@@ -6,11 +6,36 @@ Ejecutar `npm run mail:build` y copiar `normalization.gs`, `EmailProcessors.gs` 
 no se edita a mano. `npm run mail:check` verifica que esté actualizado y el sandbox
 ejecuta los tres archivos reales. Conservar las propiedades y los triggers existentes.
 
-Script Properties requeridas:
+En Apps Script, abrir **Configuración del proyecto → Propiedades del script**.
 
 - `WALLET_INGEST_URL`: `https://<dominio>/api/ingest/mail/transactions`
 - `WALLET_INGEST_TOKEN`: el mismo valor que `INGEST_API_TOKEN` en Vercel
 - `WALLET_TARGETS_JSON`: mapeos opcionales de tarjetas de crédito, débito y cuentas bancarias
+
+## Configurar avisos de crédito en Wallet
+
+Creá o elegí una tarjeta en **Cards** y abrí **Bank notices**. Elegí **Itaú email** o
+**Automation Wallet** según el tipo de aviso. Wallet usa la terminación de la ficha
+de la tarjeta o el alias configurado cuando el correo no trae dígitos. Si el consumo
+también se debe imputar a una cuenta, elegila por nombre.
+Cuando Apps Script manda el ID de una tarjeta configurada, Wallet aplica la cuenta
+y la cotización guardadas para esa tarjeta. Un conflicto entre dos tarjetas queda en revisión.
+
+En **Exchange rate** podés elegir Itaú LINK o pizarra, BROU eBROU o pizarra,
+Santander Supernet o pizarra, o la referencia de Frankfurter. El perfil se aplica a
+las conversiones de avisos de esa tarjeta. Las tasas bancarias requieren que
+una de las monedas sea UYU y que la pizarra elegida publique la otra moneda.
+LINK y eBROU cotizan USD. Si faltan datos o la tasa es posterior al movimiento
+o anterior por más de cuatro días, Wallet pide revisar la conversión. Al conciliar
+un gasto, podés cargar los importes del extracto en **Records**.
+
+La pantalla requiere la migración `0026_card_mail_settings`. Para pasar una
+configuración existente a Wallet, elegí la misma tarjeta y cuenta que asigna el
+JSON y comprobá la imputación con un aviso sintético. Después podés quitar la entrada
+de esa tarjeta en `cards`. Conservar los mapeos de débito, cuentas y tarjetas que
+todavía usan el JSON. El respaldo completo incluye los ajustes guardados en Wallet.
+
+## Mapeos en Apps Script
 
 ```json
 {

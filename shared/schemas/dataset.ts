@@ -4,6 +4,7 @@ import { recordTemplateSchema } from "./templates.js";
 import { nonnegativeMoneySchema, id, currencySchema, uuidSchema } from "./common.js";
 import { settingsSchema } from "./settings.js";
 import { accountSchema } from "./accounts.js";
+import { cardMailSettingsSchema } from "./card-mail-settings.js";
 import { categoryEntitySchema } from "./categories.js";
 import { tagSchema } from "./tags.js";
 import { walletRecordResponseSchema } from "./records.js";
@@ -62,6 +63,7 @@ export const backupRetryMetadata = {
 
 export const walletBackupSchema = walletDatasetSchema
   .extend({
+    cardMailSettings: z.array(cardMailSettingsSchema.extend(id)).optional(),
     merchantCategoryRules: z.array(merchantCategoryRuleSchema).optional(),
     recordTemplates: z
       .array(recordTemplateSchema.extend({ ...id, ...backupMetadata }))
@@ -166,6 +168,14 @@ export const walletBackupSchema = walletDatasetSchema
       if (value && !ids.get(collection)?.has(value))
         ctx.addIssue({ code: "custom", path, message: `Missing ${collection} reference` });
     };
+    dataset.cardMailSettings?.forEach((settings, index) => {
+      reference("creditCards", settings.id, ["cardMailSettings", index, "id"]);
+      reference("accounts", settings.accountId ?? undefined, [
+        "cardMailSettings",
+        index,
+        "accountId",
+      ]);
+    });
     dataset.recordTemplates.forEach((template, index) => {
       for (const key of ["accountId", "destinationAccountId"] as const)
         reference("accounts", template[key], ["recordTemplates", index, key]);

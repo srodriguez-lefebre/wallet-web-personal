@@ -63,6 +63,7 @@ export const mutationDefinitions = {
   "records.import": financial,
   "cards.create": card,
   "cards.patch": card,
+  "cards.replaceMailSettings": ["card-mail-settings"],
   "cards.delete": financial,
   "cards.refreshStatements": card,
   "cardRecords.create": financial,
@@ -95,7 +96,7 @@ export const mutationDefinitions = {
   "recurringDebts.create": ["reference", "category-usage"],
   "recurringDebts.patch": ["reference", "category-usage"],
   "recurringDebts.delete": ["reference", "category-usage"],
-  "wallet.restore": financial,
+  "wallet.restore": [...financial, "card-mail-settings"],
   "auth.lockAll": [],
 } as const satisfies Record<MutationOperationId, readonly string[]>;
 export type WalletMutations = {

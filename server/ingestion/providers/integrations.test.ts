@@ -65,6 +65,81 @@ test("a validated historical rate is frozen and later reads bypass the provider"
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
+test("configured Frankfurter reference rejects stale observed rates and an old manual rate", async () => {
+  await fixture.pool.query(
+    "INSERT INTO exchange_rates(from_currency,to_currency,rate,date) VALUES('USD','UYU',40.234,'2026-01-01')",
+  );
+  fetchMock.mockResolvedValue(
+    Response.json([{ base: "USD", quote: "UYU", date: "2026-01-20", rate: 40.595 }]),
+  );
+  expect(
+    await resolveFrozenRate(createDb(), "USD", "UYU", new Date("2026-02-01"), {
+      profile: "reference",
+      amount: 50,
+    }),
+  ).toBeNull();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("eBROU selects the quote by type and uses the buy rate when dollars fund a peso charge", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json([
+      {
+        origin: "brou",
+        code: "USD",
+        type: "",
+        buy: 39.35,
+        sell: 41.85,
+        date: "2026-02-01T03:00:00Z",
+      },
+      {
+        origin: "brou",
+        code: "USD",
+        type: "EBROU",
+        buy: 39.85,
+        sell: 41.35,
+        date: "2026-02-01T03:00:00Z",
+      },
+    ]),
+  );
+  const quote = await resolveFrozenRate(
+    createDb(),
+    "UYU",
+    "USD",
+    new Date("2026-02-01T12:00:00Z"),
+    {
+      profile: "brou_ebrou",
+      amount: 100,
+    },
+  );
+  expect(quote).toMatchObject({ side: "buy", source: "brou_ebrou" });
+  expect(quote?.rate).toBeCloseTo(1 / 39.85, 10);
+  expect(fetchMock.mock.calls[0]?.[0]).toBe("https://api.cambio-uruguay.com/exchange/brou/USD");
+});
+
+test("Supernet uses the tier beginning at the exact USD amount", async () => {
+  fetchMock.mockResolvedValue(
+    Response.json({
+      bank: "santander",
+      current: {
+        date: "2026-02-01",
+        rates: [
+          { currency: "USD", buy: 39.75, sell: 41.4, minAmount: 0, maxAmount: 1001 },
+          { currency: "USD", buy: 39.8, sell: 41.35, minAmount: 1001, maxAmount: 10000 },
+          { currency: "USD", buy: 39.9, sell: 41.25, minAmount: 10000, maxAmount: null },
+        ],
+      },
+      history: [],
+    }),
+  );
+  expect(
+    await resolveFrozenRate(createDb(), "USD", "UYU", new Date("2026-02-01T12:00:00Z"), {
+      profile: "santander_supernet",
+      amount: 1001,
+    }),
+  ).toMatchObject({ rate: 41.35, side: "sell", source: "santander_supernet" });
+});
+
 test("a hanging OpenAI response is aborted by the complete-call budget", async () => {
   let signal: AbortSignal | undefined;
   fetchMock.mockImplementation((_url, options) => {

@@ -181,6 +181,10 @@ para categorizar. Si una compra queda sin categoría, OpenAI puede sugerir una e
 revisión. El movimiento conserva el importe mientras confirmás la categoría o resolvés un dato
 faltante de la cuenta, la tarjeta o la conversión.
 
+En **Cards → Bank notices** se elige la cuenta asociada al aviso y la cotización para
+los consumos de crédito en otra moneda. La conexión inicial de Gmail y los mapeos
+de débito y transferencias se configuran en Apps Script. [Configuración de correo](mail-service/README.md)
+
 ### Claro, oscuro y en el teléfono
 
 <table>

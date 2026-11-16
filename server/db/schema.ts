@@ -17,6 +17,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { mailSources } from "../../shared/mail-normalization.js";
+import { bankExchangeRateProfiles } from "../../shared/schemas/card-mail-settings.js";
 
 import type { MerchantCorrection } from "../../shared/types.js";
 
@@ -208,6 +209,20 @@ export const creditCards = pgTable("credit_cards", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),
 });
+
+export const cardMailSettings = pgTable(
+  "card_mail_settings",
+  {
+    id: uuid("credit_card_id")
+      .primaryKey()
+      .references(() => creditCards.id, { onDelete: "cascade" }),
+    source: text("source").notNull(),
+    alias: text("alias").notNull().default(""),
+    accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
+    rateProfile: text("rate_profile", { enum: bankExchangeRateProfiles }).notNull(),
+  },
+  (table) => [index("card_mail_settings_source_idx").on(table.source)],
+);
 
 export const records = pgTable(
   "records",

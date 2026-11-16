@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { mockWalletData } from "@shared/mock-data";
@@ -14,6 +15,8 @@ const actions = vi.hoisted(() => ({
   updateCreditCard: vi.fn(),
   deleteCreditCard: vi.fn().mockResolvedValue(undefined),
   refreshCardStatements: vi.fn().mockResolvedValue(undefined),
+  readMailSettings: vi.fn(),
+  replaceMailSettings: vi.fn(),
 }));
 let dataset = structuredClone(mockWalletData);
 vi.mock("@/providers/wallet-provider", () => ({
@@ -29,6 +32,12 @@ vi.mock("@/providers/wallet-provider", () => ({
 }));
 vi.mock("@/lib/use-action-toast", () => ({
   useActionToast: () => ({ toast: null, runAction: createActionToastRunner(() => {}) }),
+}));
+vi.mock("@/providers/wallet-query-provider", () => ({
+  useWalletData: () => ({
+    client: { "cards.mailSettings": actions.readMailSettings },
+    mutations: { "cards.replaceMailSettings": actions.replaceMailSettings },
+  }),
 }));
 vi.mock("recharts", () =>
   Object.fromEntries(
@@ -51,6 +60,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   actions.addCreditCard.mockResolvedValue("synthetic-new-card");
   actions.updateCreditCard.mockResolvedValue(undefined);
+  actions.readMailSettings.mockResolvedValue({ available: true, settings: null });
+  actions.replaceMailSettings.mockResolvedValue({ available: true, settings: null });
   dataset = structuredClone(mockWalletData);
   dataset.records = [];
   dataset.creditCardRecords = [];
@@ -75,12 +86,43 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 function mount() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <MemoryRouter>
-      <CardsView />
-    </MemoryRouter>,
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <CardsView />
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
+
+test("bank notices save a named account and an Itaú LINK rate for the selected card", async () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Bank notices" }));
+  await screen.findByLabelText("Notice source");
+  const account = dataset.accounts.find((item) => item.isActive && item.isVisible)!;
+  fireEvent.change(screen.getByLabelText("Notice source"), {
+    target: { value: "itau_credit_card" },
+  });
+  fireEvent.change(screen.getByLabelText("Account"), { target: { value: account.id } });
+  fireEvent.change(screen.getByLabelText("Exchange rate"), { target: { value: "itau_link" } });
+  fireEvent.change(screen.getByLabelText("Alias"), { target: { value: "Internacional" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save bank notices" }));
+  await waitFor(() =>
+    expect(actions.replaceMailSettings).toHaveBeenCalledExactlyOnceWith({
+      params: { id: "synthetic-card" },
+      body: {
+        settings: {
+          source: "itau_credit_card",
+          alias: "Internacional",
+          accountId: account.id,
+          rateProfile: "itau_link",
+        },
+      },
+    }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
 function fillNewCard() {
   fireEvent.click(screen.getByRole("button", { name: "New card" }));
   fireEvent.change(screen.getByLabelText<HTMLInputElement>("Name"), {
