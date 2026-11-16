@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 
 import { lockCategoryReferences, writeCategoryReferences } from "./category-references.js";
+import { roundMoney } from "../../shared/money.js";
 import {
   type DebtPatch,
   debtSchema,
@@ -280,6 +281,12 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       ? { debt: mapDebt(debtRow), record: mapRecord(existing, { [existing.id]: [] }) }
       : null;
   }
+  // Hash the original request for compatible retries, then reconcile and save the same cents.
+  const amount = roundMoney(input.amount);
+  const explicitAccountAmount =
+    input.accountAmount === undefined ? undefined : roundMoney(input.accountAmount);
+  if (amount <= 0 || (explicitAccountAmount !== undefined && explicitAccountAmount <= 0))
+    throw validationError("Payment amounts must round to at least 0.01");
   const [[debtRow], [accountRow], [settingsRow]] = await Promise.all([
     db
       .select()
@@ -314,12 +321,12 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
     (settingsRow?.primaryCurrency ?? "UYU") as WalletRecord["currency"],
     input.occurredAt,
   );
-  if (primaryRate === null || (accountRate === null && input.accountAmount === undefined))
+  if (primaryRate === null || (accountRate === null && explicitAccountAmount === undefined))
     throw validationError("A historical exchange rate or explicit account amount is required");
   const accountAmount =
-    input.accountAmount === undefined
-      ? sql`round(${toNumeric(input.amount)}::numeric * ${String(accountRate)}::numeric, 2)`
-      : sql`${toNumeric(input.accountAmount)}::numeric`;
+    explicitAccountAmount === undefined
+      ? sql`round(${toNumeric(amount)}::numeric * ${String(accountRate)}::numeric, 2)`
+      : sql`${toNumeric(explicitAccountAmount)}::numeric`;
   const recordId = randomUUID();
   try {
     await db.batch([
@@ -327,12 +334,12 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       db.execute(sql`
       WITH updated_debt AS (
         UPDATE ${debts}
-        SET updated_at=now(), pending_amount = pending_amount - ${toNumeric(input.amount)}::numeric,
-            status = CASE WHEN pending_amount - ${toNumeric(input.amount)}::numeric = 0 THEN 'paid'::debt_status ELSE status END,
+        SET updated_at=now(), pending_amount = pending_amount - ${toNumeric(amount)}::numeric,
+            status = CASE WHEN pending_amount - ${toNumeric(amount)}::numeric = 0 THEN 'paid'::debt_status ELSE status END,
             account_id = CASE WHEN ${Boolean(input.saveAccountToDebt)} THEN ${input.accountId}::uuid ELSE account_id END
         WHERE id = ${id}::uuid AND deleted_at IS NULL
           AND pending_amount IS NOT NULL
-          AND pending_amount >= ${toNumeric(input.amount)}::numeric
+          AND pending_amount >= ${toNumeric(amount)}::numeric
           AND status <> 'paid'::debt_status
         RETURNING *
       )
@@ -343,7 +350,7 @@ export async function recordDebtPayment(db: Db, id: string, input: DebtPaymentIn
       )
       SELECT ${recordId}::uuid,
         CASE WHEN direction = 'receivable' THEN 'income'::record_type ELSE 'expense'::record_type END,
-        ${toNumeric(input.amount)}::numeric, currency, ${input.accountId}::uuid, ${accountAmount}, category_id, counterparty_name,
+        ${toNumeric(amount)}::numeric, currency, ${input.accountId}::uuid, ${accountAmount}, category_id, counterparty_name,
         'transfer'::payment_type, 'cleared'::payment_status, ${toNumeric(primaryRate)}, ${new Date(input.occurredAt)},
         COALESCE(${input.note ?? null}, 'Debt payment: ' || name), false, id, ${idempotencyKey}, ${requestHash}
       FROM updated_debt

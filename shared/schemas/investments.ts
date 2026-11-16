@@ -1,12 +1,17 @@
 import { z } from "zod";
 
-import { currencySchema, nonEmptyPatch } from "./common.js";
+import {
+  positiveMoneySchema,
+  nonnegativeMoneySchema,
+  currencySchema,
+  nonEmptyPatch,
+} from "./common.js";
 
 export const investmentSchema = z.object({
   name: z.string().min(1),
   type: z.enum(["stock", "fund", "crypto", "deposit", "other"]),
-  amountInvested: z.number().positive(),
-  currentValue: z.number().nonnegative(),
+  amountInvested: positiveMoneySchema,
+  currentValue: nonnegativeMoneySchema,
   currency: currencySchema,
   isVisible: z.boolean().default(true),
   startedAt: z.iso.datetime().or(z.iso.date()),
@@ -16,8 +21,8 @@ export const investmentSchema = z.object({
 export const investmentPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
   type: z.enum(["stock", "fund", "crypto", "deposit", "other"]).optional(),
-  amountInvested: z.number().positive().optional(),
-  currentValue: z.number().nonnegative().optional(),
+  amountInvested: positiveMoneySchema.optional(),
+  currentValue: nonnegativeMoneySchema.optional(),
   currency: currencySchema.optional(),
   isVisible: z.boolean().optional(),
   startedAt: z.iso.datetime().or(z.iso.date()).optional(),

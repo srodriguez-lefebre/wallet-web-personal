@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { roundMoney } from "@shared/money";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -25,7 +26,14 @@ export function limitDecimalPlaces(value: string, maxDecimals = 2) {
 
   if (!normalized.includes(".")) return integer;
 
-  const fraction = fractionParts.join("").replace(/\D/g, "").slice(0, safeMaxDecimals);
+  const fraction = fractionParts.join("").replace(/\D/g, "");
+  if (fraction.length <= safeMaxDecimals) return `${integer}.${fraction}`;
 
-  return `${integer}.${fraction}`;
+  const amount = Number(`${integer}.${fraction}`);
+  if (!Number.isFinite(amount)) return `${integer}.${fraction.slice(0, safeMaxDecimals)}`;
+  if (safeMaxDecimals === 2) return String(roundMoney(amount));
+  return new Intl.NumberFormat("en-US", {
+    useGrouping: false,
+    maximumFractionDigits: safeMaxDecimals,
+  }).format(amount);
 }

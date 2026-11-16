@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
 import { categoryReferenceQueries } from "../db/category-references.js";
+import { roundMoney, scaleMoney } from "../../shared/money.js";
 import { categoryImportWarning } from "../../shared/record-review.js";
 import { type DbClient } from "../db/client.js";
 import { prepareRecordGoalWrites } from "../db/index.js";
@@ -24,7 +25,7 @@ import type { MailIngestionInput } from "../../shared/schemas.js";
 import type { CurrencyCode, MailIngestionResult } from "../../shared/types.js";
 export class IngestionInProgressError extends Error {}
 function money(value: number) {
-  return value.toFixed(2);
+  return roundMoney(value).toFixed(2);
 }
 function rate(value: number) {
   return value.toFixed(6);
@@ -54,7 +55,7 @@ async function convert(
   occurredAt: Date,
 ) {
   const frozen = await resolveFrozenRate(db, from, to, occurredAt);
-  return frozen ? { amount: amount * frozen.rate, frozen } : null;
+  return frozen ? { amount: scaleMoney(amount, frozen.rate), frozen } : null;
 }
 function conversionNote(from: CurrencyCode, to: CurrencyCode, frozen: FrozenRate) {
   if (from === to) return undefined;

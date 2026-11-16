@@ -1,3 +1,5 @@
+import { scaleMoney } from "@shared/money";
+
 import type { CurrencyCode } from "@shared/types";
 
 /** Hidden same-currency fields follow the edited amount; unchanged history keeps its bank amount. */
@@ -12,7 +14,7 @@ export function recordAccountAmount(
   if (currency === accountCurrency && !preserveOriginal) return amount;
   const explicit = Number(input);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
-  return rate === null ? null : Math.round(amount * rate * 100) / 100;
+  return rate === null ? null : scaleMoney(amount, rate);
 }
 
 /** Retain the recorded conversion when the nominal amount changes. */
@@ -21,5 +23,5 @@ export function scaleConvertedAmount(input: string, previous: string, next: stri
     newAmount = Number(next),
     converted = Number(input);
   if (!input || oldAmount <= 0 || newAmount <= 0 || converted <= 0) return "";
-  return String(Math.round(((converted * newAmount) / oldAmount) * 100) / 100);
+  return String(scaleMoney(converted, newAmount, oldAmount));
 }

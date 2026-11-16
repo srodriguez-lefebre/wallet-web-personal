@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { findExchangeRate, proportionalMoneyCents } from "./money.js";
+import { findExchangeRate, proportionalMoneyCents, scaleMoney } from "./money.js";
 
 import type { ExchangeRate } from "./types.js";
 const rates: ExchangeRate[] = [
@@ -17,6 +17,14 @@ test("missing or future quotes cannot silently become one-to-one", () => {
   expect(findExchangeRate(rates, "USD", "UYU", "2025-01-01")).toBeNull();
   expect(findExchangeRate(rates, "BRL", "UYU", new Date())).toBeNull();
   expect(findExchangeRate(rates, "UYU", "UYU", new Date())).toBe(1);
+});
+
+test("converts decimal amounts before rounding half cents", () => {
+  expect(scaleMoney(1.15, 0.1)).toBe(0.12);
+  expect(scaleMoney(-1.15, 0.1)).toBe(-0.12);
+  expect(scaleMoney(1.15, 1e-7)).toBe(0);
+  expect(scaleMoney(1.15, 123.456789)).toBe(141.98);
+  expect(scaleMoney(1.15, 1, 10)).toBe(0.12);
 });
 
 test("proportional reserve cents round exactly at half cents and preserve the last cent", () => {

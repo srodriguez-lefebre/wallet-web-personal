@@ -1,11 +1,11 @@
 import { z } from "zod";
 
-import { currencySchema, uuidSchema, nonEmptyPatch } from "./common.js";
+import { positiveMoneySchema, currencySchema, uuidSchema, nonEmptyPatch } from "./common.js";
 
 export const installmentPlanSchema = z
   .object({
     name: z.string().min(1),
-    totalAmount: z.number().positive(),
+    totalAmount: positiveMoneySchema,
     currency: currencySchema,
     installmentsTotal: z.number().int().positive(),
     installmentsPaid: z.number().int().nonnegative(),
@@ -21,7 +21,7 @@ export const installmentPlanSchema = z
 
 export const installmentPlanPatchSchema = nonEmptyPatch({
   name: z.string().min(1).optional(),
-  totalAmount: z.number().positive().optional(),
+  totalAmount: positiveMoneySchema.optional(),
   currency: currencySchema.optional(),
   installmentsTotal: z.number().int().positive().optional(),
   installmentsPaid: z.number().int().nonnegative().optional(),

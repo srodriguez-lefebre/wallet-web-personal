@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { compatibleMailSourceSchema } from "../mail-source.js";
-import { currencySchema, optionalUuidSchema } from "./common.js";
+import { nonnegativeMoneySchema, currencySchema, optionalUuidSchema } from "./common.js";
 
 export const mailIngestionSchema = z
   .object({
@@ -22,7 +22,7 @@ export const mailIngestionSchema = z
       source: compatibleMailSourceSchema,
       sourceLabel: z.string().max(100).default(""),
       occurredAt: z.iso.datetime(),
-      amount: z.number().nonnegative(),
+      amount: nonnegativeMoneySchema,
       currency: currencySchema,
       merchantRaw: z.string().min(1).max(500),
       cardAlias: z.string().max(200).default(""),

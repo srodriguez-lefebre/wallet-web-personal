@@ -25,6 +25,27 @@ const baseRecord = {
   occurredAt: "2026-06-19T12:00:00.000Z",
 };
 
+describe("monetary precision", () => {
+  it("rounds movement amounts before cross-field validation and keeps exchange-rate precision", () => {
+    const record = recordSchema.parse({
+      ...baseRecord,
+      accountId,
+      amount: 1.005,
+      accountAmount: 42.135,
+      exchangeRateToPrimary: 41.923456,
+      goalAssociations: [{ goalId: categoryId, allocatedAmount: 1.009 }],
+    });
+    expect(record).toMatchObject({
+      amount: 1.01,
+      accountAmount: 42.14,
+      exchangeRateToPrimary: 41.923456,
+      goalAssociations: [{ allocatedAmount: 1.01 }],
+    });
+    expect(recordPatchSchema.parse({ amount: 12.346 })).toEqual({ amount: 12.35 });
+    expect(recordPatchSchema.safeParse({ amount: 0.004 }).success).toBe(false);
+  });
+});
+
 describe("credit-card validation", () => {
   it("preserves an explicitly unknown primary rate in review and cancelled history", () => {
     const input = {

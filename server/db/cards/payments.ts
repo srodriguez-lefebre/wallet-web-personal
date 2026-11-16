@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
+import { roundMoney } from "../../../shared/money.js";
 import { conflictError, validationError } from "../../api/errors.js";
 import { mapCreditCardPayment, toNumeric } from "../mappers.js";
 import { isPgError } from "../pg-error.js";
@@ -43,6 +44,11 @@ export async function payCreditCardStatement(
       }),
     )
     .digest("hex");
+  // Retain the original hash for retries from older clients.
+  const amount = toNumeric(roundMoney(input.amount));
+  const limitAmount = toNumeric(roundMoney(input.amountInLimitCurrency));
+  const accountAmount =
+    input.accountAmount === undefined ? null : toNumeric(roundMoney(input.accountAmount));
   // The first query acquires the card lock. The following query gets a fresh
   // READ COMMITTED snapshot after any concurrent payment has committed.
   let result;
@@ -69,25 +75,27 @@ export async function payCreditCardStatement(
         SELECT p.*, coalesce(sum(net) OVER (ORDER BY occurred_at, id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS prior
         FROM net_purchases p
       ), drafts AS (
-        SELECT p.*, least(net, greatest(0, t.paid + round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) - prior))
+        SELECT p.*, least(net, greatest(0, t.paid + ${limitAmount}::numeric - prior))
           - least(net, greatest(0, t.paid - prior)) AS allocated
         FROM ordered p CROSS JOIN totals t
       ), payment AS (
         INSERT INTO credit_card_payments
           (id, credit_card_id, statement_id, amount, currency, amount_in_limit_currency, account_id, account_amount, occurred_at, note, idempotency_key, request_hash)
         SELECT ${paymentId}::uuid, ${creditCardId}::uuid, s.id,
-          ${toNumeric(input.amount)}::numeric, ${input.currency}, round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2),
+          ${amount}::numeric, ${input.currency}, ${limitAmount}::numeric,
           CASE WHEN ${input.accountId ?? null}::uuid IS NOT NULL AND coalesce((SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation), 0) > 0
             THEN ${input.accountId ?? null}::uuid END,
           CASE WHEN ${input.accountId ?? null}::uuid IS NOT NULL AND coalesce((SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation), 0) > 0
-            THEN ${input.accountAmount === undefined ? null : toNumeric(input.accountAmount)}::numeric
+            THEN ${accountAmount}::numeric
               * (SELECT sum(allocated) FROM drafts WHERE NOT account_impact_at_creation)
-              / round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) END,
+              / nullif(${limitAmount}::numeric, 0) END,
           ${input.occurredAt}::timestamptz, ${input.note ?? null}, ${idempotencyKey}, ${requestHash}
         FROM credit_card_statements s CROSS JOIN totals t
         WHERE s.id = ${statementId}::uuid AND s.credit_card_id = ${creditCardId}::uuid
-          AND round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) > 0
-          AND round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) <= greatest(0, t.total - t.paid)
+          AND ${amount}::numeric > 0
+          AND ${limitAmount}::numeric > 0
+          AND (${accountAmount}::numeric IS NULL OR ${accountAmount}::numeric > 0)
+          AND ${limitAmount}::numeric <= greatest(0, t.total - t.paid)
           AND NOT EXISTS (SELECT 1 FROM credit_card_payments WHERE idempotency_key = ${idempotencyKey})
         RETURNING id, statement_id
       ), allocations AS (
@@ -97,9 +105,9 @@ export async function payCreditCardStatement(
         FROM drafts d CROSS JOIN payment WHERE d.allocated > 0 RETURNING id
       ), status_update AS (
         UPDATE credit_card_statements s SET
-          status = CASE WHEN t.total - t.paid - round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) <= 0 THEN 'paid'
+          status = CASE WHEN t.total - t.paid - ${limitAmount}::numeric <= 0 THEN 'paid'
             WHEN s.due_at < now() THEN 'overdue' ELSE 'partial' END,
-          paid_at = CASE WHEN t.total - t.paid - round(${toNumeric(input.amountInLimitCurrency)}::numeric, 2) <= 0 THEN ${input.occurredAt}::timestamptz ELSE NULL END,
+          paid_at = CASE WHEN t.total - t.paid - ${limitAmount}::numeric <= 0 THEN ${input.occurredAt}::timestamptz ELSE NULL END,
           updated_at = now()
         FROM totals t, payment WHERE s.id = payment.statement_id RETURNING s.id
       ) SELECT id FROM payment UNION ALL
