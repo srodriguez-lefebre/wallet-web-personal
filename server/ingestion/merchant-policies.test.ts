@@ -50,7 +50,9 @@ test("a generic payment processor remains reviewable instead of guessing a shop"
   const food = (
     await fixture.pool.query("SELECT id FROM categories WHERE system_key='restaurants'")
   ).rows[0].id as string;
-  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(food);
+  const model = vi
+    .spyOn(classification, "inferCategoryWithOpenAi")
+    .mockResolvedValue({ decision: "assign", categoryId: food });
   expect(await resolveCategory(createDb(), "MERPAGO*12345")).toMatchObject({
     source: "fallback",
     needsReview: true,
@@ -150,7 +152,10 @@ test("an eliminated merchant category never clears review or changes canonical i
     "INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) VALUES($1,'RETIRED SYNTHETIC','RETIRED SYNTHETIC')",
     [merchant],
   );
-  vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(category);
+  vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue({
+    decision: "assign",
+    categoryId: category,
+  });
   expect(await resolveCategory(createDb(), "RETIRED SYNTHETIC")).toMatchObject({
     merchantName: "Synthetic canonical retired",
     needsReview: true,
@@ -166,7 +171,9 @@ test.each([
   const food = (
     await fixture.pool.query("SELECT id FROM categories WHERE system_key='restaurants'")
   ).rows[0].id as string;
-  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(food);
+  const model = vi
+    .spyOn(classification, "inferCategoryWithOpenAi")
+    .mockResolvedValue({ decision: "assign", categoryId: food });
   expect(await resolveCategory(createDb(), descriptor)).toMatchObject({
     source: "fallback",
     needsReview: true,
@@ -175,15 +182,17 @@ test.each([
   expect(model).not.toHaveBeenCalled();
 });
 
-test("a real merchant between processor and location is still classified", async () => {
+test("a real merchant between processor and location can still get a suggestion", async () => {
   const food = (
     await fixture.pool.query("SELECT id FROM categories WHERE system_key='restaurants'")
   ).rows[0].id as string;
-  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(food);
+  const model = vi
+    .spyOn(classification, "inferCategoryWithOpenAi")
+    .mockResolvedValue({ decision: "assign", categoryId: food });
   expect(await resolveCategory(createDb(), "MERPAGO*12345 SYNTHETIC SHOP UY")).toMatchObject({
-    categoryId: food,
+    suggestedCategoryId: food,
     source: "openai",
-    needsReview: false,
+    needsReview: true,
   });
   expect(model).toHaveBeenCalledOnce();
 });

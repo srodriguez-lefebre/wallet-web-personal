@@ -8,6 +8,7 @@ export function buildRecordIndexes(
   return {
     accounts: new Map(dataset.accounts.map((item) => [item.id, item])),
     categories: new Map(dataset.categories.map((item) => [item.id, item])),
+    categoryParentIds: new Set(dataset.categories.map((item) => item.parentId)),
     cards: new Map(dataset.creditCards.map((item) => [item.id, item])),
     tags: new Map(dataset.tags.map((item) => [item.id, item])),
     categoryNames: new Map(

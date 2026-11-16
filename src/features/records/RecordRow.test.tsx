@@ -92,3 +92,70 @@ test("the native edit button has no nested controls and deleting does not open t
   fireEvent.click(edit);
   expect(model.loadRecord).toHaveBeenCalledExactlyOnceWith(record);
 });
+
+test("a model suggestion can be selected without saving or enabling automatic application", () => {
+  const record = walletRecordResponseSchema.parse({
+    ...syntheticRecord,
+    categoryId: undefined,
+    paymentStatus: "needs_review",
+    importMerchant: "Fixture coffee bar",
+    suggestedCategoryId: syntheticRecord.id,
+  });
+  const dataset = walletDatasetSchema.parse({
+    ...reference,
+    categories: [{ id: syntheticRecord.id, name: "Coffee shops", color: "blue", icon: "coffee" }],
+    records: [record],
+    creditCardRecords: [],
+    creditCardStatements: [],
+    creditCardPayments: [],
+    creditCardPaymentAllocations: [],
+  });
+  const saveReview = vi.fn().mockResolvedValue(undefined);
+  const model: RecordRowModel = {
+    dataset,
+    merchantCorrections: new Map(),
+    loadRecord: vi.fn(),
+    reviewSeenThrough: 0,
+    runAction: createActionToastRunner(() => {}),
+    deleteRecord: vi.fn(),
+    reviewCategories: dataset.categories,
+    reviewWrite: undefined,
+    saveReview,
+  };
+  const { rerender } = render(
+    <RecordRow record={record} model={model} indexes={buildRecordIndexes(dataset)} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /use ai suggestion.*coffee shops/i }));
+  expect(saveReview).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole<HTMLInputElement>("checkbox", { name: /apply this category/i }).checked,
+  ).toBe(false);
+
+  fireEvent.click(screen.getByRole("button", { name: "Save category" }));
+  expect(saveReview).toHaveBeenCalledExactlyOnceWith(record, { categoryId: syntheticRecord.id });
+
+  const updatedDataset = walletDatasetSchema.parse({
+    ...dataset,
+    categories: [
+      ...dataset.categories,
+      {
+        id: "00000000-0000-4000-8000-000000000002",
+        name: "Brunch",
+        color: "blue",
+        icon: "coffee",
+        parentId: syntheticRecord.id,
+      },
+    ],
+  });
+  rerender(
+    <RecordRow
+      record={record}
+      model={{ ...model, dataset: updatedDataset, reviewCategories: updatedDataset.categories }}
+      indexes={buildRecordIndexes(updatedDataset)}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /use ai suggestion/i })).toBeNull();
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Save category" }).disabled).toBe(
+    true,
+  );
+});

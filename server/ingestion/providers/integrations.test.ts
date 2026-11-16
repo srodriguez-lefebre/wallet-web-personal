@@ -91,6 +91,9 @@ test("OpenAI outage persists reviewable expenses, skips an open circuit and keep
     [accountId],
   );
   await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
+  await fixture.pool.query(
+    "INSERT INTO categories(name,kind,color,icon) VALUES('Synthetic food','expense','blue','bank')",
+  );
   fetchMock.mockResolvedValue(new Response("unavailable", { status: 503 }));
   let first: MailIngestionInput | undefined;
   const started = performance.now();
@@ -131,4 +134,30 @@ test("OpenAI outage persists reviewable expenses, skips an open circuit and keep
   expect(dataset.records).toHaveLength(4);
   expect(dataset.records.every((record) => record.paymentStatus === "needs_review")).toBe(true);
   expect(dataset.records.reduce((sum, record) => sum + record.accountAmount!, 0)).toBe(86);
+});
+
+test("a valid provider abstention resets the circuit's failure count", async () => {
+  await fixture.pool.query(
+    "INSERT INTO provider_state(name,failures,generation) VALUES('openai:category',2,0)",
+  );
+  fetchMock.mockResolvedValue(
+    Response.json({
+      status: "completed",
+      output_text: '{"decision":"review","categoryId":null,"reason":"ambiguous"}',
+    }),
+  );
+  const result = await runProvider(
+    createDb(),
+    categoryProvider,
+    { merchantRaw: "Acme", categories: [{ id: randomUUID(), path: "Food" }] },
+    { budgetMs: 1000 },
+  );
+  expect(result).toEqual({ status: "ok", value: { decision: "review", reason: "ambiguous" } });
+  expect(
+    (
+      await fixture.pool.query(
+        "SELECT failures,open_until FROM provider_state WHERE name='openai:category'",
+      )
+    ).rows,
+  ).toEqual([{ failures: 0, open_until: null }]);
 });

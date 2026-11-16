@@ -1,15 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 
 import { serveWalletApi } from "../../scripts/sandbox/http.js";
 import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test.js";
 import { findApiOperation } from "../../shared/api-contract.js";
-import { walletBackupSchema } from "../../shared/schemas.js";
+import { walletBackupSchema, walletRecordResponseSchema } from "../../shared/schemas.js";
 import { createDb } from "../db/client.js";
 import { getWalletDataset } from "../db/index.js";
 import { restoreWalletBackup } from "../db/wallet-restore.js";
+import * as classification from "../ingestion/openai-category.js";
 let fixture: Awaited<ReturnType<typeof createPostgresTestDatabase>>,
   server: Server,
   url: string,
@@ -236,4 +237,72 @@ test("nested card summary uses the real authenticated router and matches persist
   }
   const invalid = await request("/api/cards/not-a-uuid/summary");
   expect(invalid.response.status).toBe(400);
+});
+
+test("a mail suggestion is returned by Records until its metadata expires, without assigning it", async () => {
+  vi.stubEnv("INGEST_API_TOKEN", "synthetic-ingest-test");
+  const model = vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue({
+    decision: "assign",
+    categoryId,
+  });
+  try {
+    const id = randomUUID();
+    const date = "2026-11-14T12:00:00.000Z";
+    const response = await fetch(`${url}/api/ingest/mail/transactions`, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer synthetic-ingest-test",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        idempotencyKey: id,
+        integration: { name: "fixture", version: "1" },
+        email: { provider: "gmail", messageId: id, threadId: id, date },
+        transaction: {
+          source: "itau_debit_card",
+          paymentType: "debit",
+          merchantRaw: "Fixture unidentified store",
+          amount: 35,
+          currency: "UYU",
+          occurredAt: date,
+        },
+        destination: { accountId },
+      }),
+    });
+    expect(response.status).toBe(201);
+    const result = (await response.json()) as { data: { recordId: string; status: string } };
+    expect(result.data.status).toBe("needs_review");
+    const loadReview = async () => {
+      const { response: loaded, payload } = await request(
+        "/api/records?paymentStatus=needs_review",
+      );
+      expect(loaded.status).toBe(200);
+      return walletRecordResponseSchema
+        .array()
+        .parse(payload.data.items)
+        .find((record) => record.id === result.data.recordId);
+    };
+    const pending = await loadReview();
+    expect(pending).toMatchObject({
+      suggestedCategoryId: categoryId,
+      amount: 35,
+      accountAmount: 35,
+    });
+    expect(pending?.categoryId).not.toBe(categoryId);
+
+    await fixture.pool.query(
+      "UPDATE ingestion_events SET metadata_expires_at=now()-interval '1 second' WHERE record_id=$1",
+      [result.data.recordId],
+    );
+    const reloaded = await loadReview();
+    expect(reloaded).toMatchObject({
+      id: pending?.id,
+      categoryId: pending?.categoryId,
+      paymentStatus: "needs_review",
+    });
+    expect(reloaded?.suggestedCategoryId).toBeUndefined();
+  } finally {
+    model.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

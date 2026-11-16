@@ -229,6 +229,7 @@ export const walletRecordResponseSchema = z.object({
   updatedAt: z.iso.datetime().optional(),
   importMerchant: z.string().optional(),
   importHistory: z.array(z.string()).optional(),
+  suggestedCategoryId: uuidSchema.optional(),
   merchantCorrection: merchantCorrectionSchema.optional(),
   linkedCardRecordKind: z.enum(["purchase", "refund"]).optional(),
 });

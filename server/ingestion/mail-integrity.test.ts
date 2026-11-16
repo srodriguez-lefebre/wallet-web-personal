@@ -42,7 +42,19 @@ beforeEach(async () => {
     "INSERT INTO categories(id,name,color,icon) VALUES($1,'Restaurant, fast-food','blue','bank') ON CONFLICT(id) DO NOTHING",
     [knownCategoryId],
   );
-  vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(knownCategoryId);
+  const merchantId = randomUUID();
+  await fixture.pool.query(
+    "INSERT INTO merchants(id,name,category_id) VALUES($1,'Test known merchant',$2)",
+    [merchantId, knownCategoryId],
+  );
+  await fixture.pool.query(
+    "INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) VALUES($1,'Test known merchant','TEST KNOWN MERCHANT')",
+    [merchantId],
+  );
+  vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue({
+    decision: "assign",
+    categoryId: knownCategoryId,
+  });
 });
 function input(): MailIngestionInput {
   const messageId = randomUUID();
@@ -63,7 +75,7 @@ function input(): MailIngestionInput {
       occurredAt: "2026-02-01T12:00:00Z",
       amount: 50,
       currency: "UYU",
-      merchantRaw: "Test unknown merchant",
+      merchantRaw: "Test known merchant",
       cardAlias: "Test",
       cardBrand: "VISA",
       cardNumber: "1234",
@@ -212,8 +224,9 @@ test("a retry reclaims an abandoned lease and fences the expired original worker
     entered();
     return stalled;
   });
-  const event = input(),
-    original = processMailIngestion(createDb(), event);
+  const event = input();
+  event.transaction.merchantRaw = "Synthetic leased merchant";
+  const original = processMailIngestion(createDb(), event);
   // Attach a rejection observer before releasing the expired worker.
   const outcome = original.then(
     () => "unexpected success",
@@ -224,7 +237,7 @@ test("a retry reclaims an abandoned lease and fences the expired original worker
     "UPDATE ingestion_events SET updated_at=now()-interval '10 minutes' WHERE idempotency_key=$1",
     [event.idempotencyKey],
   );
-  expect((await processMailIngestion(createDb(), event)).status).toBe("created");
+  expect((await processMailIngestion(createDb(), event)).status).toBe("needs_review");
   release(null);
   expect(await outcome).toBe("expired");
   const dataset = await getWalletDataset(createDb());
@@ -301,7 +314,9 @@ test("a bank account deactivated during ingestion cannot receive a cleared debit
     reached();
     return stalled;
   });
-  const attempt = processMailIngestion(createDb(), bankInput("debit"));
+  const event = bankInput("debit");
+  event.transaction.merchantRaw = "Synthetic in-flight merchant";
+  const attempt = processMailIngestion(createDb(), event);
   const outcome = attempt.then(
     () => "created",
     () => "rejected",
@@ -412,8 +427,10 @@ test("external transfer destinations clear when the origin is mapped and retain 
   expect(metadata.transaction.destinationAccountNumber).toBe("****9012");
 });
 test("external transfers do not require merchant classification to confirm a known origin", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(null);
-  const result = await processMailIngestion(createDb(), bankInput("transfer"));
+  const event = bankInput("transfer");
+  event.transaction.merchantRaw = "Unmapped transfer recipient";
+  const result = await processMailIngestion(createDb(), event);
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
   expect(result.status).toBe("created");
   expect((await getWalletDataset(createDb())).records[0]!.paymentStatus).toBe("cleared");
 });

@@ -176,10 +176,10 @@ modificar nada.
 
 Un Google Apps Script lee en tu Gmail los avisos de compra, débito, transferencia y pago, los
 normaliza con el mismo código que usa el servidor y los envía a la API con un token exclusivo. El
-servidor reconoce el comercio, elige la categoría (reglas aprendidas primero, OpenAI sólo para
-comercios nuevos), resuelve la cuenta o tarjeta destino, descarta duplicados y guarda el
-movimiento. Si falta un dato o un proveedor externo no responde a tiempo, el movimiento queda
-para revisar con su importe intacto.
+servidor reconoce el comercio, descarta duplicados y usa las correcciones y reglas de la billetera
+para categorizar. Si una compra queda sin categoría, OpenAI puede sugerir una en la cola de
+revisión. El movimiento conserva el importe mientras confirmás la categoría o resolvés un dato
+faltante de la cuenta, la tarjeta o la conversión.
 
 ### Claro, oscuro y en el teléfono
 
