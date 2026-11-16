@@ -1,5 +1,6 @@
 import { and, eq, isNotNull, isNull, ne, sql } from "drizzle-orm";
 
+import { categoryMatchesKind } from "../../shared/categories.js";
 import { categoryReadColumns } from "../db/category-metadata.js";
 import { isReviewCategory, normalizeBankMerchant } from "../../shared/record-review.js";
 import {
@@ -11,11 +12,12 @@ import {
 } from "../db/schema.js";
 import { normalizeMerchantTerm, pickLongestMerchantMatch } from "./normalization.js";
 import { matchingMerchantTerms } from "./merchant-rules.js";
-import { type CategoryInferenceDiagnostic } from "./openai-category.js";
+import { categoryModel } from "./openai-category.js";
 import { callCategoryProvider } from "./providers/category.js";
 
 import type { DbClient } from "../db/client.js";
-import type { MerchantRuleLearning } from "./learned-merchant.js";
+import type { CategoryRow } from "../db/category-metadata.js";
+import type { CategoryDecision, CategoryInferenceDiagnostic } from "./openai-category.js";
 interface CategoryResolution {
   categoryId: string | undefined;
   merchantName: string;
@@ -31,18 +33,53 @@ interface CategoryResolution {
   needsReview: boolean;
   reason?: string;
   modelAttempt?: CategoryInferenceDiagnostic;
-  learning?: MerchantRuleLearning;
+  suggestedCategoryId?: string;
 }
-export async function resolveCategory(
+
+interface UnresolvedCategory {
+  source: "unresolved";
+  merchantName: string;
+  fallbackId: string | undefined;
+  activeCategories: CategoryRow[];
+}
+
+function readActiveCategories(db: DbClient) {
+  return db.select(categoryReadColumns).from(categories).where(isNull(categories.deletedAt));
+}
+
+function modelCategoryOptions(activeCategories: CategoryRow[]) {
+  const parentIds = new Set(activeCategories.map((category) => category.parentId));
+  const byId = new Map(activeCategories.map((category) => [category.id, category]));
+  return activeCategories
+    .filter(
+      (category) =>
+        !parentIds.has(category.id) &&
+        isReviewCategory(category) &&
+        categoryMatchesKind({ kind: category.kind ?? undefined }, "expense"),
+    )
+    .map((category) => {
+      const path = [category.name];
+      const visited = new Set([category.id]);
+      let parent = category.parentId ? byId.get(category.parentId) : undefined;
+      while (parent && !visited.has(parent.id)) {
+        path.unshift(parent.name);
+        visited.add(parent.id);
+        parent = parent.parentId ? byId.get(parent.parentId) : undefined;
+      }
+      return { id: category.id, path: path.join(" > ") };
+    })
+    .sort((a, b) => a.path.localeCompare(b.path) || a.id.localeCompare(b.id));
+}
+
+export async function resolveCategoryRules(
   db: DbClient,
   merchantRaw: string,
   useCorrections = true,
-): Promise<CategoryResolution> {
+): Promise<CategoryResolution | UnresolvedCategory> {
   const merchantTerms = matchingMerchantTerms(merchantRaw);
   const aliasRows = await db
     .select({
       normalizedAlias: merchantAliases.normalizedAlias,
-      merchantId: merchants.id,
       merchantName: merchants.name,
       categoryId: merchants.categoryId,
       priority: merchants.priority,
@@ -68,10 +105,7 @@ export async function resolveCategory(
   const local = explicit ?? learned;
   // Classification may change, but the identity used to deduplicate must stay stable.
   const merchantName = local?.merchantName ?? merchantRaw;
-  const allCategories = await db
-    .select(categoryReadColumns)
-    .from(categories)
-    .where(isNull(categories.deletedAt));
+  const allCategories = await readActiveCategories(db);
   const fallback =
     allCategories.find((item) => item.systemKey === "unknown_expense") ??
     allCategories.find(
@@ -210,54 +244,61 @@ export async function resolveCategory(
       source: "generic_rule",
       needsReview: false,
     };
-  const parentIds = new Set(allCategories.map((item) => item.parentId).filter(Boolean));
-  const byId = new Map(allCategories.map((item) => [item.id, item]));
-  const leaves = allCategories.filter((item) => !parentIds.has(item.id));
-  const options = leaves.map((item) => ({
-    id: item.id,
-    path: item.parentId ? `${byId.get(item.parentId)?.name ?? ""} > ${item.name}` : item.name,
-  }));
+  return {
+    source: "unresolved",
+    merchantName,
+    fallbackId: fallback?.id,
+    activeCategories: allCategories,
+  };
+}
+
+export async function completeCategoryResolution(
+  db: DbClient,
+  lookup: CategoryResolution | UnresolvedCategory,
+  merchantRaw: string,
+  allowModel = true,
+): Promise<CategoryResolution> {
+  if (lookup.source !== "unresolved") return lookup;
+  const { fallbackId, merchantName, activeCategories } = lookup;
+  if (!fallbackId) throw new Error("Protected Unknown expense category is not configured");
+  const fallback: CategoryResolution = {
+    categoryId: fallbackId,
+    merchantName,
+    source: "fallback",
+    needsReview: true,
+  };
+  if (!allowModel) return fallback;
+  const options = modelCategoryOptions(activeCategories);
   let modelAttempt: CategoryInferenceDiagnostic | undefined;
+  let decision: CategoryDecision | null = null;
   try {
-    const inferred = await callCategoryProvider(db, {
+    decision = await callCategoryProvider(db, {
       merchantRaw,
       categories: options,
       report: (diagnostic) => {
         modelAttempt = diagnostic;
       },
     });
-    if (inferred && options.some((item) => item.id === inferred))
-      return {
-        categoryId: inferred,
-        merchantName,
-        source: "openai",
-        needsReview: isUnknown(inferred),
-        modelAttempt,
-        learning: isUnknown(inferred)
-          ? undefined
-          : {
-              merchantName,
-              merchantRaw,
-              categoryId: inferred,
-              existingMerchant: local
-                ? { id: local.merchantId, previousCategoryId: local.categoryId }
-                : undefined,
-            },
-      };
   } catch {
     modelAttempt = {
       outcome: "failed",
-      model: process.env.OPENAI_MODEL?.trim() || "gpt-5-nano",
+      model: categoryModel(),
       reason: "unexpected_classifier_error",
       elapsedMs: 0,
     };
   }
-  if (!fallback) throw new Error("Protected Unknown expense category is not configured");
-  return {
-    categoryId: fallback.id,
-    merchantName,
-    source: "fallback",
-    needsReview: true,
-    modelAttempt,
-  };
+  if (!decision) return { ...fallback, modelAttempt };
+  if (decision.decision === "review")
+    return { ...fallback, source: "openai", reason: decision.reason, modelAttempt };
+
+  const offered = options.some(({ id }) => id === decision.categoryId);
+  const current = offered && modelCategoryOptions(await readActiveCategories(db));
+  if (!current || !current.some(({ id }) => id === decision.categoryId))
+    return { ...fallback, reason: "category_no_longer_available", modelAttempt };
+  return { ...fallback, source: "openai", suggestedCategoryId: decision.categoryId, modelAttempt };
+}
+
+export async function resolveCategory(db: DbClient, merchantRaw: string, useCorrections = true) {
+  const lookup = await resolveCategoryRules(db, merchantRaw, useCorrections);
+  return completeCategoryResolution(db, lookup, merchantRaw);
 }

@@ -15,9 +15,8 @@ import {
   settings,
 } from "../db/schema.js";
 import { resolveFrozenRate, type FrozenRate } from "./exchange-rates.js";
-import { prepareMerchantLearning } from "./learned-merchant.js";
 import { cardLastFour, normalizeMerchantTerm } from "./normalization.js";
-import { resolveCategory } from "./category-resolution.js";
+import { completeCategoryResolution, resolveCategoryRules } from "./category-resolution.js";
 import { pruneExpiredMetadata } from "./metadata.js";
 export { resolveCategory } from "./category-resolution.js";
 
@@ -192,26 +191,16 @@ export async function processMailIngestion(
     }
     const accountWasInvalid = Boolean(input.destination.accountId && !account);
     const cardWasInvalid = Boolean(isCredit && input.destination.creditCardId && !card);
-    const category = isOwnedTransfer
+    const merchantRaw = input.transaction.merchantRaw;
+    const categoryLookup = isOwnedTransfer
       ? {
           categoryId: undefined,
-          merchantName: input.transaction.merchantRaw,
+          merchantName: merchantRaw,
           source: "transfer" as const,
           needsReview: false,
         }
-      : await resolveCategory(db, input.transaction.merchantRaw, !isTransfer);
-    console.info(
-      JSON.stringify({
-        event: "mail_category_classification",
-        ingestionEventId: eventId,
-        source: category.source,
-        categoryId: category.categoryId,
-        needsReview: category.needsReview,
-        reason: "reason" in category ? category.reason : undefined,
-        modelAttempt: "modelAttempt" in category ? category.modelAttempt : undefined,
-      }),
-    );
-    const canonicalMerchantNormalized = normalizeMerchantTerm(category.merchantName);
+      : await resolveCategoryRules(db, merchantRaw, !isTransfer);
+    const canonicalMerchantNormalized = normalizeMerchantTerm(categoryLookup.merchantName);
     // Keep existing credit fingerprints stable; bank methods cannot collide with them.
     const targetKey = `account:${account?.id ?? "none"}|card:${card?.id ?? "none"}${isCredit ? "" : `|method:${paymentType}|destination:${destinationAccount?.id ?? "none"}`}`;
     const fingerprint = [
@@ -250,6 +239,19 @@ export async function processMailIngestion(
     };
     const [duplicate] = await findDuplicate();
     if (duplicate) return await completeDuplicate(duplicate.id);
+    const category = await completeCategoryResolution(db, categoryLookup, merchantRaw, !isTransfer);
+    console.info(
+      JSON.stringify({
+        event: "mail_category_classification",
+        ingestionEventId: eventId,
+        source: category.source,
+        categoryId: category.categoryId,
+        suggestedCategoryId: category.suggestedCategoryId,
+        needsReview: category.needsReview,
+        reason: category.reason,
+        modelAttempt: category.modelAttempt,
+      }),
+    );
     const [settingsRow] = await db.select().from(settings).limit(1);
     const primaryCurrency = (settingsRow?.primaryCurrency ?? "UYU") as CurrencyCode;
     const warnings: string[] = [];
@@ -329,7 +331,6 @@ export async function processMailIngestion(
       isTransfer && input.transaction.source === "itau_payment"
         ? `Payment to: ${input.transaction.merchantRaw} · ${input.transaction.currency} ${money(input.transaction.amount)} · from ${input.transaction.accountNumber ? `****${input.transaction.accountNumber.replace(/\D/g, "").slice(-4)}` : "unknown account"}`
         : undefined,
-      category.source === "openai" ? "Categorized by OpenAI" : undefined,
       primary && conversionNote(input.transaction.currency, primaryCurrency, primary.frozen),
       accountConversion &&
         account &&
@@ -508,10 +509,6 @@ export async function processMailIngestion(
     const duplicateGuard = db.execute(sql`SELECT 1 / CASE WHEN EXISTS (
       SELECT 1 FROM ${ingestionEvents} WHERE ${duplicateWhere}
     ) THEN 0 ELSE 1 END AS unique_notification`);
-    const learningQueries = prepareMerchantLearning(
-      db,
-      "learning" in category ? category.learning : undefined,
-    );
     try {
       await db.batch([
         ...categoryReferenceQueries(db, [category.categoryId]),
@@ -525,7 +522,6 @@ export async function processMailIngestion(
         ...(recordInsert ? [recordInsert] : []),
         ...(cardInsert ? [cardInsert] : []),
         ...(goalWrites?.queries ?? []),
-        ...learningQueries,
         eventUpdate,
       ] as unknown as Parameters<DbClient["batch"]>[0]);
     } catch (error) {

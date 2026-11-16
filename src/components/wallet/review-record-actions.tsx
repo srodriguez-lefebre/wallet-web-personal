@@ -13,6 +13,7 @@ export function ReviewRecordActions({
   dataset,
   categories,
   suggestion,
+  isAiSuggestion,
   autoApply,
   busy,
   onSave,
@@ -21,15 +22,16 @@ export function ReviewRecordActions({
   dataset: WalletDataset;
   categories: Category[];
   suggestion?: Category;
+  isAiSuggestion?: boolean;
   autoApply: boolean;
   busy: boolean;
   onSave: (patch: RecordPatch) => void;
 }) {
-  const [selectedCategory, setSelectedCategory] = useState(
-    categories.some((category) => category.id === record.categoryId)
+  const [categoryDraft, setCategoryDraft] = useState<{ id?: string; fromModel?: boolean }>({
+    id: categories.some((category) => category.id === record.categoryId)
       ? record.categoryId
       : undefined,
-  );
+  });
   const [ruleChoice, setRuleChoice] = useState<boolean>();
   const kind =
     record.linkedCardRecordKind === "refund"
@@ -39,6 +41,10 @@ export function ReviewRecordActions({
         : record.type;
   const matchingSuggestion =
     suggestion && categoryMatchesKind(suggestion, kind) ? suggestion : undefined;
+  const selectedCategory =
+    categoryDraft.fromModel && (!isAiSuggestion || matchingSuggestion?.id !== categoryDraft.id)
+      ? undefined
+      : categoryDraft.id;
   const issues = currentReviewIssues(record, dataset);
   const needsCategory = record.type !== "transfer" && !selectedCategory;
   const currentNeedsCategory =
@@ -68,7 +74,7 @@ export function ReviewRecordActions({
             categories={categories}
             value={selectedCategory}
             onChange={(id) => {
-              setSelectedCategory(id || undefined);
+              setCategoryDraft({ id: id || undefined });
               setRuleChoice(undefined);
             }}
             label="Review category"
@@ -86,11 +92,11 @@ export function ReviewRecordActions({
           disabled={busy}
           className="h-auto max-w-full whitespace-normal text-left"
           onClick={() => {
-            setSelectedCategory(matchingSuggestion.id);
+            setCategoryDraft({ id: matchingSuggestion.id, fromModel: isAiSuggestion });
             setRuleChoice(undefined);
           }}
         >
-          Use suggestion · {matchingSuggestion.name}
+          {isAiSuggestion ? "Use AI suggestion" : "Use suggestion"} · {matchingSuggestion.name}
         </Button>
       )}
       {canRemember && selectedCategory && (

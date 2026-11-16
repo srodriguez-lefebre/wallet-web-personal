@@ -6361,6 +6361,10 @@ paths:
                               - transfer
                               - other
                             type: string
+                          suggestedCategoryId:
+                            format: uuid
+                            pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                            type: string
                           tagIds:
                             default: []
                             items:
@@ -9545,6 +9549,10 @@ paths:
                                 - transfer
                                 - other
                               type: string
+                            suggestedCategoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
                             tagIds:
                               default: []
                               items:
@@ -9914,6 +9922,10 @@ paths:
                           - credit
                           - transfer
                           - other
+                        type: string
+                      suggestedCategoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
                       tagIds:
                         default: []
@@ -10298,6 +10310,10 @@ paths:
                             - credit
                             - transfer
                             - other
+                          type: string
+                        suggestedCategoryId:
+                          format: uuid
+                          pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                           type: string
                         tagIds:
                           default: []
@@ -10761,6 +10777,10 @@ paths:
                           - credit
                           - transfer
                           - other
+                        type: string
+                      suggestedCategoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                         type: string
                       tagIds:
                         default: []
@@ -13266,6 +13286,10 @@ paths:
                                 - transfer
                                 - other
                               type: string
+                            suggestedCategoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
                             tagIds:
                               default: []
                               items:
@@ -15010,6 +15034,10 @@ paths:
                               anyOf:
                                 - type: string
                                 - type: "null"
+                            suggestedCategoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                              type: string
                             tagIds:
                               default: []
                               items:
@@ -16405,6 +16433,10 @@ paths:
                                     - transfer
                                     - other
                                   type: string
+                                suggestedCategoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                                  type: string
                                 tagIds:
                                   default: []
                                   items:
@@ -17036,6 +17068,10 @@ paths:
                                     - credit
                                     - transfer
                                     - other
+                                  type: string
+                                suggestedCategoryId:
+                                  format: uuid
+                                  pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                                   type: string
                                 tagIds:
                                   default: []
@@ -20573,6 +20609,10 @@ paths:
                         anyOf:
                           - type: string
                           - type: "null"
+                      suggestedCategoryId:
+                        format: uuid
+                        pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
+                        type: string
                       tagIds:
                         default: []
                         items:
@@ -21913,6 +21953,10 @@ paths:
                                 - credit
                                 - transfer
                                 - other
+                              type: string
+                            suggestedCategoryId:
+                              format: uuid
+                              pattern: ^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$
                               type: string
                             tagIds:
                               default: []

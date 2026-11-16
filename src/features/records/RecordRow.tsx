@@ -75,6 +75,10 @@ export function RecordRow({
   const correction = record.importMerchant
     ? merchantCorrections.get(normalizeBankMerchant(record.importMerchant))
     : undefined;
+  const modelSuggestion =
+    record.suggestedCategoryId && !indexes.categoryParentIds.has(record.suggestedCategoryId)
+      ? indexes.categories.get(record.suggestedCategoryId)
+      : undefined;
   return (
     <article
       key={record.id}
@@ -201,7 +205,8 @@ export function RecordRow({
           record={record}
           dataset={dataset}
           categories={reviewCategories}
-          suggestion={correction?.category}
+          suggestion={correction?.category ?? modelSuggestion}
+          isAiSuggestion={Boolean(!correction && modelSuggestion)}
           autoApply={Boolean(
             correction?.record.merchantCorrection?.autoApply &&
             correction.category.id === record.categoryId,

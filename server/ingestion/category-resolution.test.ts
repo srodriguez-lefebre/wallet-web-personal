@@ -6,7 +6,7 @@ import { createPostgresTestDatabase } from "../../scripts/sandbox/postgres-test"
 import { categoryImportWarning, countNewReviews } from "../../shared/record-review";
 import { walletBackupSchema } from "../../shared/schemas";
 import { createDb } from "../db/client";
-import { getWalletDataset, patchSettings, updateRecord } from "../db/index";
+import { getWalletDataset, listRecords, patchSettings, updateRecord } from "../db/index";
 import { restoreWalletBackup } from "../db/wallet-restore";
 import * as classification from "./openai-category";
 import { processMailIngestion, resolveCategory } from "./process-mail-ingestion";
@@ -52,13 +52,17 @@ beforeEach(async () => {
   await fixture.pool.query("INSERT INTO settings(primary_currency) VALUES('UYU')");
   vi.spyOn(classification, "inferCategoryWithOpenAi").mockResolvedValue(null);
 });
-async function rule(name: string, categoryId: string, normalizedAlias = name.toUpperCase()) {
+async function rule(
+  name: string,
+  categoryId: string,
+  normalizedAlias = name.toUpperCase(),
+  matchMode = "alias",
+) {
   const id = randomUUID();
-  await fixture.pool.query("INSERT INTO merchants(id,name,category_id) VALUES($1,$2,$3)", [
-    id,
-    name,
-    categoryId,
-  ]);
+  await fixture.pool.query(
+    "INSERT INTO merchants(id,name,category_id,match_mode) VALUES($1,$2,$3,$4)",
+    [id, name, categoryId, matchMode],
+  );
   await fixture.pool.query(
     "INSERT INTO merchant_aliases(merchant_id,alias,normalized_alias) VALUES($1,$2,$3)",
     [id, name, normalizedAlias],
@@ -195,24 +199,105 @@ test("Uber Eats also overrides a broad legacy mixed-case Uber alias", async () =
 });
 test("a rule pointing at Unknown expense still falls through to GPT", async () => {
   await rule("Shop", unknownId);
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  expect((await processMailIngestion(createDb(), input("Shop"))).status).toBe("created");
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
+  expect((await processMailIngestion(createDb(), input("Shop"))).status).toBe("needs_review");
   expect(classification.inferCategoryWithOpenAi).toHaveBeenCalled();
   expect((await stored()).metadata.classification).toMatchObject({
     source: "openai",
-    categoryId: foodId,
+    categoryId: unknownId,
+    suggestedCategoryId: foodId,
   });
 });
 test("unknown-rule GPT fallback preserves canonical identity for cross-source duplicates", async () => {
   await rule("Shop", unknownId);
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  expect((await processMailIngestion(createDb(), input("SHOP MONTE"))).status).toBe("created");
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
+  expect((await processMailIngestion(createDb(), input("SHOP MONTE"))).status).toBe("needs_review");
   const second = input("HANDY*SHOP");
   second.transaction.source = "google_wallet";
   expect((await processMailIngestion(createDb(), second)).status).toBe("duplicate");
   expect((await fixture.pool.query("SELECT counterparty_name FROM records")).rows).toEqual([
     { counterparty_name: "Shop" },
   ]);
+});
+test("an unresolved cross-source duplicate is recognized before another model call", async () => {
+  await rule("Shop", unknownId);
+  const first = await processMailIngestion(createDb(), input("SHOP MONTE"));
+  const second = input("HANDY*SHOP");
+  second.transaction.source = "google_wallet";
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  expect(first.status).toBe("needs_review");
+  expect((await processMailIngestion(createDb(), second)).status).toBe("duplicate");
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+});
+
+test("each request uses the current expense or mixed leaf categories, excluding review categories", async () => {
+  await fixture.pool.query("UPDATE categories SET kind='income' WHERE id=$1", [tvId]);
+  await fixture.pool.query("UPDATE categories SET kind='expense',parent_id=$1 WHERE id=$2", [
+    publicId,
+    foodId,
+  ]);
+  await resolveCategory(createDb(), "OPAQUE SYNTHETIC STORE");
+  const first = vi.mocked(classification.inferCategoryWithOpenAi).mock.calls[0]?.[1];
+  expect(first).toContainEqual({ id: foodId, path: "Public transport > Restaurant, fast-food" });
+  expect(first?.map((option) => option.id)).not.toContain(unknownId);
+  expect(first?.some(({ id }) => id === tvId || id === publicId)).toBe(false);
+
+  await fixture.pool.query("UPDATE categories SET name='Coffee shops' WHERE id=$1", [foodId]);
+  await resolveCategory(createDb(), "OPAQUE SYNTHETIC STORE");
+  const second = vi.mocked(classification.inferCategoryWithOpenAi).mock.calls[1]?.[1];
+  expect(second).toContainEqual({ id: foodId, path: "Public transport > Coffee shops" });
+});
+
+test("model suggestions survive a records reload as unassigned until a user confirms", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
+  const result = await processMailIngestion(createDb(), input("FIXTURE COFFEE BAR"));
+  const db = createDb();
+  expect(result.status).toBe("needs_review");
+  const [review] = (await listRecords(db, { paymentStatus: "needs_review" })).items;
+  expect(review).toMatchObject({
+    categoryId: unknownId,
+    suggestedCategoryId: foodId,
+    amount: 50,
+    accountAmount: 50,
+  });
+  const saved = await stored();
+  expect(saved.card.category_id).toBe(unknownId);
+  expect((await getWalletDataset(db, { includeArchived: true })).merchants).toEqual([]);
+
+  await updateRecord(db, review!.id, {
+    categoryId: foodId,
+    paymentStatus: "cleared",
+    merchantAutoApply: true,
+    expectedUpdatedAt: review!.updatedAt,
+  });
+  vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
+  const next = await processMailIngestion(db, input("FIXTURE COFFEE BAR"));
+  expect(next.status).toBe("created");
+  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect((await listRecords(db, { paymentStatus: "cleared" })).items).toHaveLength(2);
+  expect(
+    (await fixture.pool.query("SELECT DISTINCT category_id FROM credit_card_records")).rows,
+  ).toEqual([{ category_id: foodId }]);
+});
+
+test("a model choice retyped while the request is in flight never becomes a suggestion", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
+    await fixture.pool.query("UPDATE categories SET kind='income' WHERE id=$1", [foodId]);
+    return { decision: "assign", categoryId: foodId };
+  });
+  expect((await processMailIngestion(createDb(), input("FIXTURE STORE"))).status).toBe(
+    "needs_review",
+  );
+  expect((await stored()).metadata.classification.suggestedCategoryId).toBeUndefined();
 });
 test("a failed model call keeps the expense reviewable and persists safe diagnostics", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementation(
@@ -242,15 +327,21 @@ test("a failed model call keeps the expense reviewable and persists safe diagnos
   });
   expect(result.warnings?.join(" ")).toMatch(/category/i);
 });
-test("a model explicitly choosing Unknown expense also needs review", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(unknownId);
+test("a model asking for review leaves the purchase without a suggestion", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "review",
+    reason: "ambiguous",
+  });
   expect((await processMailIngestion(createDb(), input("Opaque company"))).status).toBe(
     "needs_review",
   );
   expect((await stored()).metadata.classification).toMatchObject({
     source: "openai",
     needsReview: true,
+    reason: "ambiguous",
+    categoryId: unknownId,
   });
+  expect((await stored()).metadata.classification.suggestedCategoryId).toBeUndefined();
 });
 test("HBO bank-domain descriptors get the specific TV category without GPT", async () => {
   await rule("HBO", foodId);
@@ -266,13 +357,19 @@ test("a pañalera is shopping rather than a guessed bakery", async () => {
     "INSERT INTO categories(id,name,color,icon,system_key) VALUES($1,'Shopping','blue','bank','shopping')",
     [shoppingId],
   );
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
   await processMailIngestion(createDb(), input("PAÑALERA NATAL 27 MONTE"));
   expect((await stored()).record.category_id).toBe(shoppingId);
   expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
 });
 test("insurance without an appropriate category stays reviewable instead of becoming bank fees", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
   expect((await processMailIngestion(createDb(), input("BANCO DE SEGUROS 98290"))).status).toBe(
     "needs_review",
   );
@@ -328,93 +425,66 @@ test.each(["UBER TRIP", "UBER EATS"])(
 test("a credit notice cannot debit an account deactivated during classification", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
     await fixture.pool.query("UPDATE accounts SET is_active=false WHERE id=$1", [accountId]);
-    return foodId;
+    return { decision: "assign", categoryId: foodId };
   });
   await expect(processMailIngestion(createDb(), input("New store"))).rejects.toThrow();
   expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(0);
   expect((await fixture.pool.query("SELECT * FROM credit_card_records")).rows).toHaveLength(0);
 });
-test("a successful GPT category becomes a persistent rule available in JSON backups", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+test("repeated model suggestions do not add aliases or merchants to the catalog", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
   await processMailIngestion(createDb(), input("HDP HURBAN FOOD MONTE"));
   vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
   const next = input("hdp hurban food monte");
   next.transaction.amount = 60;
   await processMailIngestion(createDb(), next);
-  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect(classification.inferCategoryWithOpenAi).toHaveBeenCalledOnce();
   const backup = await getWalletDataset(createDb(), { includeArchived: true });
-  expect(backup.merchants).toEqual([
-    expect.objectContaining({
-      name: "HDP HURBAN FOOD MONTE",
-      categoryId: foodId,
-      matchMode: "exact",
-    }),
-  ]);
-  expect(backup.merchantAliases).toEqual([
-    expect.objectContaining({ normalizedAlias: "HDP HURBAN FOOD MONTE" }),
-  ]);
+  expect(backup.merchants).toEqual([]);
+  expect(backup.merchantAliases).toEqual([]);
   expect((await fixture.pool.query("SELECT category_id FROM records")).rows).toEqual([
-    { category_id: foodId },
-    { category_id: foodId },
+    { category_id: unknownId },
+    { category_id: unknownId },
   ]);
 });
-test("a learned category promotes an unknown rule without changing its merchant identity", async () => {
+test("an AI suggestion never changes the category or identity of an existing catalog rule", async () => {
   await rule("Shop", unknownId);
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
   await processMailIngestion(createDb(), input("SHOP MONTE"));
   vi.mocked(classification.inferCategoryWithOpenAi).mockClear();
   expect(await resolveCategory(createDb(), "HANDY*SHOP")).toMatchObject({
     merchantName: "Shop",
-    categoryId: foodId,
-    source: "merchant_rule",
+    categoryId: unknownId,
+    suggestedCategoryId: foodId,
+    source: "openai",
   });
-  expect(classification.inferCategoryWithOpenAi).not.toHaveBeenCalled();
+  expect(classification.inferCategoryWithOpenAi).toHaveBeenCalledOnce();
   expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([
-    { name: "Shop", category_id: foodId },
+    { name: "Shop", category_id: unknownId },
   ]);
 });
-test.each([null, "unknown"])("a model result %s does not become a learned rule", async (result) => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(
-    result === "unknown" ? unknownId : null,
-  );
-  await processMailIngestion(createDb(), input("OPAQUE SHOP"));
-  expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
-});
-test("learning does not overwrite a merchant category manually changed during GPT classification", async () => {
+test("a catalog edit made during classification is preserved", async () => {
   await rule("Shop", unknownId);
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
     await fixture.pool.query("UPDATE merchants SET category_id=$1 WHERE name='Shop'", [tvId]);
-    return foodId;
+    return { decision: "assign", categoryId: foodId };
   });
   await processMailIngestion(createDb(), input("SHOP MONTE"));
   expect((await fixture.pool.query("SELECT category_id FROM merchants")).rows).toEqual([
     { category_id: tvId },
   ]);
 });
-test("two concurrent classifications create only one merchant and one alias", async () => {
-  let arrived = 0;
-  let release = () => {};
-  const both = new Promise<void>((resolve) => {
-    release = resolve;
+test("a failed purchase commit rolls back the suggestion and record together", async () => {
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
   });
-  vi.mocked(classification.inferCategoryWithOpenAi).mockImplementation(async () => {
-    if (++arrived === 2) release();
-    await both;
-    return foodId;
-  });
-  const first = input("NEW SHOP"),
-    second = input("NEW SHOP");
-  second.transaction.amount = 60;
-  await Promise.all([
-    processMailIngestion(createDb(), first),
-    processMailIngestion(createDb(), second),
-  ]);
-  expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(1);
-  expect((await fixture.pool.query("SELECT * FROM merchant_aliases")).rows).toHaveLength(1);
-  expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(2);
-});
-test("failed financial writes roll back learned rules together with the records", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
   await fixture.pool.query(
     "CREATE FUNCTION reject_completion() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.status='completed' THEN RAISE EXCEPTION 'test completion failure'; END IF; RETURN NEW; END $$",
   );
@@ -423,16 +493,19 @@ test("failed financial writes roll back learned rules together with the records"
   );
   try {
     await expect(processMailIngestion(createDb(), input("NEW SHOP"))).rejects.toThrow();
-    expect((await fixture.pool.query("SELECT * FROM merchants")).rows).toHaveLength(0);
+    expect((await fixture.pool.query("SELECT * FROM ingestion_events")).rows).toHaveLength(0);
     expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(0);
   } finally {
     await fixture.pool.query("DROP TRIGGER reject_completion ON ingestion_events");
     await fixture.pool.query("DROP FUNCTION reject_completion()");
   }
 });
-test("a shorter learned descriptor cannot change old fingerprints and duplicate an expense", async () => {
+test("a suggestion for a shorter descriptor cannot change an older merchant fingerprint", async () => {
   await processMailIngestion(createDb(), input("SHOP MONTE"));
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
+  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue({
+    decision: "assign",
+    categoryId: foodId,
+  });
   const learning = input("SHOP");
   learning.transaction.amount = 60;
   await processMailIngestion(createDb(), learning);
@@ -441,10 +514,10 @@ test("a shorter learned descriptor cannot change old fingerprints and duplicate 
   expect((await processMailIngestion(createDb(), repeat)).status).toBe("duplicate");
   expect((await fixture.pool.query("SELECT * FROM records")).rows).toHaveLength(2);
 });
-test("a broader manual rule created during GPT is not shadowed by learning", async () => {
+test("a broader manual rule created during classification is used on the next lookup", async () => {
   vi.mocked(classification.inferCategoryWithOpenAi).mockImplementationOnce(async () => {
     await rule("Shop", tvId);
-    return foodId;
+    return { decision: "assign", categoryId: foodId };
   });
   await processMailIngestion(createDb(), input("SHOP MONTE"));
   expect((await fixture.pool.query("SELECT name,category_id FROM merchants")).rows).toEqual([
@@ -456,8 +529,7 @@ test("a broader manual rule created during GPT is not shadowed by learning", asy
   });
 });
 test("a manual rule takes precedence over an older exact learned descriptor", async () => {
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  await processMailIngestion(createDb(), input("SHOP MONTE"));
+  await rule("SHOP MONTE", foodId, "SHOP MONTE", "exact");
   await rule("Shop", tvId);
   expect(await resolveCategory(createDb(), "SHOP MONTE")).toMatchObject({
     categoryId: tvId,
@@ -477,8 +549,7 @@ test("an existing explicit rule with negative priority keeps broad alias matchin
 test("JSON restore retains exact learned rules and defaults legacy negative-priority rules to alias matching", async () => {
   await rule("Shop", tvId);
   await fixture.pool.query("UPDATE merchants SET priority=-1 WHERE name='Shop'");
-  vi.mocked(classification.inferCategoryWithOpenAi).mockResolvedValue(foodId);
-  await processMailIngestion(createDb(), input("HDP HURBAN FOOD MONTE"));
+  await rule("HDP HURBAN FOOD MONTE", foodId, "HDP HURBAN FOOD MONTE", "exact");
   const backup = await getWalletDataset(createDb(), { includeArchived: true });
   for (const merchant of backup.merchants ?? [])
     if (merchant.name === "Shop") delete merchant.matchMode;

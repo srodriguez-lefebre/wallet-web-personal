@@ -47,7 +47,7 @@ export const mutationDefinitions = {
   "accounts.create": catalog,
   "accounts.patch": catalog,
   "accounts.delete": financial,
-  "categories.create": ["reference", "analytics", "category-usage", "categories"],
+  "categories.create": ["reference", "analytics", "category-usage", "categories", "records"],
   "categories.patch": ["reference", "analytics", "records", "card-summary", "categories"],
   "categories.delete": financial,
   "categories.merge": financial,

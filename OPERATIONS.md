@@ -237,7 +237,7 @@ SESSION_SECRET="secreto-independiente-para-firmar-sesiones"
 SESSION_TTL_SECONDS="3888000"
 INGEST_API_TOKEN="otro-token-largo"
 OPENAI_API_KEY="opcional-para-clasificar-comercios-desconocidos"
-OPENAI_MODEL="gpt-5-nano"
+OPENAI_MODEL="gpt-6-luna"
 ```
 
 El archivo `.env.local` esta ignorado por git.
@@ -381,10 +381,11 @@ de `mail-service/` y se autentica exclusivamente con `INGEST_API_TOKEN`. El back
 resuelve comercios, categorias, moneda, destino, idempotencia y duplicados. Los
 destinos desconocidos se guardan como `needs_review` sin inventar IDs ni impactos.
 
-La clasificación usa reglas de comercio, reglas específicas y finalmente
-OpenAI con las categorías actuales. Las reglas que apuntan a `Unknown expense`
-también permiten consultar OpenAI. Uber, Cabify y Taxi corrigen el antiguo mapeo
-a transporte público; Uber Eats mantiene la categoría de comida.
+El backend resuelve las correcciones, aliases y reglas específicas para obtener
+la identidad canónica antes de buscar duplicados. Las compras sin categoría pueden
+pasar al clasificador. Las transferencias y los avisos que identifican únicamente
+un procesador genérico se resuelven con las reglas locales. Uber, Cabify y Taxi
+corrigen el antiguo mapeo a transporte público y Uber Eats conserva su regla de comida.
 
 Archivar un árbol de categorías reasigna sus referencias financieras a
 `Category eliminated` y deriva sus reglas de comercio a `Unknown expense`.
@@ -393,36 +394,42 @@ que usa para deduplicar correos. Fusionar traslada las reglas al destino.
 El uso por categoría cuenta referencias guardadas, incluidas las archivadas,
 para anticipar el alcance de la operación.
 
-El fallback usa 2048 tokens de salida, razonamiento `low` para modelos GPT-5 y
-un timeout de 30 segundos. Respuestas incompletas, refusals, errores HTTP y
-categorías inválidas mantienen el gasto bajo revisión. Una categoría desconocida
-también queda como `needs_review`; los importes válidos conservan su efecto en
-saldos e informes.
+El clasificador usa `gpt-6-luna` por defecto, con razonamiento `none`, hasta 256
+tokens de salida y un presupuesto de 10 segundos para la llamada completa.
+`OPENAI_MODEL` permite elegir otro modelo. Revisar cualquier valor anterior
+configurado al publicar una versión que deba usar Luna.
 
-Una clasificación válida de GPT se aprende en el catálogo persistente de
-comercios y aliases. Las próximas entradas con ese descriptor usan la regla sin
-consultar al modelo. Para comercios nuevos se conserva el descriptor completo
-normalizado, sin recortarlo a términos generales; una regla existente con
-categoría desconocida se actualiza conservando su identidad. No se aprenden
-resultados desconocidos ni fallidos, y una corrección simultánea de una regla
-existente prevalece sobre la inferencia pendiente. El aprendizaje se confirma en
-la misma transacción que el movimiento: los reintentos, duplicados y fallos no
-crean reglas adicionales. Las reglas aprendidas se incluyen en el respaldo JSON
-junto con el catálogo y se recuperan al restaurarlo.
-Los comercios nuevos aprendidos usan `matchMode: "exact"` para el descriptor
-normalizado. Las reglas explícitas conservan `matchMode: "alias"` y prevalecen
-sobre esa caché, incluso si se agregan más tarde. Los respaldos anteriores sin
-ese campo mantienen el comportamiento por aliases, sin reinterpretar prioridades.
-La migración aditiva `0020_merchant_match_mode` debe aplicarse al publicar esta
-funcionalidad; no modifica registros financieros.
+El prompt versionado recibe el descriptor del comercio y las categorías que en ese
+momento están activas, son de gasto o mixtas y no tienen subcategorías activas.
+Las categorías de una base anterior a `0024` siguen disponibles si aún no tienen
+tipo. La respuesta estructurada devuelve una categoría de la lista o un motivo
+para pedir revisión. El servidor vuelve a consultar la categoría antes de guardar
+la sugerencia. Respuestas inválidas y errores del proveedor dejan el gasto bajo
+revisión con su importe intacto.
+
+La cola muestra **Use AI suggestion** cuando hay una sugerencia vigente. El
+gasto cuenta en los informes bajo la categoría provisional `Unknown expense`
+hasta que el usuario guarda su elección.
+**Apply this category automatically** permite guardar esa corrección para próximos
+avisos con el mismo descriptor. Las sugerencias del modelo quedan en el evento de
+ingesta durante su retención de 90 días. Las reglas existentes por coincidencia
+exacta siguen disponibles en el catálogo y en los respaldos. El modelo sólo
+sugiere, por lo que cada compra nueva puede clasificarse sin agregar otra regla
+permanente.
+
+Para comparar modelos o versiones del prompt, usar la misma muestra de
+descriptores etiquetados, incluyendo casos que deban quedar en revisión. Medir
+aciertos, categorías incorrectas, abstenciones, latencia y tokens. La confirmación
+de las sugerencias pasa por la cola de revisión.
 
 Los logs de Vercel incluyen el evento `mail_category_classification`, el ID de
-ingesta, origen de la categoría y diagnóstico de la llamada: modelo, motivo,
-HTTP, request ID, duración y tokens. No registran claves, cuerpos de error ni
+ingesta, origen y categoría sugerida, y el diagnóstico de la llamada, que incluye
+modelo, versión del prompt, motivo, HTTP, request ID, duración y tokens.
+No registran claves, cuerpos de error ni
 descriptores financieros. El mismo diagnóstico queda en
 `ingestion_events.sanitized_payload.classification` durante la retención de
-metadatos existente de 90 días. Los fallos de categoría incluyen una nota visible
-en el movimiento; los clasificados por el modelo indican `Categorized by OpenAI`.
+metadatos existente de 90 días. Los casos sin categoría confirmada muestran un
+aviso en el historial del movimiento.
 
 Después de migrar, cargar el catálogo de 254 reglas desde el checkout WSL de
 `wallet-automation`:

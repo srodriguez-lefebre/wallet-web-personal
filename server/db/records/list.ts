@@ -1,13 +1,79 @@
-import { and, desc, eq, gte, ilike, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
+import { categoryMatchesKind } from "../../../shared/categories.js";
+import { isReviewCategory } from "../../../shared/record-review.js";
 import { creditCardRecordSchema } from "../../../shared/schemas.js";
 import { decodeRecordCursor, encodeRecordCursor } from "../../api/record-cursor.js";
+import { categoryReadColumns } from "../category-metadata.js";
 import { groupGoalAssociations, groupIds, mapRecord } from "../mappers.js";
-import { creditCardRecords, recordGoals, records, recordTags } from "../schema.js";
+import {
+  categories,
+  creditCardRecords,
+  ingestionEvents,
+  recordGoals,
+  records,
+  recordTags,
+} from "../schema.js";
 import { lowercaseSql, normalizedSearchSql } from "./search.js";
 
 import type { WalletRecord } from "../../../shared/types.js";
 import type { Db } from "../input-types.js";
+
+async function listReviewSuggestions(db: Db, recordIds: string[]) {
+  if (!recordIds.length) return new Map<string | null, string>();
+  const child = alias(categories, "suggestion_child");
+  const rows = await db
+    .selectDistinctOn([ingestionEvents.recordId], {
+      recordId: ingestionEvents.recordId,
+      id: categories.id,
+      name: categories.name,
+      systemKey: categories.systemKey,
+      kind: categoryReadColumns.kind,
+    })
+    .from(ingestionEvents)
+    .innerJoin(
+      categories,
+      sql`${categories.id}::text = ${ingestionEvents.sanitizedPayload}->'classification'->>'suggestedCategoryId'`,
+    )
+    .where(
+      and(
+        inArray(ingestionEvents.recordId, recordIds),
+        eq(ingestionEvents.status, "completed"),
+        eq(ingestionEvents.action, "needs_review"),
+        gt(ingestionEvents.metadataExpiresAt, new Date()),
+        isNull(categories.deletedAt),
+        notExists(
+          db
+            .select({ id: child.id })
+            .from(child)
+            .where(and(eq(child.parentId, categories.id), isNull(child.deletedAt))),
+        ),
+      ),
+    )
+    .orderBy(ingestionEvents.recordId, desc(ingestionEvents.completedAt), desc(ingestionEvents.id));
+  return new Map(
+    rows
+      .filter(
+        (row) =>
+          isReviewCategory(row) && categoryMatchesKind({ kind: row.kind ?? undefined }, "expense"),
+      )
+      .map((row) => [row.recordId, row.id]),
+  );
+}
 
 export async function listRecords(
   db: Db,
@@ -133,35 +199,26 @@ export async function listRecords(
     .limit(limit + 1);
   const hasMore = rows.length > limit;
   const pageRows = hasMore ? rows.slice(0, limit) : rows;
-  const recordTagRows =
-    pageRows.length > 0
-      ? await db
-          .select()
-          .from(recordTags)
-          .where(
-            inArray(
-              recordTags.recordId,
-              pageRows.map((row) => row.id),
-            ),
-          )
-      : [];
-  const recordGoalRows =
-    pageRows.length > 0
-      ? await db
-          .select()
-          .from(recordGoals)
-          .where(
-            inArray(
-              recordGoals.recordId,
-              pageRows.map((row) => row.id),
-            ),
-          )
-      : [];
-  const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
-  const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
-  const linkedRows =
-    pageRows.length > 0
-      ? await db
+  const recordIds = pageRows.map((row) => row.id);
+  const reviewIds = pageRows
+    .filter(
+      (record) =>
+        record.paymentStatus === "needs_review" &&
+        record.type === "expense" &&
+        record.paymentType !== "transfer" &&
+        record.importMerchant &&
+        !record.merchantCorrection,
+    )
+    .map((record) => record.id);
+  const [recordTagRows, recordGoalRows, linkedRows, suggestions] = await Promise.all([
+    recordIds.length
+      ? db.select().from(recordTags).where(inArray(recordTags.recordId, recordIds))
+      : [],
+    recordIds.length
+      ? db.select().from(recordGoals).where(inArray(recordGoals.recordId, recordIds))
+      : [],
+    recordIds.length
+      ? db
           .select({
             walletRecordId: creditCardRecords.walletRecordId,
             kind: creditCardRecords.kind,
@@ -170,13 +227,14 @@ export async function listRecords(
           .where(
             and(
               isNull(creditCardRecords.deletedAt),
-              inArray(
-                creditCardRecords.walletRecordId,
-                pageRows.map((row) => row.id),
-              ),
+              inArray(creditCardRecords.walletRecordId, recordIds),
             ),
           )
-      : [];
+      : [],
+    listReviewSuggestions(db, reviewIds),
+  ]);
+  const tagIdsByRecord = groupIds(recordTagRows, "recordId", "tagId");
+  const goalAssociationsByRecord = groupGoalAssociations(recordGoalRows);
   const linkedKinds = new Map(
     linkedRows.map((row) => [
       row.walletRecordId,
@@ -188,6 +246,7 @@ export async function listRecords(
     items: pageRows.map((record) => ({
       ...mapRecord(record, tagIdsByRecord, goalAssociationsByRecord),
       linkedCardRecordKind: linkedKinds.get(record.id),
+      suggestedCategoryId: suggestions.get(record.id),
     })),
     hasMore,
     nextCursor:

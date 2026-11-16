@@ -23,27 +23,79 @@ function response(body: unknown, status = 200) {
     headers: { "x-request-id": "req-test" },
   });
 }
+test("Luna is the default with explicit non-reasoning and a structured way to request review", async () => {
+  vi.stubEnv("OPENAI_MODEL", undefined);
+  fetchMock.mockResolvedValue(
+    response({
+      status: "completed",
+      output_text: '{"decision":"review","categoryId":null,"reason":"ambiguous"}',
+    }),
+  );
+  const diagnostic = vi.fn();
+  expect(await inferCategoryWithOpenAi("Synthetic reference", categories, diagnostic)).toEqual({
+    decision: "review",
+    reason: "ambiguous",
+  });
+  const request = JSON.parse(fetchMock.mock.calls[0]![1].body);
+  expect(request).toMatchObject({
+    model: "gpt-6-luna",
+    reasoning: { effort: "none" },
+    store: false,
+    text: { format: { type: "json_schema", strict: true } },
+  });
+  expect(diagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "review",
+      reason: "ambiguous",
+      promptVersion: expect.any(String),
+    }),
+  );
+});
+
+test("a review response carrying a category ID is invalid", async () => {
+  fetchMock.mockResolvedValue(
+    response({
+      status: "completed",
+      output_text: '{"decision":"review","categoryId":"restaurant","reason":"ambiguous"}',
+    }),
+  );
+  const diagnostic = vi.fn();
+  expect(await inferCategoryWithOpenAi("Synthetic reference", categories, diagnostic)).toBeNull();
+  expect(diagnostic).toHaveBeenCalledWith(
+    expect.objectContaining({ outcome: "failed", reason: "invalid_decision" }),
+  );
+});
 test("a bank descriptor gets sufficient output budget, purchase context and a valid supplied category", async () => {
   fetchMock.mockResolvedValue(
     response({
       status: "completed",
       output: [
         {
-          content: [{ type: "output_text", text: '{"categoryId":"restaurant"}' }],
+          content: [
+            {
+              type: "output_text",
+              text: '{"decision":"assign","categoryId":"restaurant","reason":null}',
+            },
+          ],
         },
       ],
       usage: { input_tokens: 100, output_tokens: 50 },
     }),
   );
   const diagnostic = vi.fn();
-  expect(await inferCategoryWithOpenAi("HDP HURBAN FOOD MONTE", categories, diagnostic)).toBe(
-    "restaurant",
-  );
+  expect(await inferCategoryWithOpenAi("HDP HURBAN FOOD MONTE", categories, diagnostic)).toEqual({
+    decision: "assign",
+    categoryId: "restaurant",
+  });
   const request = JSON.parse(fetchMock.mock.calls[0]![1].body);
   expect(request.max_output_tokens).toBeGreaterThanOrEqual(2048);
   expect(request.reasoning).toEqual({ effort: "low" });
   expect(request.store).toBe(false);
   expect(request.input[0].content).toMatch(/Uruguay/);
+  expect(JSON.parse(request.input[1].content)).toEqual({
+    descriptor: "HDP HURBAN FOOD MONTE",
+    categories,
+  });
   expect(diagnostic).toHaveBeenCalledWith(
     expect.objectContaining({
       outcome: "classified",
@@ -72,7 +124,13 @@ test("HTTP 200 with incomplete reasoning is diagnosed instead of looking like su
 });
 test.each([
   ["empty_output", { status: "completed", output: [] }],
-  ["invalid_category", { status: "completed", output_text: '{"categoryId":"invented"}' }],
+  [
+    "invalid_category",
+    {
+      status: "completed",
+      output_text: '{"decision":"assign","categoryId":"invented","reason":null}',
+    },
+  ],
   ["invalid_json", { status: "completed", output_text: "not JSON" }],
   [
     "refused",
@@ -127,9 +185,12 @@ test("a configured non-reasoning model does not receive GPT-5-only parameters", 
   fetchMock.mockResolvedValue(
     response({
       status: "completed",
-      output_text: '{"categoryId":"restaurant"}',
+      output_text: '{"decision":"assign","categoryId":"restaurant","reason":null}',
     }),
   );
-  expect(await inferCategoryWithOpenAi("Unknown", categories)).toBe("restaurant");
+  expect(await inferCategoryWithOpenAi("Unknown", categories)).toEqual({
+    decision: "assign",
+    categoryId: "restaurant",
+  });
   expect(JSON.parse(fetchMock.mock.calls[0]![1].body).reasoning).toBeUndefined();
 });
