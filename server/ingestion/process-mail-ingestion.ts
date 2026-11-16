@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { and, eq, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
 
 import { categoryReferenceQueries } from "../db/category-references.js";
-import { roundMoney } from "../../shared/money.js";
+import { roundMoney, scaleMoney } from "../../shared/money.js";
 import { categoryImportWarning } from "../../shared/record-review.js";
 import { type DbClient } from "../db/client.js";
 import { prepareRecordGoalWrites } from "../db/index.js";
@@ -56,7 +56,7 @@ async function convert(
   occurredAt: Date,
 ) {
   const frozen = await resolveFrozenRate(db, from, to, occurredAt);
-  return frozen ? { amount: roundMoney(amount * frozen.rate), frozen } : null;
+  return frozen ? { amount: scaleMoney(amount, frozen.rate), frozen } : null;
 }
 function conversionNote(from: CurrencyCode, to: CurrencyCode, frozen: FrozenRate) {
   if (from === to) return undefined;

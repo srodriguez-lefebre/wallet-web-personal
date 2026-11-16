@@ -1,4 +1,4 @@
-import { roundMoney } from "@shared/money";
+import { scaleMoney } from "@shared/money";
 
 import type { CurrencyCode } from "@shared/types";
 
@@ -14,7 +14,7 @@ export function recordAccountAmount(
   if (currency === accountCurrency && !preserveOriginal) return amount;
   const explicit = Number(input);
   if (Number.isFinite(explicit) && explicit > 0) return explicit;
-  return rate === null ? null : roundMoney(amount * rate);
+  return rate === null ? null : scaleMoney(amount, rate);
 }
 
 /** Retain the recorded conversion when the nominal amount changes. */
@@ -23,5 +23,5 @@ export function scaleConvertedAmount(input: string, previous: string, next: stri
     newAmount = Number(next),
     converted = Number(input);
   if (!input || oldAmount <= 0 || newAmount <= 0 || converted <= 0) return "";
-  return String(roundMoney((converted * newAmount) / oldAmount));
+  return String(scaleMoney(converted, newAmount, oldAmount));
 }

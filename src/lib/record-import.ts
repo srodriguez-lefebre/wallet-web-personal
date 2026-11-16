@@ -9,7 +9,7 @@ import {
   uuidSchema,
 } from "@shared/schemas";
 import { recordFingerprint } from "@shared/record-identity";
-import { findExchangeRate, roundMoney } from "@shared/money";
+import { findExchangeRate, roundMoney, scaleMoney } from "@shared/money";
 
 import type { WalletDataset, WalletRecord } from "@shared/types";
 
@@ -186,7 +186,7 @@ export function prepareCsvRecords(
           throw new Error(
             `Missing ${currency}/${account.currency} exchange rate. Supply accountAmount.`,
           );
-        accountAmount = roundMoney(amount * rate);
+        accountAmount = scaleMoney(amount, rate);
       }
       const categoryId =
         "categoryid" in row
@@ -252,7 +252,7 @@ export function prepareCsvRecords(
         if (!amountInDestination && !rate)
           throw new Error("Missing destination exchange rate. Supply destinationAmount.");
         Object.assign(record, {
-          destinationAmount: amountInDestination ?? roundMoney(amount * rate!),
+          destinationAmount: amountInDestination ?? scaleMoney(amount, rate!),
         });
       }
       // Invalid rows must not reserve a duplicate identity for later valid rows.

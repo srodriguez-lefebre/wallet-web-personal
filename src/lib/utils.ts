@@ -1,6 +1,5 @@
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
-
 import { roundMoney } from "@shared/money";
 
 export function cn(...inputs: ClassValue[]) {
