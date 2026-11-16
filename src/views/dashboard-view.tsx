@@ -260,7 +260,11 @@ export function DashboardView() {
                     />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) =>
+                    formatMoney(Number(value), dataset.settings.primaryCurrency)
+                  }
+                />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>

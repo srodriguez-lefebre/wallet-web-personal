@@ -346,7 +346,11 @@ export function AnalyticsView() {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="month" tickLine={false} axisLine={false} />
                 <YAxis tickLine={false} axisLine={false} width={70} />
-                <Tooltip />
+                <Tooltip
+                  formatter={(value) =>
+                    formatMoney(Number(value), dataset.settings.primaryCurrency)
+                  }
+                />
                 <Bar dataKey="cashFlow" fill="#2563EB" name="Cash flow" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="income" fill="#22C55E" name="Income" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" fill="#EF4444" name="Expenses" radius={[4, 4, 0, 0]} />
