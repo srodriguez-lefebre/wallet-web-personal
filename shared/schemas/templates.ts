@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import {
+  positiveMoneySchema,
   recordTypeSchema,
   currencySchema,
   uuidSchema,
@@ -12,7 +13,7 @@ export const recordTemplateSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
     type: recordTypeSchema,
-    amount: z.number().finite().positive(),
+    amount: positiveMoneySchema,
     currency: currencySchema,
     accountId: uuidSchema.optional(),
     creditCardId: uuidSchema.optional(),

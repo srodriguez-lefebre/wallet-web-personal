@@ -1,12 +1,19 @@
 import { z } from "zod";
 
-import { currencySchema, uuidSchema, nonEmptyPatch, id } from "./common.js";
+import {
+  positiveMoneySchema,
+  nonnegativeMoneySchema,
+  currencySchema,
+  uuidSchema,
+  nonEmptyPatch,
+  id,
+} from "./common.js";
 
 export const creditCardSchema = z.object({
   name: z.string().min(1),
   issuer: z.string().min(1),
   lastFour: z.string().regex(/^\d{4}$/, "Last four must contain exactly four digits"),
-  creditLimit: z.number().positive(),
+  creditLimit: positiveMoneySchema,
   limitCurrency: currencySchema,
   closingDay: z.number().int().min(1).max(31),
   dueDay: z.number().int().min(1).max(31),
@@ -49,15 +56,15 @@ export const creditCardRecordSchema = z
   .object({
     kind: z.enum(["purchase", "refund"]).default("purchase"),
     originalRecordId: uuidSchema.optional(),
-    amount: z.number().positive(),
+    amount: positiveMoneySchema,
     currency: currencySchema,
-    amountInLimitCurrency: z.number().positive(),
+    amountInLimitCurrency: positiveMoneySchema,
     exchangeRateToLimitCurrency: z.number().positive(),
     categoryId: uuidSchema,
     counterpartyName: z.string().optional(),
     note: z.string().optional(),
     accountId: uuidSchema.optional(),
-    accountAmount: z.number().positive().optional(),
+    accountAmount: positiveMoneySchema.optional(),
     accountImpactAtCreation: z.boolean().default(false),
     occurredAt: z.iso.datetime(),
   })
@@ -85,7 +92,7 @@ export const creditCardPatchSchema = nonEmptyPatch({
     .string()
     .regex(/^\d{4}$/)
     .optional(),
-  creditLimit: z.number().positive().optional(),
+  creditLimit: positiveMoneySchema.optional(),
   limitCurrency: currencySchema.optional(),
   closingDay: z.number().int().min(1).max(31).optional(),
   dueDay: z.number().int().min(1).max(31).optional(),
@@ -98,15 +105,15 @@ export const creditCardPatchSchema = nonEmptyPatch({
 export const creditCardRecordPatchSchema = nonEmptyPatch({
   kind: z.enum(["purchase", "refund"]).optional(),
   originalRecordId: uuidSchema.nullable().optional(),
-  amount: z.number().positive().optional(),
+  amount: positiveMoneySchema.optional(),
   currency: currencySchema.optional(),
-  amountInLimitCurrency: z.number().positive().optional(),
+  amountInLimitCurrency: positiveMoneySchema.optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(),
   categoryId: uuidSchema.optional(),
   counterpartyName: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   accountId: uuidSchema.nullable().optional(),
-  accountAmount: z.number().positive().nullable().optional(),
+  accountAmount: positiveMoneySchema.nullable().optional(),
   accountImpactAtCreation: z.boolean().optional(),
   occurredAt: z.iso.datetime().optional(),
 });
@@ -143,6 +150,6 @@ export const paymentAllocationResponseSchema = z.object({
   ...id,
   paymentId: uuidSchema,
   creditCardRecordId: uuidSchema,
-  amount: z.number().nonnegative(),
-  amountInLimitCurrency: z.number().nonnegative(),
+  amount: nonnegativeMoneySchema,
+  amountInLimitCurrency: nonnegativeMoneySchema,
 });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { recordTemplateSchema } from "./templates.js";
-import { id, currencySchema, uuidSchema } from "./common.js";
+import { nonnegativeMoneySchema, id, currencySchema, uuidSchema } from "./common.js";
 import { settingsSchema } from "./settings.js";
 import { accountSchema } from "./accounts.js";
 import { categoryEntitySchema } from "./categories.js";
@@ -79,7 +79,7 @@ export const walletBackupSchema = walletDatasetSchema
           fingerprint: z.string().optional(),
           targetKey: z.string().optional(),
           merchantNormalized: z.string().optional(),
-          amount: z.number().nonnegative().optional(),
+          amount: nonnegativeMoneySchema.optional(),
           currency: currencySchema.optional(),
           occurredAt: z.iso.datetime().optional(),
           recordId: uuidSchema.optional(),

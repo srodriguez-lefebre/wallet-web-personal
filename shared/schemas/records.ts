@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { timeZoneSchema } from "../time-zone.js";
 import {
+  positiveMoneySchema,
   uuidSchema,
   recordTypeSchema,
   currencySchema,
@@ -17,19 +18,19 @@ export const recordGoalAssociationSchema = z.object({
   assignmentSource: z.enum(["manual", "date_rule"]).default("manual"),
   useReserved: z.boolean().default(true),
   reserveIncome: z.boolean().default(true),
-  allocatedAmount: z.number().positive().optional(),
+  allocatedAmount: positiveMoneySchema.optional(),
 });
 
 export const recordSchema = z
   .object({
     type: recordTypeSchema,
-    amount: z.number().positive(),
+    amount: positiveMoneySchema,
     currency: currencySchema,
     accountId: uuidSchema.optional(),
-    accountAmount: z.number().positive().optional(),
+    accountAmount: positiveMoneySchema.optional(),
     creditCardId: uuidSchema.optional(),
     destinationAccountId: uuidSchema.optional(),
-    destinationAmount: z.number().positive().optional(),
+    destinationAmount: positiveMoneySchema.optional(),
     categoryId: uuidSchema.optional(),
     counterpartyName: z.string().optional(),
     tagIds: z.array(uuidSchema).max(1).default([]),
@@ -38,7 +39,7 @@ export const recordSchema = z
     paymentType: paymentTypeSchema,
     paymentStatus: paymentStatusSchema,
     exchangeRateToPrimary: z.number().nonnegative().default(1),
-    amountInLimitCurrency: z.number().positive().optional(),
+    amountInLimitCurrency: positiveMoneySchema.optional(),
     exchangeRateToLimitCurrency: z.number().positive().optional(),
     occurredAt: z.iso.datetime(),
     note: z.string().optional(),
@@ -154,14 +155,14 @@ export const merchantCorrectionSchema = z.object({
 
 export const recordPatchSchema = nonEmptyPatch({
   type: recordTypeSchema.optional(),
-  amount: z.number().positive().optional(),
+  amount: positiveMoneySchema.optional(),
   currency: currencySchema.optional(),
   accountId: uuidSchema.optional(),
-  accountAmount: z.number().positive().optional(),
+  accountAmount: positiveMoneySchema.optional(),
   creditCardId: uuidSchema.nullable().optional(),
   destinationAccountId: uuidSchema.nullable().optional(),
   categoryId: uuidSchema.nullable().optional(),
-  destinationAmount: z.number().positive().optional(),
+  destinationAmount: positiveMoneySchema.optional(),
   counterpartyName: z.string().nullable().optional(),
   tagIds: z.array(uuidSchema).max(1).optional(),
   goalIds: z.array(uuidSchema).optional(),
@@ -169,7 +170,7 @@ export const recordPatchSchema = nonEmptyPatch({
   paymentType: paymentTypeSchema.optional(),
   paymentStatus: paymentStatusSchema.optional(),
   exchangeRateToPrimary: z.number().nonnegative().optional(),
-  amountInLimitCurrency: z.number().positive().optional(),
+  amountInLimitCurrency: positiveMoneySchema.optional(),
   exchangeRateToLimitCurrency: z.number().positive().optional(),
   occurredAt: z.iso.datetime().optional(),
   note: z.string().nullable().optional(),

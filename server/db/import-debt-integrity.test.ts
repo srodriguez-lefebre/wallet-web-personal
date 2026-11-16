@@ -119,6 +119,22 @@ test("same-debt PATCH keeps legitimate payment reconciliation and forbids detach
   await expect(updateRecord(createDb(), payment!.record.id, { debtId: null })).rejects.toThrow();
   expect(await pending()).toBe(90);
 });
+test("paying the final cents closes the debt and a retry uses the original request identity", async () => {
+  const request = {
+    amount: 99.995,
+    accountId,
+    occurredAt: date,
+    idempotencyKey: "00000000-0000-4000-8000-000000000004",
+  };
+  const payment = await recordDebtPayment(createDb(), debtId, request);
+  expect(payment?.record).toMatchObject({ amount: 100, accountAmount: 100 });
+  expect(payment?.debt).toMatchObject({ pendingAmount: 0, status: "paid" });
+  expect((await recordDebtPayment(createDb(), debtId, request))?.record.id).toBe(
+    payment?.record.id,
+  );
+  expect((await getWalletDataset(createDb())).records).toHaveLength(1);
+});
+
 test("CSV duplicates of existing debt payments remain no-ops without altering the debt", async () => {
   const payment = await recordDebtPayment(createDb(), debtId, {
     amount: 30,

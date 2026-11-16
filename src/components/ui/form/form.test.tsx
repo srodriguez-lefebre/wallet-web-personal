@@ -36,13 +36,13 @@ test("money fields limit decimal input and label an independent converted amount
   const amount = screen.getByRole<HTMLInputElement>("textbox", { name: "Amount" });
   expect(amount.inputMode).toBe("decimal");
   fireEvent.change(amount, { target: { value: "12,345" } });
-  expect(amount.value).toBe("12.34");
+  expect(amount.value).toBe("12.35");
   const converted = screen.getByRole<HTMLInputElement>("textbox", {
     name: "Amount in account currency",
   });
   fireEvent.change(converted, { target: { value: "40.129" } });
-  expect(converted.value).toBe("40.12");
-  expect(amount.value).toBe("12.34");
+  expect(converted.value).toBe("40.13");
+  expect(amount.value).toBe("12.35");
 });
 test("segmented options expose their pressed state and update the controlled value", () => {
   function Example() {

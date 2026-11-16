@@ -43,7 +43,7 @@ export function prepareWalletImport(csv: string) {
   const records = rows.map((row) => {
     const category = categoryByName.get((row.category ?? "").trim());
     const occurredAt = new Date(row.date ?? "");
-    const amount = Number(row.amount);
+    const amount = roundMoney(Number(row.amount));
     const currency = currencySchema.parse((row.currency ?? "").trim().toUpperCase());
     const type = recordTypeSchema.parse((row.type ?? "").trim().toLowerCase());
     if (
@@ -57,7 +57,7 @@ export function prepareWalletImport(csv: string) {
       throw new Error(
         "CSV transfers require explicit source and destination mapping; use the supported record import API",
       );
-    const referenceAmount = Number(row.ref_currency_amount);
+    const referenceAmount = roundMoney(Number(row.ref_currency_amount));
     if (
       currency !== "UYU" &&
       (!Number.isFinite(referenceAmount) ||
@@ -82,7 +82,7 @@ export function prepareWalletImport(csv: string) {
       amount: amount.toFixed(2),
       currency,
       accountId,
-      accountAmount: roundMoney(currency === "UYU" ? amount : referenceAmount).toFixed(2),
+      accountAmount: (currency === "UYU" ? amount : referenceAmount).toFixed(2),
       categoryId: category.id,
       counterpartyName: row.payee?.trim() || null,
       paymentType: paymentType.success ? paymentType.data : ("other" as const),

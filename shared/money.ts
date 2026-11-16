@@ -1,9 +1,16 @@
 import type { CurrencyCode, ExchangeRate } from "./types.js";
 
 export const moneyTolerance = 0.005;
-/** Display/import rounding only; persistence arithmetic remains PostgreSQL numeric. */
+const centsFormat = new Intl.NumberFormat("en-US", {
+  useGrouping: false,
+  maximumFractionDigits: 2,
+});
+
+/** Rounds decimal amounts like PostgreSQL numeric, with half cents away from zero. */
 export function roundMoney(amount: number) {
-  return Number(amount.toFixed(2));
+  if (!Number.isFinite(amount)) return amount;
+  const rounded = Number(centsFormat.format(amount));
+  return rounded === 0 ? 0 : rounded;
 }
 
 /** Uses only quotes known at the requested instant; never invents a 1:1 quote. */
